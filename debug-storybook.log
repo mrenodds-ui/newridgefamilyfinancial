@@ -1,0 +1,11 @@
+[15:26:08.653] [INFO] [36mInitializing Storybook[39m
+[15:26:09.045] [DEBUG] Getting package.json info for E:\NewRidgeFamilyFinancial\package.json...
+[15:26:09.045] [INFO] Package manager: npm
+[15:26:09.047] [ERROR] [38;2;241;97;97mError: ENOENT: no such file or directory, open '.\package.json'[39m
+    at readFileSync (node:fs:441:20)
+    at _JsPackageManager.getPackageJson (file:///C:/Users/mreno/AppData/Local/npm-cache/_npx/ecccd379458fbd6a/node_modules/storybook/dist/_node-chunks/chunk-PNYLLFX3.js:9724:23)
+    at get packageJson (file:///C:/Users/mreno/AppData/Local/npm-cache/_npx/ecccd379458fbd6a/node_modules/storybook/dist/_node-chunks/chunk-PNYLLFX3.js:10075:34)
+    at PreflightCheckCommand.checkPackageNameConflict (file:///C:/Users/mreno/AppData/Local/npm-cache/_npx/ecccd379458fbd6a/node_modules/create-storybook/dist/_node-chunks/chunk-UR7I3RA2.js:666:39)
+    at PreflightCheckCommand.execute (file:///C:/Users/mreno/AppData/Local/npm-cache/_npx/ecccd379458fbd6a/node_modules/create-storybook/dist/_node-chunks/chunk-UR7I3RA2.js:645:14)
+[15:27:11.861] [PROMPT] Would you like to send anonymous crash reports to improve Storybook and fix bugs faster? {"choice":true}
+[15:27:11.865] [INFO] Storybook collects completely anonymous usage telemetry. We use it to shape Storybook's roadmap and prioritize features. You can learn more, including how to opt out, at https://storybook.js.org/telemetry

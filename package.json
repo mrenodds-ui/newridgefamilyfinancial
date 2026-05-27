@@ -1,0 +1,27 @@
+{
+  "dependencies": {
+    "cors": "^2.8.6",
+    "csv-parser": "^3.2.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "papaparse": "^5.5.3",
+    "ts-node-dev": "^2.0.0"
+  },
+  "name": "newridgefamilyfinancial",
+  "version": "1.0.0",
+  "description": "If CI/CD or E2E tests fail due to host header validation, ensure your test runner and proxy are forwarding the correct Host header. Some security middleware may block requests with unexpected Host values.\r # New Ridge Family Financial",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/papaparse": "^5.5.2"
+  }
+}
