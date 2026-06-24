@@ -21,11 +21,7 @@ if ($runtime -eq 'ollama') {
     $env:OLLAMA_HOST = "${HostName}:$Port"
     if ($ModelPath -and (Test-Path $ModelPath)) {
         $tag = if ($env:AI_BACKEND_MODEL) { $env:AI_BACKEND_MODEL } else { 'backend-30b-q4' }
-        $modelfile = @"
-FROM $ModelPath
-PARAMETER num_ctx $contextSize
-PARAMETER num_gpu 0
-"@
+        $modelfile = "FROM $ModelPath`nPARAMETER num_ctx $contextSize`nPARAMETER num_gpu 0"
         $temp = New-TemporaryFile
         Set-Content -Path $temp.FullName -Value $modelfile -Encoding UTF8
         ollama create $tag -f $temp.FullName
