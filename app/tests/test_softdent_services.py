@@ -105,7 +105,7 @@ def test_get_kpi_data_handles_sparse_snapshot_payload(monkeypatch):
     assert payload == [
         {"name": "production", "value": 0.0},
         {"name": "collections", "value": 0.0},
-        {"name": "ar", "value": 0.0},
+        {"name": "ar", "value": None},
         {"name": "collection_ratio", "value": 0.0},
         {"name": "provider_count", "value": 0},
         {"name": "period", "value": "unknown"},

@@ -1708,28 +1708,104 @@ def _find_softdent_provider_patient(provider_name: str) -> float:
     return 0.0
 
 
+def _resolve_explicit_softdent_ar_total() -> float | None:
+    """Return explicit SoftDent A/R total from export rows, or None when unavailable."""
+    rows = load_softdent_ar_rows()
+    snapshot = {
+        "total_ar": 0.0,
+        "insurance_ar": 0.0,
+        "patient_ar": 0.0,
+        "current_balance": 0.0,
+        "balance_30": 0.0,
+        "balance_60": 0.0,
+        "balance_90": 0.0,
+        "credit_balance": 0.0,
+    }
+    explicit_ar_values_present = False
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        current_balance = _coerce_float(_first_non_empty_value(row, "current_balance", "current"))
+        balance_30 = _coerce_float(_first_non_empty_value(row, "balance_30", "30_day", "30days", "30day"))
+        balance_60 = _coerce_float(_first_non_empty_value(row, "balance_60", "60_day", "60days", "60day"))
+        balance_90 = _coerce_float(
+            _first_non_empty_value(row, "balance_90", "90_day", "90days", "90day", "balance_over_90", "over_90")
+        )
+        credit_balance = _coerce_float(_first_non_empty_value(row, "credit_balance", "credit"))
+        insurance_ar = _coerce_float(_first_non_empty_value(row, "insurance_ar", "insurance_balance"))
+        patient_ar = _coerce_float(_first_non_empty_value(row, "patient_ar", "patient_balance"))
+        total_ar = _coerce_float(
+            _first_non_empty_value(
+                row,
+                "total_ar",
+                "outstanding_ar",
+                "accounts_receivable",
+                "open_balance",
+                "balance_remaining",
+                "amount",
+                "balance",
+            )
+        )
+
+        row_has_explicit_ar_values = any(
+            value > 0
+            for value in (
+                total_ar,
+                insurance_ar,
+                patient_ar,
+                current_balance,
+                balance_30,
+                balance_60,
+                balance_90,
+                credit_balance,
+            )
+        )
+        if not row_has_explicit_ar_values:
+            continue
+
+        explicit_ar_values_present = True
+        snapshot["insurance_ar"] = round(_coerce_float(snapshot.get("insurance_ar")) + insurance_ar, 2)
+        snapshot["patient_ar"] = round(_coerce_float(snapshot.get("patient_ar")) + patient_ar, 2)
+        snapshot["current_balance"] = round(_coerce_float(snapshot.get("current_balance")) + current_balance, 2)
+        snapshot["balance_30"] = round(_coerce_float(snapshot.get("balance_30")) + balance_30, 2)
+        snapshot["balance_60"] = round(_coerce_float(snapshot.get("balance_60")) + balance_60, 2)
+        snapshot["balance_90"] = round(_coerce_float(snapshot.get("balance_90")) + balance_90, 2)
+        snapshot["credit_balance"] = round(_coerce_float(snapshot.get("credit_balance")) + credit_balance, 2)
+        snapshot["total_ar"] = round(_coerce_float(snapshot.get("total_ar")) + total_ar, 2)
+
+    if not explicit_ar_values_present:
+        return None
+
+    if _coerce_float(snapshot.get("total_ar")) == 0.0:
+        snapshot["total_ar"] = round(
+            _coerce_float(snapshot.get("current_balance"))
+            + _coerce_float(snapshot.get("balance_30"))
+            + _coerce_float(snapshot.get("balance_60"))
+            + _coerce_float(snapshot.get("balance_90")),
+            2,
+        )
+    return round(_coerce_float(snapshot.get("total_ar")), 2)
+
+
 def get_kpi_data():
     snapshot = build_softdent_snapshot()
-    if bool(snapshot.get("available")):
-        raw_totals = snapshot.get("totals") if isinstance(snapshot.get("totals"), dict) else {}
-        production = _coerce_float(raw_totals.get("production"))
-        collections = _coerce_float(raw_totals.get("collections"))
-        ar_balance = round(max(production - collections, 0.0), 2)
-        collection_ratio = round((collections / production), 4) if production else 0.0
-        return [
-            {"name": "production", "value": production},
-            {"name": "collections", "value": collections},
-            {"name": "ar", "value": ar_balance},
-            {"name": "collection_ratio", "value": collection_ratio},
-            {"name": "provider_count", "value": int(snapshot.get("provider_count") or 0)},
-            {"name": "period", "value": str(snapshot.get("period") or "unknown")},
-        ]
+    if not bool(snapshot.get("available")):
+        return []
 
+    raw_totals = snapshot.get("totals") if isinstance(snapshot.get("totals"), dict) else {}
+    production = _coerce_float(raw_totals.get("production"))
+    collections = _coerce_float(raw_totals.get("collections"))
+    ar_balance = _resolve_explicit_softdent_ar_total()
+    collection_ratio = round((collections / production), 4) if production else 0.0
     return [
-        {"name": "production", "value": 10000},
-        {"name": "collections", "value": 9500},
-        {"name": "ar", "value": 1200},
-        {"name": "trends", "value": "up"},
+        {"name": "production", "value": production},
+        {"name": "collections", "value": collections},
+        {"name": "ar", "value": ar_balance},
+        {"name": "collection_ratio", "value": collection_ratio},
+        {"name": "provider_count", "value": int(snapshot.get("provider_count") or 0)},
+        {"name": "period", "value": str(snapshot.get("period") or "unknown")},
     ]
 
 # Add more business logic functions as needed
