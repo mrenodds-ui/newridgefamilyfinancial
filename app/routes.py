@@ -1,13 +1,14 @@
 from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 import io
+import json
 import logging
 import os
 import secrets
 from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from .auth import (
     APP_SESSION_COOKIE_NAME,
     AuthenticatedUser,
@@ -32,7 +33,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MAX_IMPORT_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_DOCUMENT_RAG_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_WIDGET_UPDATE_BYTES = 512 * 1024
 LOCAL_WIDGET_UPDATE_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
+LOCAL_WIDGET_UPDATE_ENVIRONMENTS = {"development", "dev", "test", "testing", "local"}
+PRODUCTION_WIDGET_UPDATE_ENVIRONMENTS = {"production", "prod", "staging"}
 
 
 class QuickBooksDiagnosticRequest(BaseModel):
@@ -94,6 +98,16 @@ def _widget_update_api_key_header_name() -> str:
     return header_name or "X-API-Key"
 
 
+def _widget_update_allows_local_fallback(request: Request) -> bool:
+    environment = str(os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "").strip().lower()
+    if environment in PRODUCTION_WIDGET_UPDATE_ENVIRONMENTS:
+        return False
+    if environment in LOCAL_WIDGET_UPDATE_ENVIRONMENTS:
+        return True
+    client_host = request.client.host if request.client is not None else ""
+    return client_host == "testclient"
+
+
 def _authorize_widget_update_request(request: Request) -> str:
     expected_api_key = str(os.getenv("WIDGET_API_KEY") or "").strip()
     header_name = _widget_update_api_key_header_name()
@@ -102,6 +116,12 @@ def _authorize_widget_update_request(request: Request) -> str:
         if not provided_api_key or not secrets.compare_digest(provided_api_key, expected_api_key):
             raise HTTPException(status_code=401, detail=f"Missing or invalid {header_name} for widget updates")
         return "api-key"
+
+    if not _widget_update_allows_local_fallback(request):
+        raise HTTPException(
+            status_code=403,
+            detail="Widget updates require WIDGET_API_KEY in this environment",
+        )
 
     client_host = request.client.host if request.client is not None else ""
     if client_host in LOCAL_WIDGET_UPDATE_HOSTS:
@@ -386,6 +406,7 @@ from .models import (
     MessageResponse,
     PhasesResponse,
     StatusResponse,
+    WidgetUpdateRequest,
     WidgetUpdateResponse,
 )
 from .models import HalDocumentRagAskRequest, HalDocumentRagAskResponse, HalDocumentRagDocumentListResponse, HalDocumentRagUploadResponse
@@ -1229,10 +1250,28 @@ def api_smoke(user: AuthenticatedUser = Depends(require_roles("admin"))):
 
 @router.post("/api/widgets/update", response_model=WidgetUpdateResponse, status_code=202)
 @router.post("/widgets/update", response_model=WidgetUpdateResponse, status_code=202, include_in_schema=False)
-def api_widget_update(request: Request, payload: dict[str, object] = Body(...)):
+async def api_widget_update(request: Request):
     auth_mode = _authorize_widget_update_request(request)
+    body = await request.body()
+    if len(body) > MAX_WIDGET_UPDATE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Widget update payload exceeds {MAX_WIDGET_UPDATE_BYTES} byte limit",
+        )
+    if not body:
+        raise HTTPException(status_code=400, detail="Widget update payload is required")
     try:
-        widget_feed = record_widget_feed(payload)
+        raw_payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Widget update payload must be valid JSON") from exc
+    if not isinstance(raw_payload, dict):
+        raise HTTPException(status_code=422, detail="Widget update payload must be a JSON object")
+    try:
+        validated = WidgetUpdateRequest.model_validate(raw_payload)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=json.loads(exc.json())) from exc
+    try:
+        widget_feed = record_widget_feed(validated.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

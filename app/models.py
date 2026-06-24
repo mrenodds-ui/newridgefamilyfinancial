@@ -910,6 +910,22 @@ class WidgetUpdateResponse(BaseModel):
     message: str
 
 
+class WidgetDefinition(BaseModel):
+    status: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    metrics: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+class WidgetUpdateRequest(BaseModel):
+    manager: str = Field(min_length=1)
+    widgets: dict[str, WidgetDefinition] = Field(min_length=1, max_length=20)
+    run_id: str | None = None
+    generated_at: str | None = None
+    sources: dict[str, object] = Field(default_factory=dict)
+    jobs: dict[str, object] = Field(default_factory=dict)
+
+
 class FinancialSummaryResponse(BaseModel):
     generatedAt: str | None = None
     latestSoftDentRefreshAt: str | None = None

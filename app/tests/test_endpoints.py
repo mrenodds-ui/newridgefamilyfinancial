@@ -1063,6 +1063,60 @@ def test_widget_update_route_requires_api_key_when_configured(monkeypatch):
     assert allowed_response.json()["auth_mode"] == "api-key"
 
 
+def test_widget_update_rejects_without_api_key_in_production(monkeypatch):
+    monkeypatch.delenv("WIDGET_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    response = client.post("/api/widgets/update", json=_sample_widget_update_payload())
+
+    assert response.status_code == 403
+    assert "WIDGET_API_KEY" in response.json()["detail"]
+
+
+def test_widget_update_allows_local_fallback_in_development(monkeypatch):
+    monkeypatch.delenv("WIDGET_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+
+    response = client.post("/api/widgets/update", json=_sample_widget_update_payload())
+
+    assert response.status_code == 202
+    assert response.json()["auth_mode"] == "local"
+
+
+def test_widget_update_payload_too_large(monkeypatch):
+    monkeypatch.delenv("WIDGET_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    oversized_payload = _sample_widget_update_payload()
+    oversized_payload["widgets"]["practice_financial_overview"]["metrics"]["padding"] = "x" * (512 * 1024)
+
+    response = client.post("/api/widgets/update", json=oversized_payload)
+
+    assert response.status_code == 413
+
+
+def test_widget_update_rejects_malformed_payload(monkeypatch):
+    monkeypatch.delenv("WIDGET_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+
+    response = client.post("/api/widgets/update", json={"manager": "", "widgets": {}})
+
+    assert response.status_code == 422
+
+
+def test_widget_update_rejects_too_many_widgets(monkeypatch):
+    monkeypatch.delenv("WIDGET_API_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    payload = _sample_widget_update_payload()
+    payload["widgets"] = {
+        f"widget_{index}": {"title": f"Widget {index}", "status": "SUCCESS", "metrics": {}}
+        for index in range(21)
+    }
+
+    response = client.post("/api/widgets/update", json=payload)
+
+    assert response.status_code == 422
+
+
 def test_hal_admin_summary_route_returns_admin_payload():
     response = client.get("/api/hal9000/admin-summary", auth=basic_auth())
 
