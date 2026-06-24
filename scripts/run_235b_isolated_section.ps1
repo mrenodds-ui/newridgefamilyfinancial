@@ -116,12 +116,20 @@ $pyArgs = @((Join-Path $Root 'run_235b_eval_section.py'), $Section, '--isolated'
 if ($OverwriteReport) { $pyArgs += '--overwrite' }
 & $py @pyArgs
 if ($LASTEXITCODE -ne 0) {
-    & (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1')
+    if ($ForceStopOllamaApp) {
+        & (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1') -ForceStopOllamaApp
+    } else {
+        & (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1')
+    }
     exit $LASTEXITCODE
 }
 
 Write-Host "`n[7/10] Stop qwen3:235b and evaluator serve"
-& (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1')
+if ($ForceStopOllamaApp) {
+    & (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1') -ForceStopOllamaApp
+} else {
+    & (Join-Path $PSScriptRoot 'stop_235b_evaluator_lane.ps1')
+}
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "`n[8/10] Verify :11436 is down"

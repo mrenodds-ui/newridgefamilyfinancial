@@ -12,6 +12,9 @@
 .PARAMETER Port
   Evaluator port (default 11436).
 
+.PARAMETER ForceStopOllamaApp
+  Stop the Windows Ollama tray app when listeners keep respawning on the evaluator port.
+
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\stop_235b_evaluator_lane.ps1
 #>
@@ -20,7 +23,8 @@ param(
     [switch]$Help,
 
     [int]$Port = 11436,
-    [string]$HostName = '127.0.0.1'
+    [string]$HostName = '127.0.0.1',
+    [switch]$ForceStopOllamaApp
 )
 
 if ($Help) {
@@ -29,16 +33,6 @@ if ($Help) {
 }
 
 $ErrorActionPreference = 'Continue'
-
-function Test-OllamaLane([string]$HostPort) {
-    try {
-        Invoke-WebRequest -Uri "http://$HostPort/v1/models" -TimeoutSec 5 -UseBasicParsing | Out-Null
-        return $true
-    }
-    catch {
-        return $false
-    }
-}
 
 function Get-ListenerPidsOnPort([int]$ListenPort) {
     $listenerPids = @()
@@ -67,17 +61,21 @@ function Stop-ListenerOnPort([int]$ListenPort) {
     }
 }
 
+function Test-PortListening([int]$ListenPort) {
+    return (Get-ListenerPidsOnPort -ListenPort $ListenPort).Count -gt 0
+}
+
 $evalHost = "${HostName}:$Port"
 $env:OLLAMA_HOST = $evalHost
 
 Write-Host "Stopping evaluator lane on http://$evalHost..."
 for ($pass = 1; $pass -le 3; $pass++) {
     Stop-ListenerOnPort -ListenPort $Port
-    if (-not (Test-OllamaLane $evalHost)) {
+    if (-not (Test-PortListening -ListenPort $Port)) {
         break
     }
     if ($pass -lt 3 -and -not $WhatIfPreference) {
-        Write-Host "Evaluator lane still responds; retrying listener stop ($pass/3)..."
+        Write-Host "Evaluator port still has listeners; retrying stop ($pass/3)..."
         Start-Sleep -Seconds 2
     }
 }
@@ -86,8 +84,20 @@ if (-not $WhatIfPreference) {
     Start-Sleep -Seconds 2
 }
 
-if (Test-OllamaLane $evalHost) {
-    Write-Error "Evaluator lane still responds on http://$evalHost. Press Ctrl+C in any foreground ollama serve terminal on :$Port, then re-run."
+if (Test-PortListening -ListenPort $Port) {
+    if ($ForceStopOllamaApp) {
+        $tray = Get-Process -Name 'ollama app' -ErrorAction SilentlyContinue
+        if ($tray -and $PSCmdlet.ShouldProcess('ollama app tray', 'Stop-Process')) {
+            Write-Host 'ForceStopOllamaApp: stopping Ollama tray app (optional, may affect other Ollama use).'
+            $tray | Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+            Stop-ListenerOnPort -ListenPort $Port
+        }
+    }
+}
+
+if (Test-PortListening -ListenPort $Port) {
+    Write-Error "Evaluator port :$Port still has listeners. Press Ctrl+C in any foreground ollama serve terminal on :$Port, then re-run."
     exit 1
 }
 
