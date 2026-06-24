@@ -27,19 +27,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const bannerTitle = hasVerifiedSession
     ? `Connected as ${session?.username}`
     : isVerificationPending
-      ? "Verifying session..."
+      ? "Preparing your workspace"
       : hasVerificationError
-        ? "Session verification unavailable"
-        : "Sign in required";
+        ? "Connection unavailable"
+        : "Sign in to continue";
   const bannerMessage = hasVerifiedSession
-    ? "Your dashboard session is managed by the backend and stays active until you sign out or it expires."
+    ? "Your financial workspace is ready."
     : isVerificationPending
-      ? "Checking the current backend-managed dashboard session before showing connected account details."
+      ? "Getting your financial dashboard ready."
       : hasVerificationError
-        ? "The current dashboard session could not be verified right now. Reconnect or try again after the session check recovers."
-        : "Sign in with your dashboard account to load live HAL, SoftDent, QuickBooks, and document-library data.";
+        ? "We could not confirm access right now. Please try again."
+        : "Sign in to open your financial dashboard, documents, and HAL tools.";
   const showSignOutButton = hasVerifiedSession || hasCachedIdentity;
-  const primaryActionLabel = hasVerifiedSession || hasCachedIdentity ? "Switch account" : "Sign in";
+  const primaryActionLabel = hasVerifiedSession || hasCachedIdentity ? "Change account" : "Sign in";
 
   useEffect(() => {
     return subscribeToApiAuthRequired(({ invalidCredentials }) => {
@@ -47,8 +47,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       setAuthPromptOpen(true);
       setAuthError(
         invalidCredentials
-          ? "Your dashboard session was rejected. Sign in again to continue."
-          : "Sign in to load live HAL, SoftDent, QuickBooks, and document-library data.",
+          ? "Your sign-in expired. Sign in again to continue."
+          : "Sign in to continue.",
       );
     });
   }, []);
@@ -70,7 +70,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       await queryClient.invalidateQueries({ queryKey: queryKeys.authSession });
       await queryClient.resetQueries();
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Unable to authenticate against the local API.");
+      setAuthError(error instanceof Error ? error.message : "Unable to sign in right now.");
     } finally {
       setIsAuthenticating(false);
     }
@@ -85,7 +85,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell app-shell--dashboard-theme">
       <aside className="app-sidebar">
         <Sidebar />
       </aside>
@@ -119,10 +119,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {authPromptOpen ? (
         <div className="api-auth-modal-backdrop" role="presentation">
           <dialog className="api-auth-modal" aria-labelledby="api-auth-title" open>
-            <h2 id="api-auth-title">Sign in to New Ridge Dashboard</h2>
-            <p>
-              Sign in once to start a backend-managed dashboard session. The browser uses that session cookie for the unified app after login.
-            </p>
+            <h2 id="api-auth-title">Sign in to New Ridge Family Financial</h2>
+            <p>Use your dashboard account to continue.</p>
             <form className="hal-form hal-form--narrative" onSubmit={(event) => void handleAuthenticate(event)}>
               <label htmlFor="api-auth-username">Username</label>
               <input

@@ -828,7 +828,8 @@ def test_hal_status_includes_operating_picture(monkeypatch):
     assert len(operating_picture["file_ownership_areas"]) == 10
     assert len(operating_picture["completion_ledger"]) == 2
     assert operating_picture["completion_ledger"][-1]["entry_id"] == "unit-test-completion-ledger"
-    assert operating_picture["model_routing"]["primary"]["model"] == "mistral-small:22b-instruct-2409-q4_K_M"
+    assert operating_picture["model_routing"]["primary"]["model"] == "mistral-small3.1:24b"
+    assert operating_picture["model_routing"]["second_opinion"]["model"] == "qwen3:30b"
     assert operating_picture["model_routing"]["code_help"]["model"] == "qwen2.5-coder:14b"
     assert any(item["path"] == "/api/hal/shell/commands" for item in operating_picture["developer_operator_endpoints"])
 
@@ -1022,7 +1023,8 @@ def test_hal_question_surfaces_retrieved_guidance(monkeypatch):
     assert "activate demo mode" in payload["answer"]
     assert any(item["source_id"] == "softdent_bridge_automation-25" for item in payload["retrieved_context"])
     assert any(item["source_id"] == "softdent_bridge_automation-29" for item in payload["retrieved_context"])
-    assert "approved SoftDent aggregate snapshots" in payload["answer"]
+    assert "backend-verified operating picture" not in payload["answer"]
+    assert "Priority routing applies:" not in payload["answer"]
 
 
 def test_hal_question_appends_profit_loss_report_snippet(monkeypatch):
@@ -1509,7 +1511,6 @@ def test_hal_question_builds_patient_insurance_narrative_from_raw_identifiers(mo
     payload = response.json()
     assert "PATIENT_REDACTED" in payload["sanitized_question"]
     assert "MRN_REDACTED" in payload["sanitized_question"]
-    assert "HAL used the reviewed local patient-specific SoftDent tool." in payload["answer"]
     assert "Verified patient context: Patient=John Doe | Claims=1 ($915.40 total) | Primary Status=Denied | Clinical Notes=1." in payload["answer"]
     assert "Insurance narrative for John Doe." in payload["answer"]
     assert "Delta Dental" in payload["answer"]
@@ -1519,6 +1520,8 @@ def test_hal_question_builds_patient_insurance_narrative_from_raw_identifiers(mo
     assert any(item["source_id"] == "softdent-patient-clinical-dossier" for item in payload["retrieved_context"])
     assert any(item["source_id"] == "softdent-insurance-narrative-support" for item in payload["retrieved_context"])
     assert "raw identifiers processed only in local patient tool" in payload["guardrails"]
+    assert payload["voice_profile"]["lane"] == "patient_workflow"
+    assert any(note["label"] == "Patient identifiers" for note in payload["governance_notes"])
 
 
 def test_hal_insurance_narrative_endpoint_returns_structured_response(monkeypatch):
@@ -1567,6 +1570,7 @@ def test_hal_insurance_narrative_endpoint_returns_structured_response(monkeypatc
     assert any(item["source_id"] == "softdent-patient-claims-dossier" for item in payload["supporting_context"])
     assert any(item["source_id"] == "softdent-patient-clinical-dossier" for item in payload["supporting_context"])
     assert "patient-specific local tool only" in payload["guardrails"]
+    assert payload["voice_profile"]["lane"] == "patient_workflow"
 
 
 def test_hal_insurance_narrative_endpoint_reports_no_match(monkeypatch):
@@ -1609,6 +1613,7 @@ def test_hal_patient_dossier_endpoint_returns_structured_lookup(monkeypatch):
     assert "Verified patient context: Patient=John Doe | Claims=1 ($0.00 total) | Primary Status=Denied | Clinical Notes=1." in payload["summary"]
     assert any(item["source_id"] == "softdent-patient-claims-dossier" for item in payload["supporting_context"])
     assert any(item["source_id"] == "softdent-patient-clinical-dossier" for item in payload["supporting_context"])
+    assert payload["voice_profile"]["lane"] == "patient_workflow"
 
 
 def test_hal_patient_dossier_endpoint_reports_no_match(monkeypatch):

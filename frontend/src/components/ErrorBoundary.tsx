@@ -2,6 +2,8 @@
 
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
+import "./ErrorBoundary.css";
+
 type ErrorBoundaryProps = {
   children: ReactNode;
   contextLabel?: string;
@@ -43,25 +45,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     const contextLabel = this.props.contextLabel?.trim();
     if (this.state.hasError) {
       return (
-        <main
-          style={{
-            padding: 24,
-            fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
-          }}
-        >
+        <main className="error-boundary">
           <section
             role="alert"
             aria-live="assertive"
-            style={{
-              maxWidth: 720,
-              margin: "0 auto",
-              padding: 20,
-              borderRadius: 18,
-              border: "1px solid rgba(157, 79, 45, 0.2)",
-              background: "#fff8f2",
-            }}
+            className="error-boundary__alert"
           >
-            <h1 style={{ marginTop: 0 }}>Something went wrong</h1>
+            <h1 className="error-boundary__title">Something went wrong</h1>
             <p>
               {contextLabel
                 ? `${contextLabel} hit an unexpected error. Try reloading the page or retrying the last action.`
@@ -70,7 +60,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <button type="button" onClick={this.handleReset}>
               Try Again
             </button>
-            {import.meta.env.DEV && this.state.message ? <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.message}</pre> : null}
+            {import.meta.env.DEV && this.state.message ? <pre className="error-boundary__details">{this.state.message}</pre> : null}
           </section>
         </main>
       );

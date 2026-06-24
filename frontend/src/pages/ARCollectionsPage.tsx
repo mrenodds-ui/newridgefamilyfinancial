@@ -6,9 +6,7 @@ import { ARAgingBarChart } from "../components/dashboard/ARAgingBarChart";
 import { ChartCard } from "../components/dashboard/ChartCard";
 import { CurrencyLineChart } from "../components/dashboard/CurrencyLineChart";
 import { buildProductionCollectionsSeries, selectLatestMonthlyKpi } from "../components/dashboard/financialDashboardSummary";
-import { SourceReviewContent } from "../components/dashboard/SourceReviewContent";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
-import { TransactionFeedStatusNotice } from "../components/dashboard/TransactionFeedStatusNotice";
 
 function formatCurrency(value: number) {
   return value.toLocaleString();
@@ -49,20 +47,27 @@ export default function ARCollectionsPage() {
     : [];
   const olderArTotal = latestAr ? (latestAr.balance_60 ?? 0) + (latestAr.balance_90 ?? 0) : 0;
   const collectionPercent = selectLatestMonthlyKpi(financialSummary.monthlyKpis)?.collection_rate ?? null;
-  const softDentReview = financialSummary.sourceReview?.softDent ?? null;
-  const healthFlags = financialSummary.healthFlags ?? [];
 
   return (
     <div className="dashboard-page">
-      <h1>A/R & Collections</h1>
-      <div className="dashboard-description">Cash collection health and A/R aging.</div>
-      <section className="dashboard-import-history">
-        <h2>SoftDent Source Review</h2>
-        <SourceReviewContent review={softDentReview} emptyMessage="SoftDent source review metadata is unavailable." />
-      </section>
-      <section className="dashboard-import-history">
-        <h2>Transaction Feed Status</h2>
-        <TransactionFeedStatusNotice healthFlags={healthFlags} />
+      <header className="page-header">
+        <p className="eyebrow">Collections</p>
+        <h1>A/R & Collections</h1>
+        <div className="dashboard-description">Cash collection health and A/R aging.</div>
+      </header>
+      <section className="dashboard-toolbar" aria-label="Collections summary">
+        <div>
+          <div className="dashboard-toolbar__label">Total A/R</div>
+          <div className="dashboard-toolbar__value">${latestAr ? formatCurrency(latestAr.total_ar ?? 0) : "0"}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">60+ A/R</div>
+          <div className="dashboard-toolbar__value">${formatCurrency(olderArTotal)}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Collection pace</div>
+          <div className="dashboard-toolbar__value">{collectionPercent !== null ? `${Math.round(collectionPercent)}%` : "N/A"}</div>
+        </div>
       </section>
       <div className="kpi-grid">
         <SummaryCard title="Total A/R">
@@ -94,6 +99,22 @@ export default function ARCollectionsPage() {
           <CurrencyLineChart data={trailing12Months} lines={[{ dataKey: "collections", name: "Collections", color: "#78A86B" }]} />
         </ChartCard>
       </div>
+      <section className="dashboard-card">
+        <div className="dashboard-card__title">Collections Focus</div>
+        <div className="dashboard-kpi-main">${latestAr ? formatCurrency(latestAr.balance_90 ?? 0) : "0"}</div>
+        <div className="dashboard-kpi-label">A/R older than 90 days</div>
+        <div className="dashboard-kpi-support">
+          <span>
+            Total A/R: <strong>${latestAr ? formatCurrency(latestAr.total_ar ?? 0) : "0"}</strong>
+          </span>
+          <span>
+            60+ aging: <strong>${formatCurrency(olderArTotal)}</strong>
+          </span>
+          <span>
+            Collection pace: <strong>{collectionPercent !== null ? `${Math.round(collectionPercent)}%` : "N/A"}</strong>
+          </span>
+        </div>
+      </section>
     </div>
   );
 }

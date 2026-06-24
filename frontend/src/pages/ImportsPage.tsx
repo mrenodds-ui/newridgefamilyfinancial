@@ -5,9 +5,9 @@ export default function ImportsPage() {
     <div className="dashboard-page">
       <div className="page-content">
         <header className="page-header">
-          <p className="eyebrow">Data Imports</p>
-          <h1>Imports</h1>
-          <p>Import SoftDent and QuickBooks files through the canonical staging and backend refresh pipeline.</p>
+          <p className="eyebrow">Practice Files</p>
+          <h1>Bring In Files</h1>
+          <p>Add the latest SoftDent and QuickBooks exports to refresh the dashboard.</p>
         </header>
         <ImportPanel />
       </div>

@@ -69,18 +69,30 @@ describe("buildProductionCollectionsSeries", () => {
 });
 
 describe("buildDashboardTrendData", () => {
-  it("prefers the verified trailing 12-month summary rows for the root dashboard charts", () => {
+  it("prefers the longer verified monthly history and limits root dashboard charts to the trailing 24 months", () => {
+    const fourYearMonthlyKpis = Array.from({ length: 30 }, (_, index) => ({
+      year_month: `${2024 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`,
+      gross_production: index + 100,
+      collections: index + 50,
+    }));
+
     expect(
       buildDashboardTrendData({
         monthlyKpis: [{ year_month: "2026-04", gross_production: 999, collections: 888 }],
         trailing12Months: [{ year_month: "2026-06", gross_production: 1500, collections: 1200 }],
         calendarYearKpis: [],
-        fourYearMonthlyKpis: [{ year_month: "2026-01", gross_production: 1000, collections: 700 }],
+        fourYearMonthlyKpis,
         providerProduction: [],
         topAdaCodes: [],
         latestAr: null,
       } as const),
-    ).toEqual([{ date: "2026-06", production: 1500, collections: 1200 }]);
+    ).toEqual(
+      fourYearMonthlyKpis.slice(-24).map((row) => ({
+        date: row.year_month,
+        production: row.gross_production,
+        collections: row.collections,
+      })),
+    );
   });
 });
 
@@ -232,6 +244,31 @@ describe("verified QuickBooks dashboard helpers", () => {
       { date: "2026-05", expenses: 900 },
       { date: "2026-06", expenses: 1200 },
     ]);
+  });
+
+  it("supports slicing QuickBooks trend helpers to the trailing 24 rows for dashboard charts", () => {
+    const expenseRows = Array.from({ length: 30 }, (_, index) => ({
+      year_month: `${2024 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`,
+      expense_total: index + 1,
+    }));
+    const profitLossRows = expenseRows.map((row, index) => ({
+      year_month: row.year_month,
+      expense_total: row.expense_total,
+      net_income: index + 101,
+    }));
+
+    expect(buildQuickBooksMonthlyExpenseTrendData(expenseRows, 24)).toHaveLength(24);
+    expect(buildQuickBooksMonthlyExpenseTrendData(expenseRows, 24)[0]).toEqual({
+      date: expenseRows[6]!.year_month,
+      expenses: expenseRows[6]!.expense_total,
+    });
+
+    expect(buildProfitLossTrendData(profitLossRows, 24)).toHaveLength(24);
+    expect(buildProfitLossTrendData(profitLossRows, 24)[0]).toEqual({
+      date: profitLossRows[6]!.year_month,
+      expenses: profitLossRows[6]!.expense_total,
+      netIncome: profitLossRows[6]!.net_income,
+    });
   });
 });
 

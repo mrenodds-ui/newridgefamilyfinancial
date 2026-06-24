@@ -2,6 +2,8 @@ from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, Reques
 from fastapi.responses import FileResponse, StreamingResponse
 import io
 import logging
+import os
+import secrets
 from typing import Optional
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -22,6 +24,7 @@ from .hal import advance_hal_autonomy_run, answer_accounting_policy_question, an
 from .hal import answer_document_rag_question, ingest_document_rag_upload, list_document_rag_documents
 from .hal.orchestrator import get_hal_operating_picture
 from .hal.financial_tools import get_financial_source_status
+from .hal.widget_feed import get_widget_feed, record_widget_feed
 from .hal.safety import append_ai_activity_log, create_ai_workspace_handle, ensure_within_ai_workspace, resolve_ai_workspace_handle
 from .hal.posting_queue import PostingQueueStatus
 
@@ -29,6 +32,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MAX_IMPORT_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_DOCUMENT_RAG_UPLOAD_BYTES = 25 * 1024 * 1024
+LOCAL_WIDGET_UPDATE_HOSTS = {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 class QuickBooksDiagnosticRequest(BaseModel):
@@ -82,6 +86,30 @@ def _quickbooks_odbc_unavailable_csv_response() -> StreamingResponse:
         io.StringIO("Error: QuickBooks ODBC diagnostic is unavailable.\n"),
         status_code=503,
         media_type="text/csv",
+    )
+
+
+def _widget_update_api_key_header_name() -> str:
+    header_name = str(os.getenv("WIDGET_API_KEY_HEADER") or "X-API-Key").strip()
+    return header_name or "X-API-Key"
+
+
+def _authorize_widget_update_request(request: Request) -> str:
+    expected_api_key = str(os.getenv("WIDGET_API_KEY") or "").strip()
+    header_name = _widget_update_api_key_header_name()
+    if expected_api_key:
+        provided_api_key = str(request.headers.get(header_name) or "").strip()
+        if not provided_api_key or not secrets.compare_digest(provided_api_key, expected_api_key):
+            raise HTTPException(status_code=401, detail=f"Missing or invalid {header_name} for widget updates")
+        return "api-key"
+
+    client_host = request.client.host if request.client is not None else ""
+    if client_host in LOCAL_WIDGET_UPDATE_HOSTS:
+        return "local"
+
+    raise HTTPException(
+        status_code=403,
+        detail="Widget update route only accepts local requests unless WIDGET_API_KEY is configured",
     )
 
 
@@ -358,6 +386,7 @@ from .models import (
     MessageResponse,
     PhasesResponse,
     StatusResponse,
+    WidgetUpdateResponse,
 )
 from .models import HalDocumentRagAskRequest, HalDocumentRagAskResponse, HalDocumentRagDocumentListResponse, HalDocumentRagUploadResponse
 from .services import (
@@ -1077,6 +1106,17 @@ def _build_financial_summary_payload() -> dict[str, object]:
     }
 
 
+def _build_public_financial_summary_payload() -> dict[str, object]:
+    payload = _build_financial_summary_payload()
+    widget_feed = get_widget_feed()
+    if widget_feed is None:
+        return payload
+
+    public_payload = dict(payload)
+    public_payload["widgetFeed"] = widget_feed
+    return public_payload
+
+
 def _build_admin_summary_payload() -> dict[str, object]:
     financial_summary = _build_financial_summary_payload()
     source_review = financial_summary.get("sourceReview") if isinstance(financial_summary.get("sourceReview"), dict) else {}
@@ -1186,10 +1226,35 @@ def api_smoke(user: AuthenticatedUser = Depends(require_roles("admin"))):
     del user
     return run_smoke_tests()
 
+
+@router.post("/api/widgets/update", response_model=WidgetUpdateResponse, status_code=202)
+@router.post("/widgets/update", response_model=WidgetUpdateResponse, status_code=202, include_in_schema=False)
+def api_widget_update(request: Request, payload: dict[str, object] = Body(...)):
+    auth_mode = _authorize_widget_update_request(request)
+    try:
+        widget_feed = record_widget_feed(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    widgets = widget_feed.get("widgets") if isinstance(widget_feed.get("widgets"), dict) else {}
+    sources = widget_feed.get("sources") if isinstance(widget_feed.get("sources"), dict) else {}
+    jobs = widget_feed.get("jobs") if isinstance(widget_feed.get("jobs"), dict) else {}
+    return {
+        "accepted": True,
+        "manager": str(widget_feed.get("manager") or ""),
+        "run_id": widget_feed.get("run_id"),
+        "received_at": str(widget_feed.get("received_at") or _utc_now_iso()),
+        "widget_count": len(widgets),
+        "source_count": len(sources),
+        "job_count": len(jobs),
+        "auth_mode": auth_mode,
+        "message": "HAL widget update accepted.",
+    }
+
 @router.get("/api/hal9000/page-summary", response_model=FinancialSummaryResponse, response_model_exclude_none=True)
 def hal9000_page_summary(user: AuthenticatedUser = Depends(require_roles("dashboard:read"))):
     del user
-    return _build_financial_summary_payload()
+    return _build_public_financial_summary_payload()
 
 
 @router.get("/api/hal9000/admin-summary")
@@ -1311,7 +1376,7 @@ async def api_hal9000_refresh_financial_sources(user: AuthenticatedUser = Depend
         "actor": user.username,
         "refreshed_at_utc": _utc_now_iso(),
         "refresh_report": refresh_report,
-        "financial_summary": _build_financial_summary_payload(),
+        "financial_summary": _build_public_financial_summary_payload(),
         "hal_status": get_hal_index_status(),
         "admin_summary": _build_admin_summary_payload(),
     }

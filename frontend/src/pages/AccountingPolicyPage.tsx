@@ -86,11 +86,19 @@ export default function AccountingPolicyPage() {
             <div className="hal-answer-card__section hal-answer-card__section--lead">{renderedResponse.answer}</div>
             <div className="journal-draft-banner">Policy guidance is draft-only and requires accounting review before operational use.</div>
             <div className="hal-answer-card__section">
+              <strong>Response profile:</strong> {renderedResponse.voice_profile.label} · {renderedResponse.voice_profile.tone}
+            </div>
+            <div className="hal-answer-card__section">
               <strong>Accounting standard:</strong> {renderedResponse.accounting_standard || "Internal reviewed guidance"}
             </div>
             <div className="hal-answer-card__section">
               <strong>Confidence:</strong> {renderedResponse.confidence}
             </div>
+            {(renderedResponse.governance_notes ?? []).length ? (
+              <div className="hal-answer-card__section">
+                <strong>Governance:</strong> {renderedResponse.governance_notes.map((item) => `${item.label}: ${item.detail}`).join(" | ")}
+              </div>
+            ) : null}
             <div className="hal-answer-card__section">
               <strong>Audit ID:</strong> {renderedResponse.audit_id}
             </div>

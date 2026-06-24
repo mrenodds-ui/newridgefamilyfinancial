@@ -1,18 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import type React from "react";
 
-const Button = (props: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button
-    {...props}
-    style={{
-      padding: "8px 18px",
-      borderRadius: 6,
-      border: "1px solid #bbb",
-      background: "#fff",
-      ...props.style,
-    }}
-  >
-    {props.children}
+import "./Button.stories.css";
+
+type ButtonProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "style">;
+
+const Button = ({ children, className, ...props }: ButtonProps) => (
+  <button {...props} className={className ? `button-story__button ${className}` : "button-story__button"}>
+    {children}
   </button>
 );
 

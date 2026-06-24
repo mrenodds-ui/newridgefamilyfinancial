@@ -5,20 +5,6 @@ environment_variables:
 model_list:
   - model_name: hal-chat-balanced
     litellm_params:
-      model: ollama_chat/qwen3:30b
-      api_base: os.environ/OLLAMA_BASE_URL
-      rpm: 18
-      tpm: 90000
-    model_info:
-      family: qwen3moe
-      context_length: 262144
-      heuristic_tags:
-        - coding
-        - long_context
-        - tools
-        - faster_turnaround
-  - model_name: hal-chat-balanced
-    litellm_params:
       model: ollama_chat/mistral-small3.1:24b
       api_base: os.environ/OLLAMA_BASE_URL
       rpm: 24
@@ -61,20 +47,6 @@ model_list:
         - large_reasoning
   - model_name: hal-analysis
     litellm_params:
-      model: ollama_chat/gpt-oss:120b
-      api_base: os.environ/OLLAMA_BASE_URL
-      rpm: 6
-      tpm: 24000
-    model_info:
-      family: gptoss
-      context_length: 131072
-      heuristic_tags:
-        - coding
-        - long_context
-        - tools
-        - large_reasoning
-  - model_name: hal-analysis
-    litellm_params:
       model: ollama_chat/qwen3:30b
       api_base: os.environ/OLLAMA_BASE_URL
       rpm: 18
@@ -87,20 +59,6 @@ model_list:
         - long_context
         - tools
         - faster_turnaround
-  - model_name: hal-second-opinion
-    litellm_params:
-      model: ollama_chat/gpt-oss:120b
-      api_base: os.environ/OLLAMA_BASE_URL
-      rpm: 6
-      tpm: 24000
-    model_info:
-      family: gptoss
-      context_length: 131072
-      heuristic_tags:
-        - coding
-        - long_context
-        - tools
-        - large_reasoning
   - model_name: hal-second-opinion
     litellm_params:
       model: ollama_chat/qwen3:30b

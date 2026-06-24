@@ -4,7 +4,6 @@ import { useState } from "react";
 import { fetchFinancialSummary } from "../api/client";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { selectLatestProfitLoss } from "../components/dashboard/financialDashboardSummary";
-import { SourceReviewContent } from "../components/dashboard/SourceReviewContent";
 
 function toNumber(value: number | string | null | undefined) {
   if (typeof value === "number") return Number.isFinite(value) ? value : 0;
@@ -56,15 +55,27 @@ export default function EBITDAEvaluationPage() {
   const lowVal = adjustedEBITDA * lowMult;
   const midVal = adjustedEBITDA * midMult;
   const highVal = adjustedEBITDA * highMult;
-  const quickBooksReview = financialSummary.sourceReview?.quickBooks ?? null;
 
   return (
     <div className="dashboard-page">
-      <h1>EBITDA Evaluation</h1>
-      <div className="dashboard-description">Practice sale and DSO readiness analysis using live QuickBooks profit and loss data.</div>
-      <section className="dashboard-import-history">
-        <h2>QuickBooks Source Review</h2>
-        <SourceReviewContent review={quickBooksReview} emptyMessage="QuickBooks source review metadata is unavailable." />
+      <header className="page-header">
+        <p className="eyebrow">Practice Valuation</p>
+        <h1>EBITDA Evaluation</h1>
+        <div className="dashboard-description">Practice sale and DSO readiness analysis using live QuickBooks profit and loss data.</div>
+      </header>
+      <section className="dashboard-toolbar" aria-label="EBITDA summary">
+        <div>
+          <div className="dashboard-toolbar__label">Revenue</div>
+          <div className="dashboard-toolbar__value">${revenue.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Net income</div>
+          <div className="dashboard-toolbar__value">${netIncome.toLocaleString()}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Starting EBITDA</div>
+          <div className="dashboard-toolbar__value">${sourceEbitda.toLocaleString()}</div>
+        </div>
       </section>
       <div className="kpi-grid">
         <div className="dashboard-card">
@@ -80,12 +91,13 @@ export default function EBITDAEvaluationPage() {
           <div className="kpi-value">{ebitdaMargin}%</div>
         </div>
         <div className="dashboard-card">
-          <div className="kpi-title">Source EBITDA Candidate</div>
+          <div className="kpi-title">Starting EBITDA</div>
           <div className="kpi-value">${sourceEbitda.toLocaleString()}</div>
         </div>
       </div>
-      <div className="dashboard-ebitda-inputs">
-        <h2>Editable Inputs</h2>
+      <div className="dashboard-charts">
+        <section className="dashboard-card dashboard-ebitda-inputs">
+        <h2>Valuation Assumptions</h2>
         <label>
           Owner Comp Adjustment: <input type="number" value={ownerAdj} onChange={(e) => setOwnerAdj(Number(e.target.value))} />
         </label>
@@ -105,8 +117,8 @@ export default function EBITDAEvaluationPage() {
         <label>
           High Multiple: <input type="number" step="0.1" value={highMult} onChange={(e) => setHighMult(Number(e.target.value))} />
         </label>
-      </div>
-      <div className="dashboard-ebitda-valuation">
+        </section>
+      <section className="dashboard-card dashboard-ebitda-valuation">
         <h2>Valuation Range</h2>
         <div>
           Low: <strong>${lowVal.toLocaleString()}</strong>
@@ -117,12 +129,12 @@ export default function EBITDAEvaluationPage() {
         <div>
           High: <strong>${highVal.toLocaleString()}</strong>
         </div>
+      </section>
       </div>
-      <div className="dashboard-ebitda-notes">
-        <h2>Notes</h2>
+      <div className="dashboard-card dashboard-ebitda-notes">
+        <h2>How To Use This View</h2>
         <div>
-          Owner compensation, replacement doctor cost, and add-backs remain editable assumptions layered on top of the latest QuickBooks net
-          income.
+          Adjust owner compensation, doctor replacement cost, add-backs, and valuation multiples to model different practice outcomes.
         </div>
       </div>
     </div>

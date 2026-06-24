@@ -52,8 +52,11 @@ export default function TrendsPage() {
 
   return (
     <div className="dashboard-page">
-      <h1>Trends</h1>
-      <div className="dashboard-description">Key financial and operational trends over time.</div>
+      <header className="page-header">
+        <p className="eyebrow">Performance Trends</p>
+        <h1>Trends</h1>
+        <div className="dashboard-description">Key financial and operational trends over time.</div>
+      </header>
       <div className="kpi-grid">
         <SummaryCard title="12-Month Production">
           <div>

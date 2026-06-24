@@ -87,8 +87,11 @@ export default function SettingsPage() {
 
   return (
     <div className="dashboard-page">
-      <h1>Settings</h1>
-      <div className="dashboard-description">Practice profile, branding, and data settings. Changes save locally in this browser.</div>
+      <header className="page-header">
+        <p className="eyebrow">Workspace Settings</p>
+        <h1>Settings</h1>
+        <div className="dashboard-description">Practice profile, branding, and data settings. Changes save locally in this browser.</div>
+      </header>
       <div className="page-state-card page-state-card--info settings-page__status" id="settings-save-status" role="status">
         {hasValidationErrors
           ? "Draft saved locally. Fix the highlighted fields before using these values elsewhere."

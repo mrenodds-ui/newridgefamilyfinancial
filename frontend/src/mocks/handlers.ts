@@ -1007,7 +1007,7 @@ export const handlers = [
       mode: "local-rag-phase-1",
       matched: true,
       narrative:
-        "Insurance narrative for John Doe. The claim concerns Crown buildup performed or documented on 2026-06-01. The current claim status is Denied with payer Delta Dental. Clinical documentation notes: ClinicalNote Patient has fractured cusp with recurrent decay and documented cold sensitivity. This narrative was prepared from local read-only SoftDent claims and clinical-note exports and should be reviewed before submission.",
+        "Insurance narrative for John Doe. The claim concerns Crown buildup performed or documented on 2026-06-01. The current claim status is Denied with payer Delta Dental. Clinical documentation notes: ClinicalNote Patient has fractured cusp with recurrent decay and documented cold sensitivity.",
       sanitized_question: question.replace("John Doe", "PATIENT_REDACTED").replace("778899", "MRN_REDACTED"),
       sanitization_findings: [
         { label: "patient_name", replacement: "PATIENT_REDACTED" },
@@ -1045,6 +1045,18 @@ export const handlers = [
         allowed_sources: ["reviewed_patient_specific_softdent_exports"],
         disallowed_actions: ["raw_phi_prompting", "arbitrary_sql"],
       },
+      voice_profile: {
+        lane: "patient_workflow",
+        label: "Patient workflow",
+        tone: "careful and case-focused",
+        style_notes: ["Stay specific to the matched patient context."],
+      },
+      governance_notes: [
+        {
+          label: "Patient identifiers",
+          detail: "Raw identifiers stay inside the reviewed local patient tool and the audit trail stores the sanitized request.",
+        },
+      ],
     });
   }),
   http.post("/api/hal9000", async ({ request }) => {
@@ -1073,6 +1085,22 @@ export const handlers = [
         allowed_sources: ["approved_local_read_only_scope"],
         disallowed_actions: ["direct_hardware_writes"],
       },
+      voice_profile: {
+        lane: "primary",
+        label: "Primary response",
+        tone: "direct and grounded",
+        style_notes: ["Lead with the answer.", "Use verified facts before interpretation."],
+      },
+      governance_notes: [
+        {
+          label: "Data boundary",
+          detail: "HAL stays inside approved local read-only sources and sanitized retrieval.",
+        },
+        {
+          label: "Human approval",
+          detail: "Requested device or state changes stay pending until a human explicitly approves them.",
+        },
+      ],
       review_actions: [
         {
           action_id: "monitor-set-luminance-30",
@@ -1285,6 +1313,18 @@ export const handlers = [
         allowed_sources: ["reviewed_patient_specific_softdent_exports"],
         disallowed_actions: ["raw_phi_prompting", "arbitrary_sql"],
       },
+      voice_profile: {
+        lane: "patient_workflow",
+        label: "Patient workflow",
+        tone: "careful and case-focused",
+        style_notes: ["Stay specific to the matched patient context."],
+      },
+      governance_notes: [
+        {
+          label: "Patient identifiers",
+          detail: "Raw identifiers stay inside the reviewed local patient tool and the audit trail stores the sanitized request.",
+        },
+      ],
     });
   }),
   http.post("/api/hal9000/chart-plan", async ({ request }) => {
@@ -1518,7 +1558,7 @@ export const handlers = [
     };
     return HttpResponse.json({
       mode: "local-rag-phase-1",
-      answer: `Accounting policy guidance is limited to approved local documentation and reviewed financial context. For this request, HAL found relevant guidance from hal_phi_rag_architecture chunk 24, API chunk 1. Treat this as draft guidance under ${payload.accounting_standard || "internal reviewed guidance"}; a human reviewer should confirm the final accounting treatment before use in the ledger.`,
+      answer: `For this request, HAL found relevant guidance from hal_phi_rag_architecture chunk 24, API chunk 1. Treat this as draft guidance under ${payload.accounting_standard || "internal reviewed guidance"}. A human reviewer should confirm the final accounting treatment before anything reaches the ledger.`,
       accounting_standard: payload.accounting_standard || null,
       citations: [
         {
@@ -1543,6 +1583,22 @@ export const handlers = [
         allowed_sources: ["calculated_kpis", "internal_policy_docs"],
         disallowed_actions: ["raw_phi_prompting", "arbitrary_sql", "production_writes"],
       },
+      voice_profile: {
+        lane: "policy",
+        label: "Policy guidance",
+        tone: "measured and review-oriented",
+        style_notes: ["Frame the answer as draft guidance.", "Ground the answer in approved citations."],
+      },
+      governance_notes: [
+        {
+          label: "Draft-only guidance",
+          detail: "Accounting policy answers are advisory and require human accounting review before operational use.",
+        },
+        {
+          label: "Approved sources",
+          detail: "This answer was grounded in hal_phi_rag_architecture chunk 24, API chunk 1.",
+        },
+      ],
     });
   }),
   http.post("/api/hal9000/accounting/posting-queue", async ({ request }) => {

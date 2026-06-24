@@ -122,11 +122,13 @@ export default function DocumentLibraryPage() {
 
   return (
     <div className="dashboard-page">
-      <h1>Document Library</h1>
-      <div className="dashboard-description">
-        Upload local 10-Ks, earnings call notes, PDFs, CSV exports, and working notes. HAL chunks them with LangChain, indexes them locally,
-        and answers only from retrieved file context.
-      </div>
+      <header className="page-header">
+        <p className="eyebrow">Reference Library</p>
+        <h1>Document Library</h1>
+        <div className="dashboard-description">
+          Upload local PDFs, notes, spreadsheets, and reference files. HAL keeps them in a private library and answers from those files only.
+        </div>
+      </header>
 
       <div className="kpi-grid">
         <div className="hal-answer-card">
@@ -134,23 +136,23 @@ export default function DocumentLibraryPage() {
           <div>{documentsQuery.data?.count ?? 0}</div>
         </div>
         <div className="hal-answer-card">
-          <h2>Visible Pages</h2>
+          <h2>Pages</h2>
           <div>{formatCount(totalPages)}</div>
         </div>
         <div className="hal-answer-card">
-          <h2>Visible Chunks</h2>
+          <h2>Sections</h2>
           <div>{formatCount(totalChunks)}</div>
         </div>
         <div className="hal-answer-card">
-          <h2>Visible Characters</h2>
+          <h2>Characters</h2>
           <div>{formatCount(totalCharacters)}</div>
         </div>
       </div>
 
       <section className="hal-answer-card">
-        <h2>Upload Files</h2>
+        <h2>Add Files</h2>
         <div className="hal-answer-card__section hal-answer-card__section--lead">
-          Accepted file types: PDF, TXT, MD, CSV, JSON. Uploaded files stay under the local AI workspace document library.
+          Accepted file types: PDF, TXT, MD, CSV, and JSON. Added files stay in your local library.
         </div>
         <form className="hal-form hal-form--narrative" onSubmit={handleUpload}>
           <label htmlFor="document-rag-upload">Choose file</label>
@@ -163,7 +165,7 @@ export default function DocumentLibraryPage() {
           />
           <div className="hal-form__actions">
             <button type="submit" disabled={!selectedFile || uploadMutation.isPending || Boolean(uploadSelectionError)}>
-              {uploadMutation.isPending ? "Indexing..." : "Index File"}
+              {uploadMutation.isPending ? "Adding..." : "Add file"}
             </button>
           </div>
         </form>
@@ -172,7 +174,7 @@ export default function DocumentLibraryPage() {
 
         {uploadMutation.isError ? (
           <div className="hal-answer-card__section">
-            {uploadMutation.error instanceof Error ? uploadMutation.error.message : "Unable to index that file."}
+            {uploadMutation.error instanceof Error ? uploadMutation.error.message : "Unable to add that file."}
           </div>
         ) : null}
 
@@ -181,14 +183,14 @@ export default function DocumentLibraryPage() {
             <strong>{uploadMutation.data.document.source_name}</strong>
             <div>{uploadMutation.data.message}</div>
             <div>
-              Stored in the local document library with {uploadMutation.data.document.page_count} page(s) and {uploadMutation.data.document.chunk_count} chunk(s).
+              Saved in your local library with {uploadMutation.data.document.page_count} page(s) and {uploadMutation.data.document.chunk_count} section(s).
             </div>
           </div>
         ) : null}
       </section>
 
       <section className="hal-answer-card">
-        <h2>Ask Grounded Questions</h2>
+        <h2>Ask About Your Files</h2>
         <form className="hal-form hal-form--narrative" onSubmit={handleAsk}>
           <label htmlFor="document-rag-question">Question</label>
           <textarea
@@ -197,18 +199,18 @@ export default function DocumentLibraryPage() {
             rows={5}
             value={question}
             onChange={(event) => setQuestion(event.target.value)}
-            placeholder="Ask about revenue trends, risk factors, guidance, margin changes, covenant language, or any uploaded note."
+            placeholder="Ask about trends, policies, risks, notes, or any detail from the files you uploaded."
           />
-          <label htmlFor="document-rag-top-k">Retrieved chunks</label>
+          <label htmlFor="document-rag-top-k">How much to search</label>
           <select id="document-rag-top-k" className="hal-form__textarea" value={String(topK)} onChange={handleTopKChange}>
-            <option value="2">2 chunks</option>
-            <option value="4">4 chunks</option>
-            <option value="6">6 chunks</option>
-            <option value="8">8 chunks</option>
+            <option value="2">2 sections</option>
+            <option value="4">4 sections</option>
+            <option value="6">6 sections</option>
+            <option value="8">8 sections</option>
           </select>
           <div className="hal-form__actions">
             <button type="submit" disabled={!question.trim() || askMutation.isPending}>
-              {askMutation.isPending ? "Asking..." : "Ask Document Library"}
+              {askMutation.isPending ? "Asking..." : "Ask library"}
             </button>
           </div>
         </form>
@@ -230,10 +232,10 @@ export default function DocumentLibraryPage() {
                     : "dashboard-import-status-badge dashboard-import-status-badge--pending"
                 }
               >
-                {askMutation.data.grounded ? "grounded" : "insufficient context"}
+                {askMutation.data.grounded ? "grounded in files" : "not enough detail"}
               </span>
               <span className="dashboard-import-status-badge dashboard-import-status-badge--spaced">
-                {askMutation.data.document_count} indexed file(s)
+                {askMutation.data.document_count} file(s) in library
               </span>
             </div>
             {askMutation.data.guardrails.length ? (
@@ -246,7 +248,7 @@ export default function DocumentLibraryPage() {
               </div>
             ) : null}
             <div className="hal-answer-card__section">
-              <strong>Retrieved context</strong>
+              <strong>Supporting excerpts</strong>
             </div>
             {askMutation.data.retrieved_context.map((item) => (
               <div key={item.source_id} className="hal-supporting-context-item">
@@ -255,16 +257,16 @@ export default function DocumentLibraryPage() {
               </div>
             ))}
             {askMutation.data.retrieved_context.length === 0 ? (
-              <div className="hal-answer-card__section">No supporting snippets were returned for this question.</div>
+              <div className="hal-answer-card__section">No supporting excerpts were returned for this question.</div>
             ) : null}
           </>
         ) : null}
       </section>
 
       <section className="hal-answer-card">
-        <h2>Indexed Files</h2>
+        <h2>Library Files</h2>
         <form className="hal-form hal-form--narrative" onSubmit={(event) => event.preventDefault()}>
-          <label htmlFor="document-rag-search">Search indexed file names</label>
+          <label htmlFor="document-rag-search">Search file names</label>
           <input
             id="document-rag-search"
             className="hal-form__textarea"
@@ -274,10 +276,10 @@ export default function DocumentLibraryPage() {
           />
         </form>
 
-        {documentsQuery.isPending ? <div className="hal-answer-card__section">Loading indexed files...</div> : null}
+        {documentsQuery.isPending ? <div className="hal-answer-card__section">Loading library files...</div> : null}
         {documentsQuery.isError ? (
           <div className="hal-answer-card__section">
-            {documentsQuery.error instanceof Error ? documentsQuery.error.message : "Unable to load indexed files."}
+            {documentsQuery.error instanceof Error ? documentsQuery.error.message : "Unable to load library files."}
           </div>
         ) : null}
 
@@ -289,8 +291,8 @@ export default function DocumentLibraryPage() {
                   <th>File</th>
                   <th>Type</th>
                   <th>Pages</th>
-                  <th>Chunks</th>
-                  <th>Uploaded</th>
+                  <th>Sections</th>
+                  <th>Added</th>
                 </tr>
               </thead>
               <tbody>
@@ -305,7 +307,7 @@ export default function DocumentLibraryPage() {
                 ))}
               </tbody>
             </table>
-            {documents.length === 0 ? <div className="hal-answer-card__section">No indexed files matched this filter.</div> : null}
+            {documents.length === 0 ? <div className="hal-answer-card__section">No files matched this filter.</div> : null}
           </div>
         ) : null}
       </section>

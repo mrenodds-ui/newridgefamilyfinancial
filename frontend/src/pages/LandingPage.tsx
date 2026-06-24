@@ -9,7 +9,6 @@ import { InsurancePatientBreakdown } from "../components/dashboard/InsurancePati
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardDataPersistence } from "../hooks/useDashboardDataPersistence";
 import { useDashboardExport } from "../utils/useDashboardExport";
-// import { mockProviderProduction, mockInsurancePatientBreakdown } from "../data/mockDashboardData";
 import styles from "./LandingPage.module.css";
 import "./LandingPage.dark.css";
 

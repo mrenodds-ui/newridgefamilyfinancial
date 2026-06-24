@@ -73,6 +73,8 @@ export type FinancialDashboardSummary = {
   isStale: boolean;
 };
 
+export const DASHBOARD_TREND_MONTH_WINDOW = 24;
+
 export function buildArOver90AlertMessage(summary: FinancialDashboardSummary | null | undefined): string | null {
   const arOver90 = summary?.arOver90;
   if (typeof arOver90 !== "number" || !Number.isFinite(arOver90) || arOver90 <= 0) {
@@ -130,6 +132,14 @@ export function selectLatestProfitLoss<T extends ProfitLossLike>(rows: T[] | nul
   return rows?.at(-1) ?? null;
 }
 
+function sliceTrailingRows<T>(rows: T[], maxRows?: number) {
+  if (typeof maxRows !== "number" || maxRows <= 0) {
+    return rows;
+  }
+
+  return rows.slice(-maxRows);
+}
+
 export function buildProductionCollectionsSeries(monthlyKpis: MonthlyKpiLike[] | null | undefined): DashboardTrendDatum[] {
   return (monthlyKpis ?? []).map((row) => ({
     date: row.year_month ?? "",
@@ -139,13 +149,13 @@ export function buildProductionCollectionsSeries(monthlyKpis: MonthlyKpiLike[] |
 }
 
 export function buildDashboardTrendData(financialSummary: FinancialSummaryResponse | null | undefined): DashboardTrendDatum[] {
-  const preferredRows = financialSummary?.trailing12Months?.length
-    ? financialSummary.trailing12Months
-    : financialSummary?.fourYearMonthlyKpis?.length
-      ? financialSummary.fourYearMonthlyKpis.slice(-12)
+  const preferredRows = financialSummary?.fourYearMonthlyKpis?.length
+    ? financialSummary.fourYearMonthlyKpis
+    : financialSummary?.trailing12Months?.length
+      ? financialSummary.trailing12Months
       : financialSummary?.monthlyKpis;
 
-  return buildProductionCollectionsSeries(preferredRows);
+  return buildProductionCollectionsSeries(sliceTrailingRows(preferredRows ?? [], DASHBOARD_TREND_MONTH_WINDOW));
 }
 
 export function sumTrailing12ProductionCollections(
@@ -160,23 +170,30 @@ export function sumTrailing12ProductionCollections(
   );
 }
 
-export function buildProfitLossTrendData(rows: ProfitLossLike[] | null | undefined): ProfitLossTrendDatum[] {
-  return (rows ?? []).map((row) => ({
-    date: toNonEmptyString(row.year_month) || toNonEmptyString(row.period_end) || toNonEmptyString(row.period_start),
-    expenses: toFiniteNumber(row.expense_total),
-    netIncome: toFiniteNumber(row.net_income),
-  }));
+export function buildProfitLossTrendData(rows: ProfitLossLike[] | null | undefined, maxRows?: number): ProfitLossTrendDatum[] {
+  return sliceTrailingRows(
+    (rows ?? []).map((row) => ({
+      date: toNonEmptyString(row.year_month) || toNonEmptyString(row.period_end) || toNonEmptyString(row.period_start),
+      expenses: toFiniteNumber(row.expense_total),
+      netIncome: toFiniteNumber(row.net_income),
+    })),
+    maxRows,
+  );
 }
 
 export function buildQuickBooksMonthlyExpenseTrendData(
   rows: FinancialSummaryQuickBooksMonthlyExpense[] | null | undefined,
+  maxRows?: number,
 ): Array<{ date: string; expenses: number }> {
-  return (rows ?? [])
-    .map((row) => ({
-      date: toNonEmptyString(row.year_month),
-      expenses: toFiniteNumber(row.expense_total),
-    }))
-    .filter((row) => row.date);
+  return sliceTrailingRows(
+    (rows ?? [])
+      .map((row) => ({
+        date: toNonEmptyString(row.year_month),
+        expenses: toFiniteNumber(row.expense_total),
+      }))
+      .filter((row) => row.date),
+    maxRows,
+  );
 }
 
 export function sumTrailing12NetIncome(rows: ProfitLossLike[] | null | undefined): number | null {

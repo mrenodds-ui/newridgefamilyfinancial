@@ -8,7 +8,6 @@ import App from "../App";
 import { clearApiBasicAuthCredentials, setApiBasicAuthCredentials } from "../api/basicAuth";
 import {
   type FinancialSummaryResponse,
-  approveHalChartPlan,
   askHalQuestion,
   draftJournalEntry,
   executeMonitorReviewAction,
@@ -16,10 +15,8 @@ import {
   fetchAccountingPostingQueue,
   fetchAccountingPostingQueueActivity,
   fetchAdminSummary,
-  fetchHalChartPlans,
   fetchHalStatus,
   fetchHealth,
-  generateHalChartPlan,
 } from "../api/client";
 import { accountingPostingQueueEntrySchema } from "../api/schemas";
 import { server } from "../mocks/server";
@@ -114,9 +111,9 @@ describe("api mocks", () => {
     expect(screen.getByText(/Draft lineage: auto-validated AI draft/)).toBeInTheDocument();
     expect(screen.getByText("SoftDent Coverage Accountability")).toBeInTheDocument();
     expect(screen.getByText(/HAL now treats missing page report lanes as operator-visible issues/)).toBeInTheDocument();
-    expect(screen.getByText(/Missing: 2/)).toBeInTheDocument();
-    expect(screen.getByText(/Limited: 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Available: 4/)).toBeInTheDocument();
+    expect(screen.getByText(/Needed: 2/)).toBeInTheDocument();
+    expect(screen.getByText(/Partial: 1/)).toBeInTheDocument();
+    expect(screen.getByText(/Ready: 4/)).toBeInTheDocument();
     expect(screen.getByText(/True outstanding: \$12,401 across 9 claim\(s\)/)).toBeInTheDocument();
     expect(screen.getByText(/Unsubmitted: \$3,840 across 4 claim\(s\)/)).toBeInTheDocument();
     expect(screen.getByText(/Top outstanding payers: Delta Dental \$7,100 · MetLife \$3,801/)).toBeInTheDocument();
@@ -238,32 +235,32 @@ describe("api mocks", () => {
 
     renderApp("/app/hal");
 
-    expect(await screen.findByRole("heading", { name: "Ask Hal 9000" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Your Question"), {
+    expect(await screen.findByRole("heading", { name: "Ask HAL" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("What do you want HAL to help with?"), {
       target: {
         value: "Change brightness to 30% on the primary monitor.",
       },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
 
-    expect(await screen.findByText("HAL's Answer")).toBeInTheDocument();
+    expect(await screen.findByText("HAL's Response")).toBeInTheDocument();
     expect(screen.getByText(/I can help with that\./)).toBeInTheDocument();
-    expect(screen.getByText(/Audit ID:/)).toBeInTheDocument();
-    expect(screen.getByText(/Safety checks:/)).toBeInTheDocument();
+    expect(screen.getByText(/Reference ID:/)).toBeInTheDocument();
+    expect(screen.getByText(/Built-in safeguards:/)).toBeInTheDocument();
     expect(screen.getByText(/Verified Physical Monitor Parameters/)).toBeInTheDocument();
-    expect(screen.getByText(/Approve display adjustment to 30%/)).toBeInTheDocument();
+    expect(screen.getByText(/Approve brightness change to 30%/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Approve display adjustment to 30%" }));
+    fireEvent.click(screen.getByRole("button", { name: "Approve brightness change to 30%" }));
 
-    expect(await screen.findByText(/Executor status:/)).toBeInTheDocument();
+    expect(await screen.findByText(/Action result:/)).toBeInTheDocument();
     expect(screen.getByText(/executed/)).toBeInTheDocument();
   });
 
   it("resolves the legacy hal-9000 route to the current HAL page", async () => {
     renderApp("/app/hal-9000");
 
-    expect(await screen.findByRole("heading", { name: "Ask Hal 9000" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Your Question")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Ask HAL" })).toBeInTheDocument();
+    expect(screen.getByLabelText("What do you want HAL to help with?")).toBeInTheDocument();
   });
 
   it("includes live financial summary context in HAL ask requests when available", async () => {
@@ -380,7 +377,7 @@ describe("api mocks", () => {
 
     renderApp("/app/hal");
 
-    fireEvent.change(await screen.findByLabelText("Your Question"), {
+    fireEvent.change(await screen.findByLabelText("What do you want HAL to help with?"), {
       target: {
         value: "Give me the current operating picture.",
       },
@@ -398,50 +395,18 @@ describe("api mocks", () => {
 
     resolveRequest();
 
-    expect(await screen.findByText(/HAL's Answer/)).toBeInTheDocument();
+    expect(await screen.findByText(/HAL's Response/)).toBeInTheDocument();
     expect(screen.getByText(/HAL handled: Give me the current operating picture\./)).toBeInTheDocument();
   });
 
-  it("renders the HAL chart planning workflow", async () => {
-    const chartPlan = await generateHalChartPlan("Create a bar chart showing June overhead variance by category.");
-    expect(chartPlan.status).toBe("pending_human_review");
-    const approval = await approveHalChartPlan(chartPlan.review_plan_path);
-    expect(approval.status).toBe("approved_and_rendered");
-    const history = await fetchHalChartPlans(8);
-    expect(history.count).toBe(2);
-    const filteredHistory = await fetchHalChartPlans(8, "approved_and_rendered");
-    expect(filteredHistory.count).toBe(1);
-
+  it("keeps the HAL page focused on the core ask-and-answer workflow", async () => {
     renderApp("/app/hal");
 
-    expect(await screen.findByRole("heading", { name: "Ask Hal 9000" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Chart request"), {
-      target: {
-        value: "Create a bar chart showing June overhead variance by category.",
-      },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Generate chart plan" }));
-
-    expect(await screen.findByText(/pending human review/)).toBeInTheDocument();
-    expect(screen.getByText(/Review and render artifacts were staged locally for approval\./)).toBeInTheDocument();
-    expect(screen.getAllByText(/\[ALERT\]/)).toHaveLength(2);
-    expect(screen.getAllByText(/Potential discrepancy: narrative prompt did not cite a source file/)).toHaveLength(3);
-    expect(screen.getAllByText(/Generated from narrative prompt; confirm values before rendering/)).toHaveLength(3);
-    expect(screen.getAllByText(/June Overhead Variance/)).toHaveLength(3);
-    fireEvent.click(screen.getByRole("button", { name: "Approve and render chart" }));
-    expect(await screen.findByText(/approved and rendered/)).toBeInTheDocument();
-    expect(screen.getByText(/Rendered chart is available below\./)).toBeInTheDocument();
-    expect(screen.getByText(/Recent Chart Drafts/)).toBeInTheDocument();
-    expect(screen.getByText(/Collections Trend/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open rendered chart" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Open chart" })).toBeInTheDocument();
-    expect(await screen.findByAltText("Rendered HAL chart preview")).toBeInTheDocument();
-    expect(await screen.findByAltText("June Overhead Variance preview")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Status filter"), {
-      target: { value: "approved_and_rendered" },
-    });
-    expect(await screen.findByText(/approved and rendered/)).toBeInTheDocument();
-    expect(screen.queryByText(/Collections Trend/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Ask HAL" })).toBeInTheDocument();
+    expect(screen.queryByText("Chart Requests")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent Chart Requests")).not.toBeInTheDocument();
+    expect(screen.queryByText("Accounting Files")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Chart idea")).not.toBeInTheDocument();
   });
 
   it("uses browser speech synthesis for the HAL response", async () => {
@@ -495,23 +460,26 @@ describe("api mocks", () => {
 
     renderApp("/app/hal");
 
-    expect(await screen.findByRole("heading", { name: "Ask Hal 9000" })).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Your Question"), {
+    expect(await screen.findByRole("heading", { name: "Ask HAL" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("What do you want HAL to help with?"), {
       target: {
         value: "Change brightness to 30% on the primary monitor.",
       },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
 
-    expect(await screen.findByText("HAL's Answer")).toBeInTheDocument();
+    expect(await screen.findByText("HAL's Response")).toBeInTheDocument();
+    expect(screen.getByText(/Response profile:/)).toBeInTheDocument();
+    expect(screen.getByText(/Governance:/)).toBeInTheDocument();
     expect(screen.getByLabelText("Voice")).toBeInTheDocument();
     expect(screen.getByLabelText("Speech rate")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("Chrome Kansas Voice"));
     await waitFor(() => expect(screen.getByLabelText("Speech rate")).toHaveValue("1.3"));
+    expect(speak).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Read It Aloud" }));
 
     expect(cancel).toHaveBeenCalled();
-    expect(speak).toHaveBeenCalledTimes(2);
+    expect(speak).toHaveBeenCalledTimes(1);
     expect((speak.mock.calls[0]?.[0] as { text: string }).text).toContain("I can help with that. I found the current monitor settings");
     expect((speak.mock.calls[0]?.[0] as { voice?: { name?: string }; rate?: number }).voice?.name).toBe("Chrome Kansas Voice");
     expect((speak.mock.calls[0]?.[0] as { rate?: number }).rate).toBe(1.3);
@@ -524,8 +492,8 @@ describe("api mocks", () => {
     await waitFor(() => expect(screen.getByLabelText("Voice")).toHaveValue("Google US English"));
     await waitFor(() => expect(screen.getByLabelText("Speech rate")).toHaveValue("1.1"));
     fireEvent.click(screen.getByRole("button", { name: "Read It Aloud" }));
-    expect((speak.mock.calls[2]?.[0] as { voice?: { name?: string }; rate?: number }).voice?.name).toBe("Google US English");
-    expect((speak.mock.calls[2]?.[0] as { rate?: number }).rate).toBe(1.1);
+    expect((speak.mock.calls[1]?.[0] as { voice?: { name?: string }; rate?: number }).voice?.name).toBe("Google US English");
+    expect((speak.mock.calls[1]?.[0] as { rate?: number }).rate).toBe(1.1);
     expect(window.localStorage.getItem("halSpeechVoice")).toBe("Google US English");
     expect(window.localStorage.getItem("halSpeechRate")).toBe("1.1");
   });
@@ -566,15 +534,15 @@ describe("api mocks", () => {
     try {
       renderApp("/app/hal");
 
-      expect(await screen.findByRole("heading", { name: "Ask Hal 9000" })).toBeInTheDocument();
-      fireEvent.change(screen.getByLabelText("Your Question"), {
+      expect(await screen.findByRole("heading", { name: "Ask HAL" })).toBeInTheDocument();
+      fireEvent.change(screen.getByLabelText("What do you want HAL to help with?"), {
         target: {
           value: "Change brightness to 30% on the primary monitor.",
         },
       });
       fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
 
-      expect(await screen.findByText("HAL's Answer")).toBeInTheDocument();
+      expect(await screen.findByText("HAL's Response")).toBeInTheDocument();
       expect(speak).not.toHaveBeenCalled();
 
       fireEvent.click(screen.getByRole("button", { name: "Read It Aloud" }));
@@ -614,6 +582,13 @@ describe("api mocks", () => {
             allowed_sources: ["approved_local_read_only_scope"],
             disallowed_actions: ["direct_hardware_writes"],
           },
+          voice_profile: {
+            lane: "primary",
+            label: "Primary response",
+            tone: "direct and grounded",
+            style_notes: [],
+          },
+          governance_notes: [],
           review_actions: [],
         });
       }),
@@ -621,7 +596,7 @@ describe("api mocks", () => {
 
     renderApp("/app/hal");
 
-    fireEvent.change(await screen.findByLabelText("Your Question"), {
+    fireEvent.change(await screen.findByLabelText("What do you want HAL to help with?"), {
       target: { value: "status" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
@@ -629,7 +604,7 @@ describe("api mocks", () => {
     expect(await screen.findByText("HAL request failed: RuntimeError: upstream timeout")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try Again" }));
 
-    expect(await screen.findByText("HAL's Answer")).toBeInTheDocument();
+    expect(await screen.findByText("HAL's Response")).toBeInTheDocument();
     expect(screen.getByText("I retried the request and the connection is back.")).toBeInTheDocument();
     expect(attempts).toBe(2);
   });
@@ -665,6 +640,7 @@ describe("api mocks", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Lookup patient dossier" }));
     expect(await screen.findByText(/Patient-specific SoftDent claim and\/or clinical-note context matched/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Response profile:/).length).toBeGreaterThan(0);
 
     fireEvent.change(screen.getByLabelText("Narrative request"), {
       target: {
@@ -674,6 +650,7 @@ describe("api mocks", () => {
     fireEvent.click(screen.getByRole("button", { name: "Generate narrative" }));
     expect(await screen.findByText(/Narrative Output/)).toBeInTheDocument();
     expect(screen.getByText(/Insurance narrative for John Doe/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Governance:/).length).toBeGreaterThan(0);
   });
 
   it("renders the journal draft workflow", async () => {
@@ -777,6 +754,8 @@ describe("api mocks", () => {
 
     expect(await screen.findByText("Draft Policy Guidance")).toBeInTheDocument();
     expect(screen.getByText(/draft guidance under GAAP/i)).toBeInTheDocument();
+    expect(screen.getByText(/Response profile:/)).toBeInTheDocument();
+    expect(screen.getByText(/Governance:/)).toBeInTheDocument();
     expect(screen.getByText(/Confidence:/)).toBeInTheDocument();
     expect(screen.getAllByText(/hal_phi_rag_architecture chunk 24/)).toHaveLength(2);
     expect(screen.getAllByText(/API chunk 1/)).toHaveLength(2);

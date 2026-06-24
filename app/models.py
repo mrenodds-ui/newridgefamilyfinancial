@@ -96,6 +96,18 @@ class HalReviewAction(BaseModel):
     confirmation_message: str
 
 
+class HalResponseVoiceProfile(BaseModel):
+    lane: str
+    label: str
+    tone: str
+    style_notes: list[str] = Field(default_factory=list)
+
+
+class HalGovernanceNote(BaseModel):
+    label: str
+    detail: str
+
+
 class HalAskResponse(BaseModel):
     mode: str
     answer: str
@@ -106,6 +118,8 @@ class HalAskResponse(BaseModel):
     audit_id: str
     access_policy: HalAccessPolicy
     review_actions: list[HalReviewAction] = Field(default_factory=list)
+    voice_profile: HalResponseVoiceProfile
+    governance_notes: list[HalGovernanceNote] = Field(default_factory=list)
 
 
 class HalInsuranceNarrativeRequest(BaseModel):
@@ -122,6 +136,8 @@ class HalInsuranceNarrativeResponse(BaseModel):
     guardrails: list[str] = Field(default_factory=list)
     audit_id: str
     access_policy: HalAccessPolicy
+    voice_profile: HalResponseVoiceProfile
+    governance_notes: list[HalGovernanceNote] = Field(default_factory=list)
 
 
 class HalPatientDossierRequest(BaseModel):
@@ -138,6 +154,8 @@ class HalPatientDossierResponse(BaseModel):
     guardrails: list[str] = Field(default_factory=list)
     audit_id: str
     access_policy: HalAccessPolicy
+    voice_profile: HalResponseVoiceProfile
+    governance_notes: list[HalGovernanceNote] = Field(default_factory=list)
 
 
 class HalChartPlanRequest(BaseModel):
@@ -344,6 +362,8 @@ class AccountingPolicyAnswerResponse(BaseModel):
     review_required: bool = True
     audit_id: str
     access_policy: HalAccessPolicy
+    voice_profile: HalResponseVoiceProfile
+    governance_notes: list[HalGovernanceNote] = Field(default_factory=list)
 
 
 class HalPageResponse(BaseModel):
@@ -878,6 +898,18 @@ class FinancialTransactionDiagnosticsResponse(BaseModel):
     summary: str | None = None
 
 
+class WidgetUpdateResponse(BaseModel):
+    accepted: bool
+    manager: str
+    run_id: str | None = None
+    received_at: str
+    widget_count: int
+    source_count: int
+    job_count: int
+    auth_mode: str
+    message: str
+
+
 class FinancialSummaryResponse(BaseModel):
     generatedAt: str | None = None
     latestSoftDentRefreshAt: str | None = None
@@ -905,3 +937,4 @@ class FinancialSummaryResponse(BaseModel):
     dataFreshnessWarnings: object | None = None
     currentMonthProduction: dict[str, object] | None = None
     currentYearProduction: dict[str, object] | None = None
+    widgetFeed: dict[str, object] | None = None

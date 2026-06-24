@@ -1,27 +1,33 @@
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatCurrency } from "../../../utils/formatting";
 
-const AR_COLORS = ["#D6B15E", "#A9823A", "#D89A2B", "#C96A5B"];
+const AR_COLORS = ["#7EE1FF", "#66AFFF", "#4C84FF", "#8BA4FF"];
 
 export function ARAgingBarChart({ data, height = 320 }: { data: { name: string; value: number }[]; height?: number }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart data={data} margin={{ top: 16, right: 24, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="rgba(214, 177, 94, 0.14)" strokeDasharray="3 3" />
-        <XAxis dataKey="name" stroke="#B9AA91" tick={{ fontSize: 13, fill: "#F7F0E2" }} />
-        <YAxis stroke="#B9AA91" tickFormatter={formatCurrency} tick={{ fill: "#F7F0E2" }} />
+        <CartesianGrid stroke="rgba(116, 156, 255, 0.12)" strokeDasharray="2 6" vertical={false} />
+        <XAxis dataKey="name" stroke="#8EA6D9" tick={{ fontSize: 11, fill: "#A7B9DD" }} tickLine={false} axisLine={false} />
+        <YAxis
+          stroke="#8EA6D9"
+          tickFormatter={formatCurrency}
+          tick={{ fontSize: 11, fill: "#A7B9DD" }}
+          tickLine={false}
+          axisLine={false}
+        />
         <Tooltip
           contentStyle={{
-            background: "#18120C",
-            color: "#F7F0E2",
-            borderRadius: 12,
-            border: "1.5px solid #D6B15E",
+            background: "rgba(7, 12, 24, 0.96)",
+            color: "#EDF4FF",
+            borderRadius: 16,
+            border: "1px solid rgba(120, 157, 255, 0.28)",
+            boxShadow: "0 24px 48px rgba(2, 8, 24, 0.42)",
           }}
-          labelStyle={{ color: "#D6B15E" }}
+          labelStyle={{ color: "#7EE1FF" }}
           formatter={formatCurrency}
         />
-        <Legend wrapperStyle={{ color: "#D6B15E" }} iconType="rect" />
-        <Bar dataKey="value" isAnimationActive={false} barSize={38}>
+        <Bar dataKey="value" isAnimationActive={false} barSize={24} radius={[999, 999, 4, 4]}>
           {data.map((entry, idx) => (
             <Cell key={entry.name} fill={AR_COLORS[idx % AR_COLORS.length]} />
           ))}

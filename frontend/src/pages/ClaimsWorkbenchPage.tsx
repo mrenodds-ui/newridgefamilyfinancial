@@ -191,8 +191,16 @@ export default function ClaimsWorkbenchPage() {
               <h3>Lookup Result</h3>
               <div className="hal-answer-card__section">{dossierMutation.data.summary}</div>
               <div className="hal-answer-card__section">
+                <strong>Response profile:</strong> {dossierMutation.data.voice_profile.label} · {dossierMutation.data.voice_profile.tone}
+              </div>
+              <div className="hal-answer-card__section">
                 <strong>Sanitized audit question:</strong> {dossierMutation.data.sanitized_question}
               </div>
+              {(dossierMutation.data.governance_notes ?? []).length ? (
+                <div className="hal-answer-card__section">
+                  <strong>Governance:</strong> {dossierMutation.data.governance_notes.map((item) => `${item.label}: ${item.detail}`).join(" | ")}
+                </div>
+              ) : null}
               {(dossierMutation.data.supporting_context ?? []).length ? (
                 (dossierMutation.data.supporting_context ?? []).map((item) => (
                   <div key={item.source_id} className="hal-supporting-context-item">
@@ -234,6 +242,9 @@ export default function ClaimsWorkbenchPage() {
               <h3>Narrative Output</h3>
               <div className="hal-answer-card__section hal-answer-card__section--lead">{narrativeMutation.data.narrative}</div>
               <div className="hal-answer-card__section">
+                <strong>Response profile:</strong> {narrativeMutation.data.voice_profile.label} · {narrativeMutation.data.voice_profile.tone}
+              </div>
+              <div className="hal-answer-card__section">
                 <strong>Audit ID:</strong> {narrativeMutation.data.audit_id}
               </div>
               <div className="hal-answer-card__section">
@@ -243,6 +254,11 @@ export default function ClaimsWorkbenchPage() {
                 <strong>Guardrails:</strong>{" "}
                 {(narrativeMutation.data.guardrails ?? []).length ? narrativeMutation.data.guardrails.join(", ") : "None"}
               </div>
+              {(narrativeMutation.data.governance_notes ?? []).length ? (
+                <div className="hal-answer-card__section">
+                  <strong>Governance:</strong> {narrativeMutation.data.governance_notes.map((item) => `${item.label}: ${item.detail}`).join(" | ")}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </article>

@@ -22,6 +22,7 @@ import RequireApiAuth from "./components/RequireApiAuth";
 
 const DASHBOARD_READ_ROLE = "dashboard:read";
 const HAL_OPERATOR_ROLE = "hal:operator";
+const HAL_DASHBOARD_PATH = "/dashboard/hal";
 
 function requireApiAuth(resourceName: string, element: ReactElement, requiredRoles?: readonly string[]) {
   return (
@@ -51,8 +52,9 @@ export default function App() {
         <Route path="/document-library" element={requireApiAuth("the document library", <DocumentLibraryPage />, [HAL_OPERATOR_ROLE])} />
         <Route path="/accounting-policy" element={requireApiAuth("the accounting policy guidance page", <AccountingPolicyPage />, [HAL_OPERATOR_ROLE])} />
         <Route path="/posting-queue" element={requireApiAuth("the posting queue review page", <PostingQueueReviewPage />, [HAL_OPERATOR_ROLE])} />
-        <Route path="/hal" element={requireApiAuth("the Ask Hal 9000 page", <AskHal9000Page />, [HAL_OPERATOR_ROLE, DASHBOARD_READ_ROLE])} />
-        <Route path="/hal-9000" element={<Navigate to="/hal" replace />} />
+        <Route path={HAL_DASHBOARD_PATH} element={requireApiAuth("the HAL workspace", <AskHal9000Page />, [HAL_OPERATOR_ROLE, DASHBOARD_READ_ROLE])} />
+        <Route path="/hal" element={<Navigate to={HAL_DASHBOARD_PATH} replace />} />
+        <Route path="/hal-9000" element={<Navigate to={HAL_DASHBOARD_PATH} replace />} />
         <Route path="/hal-landing" element={requireApiAuth("the HAL landing page", <HalLandingPage />, [DASHBOARD_READ_ROLE])} />
         <Route path="/journal-draft" element={requireApiAuth("the journal draft review page", <JournalDraftPage />, [HAL_OPERATOR_ROLE])} />
         <Route path="/settings" element={<SettingsPage />} />

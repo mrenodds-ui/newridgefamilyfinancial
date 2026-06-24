@@ -131,10 +131,13 @@ export default function AccountingDocumentsPage() {
 
   return (
     <div className="dashboard-page">
-      <h1>Accounting Documents</h1>
-      <div className="dashboard-description">
-        Local OCR ledger for invoices, receipts, and statements that HAL can search and reference.
-      </div>
+      <header className="page-header">
+        <p className="eyebrow">Accounting OCR</p>
+        <h1>Accounting Documents</h1>
+        <div className="dashboard-description">
+          Local OCR ledger for invoices, receipts, and statements that HAL can search and reference.
+        </div>
+      </header>
 
       <div className="kpi-grid">
         <div className="hal-answer-card">

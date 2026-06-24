@@ -116,17 +116,13 @@ describe("API auth gate", () => {
 
     renderApp("/app/");
 
-    expect(
-      await screen.findByText(
-        "Sign in from the dashboard banner to load the verified financial summary. Import-preview charts and CSV inspection remain available below.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Financial information will appear after access is confirmed.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument();
     expect(financialSummaryRequestCount).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Dashboard" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Family Financial" });
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "admin" },
@@ -136,11 +132,11 @@ describe("API auth gate", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument());
 
     expect(await screen.findByText("Connected as admin")).toBeInTheDocument();
-    expect(await screen.findByText("$2,500")).toBeInTheDocument();
-    expect(await screen.findByText("$1,900")).toBeInTheDocument();
+    expect((await screen.findAllByText("$2,500")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("$1,900")).length).toBeGreaterThan(0);
     expect(financialSummaryRequestCount).toBeGreaterThan(0);
   });
 
@@ -158,11 +154,11 @@ describe("API auth gate", () => {
 
     renderApp("/app/");
 
-    expect(await screen.findByText("Verifying session...")).toBeInTheDocument();
+    expect(await screen.findByText("Preparing your workspace")).toBeInTheDocument();
     expect(screen.queryByText("Connected as admin")).not.toBeInTheDocument();
     expect(await screen.findByText("Loading verified financial summary...")).toBeInTheDocument();
-    expect(screen.queryByText("$2,500")).not.toBeInTheDocument();
-    expect(screen.queryByText("$1,900")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("$2,500")).toHaveLength(0);
+    expect(screen.queryAllByText("$1,900")).toHaveLength(0);
     expect(financialSummaryRequestCount).toBe(0);
   });
 
@@ -180,16 +176,12 @@ describe("API auth gate", () => {
 
     renderApp("/app/");
 
-    expect(await screen.findByText("Session verification unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Connection unavailable")).toBeInTheDocument();
     expect(screen.queryByText("Connected as admin")).not.toBeInTheDocument();
-    expect(await screen.findByText("The dashboard session could not be verified right now.")).toBeInTheDocument();
-    expect(
-      screen.queryByText(
-        "Sign in from the dashboard banner to load the verified financial summary. Import-preview charts and CSV inspection remain available below.",
-      ),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByText("$2,500")).not.toBeInTheDocument();
-    expect(screen.queryByText("$1,900")).not.toBeInTheDocument();
+    expect(await screen.findByText("Financial information is unavailable right now.")).toBeInTheDocument();
+    expect(screen.queryByText("Financial information will appear after access is confirmed.")).not.toBeInTheDocument();
+    expect(screen.queryAllByText("$2,500")).toHaveLength(0);
+    expect(screen.queryAllByText("$1,900")).toHaveLength(0);
     expect(financialSummaryRequestCount).toBe(0);
   });
 
@@ -207,8 +199,8 @@ describe("API auth gate", () => {
 
     renderApp("/app/");
 
-    expect(await screen.findByText("$2,500")).toBeInTheDocument();
-    expect(await screen.findByText("$1,900")).toBeInTheDocument();
+    expect((await screen.findAllByText("$2,500")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("$1,900")).length).toBeGreaterThan(0);
     expect(financialSummaryRequestCount).toBeGreaterThan(0);
   });
 
@@ -261,12 +253,12 @@ describe("API auth gate", () => {
     renderApp("/app/document-library");
 
     expect(await screen.findByText("Sign in from the dashboard banner to load the document library.")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument();
     expect(documentLibraryRequestCount).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Dashboard" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Family Financial" });
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "admin" },
@@ -276,7 +268,7 @@ describe("API auth gate", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument());
     expect(await screen.findByText("Connected as admin")).toBeInTheDocument();
     expect(await screen.findByText("q2-earnings-notes.md")).toBeInTheDocument();
     expect(documentLibraryRequestCount).toBeGreaterThan(0);
@@ -352,12 +344,12 @@ describe("API auth gate", () => {
     renderApp("/app/ar");
 
     expect(await screen.findByText("Sign in from the dashboard banner to load the A/R and collections page.")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument();
     expect(financialSummaryRequestCount).toBe(0);
 
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Dashboard" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Family Financial" });
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "admin" },
@@ -367,12 +359,12 @@ describe("API auth gate", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText("Loading A/R and collections...")).not.toBeInTheDocument());
 
     expect(await screen.findByText("Connected as admin")).toBeInTheDocument();
-    expect(await screen.findByText("$9,765")).toBeInTheDocument();
-    expect(await screen.findByText("SoftDent live snapshot for 2026-06.")).toBeInTheDocument();
+    expect((await screen.findAllByText("$9,765")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("92%")).length).toBeGreaterThan(0);
     expect(financialSummaryRequestCount).toBeGreaterThan(0);
   });
 
@@ -405,7 +397,7 @@ describe("API auth gate", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Dashboard" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Family Financial" });
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "viewer" },
@@ -415,7 +407,7 @@ describe("API auth gate", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument());
 
     expect(await screen.findByText("Admin Access Required")).toBeInTheDocument();
     expect(screen.getByText(/Signed-in viewer accounts can continue using the reporting pages/i)).toBeInTheDocument();
@@ -452,7 +444,7 @@ describe("API auth gate", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
 
-    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Dashboard" });
+    const dialog = await screen.findByRole("dialog", { name: "Sign in to New Ridge Family Financial" });
 
     fireEvent.change(screen.getByLabelText("Username"), {
       target: { value: "admin" },
@@ -462,7 +454,7 @@ describe("API auth gate", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Sign in" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Dashboard" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Sign in to New Ridge Family Financial" })).not.toBeInTheDocument());
 
     expect(await screen.findByText("Admin Session Check Failed")).toBeInTheDocument();
     expect(screen.getByText(/session backend unavailable/i)).toBeInTheDocument();

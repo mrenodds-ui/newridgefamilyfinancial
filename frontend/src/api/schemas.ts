@@ -824,6 +824,18 @@ export const halReviewActionSchema = z.object({
   confirmation_message: z.string().default(""),
 });
 
+const halResponseVoiceProfileSchema = z.object({
+  lane: z.string().default("primary"),
+  label: z.string().default("Primary response"),
+  tone: z.string().default("direct and grounded"),
+  style_notes: z.array(z.string()).default([]),
+});
+
+const halGovernanceNoteSchema = z.object({
+  label: z.string().default(""),
+  detail: z.string().default(""),
+});
+
 export const halAskResponseSchema = z.object({
   mode: z.string().default(""),
   answer: z.string().default(""),
@@ -834,6 +846,8 @@ export const halAskResponseSchema = z.object({
   audit_id: z.string().default(""),
   access_policy: halAccessPolicySchema,
   review_actions: z.array(halReviewActionSchema).default([]),
+  voice_profile: halResponseVoiceProfileSchema,
+  governance_notes: z.array(halGovernanceNoteSchema).default([]),
 });
 
 export const documentRagUploadResponseSchema = z.object({
@@ -922,6 +936,8 @@ export const halInsuranceNarrativeSchema = z.object({
   guardrails: z.array(z.string()).default([]),
   audit_id: z.string().default(""),
   access_policy: halAccessPolicySchema,
+  voice_profile: halResponseVoiceProfileSchema,
+  governance_notes: z.array(halGovernanceNoteSchema).default([]),
 });
 
 export const halPatientDossierSchema = z.object({
@@ -934,6 +950,8 @@ export const halPatientDossierSchema = z.object({
   guardrails: z.array(z.string()).default([]),
   audit_id: z.string().default(""),
   access_policy: halAccessPolicySchema,
+  voice_profile: halResponseVoiceProfileSchema,
+  governance_notes: z.array(halGovernanceNoteSchema).default([]),
 });
 
 export const journalLineSchema = z.object({
@@ -995,6 +1013,8 @@ export const accountingPolicyAnswerResponseSchema = z.object({
   review_required: z.boolean().default(true),
   audit_id: z.string().default(""),
   access_policy: halAccessPolicySchema,
+  voice_profile: halResponseVoiceProfileSchema,
+  governance_notes: z.array(halGovernanceNoteSchema).default([]),
 });
 
 export const accountingPostingQueueEntrySchema = z.object({

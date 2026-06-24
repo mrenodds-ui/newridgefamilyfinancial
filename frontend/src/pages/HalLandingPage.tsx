@@ -50,7 +50,7 @@ export default function HalLandingPage() {
   if (financialSummaryQuery.isPending) {
     return (
       <div className="dashboard-page">
-        <LoadingSpinner label="Loading financial summary..." />
+        <LoadingSpinner label="Loading today's financial view..." />
       </div>
     );
   }
@@ -58,7 +58,7 @@ export default function HalLandingPage() {
   if (financialSummaryQuery.isError || !financialSummaryQuery.data) {
     return (
       <div className="dashboard-page">
-        <div className="page-state-card page-state-card--error">The live financial summary could not be loaded right now.</div>
+        <div className="page-state-card page-state-card--error">This financial overview is not available right now.</div>
       </div>
     );
   }
@@ -69,15 +69,15 @@ export default function HalLandingPage() {
   const quickBooksReview = financialSummary.sourceReview?.quickBooks ?? null;
   const softDentReview = financialSummary.sourceReview?.softDent ?? null;
   const latestRefresh = financialSummary.latestSoftDentRefreshAt ?? financialSummary.generatedAt ?? null;
-  const monitorStatus = "Read-only telemetry live";
-  const latestRefreshLabel = formatDateLabel(latestRefresh, "Waiting for sync");
+  const monitorStatus = "Today's numbers are ready";
+  const latestRefreshLabel = formatDateLabel(latestRefresh, "Waiting for update");
 
   return (
     <div className="dashboard-page">
       <div className="page-content">
         <header className="page-header hal-landing-header">
           <h1 className="hal-landing-title">New Ridge Family Financial</h1>
-          <p className="eyebrow">A clearer daily financial view for the practice</p>
+          <p className="eyebrow">Today's practice view in one place</p>
         </header>
 
         <section className="hal-monitor" aria-label="HAL monitor">
@@ -86,8 +86,8 @@ export default function HalLandingPage() {
               <div className="hal-monitor__grid" aria-hidden="true" />
               <div className="hal-monitor__hud">
                 <div>
-                  <p className="hal-monitor__eyebrow">HAL Monitor</p>
-                  <h2 className="hal-monitor__headline">Practice telemetry is live on screen.</h2>
+                  <p className="hal-monitor__eyebrow">Daily View</p>
+                  <h2 className="hal-monitor__headline">Practice performance is ready to review.</h2>
                 </div>
                 <div className="hal-monitor__status">{monitorStatus}</div>
               </div>
@@ -98,14 +98,14 @@ export default function HalLandingPage() {
                   <span className="hal-monitor__stat-note">Current month gross</span>
                 </div>
                 <div className="hal-monitor__stat">
-                  <span className="hal-monitor__stat-label">Latest sync</span>
+                  <span className="hal-monitor__stat-label">Last update</span>
                   <strong className="hal-monitor__stat-value">{latestRefreshLabel}</strong>
-                  <span className="hal-monitor__stat-note">SoftDent or summary refresh</span>
+                  <span className="hal-monitor__stat-note">Most recent file update</span>
                 </div>
                 <div className="hal-monitor__stat">
                   <span className="hal-monitor__stat-label">A/R over 90</span>
                   <strong className="hal-monitor__stat-value">{formatCurrencyValue(financialSummary.latestAr?.balance_90)}</strong>
-                  <span className="hal-monitor__stat-note">Needs operator attention</span>
+                  <span className="hal-monitor__stat-note">Needs follow-up</span>
                 </div>
               </div>
               <div className="hal-monitor__wave-band" aria-hidden="true">
@@ -163,10 +163,10 @@ export default function HalLandingPage() {
         </section>
 
         <section className="dashboard-import-history">
-          <h2>Source Notes</h2>
+          <h2>Recent Source Updates</h2>
           <div className="admin-audit-list">
-            <SourceReviewContent review={softDentReview} emptyMessage="SoftDent source review metadata is unavailable." />
-            <SourceReviewContent review={quickBooksReview} emptyMessage="QuickBooks source review metadata is unavailable." />
+            <SourceReviewContent review={softDentReview} emptyMessage="SoftDent update details are unavailable right now." />
+            <SourceReviewContent review={quickBooksReview} emptyMessage="QuickBooks update details are unavailable right now." />
           </div>
         </section>
 
@@ -174,9 +174,9 @@ export default function HalLandingPage() {
           <div className="hal-landing-actions-card">
             <h2 className="hal-landing-actions-title">Where To Look First</h2>
             <ul>
-              <li>Refresh SoftDent if the latest import looks stale. Last import: {formatDateLabel(latestRefresh, "Unavailable")}</li>
-              <li>Look at A/R over 90 days: {formatCurrencyValue(financialSummary.latestAr?.balance_90)}</li>
-              <li>Ask HAL for a plain-English summary of what matters today.</li>
+              <li>Bring in a new SoftDent file if this update looks old. Last update: {formatDateLabel(latestRefresh, "Unavailable")}</li>
+              <li>Review A/R over 90 days: {formatCurrencyValue(financialSummary.latestAr?.balance_90)}</li>
+              <li>Ask HAL for a plain-English take on what matters today.</li>
             </ul>
           </div>
         </section>
@@ -184,8 +184,8 @@ export default function HalLandingPage() {
         <section className="hal-landing-form-section">
           <div className="page-state-card page-state-card--info">
             <h2>Ask HAL</h2>
-            <p>Interactive HAL chat lives on the dedicated HAL page.</p>
-            <p>Open the HAL route when you want a plain-English summary or a guided follow-up.</p>
+            <p>The full HAL conversation lives on the dedicated HAL page.</p>
+            <p>Open HAL when you want a plain-English summary or next-step guidance.</p>
           </div>
         </section>
       </div>

@@ -7,8 +7,6 @@ import { ARAgingBarChart } from "../components/dashboard/ARAgingBarChart";
 import { ChartCard } from "../components/dashboard/ChartCard";
 import { CurrencyLineChart } from "../components/dashboard/CurrencyLineChart";
 import { buildProductionCollectionsSeries, selectLatestMonthlyKpi } from "../components/dashboard/financialDashboardSummary";
-import { SoftDentCoveragePanel } from "../components/dashboard/SoftDentCoveragePanel";
-import { SourceReviewContent } from "../components/dashboard/SourceReviewContent";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 
 function formatCurrencyValue(value: number | null | undefined) {
@@ -44,6 +42,7 @@ export default function SoftDentPage() {
   const softDentReview = financialSummary.sourceReview?.softDent ?? null;
   const monthlyKpi = selectLatestMonthlyKpi(financialSummary.monthlyKpis);
   const trailing12Months = buildProductionCollectionsSeries(financialSummary.trailing12Months);
+  const collectionPercent = monthlyKpi?.collection_rate != null ? Math.round(monthlyKpi.collection_rate) : null;
   const arAging = latestAr
     ? [
         { name: "Current", value: latestAr.current_balance ?? 0 },
@@ -52,18 +51,28 @@ export default function SoftDentPage() {
         { name: "90+", value: latestAr.balance_90 ?? 0 },
       ]
     : [];
+  const olderArBalance = latestAr ? (latestAr.balance_60 ?? 0) + (latestAr.balance_90 ?? 0) : 0;
 
   return (
     <div className="dashboard-page">
-      <h1>SoftDent Financials</h1>
-      <div className="dashboard-description">Practice-management financial performance from SoftDent.</div>
-      <section className="dashboard-import-history">
-        <h2>SoftDent Source Review</h2>
-        <SourceReviewContent review={softDentReview} emptyMessage="SoftDent source review metadata is unavailable." />
-      </section>
-      <section className="dashboard-import-history">
-        <h2>Data Coverage / Missing Reports</h2>
-        <SoftDentCoveragePanel coverage={softDentCoverage} emptyMessage="SoftDent data coverage details are unavailable." />
+      <header className="page-header">
+        <p className="eyebrow">SoftDent</p>
+        <h1>Practice Performance</h1>
+        <div className="dashboard-description">Production, collections, and receivables from your practice-management workflow.</div>
+      </header>
+      <section className="dashboard-toolbar" aria-label="SoftDent summary">
+        <div>
+          <div className="dashboard-toolbar__label">Collections pace</div>
+          <div className="dashboard-toolbar__value">{collectionPercent === null ? "Unavailable" : `${collectionPercent}%`}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Total A/R</div>
+          <div className="dashboard-toolbar__value">{formatCurrencyValue(latestAr?.total_ar)}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">90+ A/R</div>
+          <div className="dashboard-toolbar__value">{formatCurrencyValue(latestAr?.balance_90)}</div>
+        </div>
       </section>
       <div className="kpi-grid">
         <SummaryCard title="Production">
@@ -79,8 +88,7 @@ export default function SoftDentPage() {
             Current month: <strong>{formatCurrencyValue(monthlyKpi?.collections)}</strong>
           </div>
           <div>
-            Collection %:{" "}
-            <strong>{monthlyKpi?.collection_rate != null ? `${Math.round(monthlyKpi.collection_rate)}%` : "N/A"}</strong>
+            Collection %: <strong>{collectionPercent === null ? "N/A" : `${collectionPercent}%`}</strong>
           </div>
         </SummaryCard>
         <SummaryCard title="A/R Aging">
@@ -89,6 +97,14 @@ export default function SoftDentPage() {
           </div>
           <div>
             90+: <strong>{formatCurrencyValue(latestAr?.balance_90)}</strong>
+          </div>
+        </SummaryCard>
+        <SummaryCard title="Receivables Focus">
+          <div>
+            Current A/R: <strong>{formatCurrencyValue(latestAr?.current_balance)}</strong>
+          </div>
+          <div>
+            60+ aging: <strong>{formatCurrencyValue(olderArBalance)}</strong>
           </div>
         </SummaryCard>
       </div>
@@ -103,31 +119,22 @@ export default function SoftDentPage() {
           <ARAgingBarChart data={arAging} />
         </ChartCard>
       </div>
-      <div className="dashboard-import-history">
-        <h2>Current Source Snapshot</h2>
-        <table className="import-history-table">
-          <thead>
-            <tr>
-              <th>Measure</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Latest A/R snapshot</td>
-              <td>{latestAr?.as_of_date ?? "Unavailable"}</td>
-            </tr>
-            <tr>
-              <td>Monthly KPI rows</td>
-              <td>{financialSummary.monthlyKpis?.length ?? 0}</td>
-            </tr>
-            <tr>
-              <td>Trailing trend rows</td>
-              <td>{financialSummary.trailing12Months?.length ?? 0}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <section className="dashboard-card">
+        <div className="dashboard-card__title">Collections Focus</div>
+        <div className="dashboard-kpi-main">{formatCurrencyValue(monthlyKpi?.collections)}</div>
+        <div className="dashboard-kpi-label">Current month collections</div>
+        <div className="dashboard-kpi-support">
+          <span>
+            Gross production: <strong>{formatCurrencyValue(monthlyKpi?.gross_production)}</strong>
+          </span>
+          <span>
+            Net production: <strong>{formatCurrencyValue(monthlyKpi?.net_production)}</strong>
+          </span>
+          <span>
+            Older A/R: <strong>{formatCurrencyValue(olderArBalance)}</strong>
+          </span>
+        </div>
+      </section>
     </div>
   );
 }

@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchFinancialSummary } from "../api/client";
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { ChartCard } from "../components/dashboard/ChartCard";
+import { CurrencyBarChart } from "../components/dashboard/CurrencyBarChart";
 import { CurrencyLineChart } from "../components/dashboard/CurrencyLineChart";
 import { HorizontalExpenseBarChart } from "../components/dashboard/HorizontalExpenseBarChart";
 import { selectLatestProfitLoss } from "../components/dashboard/financialDashboardSummary";
-import { SourceReviewContent } from "../components/dashboard/SourceReviewContent";
 import { SummaryCard } from "../components/dashboard/SummaryCard";
 
 import styles from "./QuickBooksPage.module.css";
@@ -65,36 +65,42 @@ export default function QuickBooksPage() {
     date: row.year_month ?? "",
     expenses: toNumber(row.expense_total) ?? 0,
   }));
-  const quickBooksStatus = financialSummary.quickBooksStatus;
-  const quickBooksReview = financialSummary.sourceReview?.quickBooks ?? null;
-  const quickBooksSnapshotRows = [
-    ["Status", quickBooksStatus?.status ?? "Unavailable"],
-    ["Message", quickBooksStatus?.message ?? "No QuickBooks status message returned"],
-    ["Last imported", quickBooksStatus?.lastImportedAtUtc ?? latestProfitLoss?.last_imported_at_utc ?? "Unavailable"],
-    ["Last checked", quickBooksStatus?.lastCheckedAtUtc ?? "Unavailable"],
-    ["Profit/loss rows", String(financialSummary.quickBooksProfitLossSummary?.length ?? 0)],
-    ["Expense category rows", String(financialSummary.quickBooksExpenseCategories?.length ?? 0)],
-  ];
+  const performanceTrend = (financialSummary.quickBooksProfitLossSummary ?? []).map((row) => ({
+    date: row.year_month ?? row.period_end ?? row.period_start ?? "",
+    revenue: toNumber(row.income_total) ?? 0,
+    netIncome: toNumber(row.net_income) ?? 0,
+  }));
+  const operatingMargin = latestIncome && latestNetIncome !== null ? Math.round((latestNetIncome / latestIncome) * 100) : null;
+  const expenseShare = latestIncome && latestExpenses !== null ? Math.round((latestExpenses / latestIncome) * 100) : null;
+  const leadingExpense = expenseCategories[0]?.category ?? "Unavailable";
+  const leadingExpenseValue = expenseCategories[0]?.amount ?? null;
+  const hasExpenseCategoryData = expenseCategories.length > 0;
 
   return (
     <div className="dashboard-page">
-      <h1>QuickBooks Financials</h1>
-      <div className="dashboard-description">Business accounting and expense management from QuickBooks.</div>
-      <section className="dashboard-import-history">
-        <h2>QuickBooks Source Review</h2>
-        <SourceReviewContent review={quickBooksReview} emptyMessage="QuickBooks source review metadata is unavailable." />
-      </section>
-      <section>
-        <h2>Verified QuickBooks Data</h2>
-        <div className="hal-answer-card">
-          This page is limited to verified QuickBooks summaries from the approved production pipeline. Raw ODBC queries remain available
-          only through explicit admin diagnostics.
+      <header className="page-header">
+        <p className="eyebrow">QuickBooks</p>
+        <h1>Business Financials</h1>
+        <div className="dashboard-description">Revenue, operating costs, and profit movement in one accounting view.</div>
+      </header>
+      <section className="dashboard-toolbar" aria-label="QuickBooks summary">
+        <div>
+          <div className="dashboard-toolbar__label">Operating margin</div>
+          <div className="dashboard-toolbar__value">{operatingMargin === null ? "Unavailable" : `${operatingMargin}%`}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Expense share</div>
+          <div className="dashboard-toolbar__value">{expenseShare === null ? "Unavailable" : `${expenseShare}%`}</div>
+        </div>
+        <div>
+          <div className="dashboard-toolbar__label">Leading spend bucket</div>
+          <div className="dashboard-toolbar__value">{leadingExpense}</div>
         </div>
       </section>
       <div className="kpi-grid">
-        <SummaryCard title="Income">
+        <SummaryCard title="Revenue">
           <div>
-            Latest Income: <strong>{formatCurrency(latestIncome)}</strong>
+            Monthly revenue: <strong>{formatCurrency(latestIncome)}</strong>
           </div>
           <div>
             Net Income: <strong>{formatCurrency(latestNetIncome)}</strong>
@@ -102,48 +108,70 @@ export default function QuickBooksPage() {
         </SummaryCard>
         <SummaryCard title="Expenses">
           <div>
-            Latest Expenses: <strong>{formatCurrency(latestExpenses)}</strong>
+            Monthly expenses: <strong>{formatCurrency(latestExpenses)}</strong>
           </div>
           <div>
-            Top Expense: <strong>{expenseCategories[0]?.category ?? "Unavailable"}</strong>
+            Expense share: <strong>{expenseShare === null ? "Unavailable" : `${expenseShare}%`}</strong>
           </div>
         </SummaryCard>
-        <SummaryCard title="Expense Categories">
+        <SummaryCard title="Leading Category">
           <ul className={styles["quickbooks-list"]}>
-            {expenseCategories.slice(0, 3).map((expense) => (
+            <li>
+              {leadingExpense}: <strong>{formatCurrency(leadingExpenseValue)}</strong>
+            </li>
+            <li>
+              Active categories: <strong>{expenseCategories.length}</strong>
+            </li>
+          </ul>
+        </SummaryCard>
+        <SummaryCard title="Expense Focus">
+          <ul className={styles["quickbooks-list"]}>
+            {expenseCategories.slice(0, 2).map((expense) => (
               <li key={expense.category}>
-                {expense.category}: {formatCurrency(expense.amount)}
+                {expense.category}: <strong>{formatCurrency(expense.amount)}</strong>
               </li>
             ))}
           </ul>
         </SummaryCard>
       </div>
       <div className="dashboard-charts">
-        <ChartCard title="Monthly Expenses">
-          <CurrencyLineChart data={monthlyExpenseTrend} lines={[{ dataKey: "expenses", name: "Expenses", color: "#C96A5B" }]} />
+        <ChartCard title="Revenue vs Net Income">
+          <CurrencyLineChart
+            data={performanceTrend}
+            lines={[
+              { dataKey: "revenue", name: "Revenue", color: "#4C84FF" },
+              { dataKey: "netIncome", name: "Net Income", color: "#69E6FF" },
+            ]}
+          />
         </ChartCard>
-        <ChartCard title="Expense Categories">
-          <HorizontalExpenseBarChart data={expenseCategories.map((expense) => ({ ...expense, amount: expense.amountValue }))} />
+        <ChartCard title="Monthly Expenses">
+          <CurrencyBarChart data={monthlyExpenseTrend} bars={[{ dataKey: "expenses", name: "Expenses", color: "#E4ECFF" }]} legend={false} />
         </ChartCard>
       </div>
-      <div className="dashboard-import-history">
-        <h2>QuickBooks Source Snapshot</h2>
-        <table className="import-history-table">
-          <thead>
-            <tr>
-              <th>Measure</th>
-              <th>Value</th>
-            </tr>
-          </thead>
-          <tbody>
-            {quickBooksSnapshotRows.map(([label, value]) => (
-              <tr key={label}>
-                <td>{label}</td>
-                <td>{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="dashboard-charts">
+        <ChartCard title="Expense Categories">
+          {hasExpenseCategoryData ? (
+            <HorizontalExpenseBarChart data={expenseCategories.map((expense) => ({ ...expense, amount: expense.amountValue })).slice(0, 6)} />
+          ) : (
+            <div className="page-state-card page-state-card--info">Expense category detail will appear after a QuickBooks expense export is connected.</div>
+          )}
+        </ChartCard>
+        <section className="dashboard-card">
+          <div className="dashboard-card__title">Expense Posture</div>
+          <div className="dashboard-kpi-main">{formatCurrency(latestExpenses)}</div>
+          <div className="dashboard-kpi-label">Current monthly spend</div>
+          <div className="dashboard-kpi-support">
+            <span>
+              Revenue: <strong>{formatCurrency(latestIncome)}</strong>
+            </span>
+            <span>
+              Net income: <strong>{formatCurrency(latestNetIncome)}</strong>
+            </span>
+            <span>
+              Largest category: <strong>{leadingExpense}</strong>
+            </span>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+import app.hal.widget_feed as widget_feed_module
 import app.hal.orchestrator as hal_orchestrator
 import app.hardware_routes as hardware_routes_module
 import app.routes as routes_module
@@ -50,6 +51,7 @@ def setup_function():
     os.environ["HAL_SQLITE_PATH"] = str(runtime_dir / "hal_test.sqlite3")
     os.environ["HAL_CHROMA_PATH"] = str(runtime_dir / "hal_chroma")
     clear_user_registry_cache()
+    widget_feed_module.clear_widget_feed()
 
 def basic_auth():
     return ("admin", "password")
@@ -174,6 +176,70 @@ def _fake_hal_ask_response(answer: str = "ok") -> dict[str, object]:
             "capability_hierarchy": [],
         },
         "review_actions": [],
+        "voice_profile": {
+            "lane": "primary",
+            "label": "Primary response",
+            "tone": "direct and grounded",
+            "style_notes": [],
+        },
+        "governance_notes": [],
+    }
+
+
+def _sample_widget_update_payload() -> dict[str, object]:
+    return {
+        "manager": "HAL 9000",
+        "run_id": "run-123",
+        "generated_at": "2026-06-23T12:10:00Z",
+        "widgets": {
+            "practice_financial_overview": {
+                "title": "Practice Financial Overview",
+                "status": "SUCCESS",
+                "metrics": {
+                    "monthly_revenue": 155000.0,
+                    "monthly_net_income": 62000.0,
+                    "production_total": 171500.0,
+                    "collections_total": 149250.0,
+                    "collection_rate": 87.03,
+                },
+            },
+            "accounts_payable_automation": {
+                "title": "Accounts Payable Automation",
+                "status": "SUCCESS",
+                "metrics": {
+                    "open_bills_total": 12850.0,
+                    "expense_total": 93000.0,
+                },
+            },
+            "smart_claims_and_receivables": {
+                "title": "Smart Claims & Receivables",
+                "status": "DEGRADED",
+                "metrics": {
+                    "outstanding_claim_count": 34,
+                    "outstanding_claim_amount": 22110.0,
+                    "unsubmitted_claim_count": 9,
+                    "accounts_receivable_total": 21700.0,
+                },
+            },
+            "care_delivery_performance": {
+                "title": "Care Delivery Performance",
+                "status": "SUCCESS",
+                "metrics": {
+                    "provider_count": 7,
+                    "patient_count": 642,
+                    "patient_balance_total": 9100.0,
+                },
+            },
+        },
+        "sources": {
+            "quickbooks_online": {"last_status": "SUCCESS"},
+            "softdent": {"last_status": "SUCCESS"},
+        },
+        "jobs": {
+            "quickbooks_extract": {"status": "SUCCESS"},
+            "softdent_extract": {"status": "SUCCESS"},
+            "widget_publish": {"status": "SUCCESS"},
+        },
     }
 
 def test_health():
@@ -946,6 +1012,57 @@ def test_hal_page_summary_route_returns_financial_summary_payload(monkeypatch):
     }
 
 
+def test_widget_update_route_accepts_local_payload_and_surfaces_widget_feed(monkeypatch):
+    monkeypatch.setattr(
+        routes_module,
+        "_build_financial_summary_payload",
+        lambda: {
+            "generatedAt": "2026-06-23T00:00:00Z",
+            "healthFlags": [],
+            "monthlyKpis": [],
+            "trailing12Months": [],
+            "calendarYearKpis": [],
+            "fourYearMonthlyKpis": [],
+            "providerProduction": [],
+            "topAdaCodes": [],
+        },
+    )
+
+    update_response = client.post("/api/widgets/update", json=_sample_widget_update_payload())
+
+    assert update_response.status_code == 202
+    update_payload = update_response.json()
+    assert update_payload["accepted"] is True
+    assert update_payload["auth_mode"] == "local"
+    assert update_payload["widget_count"] == 4
+
+    response = client.get("/api/hal9000/page-summary", auth=viewer_auth())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["widgetFeed"]["manager"] == "HAL 9000"
+    assert payload["widgetFeed"]["run_id"] == "run-123"
+    assert payload["widgetFeed"]["widgets"]["practice_financial_overview"]["metrics"]["monthly_revenue"] == 155000.0
+
+
+def test_widget_update_route_requires_api_key_when_configured(monkeypatch):
+    monkeypatch.setenv("WIDGET_API_KEY", "widget-secret")
+    monkeypatch.setenv("WIDGET_API_KEY_HEADER", "X-API-Key")
+
+    denied_response = client.post("/api/widgets/update", json=_sample_widget_update_payload())
+
+    assert denied_response.status_code == 401
+
+    allowed_response = client.post(
+        "/api/widgets/update",
+        json=_sample_widget_update_payload(),
+        headers={"X-API-Key": "widget-secret"},
+    )
+
+    assert allowed_response.status_code == 202
+    assert allowed_response.json()["auth_mode"] == "api-key"
+
+
 def test_hal_admin_summary_route_returns_admin_payload():
     response = client.get("/api/hal9000/admin-summary", auth=basic_auth())
 
@@ -1226,6 +1343,8 @@ def test_hal_post_forwards_optional_summary_payload(monkeypatch):
                 "disallowed_actions": [],
             },
             "review_actions": [],
+            "voice_profile": {"lane": "primary", "label": "Primary response", "tone": "direct and grounded", "style_notes": []},
+            "governance_notes": [],
         }
 
     monkeypatch.setattr(routes_module, "answer_hal_question", fake_answer_hal_question)
@@ -1278,6 +1397,8 @@ def test_hal_second_opinion_post_forwards_optional_summary_payload(monkeypatch):
                 "disallowed_actions": [],
             },
             "review_actions": [],
+            "voice_profile": {"lane": "second_opinion", "label": "Second opinion", "tone": "slower and more evaluative", "style_notes": []},
+            "governance_notes": [],
         }
 
     monkeypatch.setattr(routes_module, "answer_hal_second_opinion_question", fake_answer_hal_second_opinion_question)

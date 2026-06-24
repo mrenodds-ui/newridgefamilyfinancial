@@ -35,6 +35,8 @@ DEFAULT_OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
 DEFAULT_LITELLM_PROXY_BASE_URL = os.getenv("LITELLM_PROXY_BASE_URL", "http://127.0.0.1:4000")
 LITELLM_ROUTER_CONFIG_PATH = Path(__file__).resolve().parent.parent / "scripts" / "litellm_ollama_router.yaml"
 DEFAULT_LITELLM_ROUTING_STRATEGY = "simple-shuffle"
+APPROVED_HAL_PRIMARY_MODEL = "mistral-small3.1:24b"
+APPROVED_HAL_SECOND_OPINION_MODEL = "qwen3:30b"
 
 
 @dataclass
@@ -99,6 +101,14 @@ def _model_summary(card: _ModelCard) -> dict[str, Any]:
     }
 
 
+def _find_model_by_name(models: list[_ModelCard], name: str) -> _ModelCard | None:
+    normalized_name = name.strip().lower()
+    for model in models:
+        if model.name.lower() == normalized_name:
+            return model
+    return None
+
+
 def _fetch_model_catalog(base_url: str, timeout_seconds: int = 5) -> tuple[dict[str, Any], list[_ModelCard]]:
     normalized_base_url = base_url.rstrip("/")
     try:
@@ -161,10 +171,18 @@ def _fetch_model_catalog(base_url: str, timeout_seconds: int = 5) -> tuple[dict[
 def _score_model_for_request(card: _ModelCard, payload: ControlRouteRequest) -> tuple[float, list[str]]:
     score = 0.0
     reasons: list[str] = []
+    normalized_name = card.name.lower()
 
     if payload.preferred_model and payload.preferred_model.strip().lower() == card.name.lower():
         score += 1000
         reasons.append("Exact preferred model match.")
+
+    if payload.task_kind in {"chat", "vision"} and normalized_name == APPROVED_HAL_PRIMARY_MODEL:
+        score += 260
+        reasons.append("Matches the approved HAL primary lane.")
+    if payload.task_kind == "second_opinion" and normalized_name == APPROVED_HAL_SECOND_OPINION_MODEL:
+        score += 420
+        reasons.append("Matches the approved HAL second-opinion lane.")
 
     wants_vision = payload.requires_vision or payload.task_kind == "vision"
     if wants_vision:
@@ -328,15 +346,34 @@ def _pick_top_models(payload: ControlRouteRequest, models: list[_ModelCard], *, 
 
 
 def _build_litellm_route_groups(models: list[_ModelCard]) -> list[_LiteLLMRouteGroup]:
+    primary_model = _find_model_by_name(models, APPROVED_HAL_PRIMARY_MODEL)
+    second_opinion_model = _find_model_by_name(models, APPROVED_HAL_SECOND_OPINION_MODEL)
+    chat_models = [primary_model] if primary_model else _pick_top_models(
+        ControlRouteRequest(objective="Balanced general chat routing.", task_kind="chat", quality_priority="balanced", requires_tools=True),
+        models,
+        max_models=1,
+    )
+    analysis_models = [second_opinion_model] if second_opinion_model else _pick_top_models(
+        ControlRouteRequest(objective="Deep analysis routing.", task_kind="analysis", quality_priority="quality"),
+        models,
+        max_models=1,
+    )
+    second_opinion_models = [second_opinion_model] if second_opinion_model else _pick_top_models(
+        ControlRouteRequest(objective="Second opinion routing.", task_kind="second_opinion", quality_priority="quality"),
+        models,
+        max_models=1,
+    )
+    vision_models = [primary_model] if primary_model and "vision" in primary_model.capabilities else _pick_top_models(
+        ControlRouteRequest(objective="Vision routing.", task_kind="vision", quality_priority="balanced", requires_vision=True),
+        models,
+        max_models=1,
+    )
+
     groups = [
         _LiteLLMRouteGroup(
             alias="hal-chat-balanced",
             purpose="Balanced general chat lane exposed through an OpenAI-compatible LiteLLM alias.",
-            models=_pick_top_models(
-                ControlRouteRequest(objective="Balanced general chat routing.", task_kind="chat", quality_priority="balanced", requires_tools=True),
-                models,
-                max_models=2,
-            ),
+            models=chat_models,
             fallback_aliases=["hal-analysis"],
         ),
         _LiteLLMRouteGroup(
@@ -352,31 +389,19 @@ def _build_litellm_route_groups(models: list[_ModelCard]) -> list[_LiteLLMRouteG
         _LiteLLMRouteGroup(
             alias="hal-analysis",
             purpose="Higher-quality analysis lane for scoring, dashboards, and heavier reasoning tasks.",
-            models=_pick_top_models(
-                ControlRouteRequest(objective="Deep analysis routing.", task_kind="analysis", quality_priority="quality"),
-                models,
-                max_models=2,
-            ),
+            models=analysis_models,
             fallback_aliases=["hal-second-opinion", "hal-chat-balanced"],
         ),
         _LiteLLMRouteGroup(
             alias="hal-second-opinion",
             purpose="Second-opinion lane for slower or higher-confidence review passes.",
-            models=_pick_top_models(
-                ControlRouteRequest(objective="Second opinion routing.", task_kind="second_opinion", quality_priority="quality"),
-                models,
-                max_models=2,
-            ),
+            models=second_opinion_models,
             fallback_aliases=["hal-analysis", "hal-chat-balanced"],
         ),
         _LiteLLMRouteGroup(
             alias="hal-vision",
             purpose="Vision-capable lane for screenshots, charts, and document image inspection.",
-            models=_pick_top_models(
-                ControlRouteRequest(objective="Vision routing.", task_kind="vision", quality_priority="balanced", requires_vision=True),
-                models,
-                max_models=1,
-            ),
+            models=vision_models,
             fallback_aliases=["hal-analysis"],
         ),
     ]

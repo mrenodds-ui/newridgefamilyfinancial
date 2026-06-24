@@ -129,10 +129,10 @@ describe("ImportPanel QuickBooks routing", () => {
 
     fireEvent.change(fileInput, { target: { files: [file] } });
 
-    await screen.findByText(/detected report type:/i);
-    await screen.findByText(/quickbooks staged files ready:/i);
+    await screen.findByText(/detected file type:/i);
+    await screen.findByText(/quickbooks files ready to add:/i);
 
-    fireEvent.click(screen.getByRole("button", { name: "Import Data" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to Dashboard" }));
 
     await waitFor(() => {
       expect(uploadQuickBooksImport).toHaveBeenCalledTimes(2);
@@ -152,7 +152,7 @@ describe("ImportPanel QuickBooks routing", () => {
     ]);
     expect(
       await screen.findByText(
-        /2 QuickBooks file\(s\) imported through the canonical backend pipeline and HAL page feeds were refreshed\./i,
+        /2 QuickBooks file\(s\) added and dashboard pages refreshed\./i,
       ),
     ).toBeInTheDocument();
   });
@@ -168,7 +168,7 @@ describe("ImportPanel QuickBooks routing", () => {
 
     renderImportPanel();
 
-    expect(await screen.findByText(/Imports require an admin account after sign-in\./i)).toBeInTheDocument();
+    expect(await screen.findByText(/Only admin accounts can add files\./i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Choose File" })).toBeDisabled();
   });
 
@@ -179,7 +179,7 @@ describe("ImportPanel QuickBooks routing", () => {
 
     renderImportPanel();
 
-    expect(await screen.findByText(/Verifying the current dashboard session before loading live HAL source status and coverage details\./i)).toBeInTheDocument();
+    expect(await screen.findByText(/Checking your access before loading the latest file status and coverage details\./i)).toBeInTheDocument();
     expect(screen.getByTestId("import-history")).toHaveTextContent("0");
     expect(screen.queryByText(/Live claims aggregate snapshot:/i)).not.toBeInTheDocument();
     expect(fetchFinancialSummary).not.toHaveBeenCalled();
@@ -192,9 +192,9 @@ describe("ImportPanel QuickBooks routing", () => {
 
     renderImportPanel();
 
-    expect(await screen.findByText("The dashboard session could not be verified right now.")).toBeInTheDocument();
+    expect(await screen.findByText("Your workspace could not be verified right now.")).toBeInTheDocument();
     expect(
-      screen.queryByText(/Sign in from the dashboard banner to load live HAL source status, claims aggregate snapshot, and SoftDent coverage details\./i),
+      screen.queryByText(/Sign in from the dashboard banner to see the latest file status and SoftDent file details\./i),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("import-history")).toHaveTextContent("0");
     expect(screen.queryByText(/Live claims aggregate snapshot:/i)).not.toBeInTheDocument();

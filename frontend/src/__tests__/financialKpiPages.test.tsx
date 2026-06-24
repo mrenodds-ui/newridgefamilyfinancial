@@ -136,12 +136,12 @@ describe("financial KPI pages", () => {
 
     renderWithQuery(<SoftDentPage />);
 
-    await screen.findByText("SoftDent Financials");
+    await screen.findByRole("heading", { name: "Practice Performance" });
 
-    expect(screen.getByText("$900")).toBeInTheDocument();
-    expect(screen.getByText("$700")).toBeInTheDocument();
-    expect(screen.getByText("$650")).toBeInTheDocument();
-    expect(screen.getByText("72%")).toBeInTheDocument();
+    expect(screen.getAllByText("$900").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$700").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("$650").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("72%").length).toBeGreaterThan(0);
     expect(screen.queryByText(/^\$100$/)).not.toBeInTheDocument();
   });
 
@@ -179,7 +179,7 @@ describe("financial KPI pages", () => {
 
     await screen.findByText("A/R & Collections");
 
-    expect(screen.getByText("72%")).toBeInTheDocument();
+    expect(screen.getAllByText("72%").length).toBeGreaterThan(0);
     expect(screen.queryByText(/^50%$/)).not.toBeInTheDocument();
   });
 });

@@ -17,6 +17,17 @@ function humanizeMetricKey(key: string) {
     .toLowerCase();
 }
 
+function humanizeLabel(value: string) {
+  return value.replaceAll("_", " ");
+}
+
+function humanizeConfidenceLabel(value: string) {
+  if (value === "manual review") {
+    return "needs review";
+  }
+  return humanizeLabel(value);
+}
+
 type SourceReviewContentProps = {
   review?: FinancialSourceReviewItem | null;
   emptyMessage: string;
@@ -35,12 +46,12 @@ export function SourceReviewContent({ review, emptyMessage }: SourceReviewConten
       <div className="admin-audit-item__header">
         <strong>{review.sourceSystem}</strong>
         <span>
-          {review.status} ·{" "}
-          <span className={confidenceBadgeClass(review.confidenceLabel, review.reviewRequired)}>{review.confidenceLabel}</span>
+          {humanizeLabel(review.status)} ·{" "}
+          <span className={confidenceBadgeClass(review.confidenceLabel, review.reviewRequired)}>{humanizeConfidenceLabel(review.confidenceLabel)}</span>
         </span>
       </div>
       <div className="admin-audit-item__summary">{review.summary}</div>
-      <div className="admin-audit-item__summary">Last verified: {review.lastVerifiedAt ?? "Unavailable"}</div>
+      <div className="admin-audit-item__summary">Last checked: {review.lastVerifiedAt ?? "Unavailable"}</div>
       {metricEntries.length ? (
         <div className="admin-audit-item__summary">
           {metricEntries.map(([key, value]) => `${humanizeMetricKey(key)}: ${value}`).join(" · ")}
@@ -53,11 +64,11 @@ export function SourceReviewContent({ review, emptyMessage }: SourceReviewConten
               key={`${review.sourceSystem}-${flag}`}
               className="dashboard-import-status-badge dashboard-import-status-badge--pending dashboard-import-status-badge--spaced"
             >
-              {flag}
+              {humanizeLabel(flag)}
             </span>
           ))
         ) : (
-          <span className="dashboard-import-status-badge">no review flags</span>
+          <span className="dashboard-import-status-badge">no follow-up flags</span>
         )}
       </div>
     </div>

@@ -54,6 +54,16 @@ import {
 
 type BackendSchemas = components["schemas"];
 
+export type FinancialSummaryWidgetFeed = {
+  manager?: string | null;
+  run_id?: string | null;
+  generated_at?: string | null;
+  received_at?: string | null;
+  widgets?: Record<string, unknown> | null;
+  sources?: Record<string, unknown> | null;
+  jobs?: Record<string, unknown> | null;
+};
+
 export type AuthSessionResponse = BackendSchemas["AuthSessionResponse"];
 
 function buildApiHeaders(initHeaders?: HeadersInit): Headers {
@@ -406,6 +416,18 @@ const financialTransactionDiagnosticsSchema = z
   })
   .passthrough();
 
+const financialSummaryWidgetFeedSchema = z
+  .object({
+    manager: z.string().nullable().optional(),
+    run_id: z.string().nullable().optional(),
+    generated_at: z.string().nullable().optional(),
+    received_at: z.string().nullable().optional(),
+    widgets: z.record(z.unknown()).nullable().optional().default({}),
+    sources: z.record(z.unknown()).nullable().optional().default({}),
+    jobs: z.record(z.unknown()).nullable().optional().default({}),
+  })
+  .passthrough();
+
 const financialSummarySchema = z
   .object({
     generatedAt: z.string().nullable().optional(),
@@ -434,6 +456,7 @@ const financialSummarySchema = z
     dataFreshnessWarnings: z.unknown().optional(),
     currentMonthProduction: z.record(z.unknown()).nullable().optional(),
     currentYearProduction: z.record(z.unknown()).nullable().optional(),
+    widgetFeed: financialSummaryWidgetFeedSchema.nullable().optional().default(null),
   })
   .passthrough();
 
@@ -550,7 +573,9 @@ export type FinancialHealthFlag = BackendSchemas["FinancialHealthFlagResponse"];
 
 export type FinancialTransactionDiagnostics = BackendSchemas["FinancialTransactionDiagnosticsResponse"];
 
-export type FinancialSummaryResponse = BackendSchemas["FinancialSummaryResponse"];
+export type FinancialSummaryResponse = BackendSchemas["FinancialSummaryResponse"] & {
+  widgetFeed?: FinancialSummaryWidgetFeed | null;
+};
 
 export type HalStagedImportFilePayload = {
   file_name: string;

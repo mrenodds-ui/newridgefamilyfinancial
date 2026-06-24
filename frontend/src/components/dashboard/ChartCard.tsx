@@ -1,14 +1,13 @@
-import type React from "react";
+import type { ReactNode } from "react";
 
 interface ChartCardProps {
   title: string;
-  children: React.ReactNode;
-  style?: React.CSSProperties;
+  children: ReactNode;
 }
 
-export function ChartCard({ title, children, style }: ChartCardProps) {
+export function ChartCard({ title, children }: ChartCardProps) {
   return (
-    <section className="dashboard-chart-card" style={style}>
+    <section className="dashboard-chart-card">
       <div className="dashboard-chart-title">{title}</div>
       {children}
     </section>

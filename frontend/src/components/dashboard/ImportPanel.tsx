@@ -35,7 +35,7 @@ type PreviewRow = Record<string, unknown>;
 
 function buildValidationMessage(reportType: string, data: Record<string, unknown>[]) {
   if (!data.length) {
-    return "The selected sheet or file has no data rows.";
+    return "This file does not contain any rows to import.";
   }
 
   const columns = new Set(Object.keys(data[0] ?? {}).map(normalizeColumn));
@@ -45,7 +45,7 @@ function buildValidationMessage(reportType: string, data: Record<string, unknown
     const hasProduction = hasAnyColumn(columns, ["production", "gross_production", "net_production"]);
     const hasCollections = hasAnyColumn(columns, ["collections", "collection_total", "deposit_total"]);
     if (!hasProvider || !hasProduction || !hasCollections) {
-      return "Expected production import columns such as provider, production, and collections were not found on the selected sheet.";
+      return "Missing columns for a production file. Include provider, production, and collections.";
     }
     return null;
   }
@@ -54,7 +54,7 @@ function buildValidationMessage(reportType: string, data: Record<string, unknown
     const hasIncome = hasAnyColumn(columns, ["income", "income_total", "revenue"]);
     const hasExpenses = hasAnyColumn(columns, ["expense_total", "expenses", "amount"]);
     if (!hasIncome || !hasExpenses) {
-      return "Expected profit and loss columns such as income/revenue and expenses were not found on the selected sheet.";
+      return "Missing columns for a profit and loss file. Include income or revenue plus expenses.";
     }
     return null;
   }
@@ -62,7 +62,7 @@ function buildValidationMessage(reportType: string, data: Record<string, unknown
   if (reportType === "A/R Aging") {
     const hasAging = hasAnyColumn(columns, ["current_balance", "balance_30", "balance_60", "balance_90", "total_ar"]);
     if (!hasAging) {
-      return "Expected A/R aging columns such as current_balance, balance_30, balance_60, or balance_90 were not found on the selected sheet.";
+      return "Missing columns for an A/R aging file. Include balances for current, 30, 60, or 90+.";
     }
     return null;
   }
@@ -71,12 +71,12 @@ function buildValidationMessage(reportType: string, data: Record<string, unknown
     const hasCategory = hasAnyColumn(columns, ["expense_category", "category", "account_name"]);
     const hasAmount = hasAnyColumn(columns, ["total_amount", "amount", "expense_total"]);
     if (!hasCategory || !hasAmount) {
-      return "Expected expense category columns such as category/account and amount were not found on the selected sheet.";
+      return "Missing columns for an expense category file. Include a category or account plus an amount.";
     }
     return null;
   }
 
-  return "Report type could not be detected from the selected file. Review the sheet and column names before importing.";
+  return "We could not match this file to a supported import type. Review the sheet and column names before continuing.";
 }
 
 function toNumber(value: number | string | null | undefined) {
@@ -125,19 +125,19 @@ export function buildLiveImportHistory(financialSummary: FinancialSummaryRespons
     {
       id: "live-softdent-summary",
       source: "softdent",
-      reportType: "Live financial summary",
-      fileName: "C:/SoftDentFinancialExports/softdent_period_report_status.json",
+      reportType: "SoftDent dashboard update",
+      fileName: "SoftDent monthly summary",
       importedAt: softDentImportedAt,
       rowCount: softDentRows,
       status: financialSummary.latestSoftDentRefreshAt ? "success" : "pending",
       errorMessage:
-        financialSummary.dataFreshnessStatus === "stale" ? "SoftDent summary is marked stale until a newer exact export lands." : undefined,
+        financialSummary.dataFreshnessStatus === "stale" ? "SoftDent numbers are marked out of date until a newer export is added." : undefined,
     },
     {
       id: "live-quickbooks-summary",
       source: "quickbooks",
-      reportType: "Live QuickBooks snapshot",
-      fileName: "wrapper:/api/hal9000/page-summary",
+      reportType: "QuickBooks live update",
+      fileName: "QuickBooks live summary",
       importedAt: quickBooksImportedAt,
       rowCount: quickBooksRows,
       status: toImportStatus(financialSummary.quickBooksStatus?.status),
@@ -189,10 +189,10 @@ export default function ImportPanel() {
   const importControlsLocked = isAuthenticated && (!isRoleKnown || isAuthSessionLoading || !isAdmin);
   const hasSessionVerificationError = isAuthenticated && isAuthSessionError && sessionStatusCode !== 401;
   const liveCoverageMessage = isAuthSessionLoading
-    ? "Verifying the current dashboard session before loading live HAL source status and coverage details."
+    ? "Checking your access before loading the latest file status and coverage details."
     : hasSessionVerificationError
-      ? "The dashboard session could not be verified right now."
-      : "Sign in from the dashboard banner to load live HAL source status, claims aggregate snapshot, and SoftDent coverage details.";
+      ? "Your workspace could not be verified right now."
+      : "Sign in from the dashboard banner to see the latest file status and SoftDent file details.";
 
   async function invalidateHalViews() {
     await Promise.all([
@@ -224,7 +224,7 @@ export default function ImportPanel() {
       setPreviewData(data);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      setPreviewError(`Malformed file: ${message}`);
+      setPreviewError(`This file could not be opened. ${message}`);
       setPreviewFile(null);
       setPreviewSheetNames([]);
       setSelectedSheetName("");
@@ -241,8 +241,8 @@ export default function ImportPanel() {
       setStagingMessage(null);
       setStagingError(
         isAuthSessionError
-          ? authSessionError?.message || "The current API session could not be verified for imports. Retry the admin session check."
-          : "Imports require an admin account after sign-in.",
+          ? authSessionError?.message || "We could not confirm your sign-in for file imports. Try signing in again."
+          : "Only admin accounts can add files.",
       );
       return;
     }
@@ -266,11 +266,11 @@ export default function ImportPanel() {
           await refreshHalFinancialSources();
           await invalidateHalViews();
           setHistory((prev) => [historyRecord, ...prev]);
-          setStagingMessage("SoftDent import completed through the canonical backend pipeline and HAL page feeds were refreshed.");
+          setStagingMessage("SoftDent file added and dashboard pages refreshed.");
           setStagingError(null);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          setStagingError(`SoftDent import failed before the backend pipeline could accept the file. ${message}`);
+          setStagingError(`SoftDent import could not be completed. ${message}`);
         }
       } else if (normalized.stagedFiles.length > 0) {
         try {
@@ -284,16 +284,14 @@ export default function ImportPanel() {
           await refreshHalFinancialSources();
           await invalidateHalViews();
           setHistory((prev) => [historyRecord, ...prev]);
-          setStagingMessage(
-            `${normalized.stagedFiles.length} QuickBooks file(s) imported through the canonical backend pipeline and HAL page feeds were refreshed.`,
-          );
+          setStagingMessage(`${normalized.stagedFiles.length} QuickBooks file(s) added and dashboard pages refreshed.`);
           setStagingError(null);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          setStagingError(`Canonical QuickBooks import failed before the backend pipeline could accept the generated file. ${message}`);
+          setStagingError(`QuickBooks import could not be completed. ${message}`);
         }
       } else if (currentSource === "quickbooks") {
-        setStagingError("No canonical QuickBooks staged files were generated, so HAL page feeds were not updated.");
+        setStagingError("This QuickBooks file could not be prepared for import, so the dashboard was not updated.");
       }
     }
 
@@ -348,20 +346,20 @@ export default function ImportPanel() {
   return (
     <section className="dashboard-import-card">
       <div className="dashboard-import-title">
-        Import Data
+        Add a File
         <span className="dashboard-import-title-download" title="Click to download a sample file for import.">
           <button className="dashboard-import-btn dashboard-import-btn-download" onClick={downloadSampleFile} type="button">
-            Download Sample File
+            Download Example File
           </button>
         </span>
         <span
           className="dashboard-import-title-tip"
-          title="Tip: Import a CSV with columns: provider, production, collections. Use the sample file for format."
+          title="Tip: For production updates, use a file with provider, production, and collections columns."
         >
-          ℹ️ Tip: Import a CSV with columns: provider, production, collections.
+          ℹ️ Tip: For production updates, use provider, production, and collections columns.
         </span>
       </div>
-      <div className="dashboard-import-helper">Import SoftDent or QuickBooks Excel/CSV exports.</div>
+      <div className="dashboard-import-helper">Add SoftDent or QuickBooks Excel/CSV files.</div>
       <div
         className={`dashboard-import-file-row${dragActive ? " dashboard-import-file-row-active" : ""}`}
         onDragOver={handleDragOver}
@@ -385,10 +383,10 @@ export default function ImportPanel() {
           Choose File
         </button>
         <span className="dashboard-import-helper">
-          Or drag and drop a file here. Visible pages refresh only after the canonical backend pipeline updates HAL-owned page feeds.
+          Or drag and drop a file here. Dashboard pages refresh after the import finishes.
         </span>
       </div>
-      {importsRequireAdmin ? <div className="dashboard-import-warning">Imports require an admin account after sign-in.</div> : null}
+      {importsRequireAdmin ? <div className="dashboard-import-warning">Only admin accounts can add files.</div> : null}
       {parsing && (
         <div className="dashboard-import-parse">
           <span className="spinner" aria-live="polite">
@@ -403,20 +401,18 @@ export default function ImportPanel() {
         <div className={validationMsg.startsWith("Missing") ? "dashboard-import-error" : "dashboard-import-warning"}>{validationMsg}</div>
       )}
       {isSessionVerified && financialSummaryQuery.isError && (
-        <div className="dashboard-import-warning">
-          Live HAL source status is temporarily unavailable. Page updates resume after HAL page-summary refresh succeeds.
-        </div>
+        <div className="dashboard-import-warning">The latest file status is temporarily unavailable. Try again after the next update.</div>
       )}
       <div className="dashboard-import-history">
-        <h3>SoftDent Coverage Gate</h3>
+        <h3>SoftDent File Check</h3>
         {isSessionVerified ? (
           <>
             <div className="dashboard-import-helper">
               {claimsSummary?.available
-                ? `Live claims aggregate snapshot: ${formatCurrency(claimsSummary.true_outstanding_claims_amount)} outstanding and ${formatCurrency(claimsSummary.unsubmitted_claims_amount)} unsubmitted are now flowing from approved SoftDent aggregate exports.`
-                : "Claims aggregate snapshot remains blocked until the approved SoftDent aggregate claim exports land in the canonical import lane."}
+                ? `Current claims totals: ${formatCurrency(claimsSummary.true_outstanding_claims_amount)} outstanding and ${formatCurrency(claimsSummary.unsubmitted_claims_amount)} unsubmitted.`
+                : "Claims totals will appear after the approved SoftDent claim files are added."}
             </div>
-            <SoftDentCoveragePanel coverage={softDentCoverage} emptyMessage="SoftDent coverage details are unavailable during import review." />
+            <SoftDentCoveragePanel coverage={softDentCoverage} emptyMessage="SoftDent file details are unavailable right now." />
           </>
         ) : (
           <div className="dashboard-import-helper">{liveCoverageMessage}</div>
@@ -424,9 +420,9 @@ export default function ImportPanel() {
       </div>
       {previewData && (
         <div className="dashboard-import-preview">
-          <strong>Preview Data:</strong>
+          <strong>Preview</strong>
           <div className="dashboard-import-helper">
-            Detected report type: <strong>{detectedReportType}</strong>
+            Detected file type: <strong>{detectedReportType}</strong>
           </div>
           {previewSheetNames.length > 1 && previewFile ? (
             <label className="dashboard-import-helper">
@@ -449,7 +445,7 @@ export default function ImportPanel() {
           ) : null}
           {normalizedFiles.length > 0 && currentSource === "quickbooks" ? (
             <div className="dashboard-import-helper">
-              QuickBooks staged files ready:
+              QuickBooks files ready to add:
               {normalizedFiles.map((file) => (
                 <button
                   key={file.fileName}
@@ -488,7 +484,7 @@ export default function ImportPanel() {
                 })}
               </tbody>
             </table>
-            {previewData.length > 10 && <div className="dashboard-import-preview-info">(showing first 10 rows)</div>}
+            {previewData.length > 10 && <div className="dashboard-import-preview-info">Showing first 10 rows</div>}
           </div>
           <button
             type="button"
@@ -498,7 +494,7 @@ export default function ImportPanel() {
             }}
             disabled={importControlsLocked}
           >
-            Import Data
+            Add to Dashboard
           </button>
           <button
             type="button"

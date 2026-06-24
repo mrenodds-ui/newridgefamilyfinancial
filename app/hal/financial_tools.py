@@ -993,7 +993,6 @@ def _build_insurance_narrative(*, question: str, matched_claims: list[dict], mat
         sentences.append(f"Clinical documentation notes: {' '.join(note_points)}")
     if claim_points:
         sentences.append(f"Additional claim facts: {', '.join(claim_points)}.")
-    sentences.append("This narrative was prepared from local read-only SoftDent claims and clinical-note exports and should be reviewed before submission.")
     return " ".join(sentences)
 
 

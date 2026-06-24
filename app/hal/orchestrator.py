@@ -135,6 +135,79 @@ FOLLOW_UP_PHRASES = (
     "summarize the top two action items",
 )
 
+HAL_VOICE_PROFILES = {
+    "primary": {
+        "lane": "primary",
+        "label": "Primary response",
+        "tone": "direct and grounded",
+        "style_notes": [
+            "Lead with the answer.",
+            "Use verified facts before interpretation.",
+            "Keep safety language outside the main answer when the UI can carry it.",
+        ],
+    },
+    "second_opinion": {
+        "lane": "second_opinion",
+        "label": "Second opinion",
+        "tone": "slower and more evaluative",
+        "style_notes": [
+            "Add one extra verification angle when useful.",
+            "Call out tradeoffs and uncertainty.",
+            "Stay practical instead of verbose.",
+        ],
+    },
+    "patient_workflow": {
+        "lane": "patient_workflow",
+        "label": "Patient workflow",
+        "tone": "careful and case-focused",
+        "style_notes": [
+            "Stay specific to the matched patient context.",
+            "Use calm clinical-administrative wording.",
+            "Keep governance text separate from the patient narrative when possible.",
+        ],
+    },
+    "policy": {
+        "lane": "policy",
+        "label": "Policy guidance",
+        "tone": "measured and review-oriented",
+        "style_notes": [
+            "Frame the answer as draft guidance.",
+            "Ground the answer in approved citations.",
+            "Make the need for review explicit without sounding defensive.",
+        ],
+    },
+}
+
+
+def _voice_profile(name: str) -> dict[str, object]:
+    selected = HAL_VOICE_PROFILES.get(name) or HAL_VOICE_PROFILES["primary"]
+    return {
+        "lane": str(selected["lane"]),
+        "label": str(selected["label"]),
+        "tone": str(selected["tone"]),
+        "style_notes": [str(item) for item in selected.get("style_notes", [])],
+    }
+
+
+def _governance_note(label: str, detail: str) -> dict[str, str]:
+    return {"label": label, "detail": detail}
+
+
+def _build_governance_notes(*, patient_context_used: bool = False, review_actions_present: bool = False) -> list[dict[str, str]]:
+    notes = [
+        _governance_note("Data boundary", "HAL stays inside approved local read-only sources and sanitized retrieval."),
+        _governance_note("Runtime truthfulness", "HAL only reports runtime, model, file, and tool facts that the backend verified."),
+    ]
+    if patient_context_used:
+        notes.append(
+            _governance_note("Patient identifiers", "Raw identifiers stay inside the reviewed local patient tool and the audit trail stores the sanitized request."),
+        )
+    if review_actions_present:
+        notes.append(
+            _governance_note("Human approval", "Requested device or state changes stay pending until a human explicitly approves them."),
+        )
+    return notes
+
 
 class CommandRegistry:
     def __init__(self) -> None:
@@ -314,7 +387,8 @@ def _get_hal_model_routing() -> dict[str, object]:
 
     # The operating picture publishes stable approved lane labels rather than the
     # mutable runtime profile file value so downstream status contracts stay fixed.
-    primary_model = "mistral-small:22b-instruct-2409-q4_K_M"
+    primary_model = "mistral-small3.1:24b"
+    second_opinion_model = "qwen3:30b"
     code_model = str(coder_profile.get("model") or "qwen2.5-coder:14b")
     if not code_model or code_model == "unknown":
         code_model = "qwen2.5-coder:14b"
@@ -325,6 +399,11 @@ def _get_hal_model_routing() -> dict[str, object]:
             "model": primary_model,
             "purpose": "general HAL",
         },
+        "second_opinion": {
+            "route": "local",
+            "model": second_opinion_model,
+            "purpose": "deeper second opinion",
+        },
         "code_help": {
             "route": "local_only_raw_ollama",
             "model": code_model,
@@ -332,7 +411,7 @@ def _get_hal_model_routing() -> dict[str, object]:
         },
         "optional_test_lane": {
             "route": "local",
-            "model": "qwen3:30b",
+            "model": second_opinion_model,
             "purpose": "test-only",
         },
         "truthfulness_boundary": (
@@ -1405,6 +1484,13 @@ def _is_action_summary_request(question: str) -> bool:
     return "top two action items" in lowered or ("summarize" in lowered and "without inventing anything new" in lowered)
 
 
+def _is_operating_picture_request(question: str) -> bool:
+    lowered = question.lower()
+    return "operating picture" in lowered or "what can you do" in lowered or "capabilities" in lowered or (
+        "hal" in lowered and any(keyword in lowered for keyword in ("status", "runtime", "health", "model", "routing"))
+    )
+
+
 def _build_quickbooks_write_boundary_answer() -> str:
     return (
         "I cannot post that in QuickBooks myself. "
@@ -1862,18 +1948,18 @@ def answer_hal_question(
         patient_summary = _build_patient_context_summary(patient_context)
         if _is_patient_follow_up_question(question) and ("follow-up plan" in lowered_question or "follow up plan" in lowered_question):
             answer = (
-                "HAL used the reviewed local patient-specific SoftDent tool. "
-                + (f"Verified patient context: {patient_summary}. " if patient_summary else "")
+                (f"Verified patient context: {patient_summary}. " if patient_summary else "")
                 + _build_patient_follow_up_plan(patient_context)
-                + f" Supporting context: {context_titles}. Raw identifiers were processed only inside the local read-only backend; the audit trail stores the sanitized request."
+                + (f" Supporting context: {context_titles}." if context_titles else "")
             )
         else:
             answer = (
-                "HAL used the reviewed local patient-specific SoftDent tool. "
-                + (f"Verified patient context: {patient_summary}. " if patient_summary else "")
-                + f"{patient_context['narrative']} Supporting context: {context_titles}. "
-                + "Raw identifiers were processed only inside the local read-only backend; the audit trail stores the sanitized request."
+                (f"Verified patient context: {patient_summary}. " if patient_summary else "")
+                + f"{patient_context['narrative']}"
+                + (f" Supporting context: {context_titles}." if context_titles else "")
             )
+        voice_profile = _voice_profile("patient_workflow")
+        governance_notes = _build_governance_notes(patient_context_used=True)
     else:
         context_summary = _build_context_excerpt_summary(combined_context)
         hardware_summary = _build_hardware_answer_summary(hardware_context)
@@ -1881,7 +1967,8 @@ def answer_hal_question(
         report_summary = _build_report_answer_summary(live_report_context)
         answer_parts: list[str] = []
         concise_answer_frame = _should_use_concise_answer_frame(question)
-        if not _is_follow_up_question(question) and not concise_answer_frame:
+        include_operating_picture = _is_operating_picture_request(question) and not _is_follow_up_question(question)
+        if include_operating_picture and not concise_answer_frame:
             answer_parts.append(f"{operating_picture['summary']} I answer from deterministic server facts first, then from approved local retrieval.")
         if _is_quickbooks_write_request(question):
             answer_parts.append(_build_quickbooks_write_boundary_answer())
@@ -1891,7 +1978,7 @@ def answer_hal_question(
             answer_parts.append(_build_weakest_provider_answer(softdent_aggregate_context))
         elif _is_action_summary_request(question):
             answer_parts.append(_build_action_summary_answer([str(item) for item in state.get("action_items", []) if str(item).strip()]))
-        if not concise_answer_frame:
+        if include_operating_picture and not concise_answer_frame:
             answer_parts.append(
                 "I can use sanitized financial summaries, KPI context, approved SoftDent aggregate snapshots, sanitized SoftDent claims or clinical-note exports when available, and approved QuickBooks read-only summaries only."
             )
@@ -1917,6 +2004,8 @@ def answer_hal_question(
                 "If you need patient-specific action, use a reviewed read-only backend tool rather than sending raw identifiers to the assistant. HAL cannot run arbitrary SQL, expose raw patient records, or claim runtime or model changes that the backend did not verify."
             )
         answer = " ".join(part.strip() for part in answer_parts if part and part.strip())
+        voice_profile = _voice_profile("primary")
+        governance_notes = _build_governance_notes(review_actions_present=bool(hardware_review_actions))
     _update_conversation_state(
         actor=actor,
         session_id=session_id,
@@ -1961,6 +2050,8 @@ def answer_hal_question(
         "audit_id": audit_entry["audit_id"],
         "access_policy": get_hal_access_policy(),
         "review_actions": hardware_review_actions,
+        "voice_profile": voice_profile,
+        "governance_notes": governance_notes,
     }
 
 
@@ -1980,6 +2071,7 @@ def answer_hal_second_opinion_question(
     return {
         **payload,
         "mode": f"{HAL_MODE}:second-opinion",
+        "voice_profile": _voice_profile("second_opinion"),
     }
 
 
@@ -2022,6 +2114,8 @@ def answer_insurance_narrative_request(*, question: str, actor: str) -> dict[str
         ],
         "audit_id": audit_entry["audit_id"],
         "access_policy": get_hal_access_policy(),
+        "voice_profile": _voice_profile("patient_workflow"),
+        "governance_notes": _build_governance_notes(patient_context_used=bool(patient_context["matched"])),
     }
 
 
@@ -2065,6 +2159,8 @@ def answer_patient_dossier_request(*, question: str, actor: str) -> dict[str, ob
         ],
         "audit_id": audit_entry["audit_id"],
         "access_policy": get_hal_access_policy(),
+        "voice_profile": _voice_profile("patient_workflow"),
+        "governance_notes": _build_governance_notes(patient_context_used=bool(patient_context["matched"])),
     }
 
 
@@ -2090,9 +2186,8 @@ def answer_accounting_policy_question(
     citation_titles = ", ".join(item["title"] for item in citations) if citations else "approved local policy sources"
     standard_label = accounting_standard or "internal reviewed guidance"
     answer = (
-        f"Accounting policy guidance is limited to approved local documentation and reviewed financial context. "
         f"For this request, HAL found relevant guidance from {citation_titles}. "
-        f"Treat this as draft guidance under {standard_label}; a human reviewer should confirm the final accounting treatment before use in the ledger."
+        f"Treat this as draft guidance under {standard_label}. A human reviewer should confirm the final accounting treatment before anything reaches the ledger."
     )
     append_ai_activity_log(
         tier="tier_2",
@@ -2117,6 +2212,11 @@ def answer_accounting_policy_question(
         "review_required": True,
         "audit_id": audit_entry["audit_id"],
         "access_policy": get_hal_access_policy(),
+        "voice_profile": _voice_profile("policy"),
+        "governance_notes": [
+            _governance_note("Draft-only guidance", "Accounting policy answers are advisory and require human accounting review before operational use."),
+            _governance_note("Approved sources", f"This answer was grounded in {citation_titles}."),
+        ],
     }
 
 
