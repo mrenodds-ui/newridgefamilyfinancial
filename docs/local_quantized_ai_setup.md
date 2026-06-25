@@ -48,6 +48,8 @@ Configuration is centralized in `app/ai_local_config.py` and `evals/local_model_
 
 `scripts/start_litellm_proxy.ps1` warns when `LITELLM_MASTER_KEY` is unset. Bind the proxy to `127.0.0.1` unless you intentionally expose it on a shared network.
 
+Full API security contracts and the README production checklist are in `docs/API.md` and `README.md`.
+
 ## Environment
 
 Copy `.env.example` to `.env` and adjust:

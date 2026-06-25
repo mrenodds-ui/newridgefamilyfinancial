@@ -46,6 +46,32 @@ That command watches the frontend production bundle, rebuilds it on changes, and
 
 Before starting the backend, configure `APP_AUTH_USERS_JSON` plus optional `HAL_SQLITE_PATH`, `HAL_CHROMA_PATH`, and `HAL_EMBEDDING_PROVIDER` in your environment or `.env` file. Prefer `password_hash` entries in `APP_AUTH_USERS_JSON`; legacy plaintext `password` entries still load for compatibility but should be rotated out. The app now fails fast at startup if `APP_AUTH_USERS_JSON` is missing, malformed, or missing required HAL/admin roles. See `.env.example` for the expected shape.
 
+For production or staging deployment, also complete the **Production environment checklist** below and read `docs/API.md` **Security contracts**.
+
+### Production environment checklist
+
+Set these in deployment configuration (not copy-pasted from `.env.example` placeholders):
+
+| Variable | Required when | Notes |
+| --- | --- | --- |
+| `APP_ENV` | Production/staging | Set `APP_ENV=production`. Unset `APP_ENV` is treated as production-like. Use `APP_ENV=development` only on local workstations. |
+| `APP_AUTH_USERS_JSON` | Always | Generate per environment. Do **not** use example hashes or placeholder users in production. |
+| `APP_AUTH_SESSION_SECRET` | Production-like | Long random secret. Required when `APP_ENV` is unset, `production`, `staging`, or any non-dev value. |
+| `WIDGET_API_KEY` | Production-like | Required for `/api/widgets/update` unless you are on explicit local dev/test **and** calling from localhost only. |
+| `LITELLM_MASTER_KEY` | Non-local LiteLLM proxy | Required if the LiteLLM proxy is used beyond strictly local-only binding. Do not expose the proxy without auth. |
+| `LITELLM_PROXY_BASE_URL` | Optional | Default local proxy is `http://127.0.0.1:4000`. Keep bind on localhost unless intentionally exposing with auth. |
+| `AI_FRONTEND_BASE_URL` / `OLLAMA_FRONTEND_BASE_URL` | Local AI enabled | Frontend lane (default `http://127.0.0.1:11434`). `AI_*` takes precedence when set. |
+| `AI_BACKEND_BASE_URL` / `OLLAMA_BACKEND_BASE_URL` | Local AI enabled | Backend/HAL lane (default `http://127.0.0.1:11435`). |
+| `AI_FRONTEND_MODEL` / `OLLAMA_FRONTEND_MODEL` | Local AI enabled | Default frontend tag: `mistral-small3.1:24b`. |
+| `AI_BACKEND_MODEL` / `OLLAMA_BACKEND_MODEL` | Local AI enabled | Default backend tag: `qwen3:30b`. |
+
+**Operational notes:**
+
+- Do not use example auth placeholders from `.env.example` in production.
+- Do not expose the LiteLLM proxy without `LITELLM_MASTER_KEY` on any shared or remote interface.
+- Local 235B evaluator outputs (`235b_*.md`, `235b_*.txt`, `235b_*.json`, raw logs) are gitignored — keep them local unless explicitly sanitized and approved for commit.
+- Normal runtime must **not** use `:11436` or `qwen3:235b`; that lane is for isolated offline evaluation workflows only (see `docs/local_quantized_ai_setup.md`).
+
 HAL now has two safe local financial context paths:
 
 - Indexed aggregate SoftDent summaries built from the local dashboard export files in the repo, including KPI rollups, provider ranking, and payer-mix summaries.
@@ -319,6 +345,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\watch_whea_root_port.ps1 -Con
 - Keep `.env` credentials out of source control.
 - Do not expose the app to LAN unless explicitly changed.
 - Keep all integrations read-only.
+- Production-like deployments require `APP_AUTH_SESSION_SECRET` and `WIDGET_API_KEY`; see **Production environment checklist** above and `docs/API.md` **Security contracts**.
 - Session cookies, if added later, should be `HttpOnly` and `Secure`; the browser app does not store auth tokens, API keys, or session IDs in `localStorage`.
 
 ### Content Security Policy

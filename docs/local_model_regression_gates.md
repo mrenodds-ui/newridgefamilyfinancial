@@ -65,6 +65,8 @@ Prompt packs may also include per-case `content_assertions` with `required_conta
 
 GitHub Actions runs `python scripts/run_ci_gates.py` in `.github/workflows/test.yml` (`ci-gates` job) on every push/PR to `main`.
 
+Deployment security contracts (`APP_ENV`, `APP_AUTH_SESSION_SECRET`, `WIDGET_API_KEY`, LiteLLM auth) are documented in `docs/API.md` and `README.md` (**Production environment checklist**).
+
 To include the local LLM gate in the existing CI runner:
 
 ```powershell
