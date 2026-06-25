@@ -34,6 +34,10 @@ Optional LiteLLM proxy (:4000)
   -> hal-chat-balanced / hal-vision -> OLLAMA_FRONTEND_BASE_URL (:11434) -> mistral-small3.1:24b
   -> hal-coding / hal-second-opinion / hal-analysis -> OLLAMA_BACKEND_BASE_URL (:11435) -> qwen3:30b
   -> qwen3:235b evaluator (:11436) is isolated workflow only; no normal LiteLLM alias uses it
+
+Optional experimental fast structured reviewer (opt-in profile `fast_review` only)
+  -> AI_FAST_REVIEW_BASE_URL (:11437) -> Qwen3-Coder-30B-A3B-Instruct
+  -> not wired into user-facing narrative generation or second-opinion defaults yet
 ```
 
 Configuration is centralized in `app/ai_local_config.py` and `evals/local_model_profiles.json`.
@@ -80,6 +84,8 @@ All lane settings are env-driven (`app/ai_local_config.py` reads `.env`); do not
 | `AI_FRONTEND_BASE_URL` / `AI_BACKEND_BASE_URL` | OpenAI-compatible or Ollama base URLs (ports default `:11434` / `:11435`) |
 | `OLLAMA_FRONTEND_BASE_URL` / `OLLAMA_BACKEND_BASE_URL` | LiteLLM proxy lane URLs (should match the `AI_*` values above) |
 | `OLLAMA_EVALUATOR_BASE_URL` | Isolated 235B evaluator on `:11436` only; not used by normal HAL or LiteLLM aliases |
+| `AI_FAST_REVIEW_BASE_URL` / `OLLAMA_FAST_REVIEW_BASE_URL` | **Experimental** fast structured reviewer on `:11437` (`fast_review` profile only; opt-in) |
+| `AI_FAST_REVIEW_MODEL` / `OLLAMA_FAST_REVIEW_MODEL` | Fast reviewer model tag (default `Qwen3-Coder-30B-A3B-Instruct`; override if your local Ollama tag differs) |
 | `AI_FRONTEND_MODEL` / `AI_BACKEND_MODEL` | Ollama model tags or LiteLLM aliases (`mistral-small3.1:24b`, `qwen3:30b`) |
 | `OLLAMA_FRONTEND_MODEL` / `OLLAMA_BACKEND_MODEL` | Optional model-tag overrides used by run scripts when `AI_*_MODEL` is unset |
 | `AI_FRONTEND_MODEL_PATH` / `AI_BACKEND_MODEL_PATH` | Local GGUF paths for `llama_cpp` |
@@ -102,6 +108,45 @@ Requires `llama-quantize` on PATH. Source can be HuggingFace directory or an exi
 Fallback quants are attempted automatically if the primary quant fails.
 
 Outputs are written to `.local_models/` by default (gitignored, local-only — do not commit).
+
+## Experimental fast structured reviewer (`:11437`)
+
+**Status: experimental and opt-in.** This lane does **not** replace the production backend default (`qwen3:30b` on `:11435`) or `POST /api/hal9000/second-opinion`.
+
+Use the `fast_review` profile when you want a faster structured checker for:
+
+- insurance narrative fact-checking
+- missing-data detection
+- citation/source compliance checks
+- contradiction checks
+- structured JSON review output
+
+It is **not** the default narrative writer. Benchmark structured review quality against `qwen3:30b` before promoting it.
+
+| Item | Value |
+| --- | --- |
+| Profile alias | `fast_review` |
+| Default port | `127.0.0.1:11437` |
+| Default model | `Qwen3-Coder-30B-A3B-Instruct` |
+| Config | `AI_FAST_REVIEW_*` or `OLLAMA_FAST_REVIEW_*` in `.env` |
+
+**Operational rules**
+
+1. Start only when needed; normal HAL chat, coder, and second-opinion routes never call `:11437` unless code explicitly targets `fast_review`.
+2. Do **not** run `:11437` at the same time as the isolated 235B evaluator (`:11436` / `qwen3:235b`).
+3. Override `AI_FAST_REVIEW_MODEL` if your local Ollama tag differs from the default GGUF name.
+
+Start the lane (Ollama example):
+
+```powershell
+$env:AI_PORT = '11437'
+$env:AI_FAST_REVIEW_MODEL = 'Qwen3-Coder-30B-A3B-Instruct'  # or your local tag
+$env:OLLAMA_HOST = '127.0.0.1:11437'
+ollama serve
+# Health check: curl http://127.0.0.1:11437/v1/models
+```
+
+Resolve the lane in Python/tests via `app.ai_local_config.resolve_profile_base_url("fast_review")`.
 
 ## Run model servers
 
