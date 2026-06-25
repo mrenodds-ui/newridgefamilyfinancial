@@ -967,7 +967,7 @@ def test_hal_status_includes_live_softdent_snapshot(monkeypatch):
     assert "Patient reports sensitivity." in softdent_payload["live_clinical_notes"]["excerpt"]
 
 
-def test_hal_question_includes_softdent_live_summary():
+def test_hal_question_includes_softdent_live_summary(canonical_softdent_dashboard):
     client.post("/api/hal9000/refresh-index", auth=basic_auth())
 
     response = client.post(
@@ -1187,7 +1187,7 @@ def test_hal_question_appends_last_month_profit_loss_snippet(monkeypatch):
     assert "QuickBooks verified profit and loss 2026-05-01 to 2026-05-31" in payload["answer"]
 
 
-def test_hal_question_includes_softdent_provider_ranking_context():
+def test_hal_question_includes_softdent_provider_ranking_context(canonical_softdent_dashboard):
     client.post("/api/hal9000/refresh-index", auth=basic_auth())
 
     response = client.post(
@@ -1204,7 +1204,7 @@ def test_hal_question_includes_softdent_provider_ranking_context():
     assert not any(item["source_id"] == "softdent-live-summary" for item in payload["retrieved_context"])
 
 
-def test_hal_question_includes_softdent_payer_mix_context():
+def test_hal_question_includes_softdent_payer_mix_context(canonical_softdent_dashboard):
     client.post("/api/hal9000/refresh-index", auth=basic_auth())
 
     response = client.post(
@@ -1221,7 +1221,7 @@ def test_hal_question_includes_softdent_payer_mix_context():
     assert not any(item["source_id"] == "softdent-live-summary" for item in payload["retrieved_context"])
 
 
-def test_hal_question_includes_softdent_collection_delta_context():
+def test_hal_question_includes_softdent_collection_delta_context(canonical_softdent_dashboard):
     client.post("/api/hal9000/refresh-index", auth=basic_auth())
 
     response = client.post(
@@ -1363,7 +1363,7 @@ def test_hal_follow_up_uses_last_patient_context(monkeypatch):
     assert "resubmission or appeal" in second_payload["answer"]
 
 
-def test_hal_follow_up_suppresses_operating_picture_and_summarizes_collection_action(monkeypatch):
+def test_hal_follow_up_suppresses_operating_picture_and_summarizes_collection_action(monkeypatch, canonical_softdent_dashboard):
     import app.hal.orchestrator as orchestrator
 
     monkeypatch.setattr(orchestrator, "get_controlled_patient_context", lambda question: {"matched": False, "snippets": [], "narrative": "", "summary_fields": {}})
@@ -1380,7 +1380,7 @@ def test_hal_follow_up_suppresses_operating_picture_and_summarizes_collection_ac
     assert "$9,765.00 collections gap" in payload["answer"]
 
 
-def test_hal_provider_question_can_identify_weakest_provider(monkeypatch):
+def test_hal_provider_question_can_identify_weakest_provider(monkeypatch, canonical_softdent_dashboard):
     import app.hal.orchestrator as orchestrator
 
     monkeypatch.setattr(orchestrator, "get_controlled_patient_context", lambda question: {"matched": False, "snippets": [], "narrative": "", "summary_fields": {}})

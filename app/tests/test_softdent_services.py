@@ -5,7 +5,7 @@ import app.services as services
 import app.hal.financial_tools as financial_tools
 
 
-def test_fetch_softdent_dashboard_aggregate_maps_local_snapshot():
+def test_fetch_softdent_dashboard_aggregate_maps_local_snapshot(canonical_softdent_dashboard):
     payload = services.fetch_softdent_dashboard_aggregate()
 
     assert payload["source_file"] == "softdent_dashboard_data.json"
@@ -29,7 +29,7 @@ def test_fetch_softdent_dashboard_aggregate_maps_local_snapshot():
     }
 
 
-def test_build_softdent_snapshot_preserves_legacy_shape():
+def test_build_softdent_snapshot_preserves_legacy_shape(canonical_softdent_dashboard):
     payload = services.build_softdent_snapshot()
 
     assert payload["available"] is True
@@ -112,7 +112,7 @@ def test_get_kpi_data_handles_sparse_snapshot_payload(monkeypatch):
     ]
 
 
-def test_softdent_status_helpers_read_from_aggregate_contract(monkeypatch):
+def test_softdent_status_helpers_read_from_aggregate_contract(monkeypatch, canonical_softdent_dashboard):
     def fail_legacy_snapshot():
         raise AssertionError("legacy snapshot helper should not be used")
 
