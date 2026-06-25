@@ -1,18 +1,35 @@
 [CmdletBinding()]
 param(
+    [switch]$Help,
+
     [string]$ModelPath = $env:AI_MODEL_PATH,
     [int]$Port = $(if ($env:AI_PORT) { [int]$env:AI_PORT } else { 11434 }),
     [string]$HostName = $(if ($env:AI_HOST) { $env:AI_HOST } else { '127.0.0.1' })
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '_local_model_defaults.ps1')
+
+if ($Help) {
+    Write-Host @'
+run_frontend_model.ps1 - start the frontend Ollama or llama.cpp lane on :11434.
+
+Default model tag: mistral-small3.1:24b
+Override with AI_FRONTEND_MODEL or OLLAMA_FRONTEND_MODEL.
+Optional custom GGUF tag via AI_FRONTEND_MODEL_PATH / AI_MODEL_PATH when creating from a local file.
+'@
+    exit 0
+}
+
 $runtime = if ($env:AI_RUNTIME) { $env:AI_RUNTIME } else { 'ollama' }
 $contextSize = if ($env:AI_FRONTEND_CONTEXT_SIZE) { $env:AI_FRONTEND_CONTEXT_SIZE } elseif ($env:AI_CONTEXT_SIZE) { $env:AI_CONTEXT_SIZE } else { '4096' }
+$defaultModelTag = Get-LocalFrontendModelName
 
 if (-not $ModelPath) { $ModelPath = $env:AI_FRONTEND_MODEL_PATH }
 
 Write-Host 'Local-only: keep weights under models/ or .local_models/ (gitignored). Never commit GGUF or checkpoint files.'
 Write-Host 'VRAM: frontend 24B Q4_K_M - keep context at 4096 on 16GB AMD; use Vulkan Ollama on Windows.'
+Write-Host "Default frontend model tag: $defaultModelTag"
 Write-Host 'This script runs in the foreground. Keep this terminal open; stopping it shuts down the frontend lane on this port.'
 Write-Host 'Health check: curl http://127.0.0.1:11434/v1/models'
 
@@ -22,7 +39,7 @@ if ($runtime -eq 'ollama') {
     }
     $env:OLLAMA_HOST = "${HostName}:$Port"
     if ($ModelPath -and (Test-Path $ModelPath)) {
-        $tag = if ($env:AI_FRONTEND_MODEL) { $env:AI_FRONTEND_MODEL } else { 'frontend-24b-q4' }
+        $tag = $defaultModelTag
         $modelfile = "FROM $ModelPath`nPARAMETER num_ctx $contextSize"
         $temp = New-TemporaryFile
         Set-Content -Path $temp.FullName -Value $modelfile -Encoding UTF8

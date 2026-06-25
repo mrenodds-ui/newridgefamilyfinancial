@@ -23,6 +23,8 @@ LITELLM_BACKEND_ALIASES = frozenset({"hal-coding", "hal-analysis", "hal-second-o
 OLLAMA_FRONTEND_BASE_URL_ENV = "OLLAMA_FRONTEND_BASE_URL"
 OLLAMA_BACKEND_BASE_URL_ENV = "OLLAMA_BACKEND_BASE_URL"
 OLLAMA_LEGACY_FRONTEND_BASE_URL_ENV = "OLLAMA_BASE_URL"
+OLLAMA_FRONTEND_MODEL_ENV = "OLLAMA_FRONTEND_MODEL"
+OLLAMA_BACKEND_MODEL_ENV = "OLLAMA_BACKEND_MODEL"
 DEFAULT_FRONTEND_QUANT = "Q4_K_M"
 DEFAULT_BACKEND_QUANT = "Q4_K_S"
 DEFAULT_CONTEXT_SIZE = 4096
@@ -112,11 +114,17 @@ def build_litellm_environment_variables(*, proxy_base_url: str = "") -> dict[str
 
 
 def get_frontend_model_name() -> str:
-    return _env("AI_FRONTEND_MODEL", DEFAULT_FRONTEND_MODEL)
+    explicit = _env("AI_FRONTEND_MODEL") or _env(OLLAMA_FRONTEND_MODEL_ENV)
+    if explicit.strip():
+        return explicit.strip()
+    return DEFAULT_FRONTEND_MODEL
 
 
 def get_backend_model_name() -> str:
-    return _env("AI_BACKEND_MODEL", DEFAULT_BACKEND_MODEL)
+    explicit = _env("AI_BACKEND_MODEL") or _env(OLLAMA_BACKEND_MODEL_ENV)
+    if explicit.strip():
+        return explicit.strip()
+    return DEFAULT_BACKEND_MODEL
 
 
 def get_frontend_model_path() -> str:

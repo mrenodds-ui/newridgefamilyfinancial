@@ -54,6 +54,11 @@ def test_profile_lane_routing_uses_expected_models(monkeypatch: pytest.MonkeyPat
 
 
 def test_env_overrides_model_name_and_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OLLAMA_FRONTEND_MODEL", "ollama-frontend")
+    monkeypatch.setenv("OLLAMA_BACKEND_MODEL", "ollama-backend")
+    assert config.get_frontend_model_name() == "ollama-frontend"
+    assert config.get_backend_model_name() == "ollama-backend"
+
     monkeypatch.setenv("AI_FRONTEND_MODEL", "custom-24b")
     monkeypatch.setenv("AI_BACKEND_MODEL", "custom-30b")
     monkeypatch.setenv("AI_FRONTEND_CONTEXT_SIZE", "8192")

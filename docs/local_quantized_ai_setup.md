@@ -68,7 +68,8 @@ All lane settings are env-driven (`app/ai_local_config.py` reads `.env`); do not
 | `AI_FRONTEND_BASE_URL` / `AI_BACKEND_BASE_URL` | OpenAI-compatible or Ollama base URLs (ports default `:11434` / `:11435`) |
 | `OLLAMA_FRONTEND_BASE_URL` / `OLLAMA_BACKEND_BASE_URL` | LiteLLM proxy lane URLs (should match the `AI_*` values above) |
 | `OLLAMA_EVALUATOR_BASE_URL` | Isolated 235B evaluator on `:11436` only; not used by normal HAL or LiteLLM aliases |
-| `AI_FRONTEND_MODEL` / `AI_BACKEND_MODEL` | Ollama model tags or LiteLLM aliases |
+| `AI_FRONTEND_MODEL` / `AI_BACKEND_MODEL` | Ollama model tags or LiteLLM aliases (`mistral-small3.1:24b`, `qwen3:30b`) |
+| `OLLAMA_FRONTEND_MODEL` / `OLLAMA_BACKEND_MODEL` | Optional model-tag overrides used by run scripts when `AI_*_MODEL` is unset |
 | `AI_FRONTEND_MODEL_PATH` / `AI_BACKEND_MODEL_PATH` | Local GGUF paths for `llama_cpp` |
 | `AI_CONTEXT_SIZE` | Shared default context (4096 recommended on 16GB) |
 | `AI_FRONTEND_CONTEXT_SIZE` / `AI_BACKEND_CONTEXT_SIZE` | Per-lane context override |
@@ -113,6 +114,7 @@ Terminal 1 — frontend 24B:
 ```powershell
 $env:AI_PORT = '11434'
 .\scripts\run_frontend_model.ps1
+# Default tag: mistral-small3.1:24b (override with AI_FRONTEND_MODEL)
 # or: ollama pull mistral-small3.1:24b with default Ollama on :11434
 ```
 
@@ -121,6 +123,7 @@ Terminal 2 — backend 30B on a second port:
 ```powershell
 $env:AI_PORT = '11435'
 .\scripts\run_backend_model.ps1
+# Default tag: qwen3:30b (override with AI_BACKEND_MODEL)
 # or: $env:OLLAMA_HOST='127.0.0.1:11435'; ollama serve
 ```
 

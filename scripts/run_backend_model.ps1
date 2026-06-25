@@ -1,18 +1,35 @@
 [CmdletBinding()]
 param(
+    [switch]$Help,
+
     [string]$ModelPath = $env:AI_MODEL_PATH,
     [int]$Port = $(if ($env:AI_PORT) { [int]$env:AI_PORT } else { 11435 }),
     [string]$HostName = $(if ($env:AI_HOST) { $env:AI_HOST } else { '127.0.0.1' })
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '_local_model_defaults.ps1')
+
+if ($Help) {
+    Write-Host @'
+run_backend_model.ps1 - start the backend Ollama or llama.cpp lane on :11435.
+
+Default model tag: qwen3:30b
+Override with AI_BACKEND_MODEL or OLLAMA_BACKEND_MODEL.
+Optional custom GGUF tag via AI_BACKEND_MODEL_PATH / AI_MODEL_PATH when creating from a local file.
+'@
+    exit 0
+}
+
 $runtime = if ($env:AI_RUNTIME) { $env:AI_RUNTIME } else { 'ollama' }
 $contextSize = if ($env:AI_BACKEND_CONTEXT_SIZE) { $env:AI_BACKEND_CONTEXT_SIZE } elseif ($env:AI_CONTEXT_SIZE) { $env:AI_CONTEXT_SIZE } else { '4096' }
+$defaultModelTag = Get-LocalBackendModelName
 
 if (-not $ModelPath) { $ModelPath = $env:AI_BACKEND_MODEL_PATH }
 
 Write-Host 'Local-only: keep weights under models/ or .local_models/ (gitignored). Never commit GGUF or checkpoint files.'
 Write-Host 'VRAM: backend 30B Q4_K_S - prefer CPU/RAM or partial offload on :11435 to avoid contending with the 24B frontend lane.'
+Write-Host "Default backend model tag: $defaultModelTag"
 Write-Host 'This script runs in the foreground. Keep this terminal open; stopping it shuts down the backend lane on this port.'
 Write-Host 'Health check: curl http://127.0.0.1:11435/v1/models'
 
@@ -22,7 +39,7 @@ if ($runtime -eq 'ollama') {
     }
     $env:OLLAMA_HOST = "${HostName}:$Port"
     if ($ModelPath -and (Test-Path $ModelPath)) {
-        $tag = if ($env:AI_BACKEND_MODEL) { $env:AI_BACKEND_MODEL } else { 'backend-30b-q4' }
+        $tag = $defaultModelTag
         $modelfile = "FROM $ModelPath`nPARAMETER num_ctx $contextSize`nPARAMETER num_gpu 0"
         $temp = New-TemporaryFile
         Set-Content -Path $temp.FullName -Value $modelfile -Encoding UTF8
