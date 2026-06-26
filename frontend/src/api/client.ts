@@ -981,6 +981,7 @@ export async function createInsuranceNarrativeDraftWorkflow(payload: {
   procedure_ids?: string[] | null;
   narrative_type: string;
   run_checker?: boolean;
+  adapter_mode?: "fixture" | "softdent_export_file";
 }): Promise<InsuranceNarrativeWorkflowResult> {
   const { response, payload: responsePayload } = await requestJson("/insurance-narratives/draft", {
     method: "POST",
@@ -994,6 +995,7 @@ export async function createInsuranceNarrativeDraftWorkflow(payload: {
       procedure_ids: payload.procedure_ids ?? null,
       narrative_type: payload.narrative_type,
       run_checker: payload.run_checker ?? false,
+      adapter_mode: payload.adapter_mode ?? "fixture",
     }),
   });
   if (!response.ok) {

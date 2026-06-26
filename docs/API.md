@@ -272,6 +272,8 @@ Require role **`hal:operator`** (HTTP Basic or valid session):
 - Requires `hal:operator`
 - Hidden from public OpenAPI (`include_in_schema=False`)
 - `run_checker` defaults to **`false`** — no live model unless explicitly requested
+- `adapter_mode` defaults to **`fixture`** — explicit opt-in required for SoftDent export files
+- When `adapter_mode=softdent_export_file`, reads `INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR` server-side only (clients cannot pass export paths)
 - When `run_checker=true`, invokes the opt-in `fast_review` checker only (no cloud fallback)
 - Does not approve, export, or submit narratives
 - Returns `InsuranceNarrativeWorkflowResult`
@@ -286,6 +288,7 @@ Request body (`InsuranceNarrativeDraftWorkflowRequest`):
 | `date_range` | `[start, end]` \| null | Optional service window |
 | `narrative_type` | string | Narrative workflow type |
 | `run_checker` | boolean | Default `false` |
+| `adapter_mode` | `"fixture"` \| `"softdent_export_file"` | Default `fixture`. `softdent_export_file` uses server-configured `INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR`; clients must not send export paths. |
 
 ### POST /api/insurance-narratives/approve-export (internal)
 

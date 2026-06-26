@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,6 +37,46 @@ os.environ["APP_AUTH_USERS_JSON"] = TEST_AUTH_USERS_JSON
 client = TestClient(app)
 
 FIXED_TIMESTAMP = "2026-06-25T12:00:00+00:00"
+FIXTURE_EXPORT_DIR = Path(__file__).resolve().parent / "fixtures" / "insurance_narratives" / "softdent"
+FIXTURE_CLAIMS_CSV = FIXTURE_EXPORT_DIR / "claims_export_fixture.csv"
+FIXTURE_PROCEDURES_CSV = FIXTURE_EXPORT_DIR / "softdent_procedures_export.csv"
+FIXTURE_LEDGER_CSV = FIXTURE_EXPORT_DIR / "softdent_patient_ledger_export.csv"
+FIXTURE_CLAIM_STATUS_CSV = FIXTURE_EXPORT_DIR / "softdent_claim_status_export.csv"
+FIXTURE_CLINICAL_NOTES_CSV = FIXTURE_EXPORT_DIR / "softdent_clinical_notes_export.csv"
+
+
+def _prepare_softdent_export_dir(target_dir: Path) -> Path:
+    (target_dir / "softdent_claims_export.csv").write_text(
+        FIXTURE_CLAIMS_CSV.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (target_dir / "softdent_procedures_export.csv").write_text(
+        FIXTURE_PROCEDURES_CSV.read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    if FIXTURE_LEDGER_CSV.is_file():
+        (target_dir / "softdent_patient_ledger_export.csv").write_text(
+            FIXTURE_LEDGER_CSV.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    if FIXTURE_CLAIM_STATUS_CSV.is_file():
+        (target_dir / "softdent_claim_status_export.csv").write_text(
+            FIXTURE_CLAIM_STATUS_CSV.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    if FIXTURE_CLINICAL_NOTES_CSV.is_file():
+        (target_dir / "softdent_clinical_notes_export.csv").write_text(
+            FIXTURE_CLINICAL_NOTES_CSV.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+    return target_dir
+
+
+@pytest.fixture
+def softdent_export_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    export_dir = _prepare_softdent_export_dir(tmp_path)
+    monkeypatch.setenv("INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR", str(export_dir))
+    return export_dir
 
 
 def setup_function() -> None:
@@ -117,6 +158,113 @@ def test_draft_endpoint_creates_packet_and_draft() -> None:
     assert payload["status"] in ("draft_created", "blocked_missing_data")
     assert payload["export"] is None
     assert payload["review"] is None
+    assert payload["packet"]["audit_metadata"]["adapter_name"] == "fixture"
+
+
+def test_draft_endpoint_adapter_mode_defaults_to_fixture() -> None:
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json=_draft_payload(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["packet"]["audit_metadata"]["adapter_name"] == "fixture"
+
+
+def test_draft_endpoint_adapter_mode_fixture_uses_fixture_adapter() -> None:
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json=_draft_payload(adapter_mode="fixture"),
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["packet"]["audit_metadata"]["adapter_name"] == "fixture"
+    assert payload["packet"]["audit_metadata"]["source_mode"] == "fixture"
+
+
+def test_draft_endpoint_adapter_mode_softdent_export_file_uses_export_adapter(
+    softdent_export_env: Path,
+) -> None:
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json={
+            "patient_ref": "CHART-EXPORT",
+            "claim_id": "CLAIM-EXPORT-1",
+            "procedure_ids": ["PROC-CROWN-30"],
+            "narrative_type": "appeal",
+            "adapter_mode": "softdent_export_file",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["packet"]["audit_metadata"]["adapter_name"] == "softdent_export_file"
+    assert payload["packet"]["audit_metadata"]["source_mode"] == "export_file"
+    assert payload["packet"]["source_facts"]
+    missing_codes = {item["code"] for item in payload["packet"]["missing_data"]}
+    assert "missing_softdent_ar" in missing_codes
+
+
+def test_draft_endpoint_rejects_invalid_adapter_mode() -> None:
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json=_draft_payload(adapter_mode="database_scrape"),
+    )
+
+    assert response.status_code == 422
+
+
+def test_draft_endpoint_ignores_client_export_dir(
+    softdent_export_env: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    malicious_dir = softdent_export_env.parent / "malicious-export-dir"
+    malicious_dir.mkdir()
+    (malicious_dir / "softdent_claims_export.csv").write_text("patient_ref,claim_id\nEVIL,EVIL\n", encoding="utf-8")
+
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json={
+            "patient_ref": "CHART-EXPORT",
+            "claim_id": "CLAIM-EXPORT-1",
+            "procedure_ids": ["PROC-CROWN-30"],
+            "narrative_type": "appeal",
+            "adapter_mode": "softdent_export_file",
+            "export_dir": str(malicious_dir),
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["packet"]["audit_metadata"]["adapter_name"] == "softdent_export_file"
+    assert payload["packet"]["claim"]["claim_id"] == "CLAIM-EXPORT-1"
+    assert not any(fact["fact_id"].startswith("EVIL") for fact in payload["packet"]["source_facts"])
+
+
+def test_draft_endpoint_softdent_mode_has_no_raw_csv_rows(softdent_export_env: Path) -> None:
+    response = client.post(
+        "/api/insurance-narratives/draft",
+        auth=operator_auth(),
+        json={
+            "patient_ref": "CHART-EXPORT",
+            "claim_id": "CLAIM-EXPORT-1",
+            "procedure_ids": ["PROC-CROWN-30"],
+            "narrative_type": "appeal",
+            "adapter_mode": "softdent_export_file",
+        },
+    )
+
+    assert response.status_code == 200
+    serialized = json.dumps(response.json())
+    assert "raw_rows" not in serialized
+    assert "database_dump" not in serialized
+    assert "patient_ref,claim_id" not in serialized
 
 
 def test_draft_endpoint_run_checker_defaults_false() -> None:

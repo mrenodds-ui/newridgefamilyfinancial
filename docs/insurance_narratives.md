@@ -261,11 +261,27 @@ Report JSON includes `packet_id`, `draft_id`, `review_id`, `export_id`, `workflo
 
 Route: `/app/insurance-narratives` (requires `hal:operator`).
 
-The page provides a scope form, **Create draft** (calls `POST /api/insurance-narratives/draft`),
-draft/missing-data/source-fact summary, and **Approve and create local export** (calls
-`POST /api/insurance-narratives/approve-export`). The fast_review checker is opt-in via a
-checkbox that maps to `run_checker` on the draft endpoint only — the page does not call
-`/api/hal9000/fast-review-check` directly.
+The page provides a **Data source** selector (`adapter_mode`), a scope form, **Create draft** (calls
+`POST /api/insurance-narratives/draft`), draft/missing-data/source-fact summary, and **Approve and
+create local export** (calls `POST /api/insurance-narratives/approve-export`). The fast_review
+checker is opt-in via a checkbox that maps to `run_checker` on the draft endpoint only — the page
+does not call `/api/hal9000/fast-review-check` directly.
+
+| Data source (UI) | `adapter_mode` | Backend adapter |
+| --- | --- | --- |
+| Fixture demo data | `fixture` (default) | `FixtureInsuranceNarrativeDataAdapter` |
+| SoftDent export files | `softdent_export_file` | `SoftDentExportFileInsuranceNarrativeAdapter` |
+
+SoftDent export mode reads **server-configured** local CSV files from
+`INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR` only. The frontend never sends export directories or
+arbitrary adapter names. No E-Services, Gateway, database scraping, payer submission, email, fax,
+or upload.
+
+Sample scope defaults depend on the selected data source:
+
+- **Fixture demo data:** `CHART-A` / `CLAIM-1001` / `PROC-CROWN-BUILDUP-3` /
+  `denied_claim_resubmission`
+- **SoftDent export files:** `CHART-EXPORT` / `CLAIM-EXPORT-1` / `PROC-CROWN-30` / `appeal`
 
 Export preview shows `submission_status` (always `not_submitted`), review/export ids, and the
 formatted export body with citations and missing-data disclosures. No payer submission, email,
@@ -275,8 +291,18 @@ fax, or upload controls are provided.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/insurance-narratives/draft` | Packet + draft workflow (`run_checker` defaults `false`) |
+| `POST /api/insurance-narratives/draft` | Packet + draft workflow (`run_checker` defaults `false`; `adapter_mode` defaults `fixture`) |
 | `POST /api/insurance-narratives/approve-export` | Approve + local export (`submission_status=not_submitted`) |
+
+Draft request `adapter_mode` values:
+
+| `adapter_mode` | Adapter | Export directory |
+| --- | --- | --- |
+| `fixture` (default) | `FixtureInsuranceNarrativeDataAdapter` | N/A (in-memory fixture catalog) |
+| `softdent_export_file` | `SoftDentExportFileInsuranceNarrativeAdapter` | `INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR` (server env only) |
+
+The request body must not include export paths. Clients select the adapter mode explicitly; the
+backend resolves the SoftDent export directory from server configuration only.
 
 Both require `hal:operator`, are hidden from public OpenAPI (`include_in_schema=False`), and do
 not submit to payers. See `docs/API.md` for request/response shapes.

@@ -7,10 +7,25 @@ import {
   type InsuranceNarrativeWorkflowResult,
 } from "../api/client";
 
-const SAMPLE_PATIENT_REF = "CHART-EXPORT";
-const SAMPLE_CLAIM_ID = "CLAIM-EXPORT-1";
-const SAMPLE_PROCEDURE_IDS = "PROC-CROWN-30";
-const SAMPLE_NARRATIVE_TYPE = "appeal";
+const FIXTURE_SAMPLE = {
+  patientRef: "CHART-A",
+  claimId: "CLAIM-1001",
+  procedureIds: "PROC-CROWN-BUILDUP-3",
+  narrativeType: "denied_claim_resubmission",
+} as const;
+
+const SOFTDENT_EXPORT_SAMPLE = {
+  patientRef: "CHART-EXPORT",
+  claimId: "CLAIM-EXPORT-1",
+  procedureIds: "PROC-CROWN-30",
+  narrativeType: "appeal",
+} as const;
+
+type AdapterMode = "fixture" | "softdent_export_file";
+
+function sampleValuesForAdapterMode(mode: AdapterMode) {
+  return mode === "softdent_export_file" ? SOFTDENT_EXPORT_SAMPLE : FIXTURE_SAMPLE;
+}
 
 function formatMissingDataLabel(code: string): string {
   if (code === "missing_softdent_ar") {
@@ -36,10 +51,11 @@ function SourceFactList({ facts }: { facts: InsuranceNarrativeWorkflowResult["pa
 }
 
 export default function InsuranceNarrativesPage() {
-  const [patientRef, setPatientRef] = useState(SAMPLE_PATIENT_REF);
-  const [claimId, setClaimId] = useState(SAMPLE_CLAIM_ID);
-  const [procedureIds, setProcedureIds] = useState(SAMPLE_PROCEDURE_IDS);
-  const [narrativeType, setNarrativeType] = useState(SAMPLE_NARRATIVE_TYPE);
+  const [adapterMode, setAdapterMode] = useState<AdapterMode>("fixture");
+  const [patientRef, setPatientRef] = useState<string>(FIXTURE_SAMPLE.patientRef);
+  const [claimId, setClaimId] = useState<string>(FIXTURE_SAMPLE.claimId);
+  const [procedureIds, setProcedureIds] = useState<string>(FIXTURE_SAMPLE.procedureIds);
+  const [narrativeType, setNarrativeType] = useState<string>(FIXTURE_SAMPLE.narrativeType);
   const [runChecker, setRunChecker] = useState(false);
   const [reviewer, setReviewer] = useState("local-reviewer");
   const [notes, setNotes] = useState("Reviewed packet-bounded draft for local export preview.");
@@ -60,6 +76,15 @@ export default function InsuranceNarrativesPage() {
   const draftBlocked = draftResult?.draft.status === "blocked_missing_data";
   const canApprove = Boolean(draftResult && !draftBlocked && !exportResult);
 
+  function handleAdapterModeChange(nextMode: AdapterMode) {
+    setAdapterMode(nextMode);
+    const sample = sampleValuesForAdapterMode(nextMode);
+    setPatientRef(sample.patientRef);
+    setClaimId(sample.claimId);
+    setProcedureIds(sample.procedureIds);
+    setNarrativeType(sample.narrativeType);
+  }
+
   function handleCreateDraft(event: React.FormEvent) {
     event.preventDefault();
     exportMutation.reset();
@@ -74,6 +99,7 @@ export default function InsuranceNarrativesPage() {
       procedure_ids: parsedProcedureIds.length ? parsedProcedureIds : null,
       narrative_type: narrativeType.trim(),
       run_checker: runChecker,
+      adapter_mode: adapterMode,
     });
   }
 
@@ -109,10 +135,28 @@ export default function InsuranceNarrativesPage() {
         <section className="hal-answer-card" aria-labelledby="narrative-scope-heading">
           <h2 id="narrative-scope-heading">1. Scope</h2>
           <p className="hal-answer-card__meta">
-            Sample defaults reference synthetic SoftDent export fixture refs. Adjust to match configured export files on
-            the backend.
+            Sample defaults are local references only. Choose the data source that matches your backend
+            configuration, then adjust scope fields as needed.
           </p>
           <form className="hal-form hal-form--narrative" onSubmit={handleCreateDraft}>
+            <label htmlFor="narrative-adapter-mode">Data source</label>
+            <select
+              id="narrative-adapter-mode"
+              className="hal-form__input"
+              value={adapterMode}
+              onChange={(event) => handleAdapterModeChange(event.target.value as AdapterMode)}
+            >
+              <option value="fixture">Fixture demo data</option>
+              <option value="softdent_export_file">SoftDent export files</option>
+            </select>
+
+            {adapterMode === "softdent_export_file" ? (
+              <p className="hal-answer-card__meta" role="note">
+                SoftDent export mode reads server-configured local export files only. No E-Services, Gateway,
+                database scraping, payer submission, email, fax, or upload.
+              </p>
+            ) : null}
+
             <label htmlFor="narrative-patient-ref">Patient ref</label>
             <input
               id="narrative-patient-ref"

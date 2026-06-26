@@ -217,7 +217,17 @@ afterEach(() => {
 });
 
 describe("InsuranceNarrativesPage", () => {
-  it("defaults run_checker to false and does not call fast review directly", async () => {
+  it("renders adapter selector defaulting to fixture and no export-dir input", () => {
+    renderPage();
+
+    const adapterSelect = screen.getByLabelText("Data source");
+    expect(adapterSelect).toHaveValue("fixture");
+    expect(screen.getByDisplayValue("CHART-A")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/export dir/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/export directory/i)).not.toBeInTheDocument();
+  });
+
+  it("defaults run_checker to false and posts fixture adapter_mode", async () => {
     vi.mocked(createInsuranceNarrativeDraftWorkflow).mockResolvedValue(buildHappyDraftResult());
 
     renderPage();
@@ -229,11 +239,35 @@ describe("InsuranceNarrativesPage", () => {
 
     await waitFor(() => expect(createInsuranceNarrativeDraftWorkflow).toHaveBeenCalled());
     expect(vi.mocked(createInsuranceNarrativeDraftWorkflow).mock.calls[0]?.[0]).toMatchObject({
+      patient_ref: "CHART-A",
+      claim_id: "CLAIM-1001",
+      procedure_ids: ["PROC-CROWN-BUILDUP-3"],
+      narrative_type: "denied_claim_resubmission",
+      run_checker: false,
+      adapter_mode: "fixture",
+    });
+  });
+
+  it("selecting SoftDent export files posts adapter_mode=softdent_export_file with export samples", async () => {
+    vi.mocked(createInsuranceNarrativeDraftWorkflow).mockResolvedValue(buildHappyDraftResult());
+
+    renderPage();
+
+    fireEvent.change(screen.getByLabelText("Data source"), {
+      target: { value: "softdent_export_file" },
+    });
+    expect(screen.getByText(/SoftDent export mode reads server-configured local export files only/i)).toBeInTheDocument();
+    expect(screen.getByDisplayValue("CHART-EXPORT")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
+
+    await waitFor(() => expect(createInsuranceNarrativeDraftWorkflow).toHaveBeenCalled());
+    expect(vi.mocked(createInsuranceNarrativeDraftWorkflow).mock.calls[0]?.[0]).toMatchObject({
       patient_ref: "CHART-EXPORT",
       claim_id: "CLAIM-EXPORT-1",
       procedure_ids: ["PROC-CROWN-30"],
       narrative_type: "appeal",
-      run_checker: false,
+      adapter_mode: "softdent_export_file",
     });
   });
 
@@ -254,7 +288,9 @@ describe("InsuranceNarrativesPage", () => {
     vi.mocked(createInsuranceNarrativeDraftWorkflow).mockResolvedValue(buildHappyDraftResult());
 
     renderPage();
-
+    fireEvent.change(screen.getByLabelText("Data source"), {
+      target: { value: "softdent_export_file" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
 
     expect(await screen.findByText("narrative-packet-happy")).toBeInTheDocument();
@@ -268,6 +304,9 @@ describe("InsuranceNarrativesPage", () => {
     vi.mocked(createInsuranceNarrativeDraftWorkflow).mockResolvedValue(buildHappyDraftResult());
 
     renderPage();
+    fireEvent.change(screen.getByLabelText("Data source"), {
+      target: { value: "softdent_export_file" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
     await screen.findByText("narrative-draft-happy");
 
@@ -284,6 +323,9 @@ describe("InsuranceNarrativesPage", () => {
     vi.mocked(approveAndExportInsuranceNarrativeWorkflow).mockResolvedValue(buildExportResult());
 
     renderPage();
+    fireEvent.change(screen.getByLabelText("Data source"), {
+      target: { value: "softdent_export_file" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create draft" }));
     await screen.findByText("narrative-draft-happy");
 

@@ -24,6 +24,7 @@ from .data_pipeline import get_pull_status_payload, import_uploaded_file
 from .services import fetch_quickbooks_data
 from .hal import advance_hal_autonomy_run, answer_accounting_policy_question, answer_hal_question, answer_hal_second_opinion_question, answer_insurance_narrative_request, answer_patient_dossier_request, approve_hal_chart_plan, create_hal_autonomy_run, create_hal_chart_plan, draft_accounting_journal_entry, get_accounting_posting_queue_summary, get_hal_access_policy, get_hal_autonomy_profile, get_hal_autonomy_run_status, get_hal_index_status, get_hal_phases, get_hal_shell_commands, list_accounting_posting_queue, list_hal_audit_events, list_hal_autonomy_runs, list_hal_chart_plans, list_recent_accounting_posting_queue_activity, queue_accounting_posting_draft, refresh_local_hal_index, review_accounting_posting_queue_entry, run_fast_review_check
 from .hal import answer_document_rag_question, ingest_document_rag_upload, list_document_rag_documents
+from .insurance_narratives.data_adapter import resolve_insurance_narrative_adapter
 from .insurance_narratives.export import NarrativeExportWorkflowError
 from .insurance_narratives.review import NarrativeReviewWorkflowError
 from .insurance_narratives.schemas import InsuranceNarrativeWorkflowResult
@@ -1676,6 +1677,7 @@ async def api_insurance_narrative_draft_workflow(
         narrative_type=payload.narrative_type,
         actor=user.username,
         run_checker=payload.run_checker,
+        adapter=resolve_insurance_narrative_adapter(payload.adapter_mode),
     )
 
 

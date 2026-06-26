@@ -183,6 +183,7 @@ class InsuranceNarrativeDraftWorkflowRequest(BaseModel):
     date_range: tuple[str, str] | None = None
     narrative_type: str = Field(min_length=1, max_length=128)
     run_checker: bool = False
+    adapter_mode: Literal["fixture", "softdent_export_file"] = "fixture"
 
 
 class InsuranceNarrativeApproveExportRequest(BaseModel):

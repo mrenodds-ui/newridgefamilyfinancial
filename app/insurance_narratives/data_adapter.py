@@ -5,7 +5,9 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
+
+AdapterMode = Literal["fixture", "softdent_export_file"]
 
 from pydantic import BaseModel, Field
 
@@ -1650,6 +1652,15 @@ class SoftDentExportFileInsuranceNarrativeAdapter:
 
 def softdent_export_file_adapter(export_dir: str | Path | None = None) -> SoftDentExportFileInsuranceNarrativeAdapter:
     return SoftDentExportFileInsuranceNarrativeAdapter(export_dir=export_dir)
+
+
+def resolve_insurance_narrative_adapter(
+    adapter_mode: AdapterMode = "fixture",
+) -> InsuranceNarrativeDataAdapter:
+    """Resolve a bounded narrative data adapter from an explicit server-side mode."""
+    if adapter_mode == "softdent_export_file":
+        return softdent_export_file_adapter()
+    return default_fixture_adapter()
 
 
 def _dedupe_missing_data(items: list[NarrativeMissingDataItem]) -> list[NarrativeMissingDataItem]:

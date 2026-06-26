@@ -13,6 +13,7 @@ from app.insurance_narratives.data_adapter import (
     SoftDentExportFileInsuranceNarrativeAdapter,
     build_packet_inputs_from_adapter_scope,
     default_fixture_adapter,
+    resolve_insurance_narrative_adapter,
     softdent_export_file_adapter,
 )
 from app.insurance_narratives.draft import (
@@ -113,5 +114,6 @@ __all__ = [
     "export_approved_insurance_narrative",
     "reject_narrative_draft",
     "request_narrative_revision",
+    "resolve_insurance_narrative_adapter",
     "softdent_export_file_adapter",
 ]
