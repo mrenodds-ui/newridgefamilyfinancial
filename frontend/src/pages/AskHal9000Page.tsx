@@ -10,6 +10,11 @@ import {
 
 const HAL_SPEECH_VOICE_KEY = "halSpeechVoice";
 const HAL_SPEECH_RATE_KEY = "halSpeechRate";
+const HAL_QUESTION_MIN_LENGTH = 3;
+
+function isHalQuestionSubmittable(value: string): boolean {
+  return value.trim().length >= HAL_QUESTION_MIN_LENGTH;
+}
 
 function humanizeLabel(value: string) {
   return value.replaceAll("_", " ");
@@ -101,8 +106,12 @@ export default function AskHal9000Page() {
     mutationFn: executeMonitorReviewAction,
   });
 
+  const trimmedQuestion = question.trim();
+  const questionTooShort = trimmedQuestion.length > 0 && trimmedQuestion.length < HAL_QUESTION_MIN_LENGTH;
+  const canSubmitQuestion = isHalQuestionSubmittable(question) && !halMutation.isPending;
+
   function submitHalQuestion(lane: "primary" | "second_opinion") {
-    if (!question.trim() || halMutation.isPending || askInFlightRef.current) {
+    if (!isHalQuestionSubmittable(question) || halMutation.isPending || askInFlightRef.current) {
       return;
     }
     askInFlightRef.current = true;
@@ -110,7 +119,7 @@ export default function AskHal9000Page() {
     actionMutation.reset();
     setSpeechError(null);
     setIsSpeaking(false);
-    halMutation.mutate({ nextQuestion: question.trim(), lane });
+    halMutation.mutate({ nextQuestion: trimmedQuestion, lane });
   }
 
   function handleAsk(e: FormEvent) {
@@ -272,17 +281,25 @@ export default function AskHal9000Page() {
             rows={4}
             placeholder="e.g. What needs my attention today, or lower the primary monitor brightness to 30%."
             required
+            minLength={HAL_QUESTION_MIN_LENGTH}
+            aria-invalid={questionTooShort || undefined}
+            aria-describedby={questionTooShort ? "hal-question-length-hint" : undefined}
           />
+          {questionTooShort ? (
+            <p id="hal-question-length-hint" className="hal-answer-card__error" role="alert">
+              Ask at least 3 characters.
+            </p>
+          ) : null}
           <br />
           <div className="hal-form__actions">
-            <button type="submit" className="refresh-button" disabled={!question.trim() || halMutation.isPending}>
+            <button type="submit" className="refresh-button" disabled={!canSubmitQuestion}>
               {halMutation.isPending && lastRequestLane === "primary" ? "Asking HAL..." : "Ask HAL"}
             </button>
             <button
               type="button"
               className="refresh-button"
               onClick={handleSecondOpinionAsk}
-              disabled={!question.trim() || halMutation.isPending}
+              disabled={!canSubmitQuestion}
             >
               {halMutation.isPending && lastRequestLane === "second_opinion" ? "Getting second opinion..." : "Get second opinion"}
             </button>
@@ -293,7 +310,7 @@ export default function AskHal9000Page() {
           <div className="hal-answer-card">
             <h2>That request did not go through</h2>
             <div>{halMutation.error instanceof Error ? halMutation.error.message : "HAL could not finish that request."}</div>
-            <button type="button" className="refresh-button" onClick={handleRetryAsk} disabled={!question.trim() || halMutation.isPending}>
+            <button type="button" className="refresh-button" onClick={handleRetryAsk} disabled={!canSubmitQuestion}>
               {halMutation.isPending ? "Retrying..." : "Try Again"}
             </button>
           </div>

@@ -398,6 +398,64 @@ describe("api mocks", () => {
     expect(screen.getByText(/HAL handled: Give me the current operating picture\./)).toBeInTheDocument();
   });
 
+  it("does not submit HAL questions shorter than three characters", async () => {
+    let requestCount = 0;
+    server.use(
+      http.post("/api/hal9000", async () => {
+        requestCount += 1;
+        return HttpResponse.json(
+          buildHalAskMockResponse({
+            answer: "HAL should not have been called.",
+            sanitized_question: "hi",
+            audit_id: "hal-ask-too-short-1",
+          }),
+        );
+      }),
+    );
+
+    renderApp("/app/hal");
+
+    fireEvent.change(await screen.findByLabelText("What do you want HAL to help with?"), {
+      target: { value: "hi" },
+    });
+
+    expect(screen.getByText("Ask at least 3 characters.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ask HAL" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Get second opinion" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
+
+    expect(requestCount).toBe(0);
+  });
+
+  it("submits HAL questions of at least three characters", async () => {
+    let capturedQuestion = "";
+    server.use(
+      http.post("/api/hal9000", async ({ request }) => {
+        const payload = (await request.json()) as { question?: string };
+        capturedQuestion = payload.question || "";
+        return HttpResponse.json(
+          buildHalAskMockResponse({
+            answer: "Here is what needs attention today.",
+            sanitized_question: capturedQuestion,
+            audit_id: "hal-ask-valid-length-1",
+          }),
+        );
+      }),
+    );
+
+    renderApp("/app/hal");
+
+    fireEvent.change(await screen.findByLabelText("What do you want HAL to help with?"), {
+      target: { value: "What needs my attention today?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
+
+    expect(await screen.findByText("HAL's Response")).toBeInTheDocument();
+    expect(capturedQuestion).toBe("What needs my attention today?");
+    expect(screen.getByText(/Here is what needs attention today\./)).toBeInTheDocument();
+  });
+
   it("shows a generic error when HAL returns a malformed response shape", async () => {
     server.use(
       http.post("/api/hal9000", async () =>
