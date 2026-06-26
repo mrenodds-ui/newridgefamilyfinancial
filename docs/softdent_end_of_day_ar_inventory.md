@@ -82,6 +82,28 @@ Daysheet date headers may appear as `Friday, June 26, 2026` (weekday + month nam
 
 Patient-level transaction rows on intermediate Daysheet pages are never parsed for A/R totals.
 
+### SoftDent DAYSHEET Provider Summary page (not ending A/R)
+
+SoftDent v19.x **DAYSHEET** reports include intermediate **Provider Summary for Practice**
+pages (for example `Page 4 of 6`) with production/collections activity columns:
+
+| Column / row | Adapter use |
+| --- | --- |
+| `Production`, `Charges`, `Prod Adjs`, `Tax` | Not used as ending office A/R |
+| `Collections`, `Coll Adj.` | Not used as ending office A/R |
+| `Receivables` column (provider activity) | **Not** used as ending office `total_ar` |
+| `M-T-D`, `Y-T-D`, `Totals` rows | Not used as ending office A/R |
+| `Production minus collections` (derived) | Never calculated or used as A/R |
+| `New Receivables Total` on the **final** receivables page | Maps to bounded office `total_ar` when present |
+
+This Provider Summary page is useful for daily/M-T-D/Y-T-D production and collections
+reporting, but it is **not** the ending A/R source. Ending A/R must come from the final
+receivables page/section with an explicit total such as `New Receivables Total`.
+
+If an export stops at a Provider Summary page (for example truncated at page 4 of 6),
+HAL treats A/R as unavailable and does not infer a balance from production, collections,
+or the Receivables column.
+
 ## Freshness (business-day aware)
 
 The office operates **Monday through Thursday only**. Friday, Saturday, and Sunday are
@@ -106,6 +128,10 @@ Examples (default threshold = 2 working days):
 
 Closed days (Fri/Sat/Sun) never count toward staleness, and HAL still never implies A/R
 came from a non-working day — the report date is always shown.
+
+On Friday/Saturday/Sunday the office is closed and SoftDent may not generate a new DAYSHEET
+A/R. Freshness logic accepts the most recent **working-day** report rather than requiring
+a same-day report on a closed day.
 
 ## Role gate
 

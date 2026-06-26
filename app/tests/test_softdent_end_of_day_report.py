@@ -40,6 +40,8 @@ AMBIGUOUS_AR_REPORT = FIXTURE_DIR / "eod_ambiguous_ar.txt"
 NEGATIVE_VALUES_REPORT = FIXTURE_DIR / "eod_negative_values.txt"
 LIMITED_RECONCILE_REPORT = FIXTURE_DIR / "eod_limited_reconcile.txt"
 DAYSHEET_REPORT = FIXTURE_DIR / "eod_daysheet_last_page.txt"
+PROVIDER_SUMMARY_PAGE = FIXTURE_DIR / "eod_daysheet_provider_summary_page.txt"
+TRUNCATED_PROVIDER_SUMMARY = FIXTURE_DIR / "eod_daysheet_truncated_at_provider_summary.txt"
 
 
 @pytest.fixture(autouse=True)
@@ -199,6 +201,61 @@ def test_parser_extracts_daysheet_new_receivables_total_from_last_page() -> None
     assert summary.page_number == 2
     assert summary.page_count == 2
     assert "Previous Receivables Total" not in str(summary.to_public_dict())
+
+
+def test_provider_summary_page_does_not_supply_total_ar() -> None:
+    summary = SoftDentEndOfDayReportAdapter().parse_report(PROVIDER_SUMMARY_PAGE)
+
+    assert summary.available is False
+    assert summary.total_ar is None
+    assert summary.production_total is None
+    assert summary.collection_total is None
+    assert summary.parse_status == "missing"
+    assert "missing_softdent_ar" in summary.missing_data_codes
+    assert "$0.00" not in str(summary.to_public_dict())
+    assert "recognizable A/R section" in summary.limitations[0]
+
+
+def test_provider_summary_receivables_column_not_used_as_total_ar() -> None:
+    """Totals-row Receivables (270.00) is provider activity, not ending office A/R."""
+    summary = SoftDentEndOfDayReportAdapter().parse_report(PROVIDER_SUMMARY_PAGE)
+
+    assert summary.total_ar is None
+    assert summary.total_ar != Decimal("270.00")
+
+
+def test_truncated_daysheet_at_provider_summary_page_has_no_ending_ar() -> None:
+    summary = SoftDentEndOfDayReportAdapter().parse_report(TRUNCATED_PROVIDER_SUMMARY)
+
+    assert summary.available is False
+    assert summary.total_ar is None
+    assert summary.parse_status == "missing"
+    assert summary.page_number == 4
+    assert summary.page_count == 4
+    assert "missing_softdent_ar" in summary.missing_data_codes
+
+
+def test_full_daysheet_still_parses_ar_from_final_receivables_page(
+    tmp_path: Path,
+) -> None:
+    """Provider Summary on page 4 must not block New Receivables Total on the final page."""
+    combined = (
+        TRUNCATED_PROVIDER_SUMMARY.read_text(encoding="utf-8")
+        + "\f\n"
+        + "Page 5 of 6\nTransaction summary omitted.\n\f\n"
+        + DAYSHEET_REPORT.read_text(encoding="utf-8").split("\f", 1)[-1]
+    )
+    report_path = tmp_path / "daysheet_full_six_pages.txt"
+    report_path.write_text(combined, encoding="utf-8")
+
+    summary = SoftDentEndOfDayReportAdapter().parse_report(report_path)
+
+    assert summary.available is True
+    assert summary.total_ar == Decimal("73143.91")
+    assert summary.page_number == 6
+    assert summary.page_count == 6
+    assert summary.production_total is None
+    assert summary.collection_total is None
 
 
 def test_inventory_and_source_status_use_explicit_path_and_latest_dir(
