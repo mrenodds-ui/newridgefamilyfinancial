@@ -268,7 +268,8 @@ def test_hal_question_handles_context_without_title(monkeypatch):
         actor="hal_operator",
     )
 
-    assert "retrieval-1" in payload["answer"]
+    assert "Approved context without a title." in payload["answer"]
+    assert "retrieval-1" not in payload["answer"]
     assert captured["retrieval_ids"] == ["retrieval-1"]
 
 

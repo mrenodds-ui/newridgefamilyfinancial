@@ -40,6 +40,7 @@ export function HalRecommendationBlock({ response, speechControls }: HalRecommen
   }
 
   const sections = splitAnswer(response.answer);
+  const isGenericHelp = response.mode.includes("generic-help");
   return (
     <section className="hal-workstation-card" aria-labelledby="hal-recommendation-title">
       <div className="hal-workstation-card__header">
@@ -49,7 +50,8 @@ export function HalRecommendationBlock({ response, speechControls }: HalRecommen
           Staff-assistant response · {response.voice_profile.label}
         </p>
       </div>
-      <div className="hal-recommendation-grid">
+      {!isGenericHelp ? (
+        <div className="hal-recommendation-grid">
         <section>
           <h3>Practical answer</h3>
           <p>{sections.practical}</p>
@@ -75,6 +77,7 @@ export function HalRecommendationBlock({ response, speechControls }: HalRecommen
           <p>{sections.approval || "Any draft, packet, or operational action still needs human review before use."}</p>
         </section>
       </div>
+      ) : null}
       <div className="hal-answer-card__section hal-answer-card__section--lead">{response.answer}</div>
       {speechControls}
       <div className="hal-answer-card__section">

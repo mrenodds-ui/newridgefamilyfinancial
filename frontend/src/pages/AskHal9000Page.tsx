@@ -179,6 +179,16 @@ export default function AskHal9000Page() {
             return savedVoice;
           }
         }
+        const englishChromeVoice = voices.find(
+          (voice) => /^en(-|$)/i.test(voice.lang) && /google|chrome/i.test(`${voice.name} ${voice.voiceURI}`),
+        );
+        if (englishChromeVoice) {
+          return englishChromeVoice.name;
+        }
+        const englishVoice = voices.find((voice) => /^en(-|$)/i.test(voice.lang));
+        if (englishVoice) {
+          return englishVoice.name;
+        }
         const chromeVoice = voices.find((voice) => /google|chrome/i.test(`${voice.name} ${voice.voiceURI}`));
         return chromeVoice?.name || voices[0]?.name || "";
       });

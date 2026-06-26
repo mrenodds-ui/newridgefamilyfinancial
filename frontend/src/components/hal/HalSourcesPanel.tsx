@@ -13,6 +13,16 @@ function looksLikeRawCsv(value: string) {
   return commaCount >= 3 && headerish;
 }
 
+function friendlySourceTitle(title: string) {
+  if (/^readme chunk \d+/i.test(title.trim())) {
+    return "README guidance";
+  }
+  if (/\bchunk \d+\b/i.test(title)) {
+    return "Approved local office context";
+  }
+  return title;
+}
+
 export function sanitizeSourceExcerpt(value: string) {
   if (looksLikeRawCsv(value)) {
     return "Bounded source summary only. Raw CSV-like content was hidden.";
@@ -52,7 +62,7 @@ export function HalSourcesPanel({ response }: { response: HalAskResponse | undef
           <h3>{label}</h3>
           {items.map((item) => (
             <div key={item.source_id} className="hal-supporting-context-item">
-              <strong>{item.title}</strong>
+              <strong>{friendlySourceTitle(item.title)}</strong>
               <p>{sanitizeSourceExcerpt(item.excerpt)}</p>
             </div>
           ))}

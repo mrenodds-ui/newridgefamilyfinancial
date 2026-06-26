@@ -1646,6 +1646,15 @@ def review_accounting_posting_queue_entry(
     return updated_entry
 
 
+def _should_include_context_excerpt_in_answer(item: dict[str, object], excerpt: str) -> bool:
+    title = _get_context_title(item)
+    if re.fullmatch(r"(?i)readme chunk \d+", title.strip()):
+        return False
+    if "localhost:5173/app" in excerpt.lower():
+        return False
+    return True
+
+
 def _build_context_excerpt_summary(items: list[dict[str, object]], *, limit: int = 2) -> str:
     prioritized_items = sorted(
         items,
@@ -1658,6 +1667,8 @@ def _build_context_excerpt_summary(items: list[dict[str, object]], *, limit: int
             continue
         excerpt = str(item.get("excerpt") or "").strip()
         if not excerpt or excerpt.startswith("#") or excerpt in seen:
+            continue
+        if not _should_include_context_excerpt_in_answer(item, excerpt):
             continue
         seen.add(excerpt)
         excerpts.append(excerpt)
@@ -2155,8 +2166,148 @@ def _should_use_concise_answer_frame(question: str) -> bool:
             _is_collections_follow_up_request(question),
             _is_weakest_provider_request(question),
             _is_action_summary_request(question),
+            _is_generic_help_request(question),
         )
     )
+
+
+def _normalize_help_question(question: str) -> str:
+    return re.sub(r"\s+", " ", question.strip().lower()).strip("?!.")
+
+
+def _is_generic_help_request(question: str) -> bool:
+    normalized = _normalize_help_question(question)
+    if not normalized:
+        return False
+    if normalized in {"help", "hal help", "help hal", "help me", "help please", "i need help"}:
+        return True
+    generic_prefixes = (
+        "can you help",
+        "could you help",
+        "what can you do",
+        "what can hal help",
+        "what can hal do",
+        "how can you help",
+        "how can hal help",
+        "how can you help the office",
+        "what do you do",
+    )
+    return any(normalized.startswith(prefix) for prefix in generic_prefixes)
+
+
+def _user_asked_for_sources(question: str) -> bool:
+    lowered = question.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "what sources",
+            "which sources",
+            "where did you get",
+            "what did you look at",
+            "show sources",
+            "what sources did you use",
+        )
+    )
+
+
+def _friendly_source_label(title: str) -> str:
+    normalized = title.strip()
+    if re.fullmatch(r"(?i)readme chunk \d+", normalized):
+        return "README guidance"
+    if re.search(r"(?i)\bchunk \d+\b", normalized):
+        return "approved local office context"
+    return normalized
+
+
+def _summarize_sources_for_display(items: list[dict[str, object]]) -> str:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        label = _friendly_source_label(_get_context_title(item))
+        key = label.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        labels.append(label)
+    return ", ".join(labels)
+
+
+def _dedupe_answer_parts(parts: list[str]) -> str:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for part in parts:
+        cleaned = part.strip()
+        if not cleaned:
+            continue
+        key = cleaned.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(cleaned)
+    return " ".join(ordered)
+
+
+def _build_generic_help_answer_text() -> str:
+    return (
+        "Yes. I can help with local office tasks, claim follow-up drafts, patient prep summaries, "
+        "report checklists, SoftDent export review, and internal office-manager summaries. "
+        "I stay local and read-only. I can prepare drafts and packets for review, but I do not submit claims, "
+        "contact payers, email, fax, upload, use Gateway/E-Services, or write back to SoftDent."
+    )
+
+
+def _build_generic_help_hal_response(
+    *,
+    question: str,
+    actor: str,
+    session_id: str | None,
+    sanitized: dict[str, object],
+) -> dict[str, object]:
+    sanitized_question = str(sanitized.get("sanitized_text") or "")
+    answer = _build_generic_help_answer_text()
+    state = _get_conversation_state(actor, session_id)
+    _update_conversation_state(
+        actor=actor,
+        session_id=session_id,
+        state=state,
+        question=question,
+        patient_context={"matched": False},
+        softdent_aggregate_context=[],
+        hardware_review_actions=[],
+    )
+    append_ai_activity_log(
+        tier="tier_2",
+        actor=actor,
+        action="hal-generic-help",
+        detail=f"Answered a generic HAL help request for sanitized request: {sanitized_question[:140]}",
+    )
+    audit_entry = record_hal_audit(
+        actor=actor,
+        mode=f"{HAL_MODE}:generic-help",
+        sanitized_question=sanitized_question,
+        retrieval_ids=[],
+        response_summary=answer[:180],
+    )
+    return {
+        "mode": f"{HAL_MODE}:generic-help",
+        "answer": answer,
+        "sanitized_question": sanitized_question,
+        "sanitization_findings": sanitized.get("findings", []),
+        "retrieved_context": [],
+        "guardrails": [
+            "approved local read-only scope",
+            "deterministic generic help response",
+            "read-only data boundary",
+            "audit log recorded",
+            "hardware mutations require human confirmation",
+            "tier-1 critical actions require explicit confirmation",
+        ],
+        "audit_id": audit_entry["audit_id"],
+        "access_policy": get_hal_access_policy(),
+        "review_actions": [],
+        "voice_profile": _voice_profile("primary"),
+        "governance_notes": _build_governance_notes(),
+    }
 
 
 def _build_patient_follow_up_plan(patient_context: dict[str, object]) -> str:
@@ -2874,20 +3025,24 @@ def _build_deterministic_hal_answer(
             answer_parts.append(f"Verified SoftDent metrics: {softdent_summary}")
         if report_summary:
             answer_parts.append(f"Verified report metrics: {report_summary}")
+            for item in live_report_context:
+                if str(item.get("source_id") or "").startswith("qb-"):
+                    answer_parts.append(_get_context_title(item))
+                    break
         if hardware_review_actions:
             answer_parts.append("Requested hardware changes require human confirmation before any device command is sent.")
-        if concise_answer_frame:
-            if context_titles:
-                answer_parts.append(f"Supporting context: {context_titles}.")
-        else:
-            answer_parts.append(f"Relevant context: {context_titles}.")
-            if context_summary:
-                answer_parts.append(f"Key approved guidance: {context_summary}")
+        if context_summary:
+            answer_parts.append(context_summary)
+        if _user_asked_for_sources(question):
+            friendly_sources = _summarize_sources_for_display(combined_context)
+            if friendly_sources:
+                answer_parts.append(f"Sources used: {friendly_sources}.")
+        if not answer_parts:
             answer_parts.append(
-                "For patient-specific work, I can use authorized internal office context from reviewed SoftDent exports and dossier tools. "
-                "I cannot run arbitrary SQL, expose raw export files, or claim runtime or model changes that the backend did not verify."
+                "I can review approved local office context for a specific patient, claim, metric, or task. "
+                "I stay local/read-only and do not submit, send, upload, or write back to SoftDent."
             )
-        answer = " ".join(part.strip() for part in answer_parts if part and part.strip())
+        answer = _dedupe_answer_parts(answer_parts)
         voice_profile = _voice_profile("primary")
         governance_notes = _build_governance_notes(review_actions_present=bool(hardware_review_actions))
     answer = _append_governed_memory_proposal(answer, question=question)
@@ -2948,6 +3103,17 @@ def answer_hal_question(
     session_id: str | None = None,
     roles: object | None = None,
 ) -> dict[str, object]:
+    if _is_generic_help_request(question):
+        patient_context = get_controlled_patient_context(question, roles=roles, actor=actor)
+        if not patient_context.get("matched"):
+            sanitized = sanitize_hal_text(question)
+            return _build_generic_help_hal_response(
+                question=question,
+                actor=actor,
+                session_id=session_id,
+                sanitized=sanitized,
+            )
+
     context_bundle = _collect_hal_question_context(
         question=question, actor=actor, session_id=session_id, roles=roles
     )

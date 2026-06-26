@@ -243,6 +243,50 @@ describe("HAL workstation page", () => {
     await waitFor(() => expect(screen.getByText(/HAL's Response/i)).toBeInTheDocument());
   });
 
+  it("renders friendly source labels instead of raw README chunk IDs", async () => {
+    vi.mocked(askHalQuestion).mockResolvedValue(
+      buildHalResponse({
+        retrieved_context: [
+          {
+            source_id: "readme-chunk-68",
+            title: "README chunk 68",
+            category: "documentation",
+            excerpt: "Approved local guidance only.",
+          },
+        ],
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/What do you want HAL to help with/i), {
+      target: { value: "What sources did you use?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Ask HAL/i }));
+
+    expect(await screen.findByText("README guidance")).toBeInTheDocument();
+    expect(screen.queryByText("README chunk 68")).toBeNull();
+  });
+
+  it("does not render raw README chunk IDs for generic help responses", async () => {
+    vi.mocked(askHalQuestion).mockResolvedValue(
+      buildHalResponse({
+        mode: "local-rag-phase-1:generic-help",
+        answer:
+          "Yes. I can help with local office tasks, claim follow-up drafts, patient prep summaries, report checklists, SoftDent export review, and internal office-manager summaries. I stay local and read-only.",
+        retrieved_context: [],
+      }),
+    );
+    renderPage();
+    fireEvent.change(screen.getByLabelText(/What do you want HAL to help with/i), {
+      target: { value: "can you help me" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Ask HAL/i }));
+
+    expect(await screen.findByText(/Yes\. I can help with local office tasks/i)).toBeInTheDocument();
+    expect(screen.queryByText(/README chunk/i)).toBeNull();
+    expect(screen.queryByText(/Relevant context/i)).toBeNull();
+    expect(screen.queryByLabelText(/Use deeper second opinion/i)).toBeNull();
+  });
+
   it("creates draft and local packet artifacts with required safety wording", async () => {
     renderPage();
     fireEvent.change(screen.getAllByLabelText(/Patient \/ claim question/i)[0], {

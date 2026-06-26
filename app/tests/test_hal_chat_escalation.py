@@ -80,3 +80,113 @@ def test_answer_hal_question_falls_back_to_deterministic_when_models_unavailable
     assert payload["mode"] == hal_orchestrator.HAL_MODE
     assert payload["answer"]
     assert "deterministic server facts first" in payload["guardrails"]
+
+
+def test_generic_help_returns_concise_capability_answer() -> None:
+    payload = hal_orchestrator.answer_hal_question(
+        question="can you help me",
+        actor="hal_operator",
+    )
+
+    assert payload["mode"].endswith(":generic-help")
+    assert payload["answer"].startswith("Yes.")
+    assert "local office tasks" in payload["answer"]
+    assert "read-only" in payload["answer"].lower()
+    assert "write back to SoftDent" in payload["answer"]
+    assert "README chunk" not in payload["answer"]
+    assert "Relevant context" not in payload["answer"]
+    assert "Key approved guidance" not in payload["answer"]
+    assert payload["retrieved_context"] == []
+
+
+def test_generic_help_variants_use_same_path() -> None:
+    for question in ("what can you do", "help", "how can you help the office"):
+        payload = hal_orchestrator.answer_hal_question(question=question, actor="hal_operator")
+        assert payload["mode"].endswith(":generic-help"), question
+        assert "README chunk" not in payload["answer"], question
+
+
+def test_normal_question_does_not_surface_readme_chunk_ids_in_main_answer(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hal_orchestrator, "_try_hal_model_answer_with_escalation", lambda **kwargs: None)
+    monkeypatch.setattr(
+        hal_orchestrator,
+        "_collect_hal_question_context",
+        lambda **kwargs: {
+            "state": {"action_items": []},
+            "patient_context": {"matched": False},
+            "sanitized": {"findings": [], "sanitized_text": "What is today's production?"},
+            "sanitized_question": "What is today's production?",
+            "hardware_context": [],
+            "hardware_review_actions": [],
+            "softdent_aggregate_context": [
+                {
+                    "source_id": "softdent-live-production",
+                    "title": "SoftDent production",
+                    "category": "softdent_aggregate",
+                    "excerpt": "Daily gross production is $7,759.",
+                }
+            ],
+            "live_report_context": [],
+            "combined_context": [
+                {
+                    "source_id": "readme-chunk-68",
+                    "title": "README chunk 68",
+                    "category": "documentation",
+                    "excerpt": "Open: http://localhost:5173/app",
+                },
+                {
+                    "source_id": "readme-chunk-17",
+                    "title": "README chunk 17",
+                    "category": "documentation",
+                    "excerpt": "Open: http://localhost:5173/app",
+                },
+            ],
+            "operating_picture": {"summary": "Operating picture"},
+        },
+    )
+
+    payload = hal_orchestrator.answer_hal_question(
+        question="What is today's production?",
+        actor="hal_operator",
+    )
+
+    assert "README chunk" not in payload["answer"]
+    assert "Relevant context" not in payload["answer"]
+    assert "Key approved guidance" not in payload["answer"]
+    assert "Open: http://localhost:5173/app" not in payload["answer"]
+    assert "$7,759" in payload["answer"]
+
+
+def test_source_question_returns_friendly_source_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(hal_orchestrator, "_try_hal_model_answer_with_escalation", lambda **kwargs: None)
+    monkeypatch.setattr(
+        hal_orchestrator,
+        "_collect_hal_question_context",
+        lambda **kwargs: {
+            "state": {"action_items": []},
+            "patient_context": {"matched": False},
+            "sanitized": {"findings": [], "sanitized_text": "What sources did you use?"},
+            "sanitized_question": "What sources did you use?",
+            "hardware_context": [],
+            "hardware_review_actions": [],
+            "softdent_aggregate_context": [],
+            "live_report_context": [],
+            "combined_context": [
+                {
+                    "source_id": "readme-chunk-26",
+                    "title": "README chunk 26",
+                    "category": "documentation",
+                    "excerpt": "Approved local guidance.",
+                }
+            ],
+            "operating_picture": {"summary": "Operating picture"},
+        },
+    )
+
+    payload = hal_orchestrator.answer_hal_question(
+        question="What sources did you use?",
+        actor="hal_operator",
+    )
+
+    assert "Sources used: README guidance." in payload["answer"]
+    assert "README chunk 26" not in payload["answer"]
