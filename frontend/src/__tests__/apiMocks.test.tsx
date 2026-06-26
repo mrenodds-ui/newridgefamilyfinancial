@@ -287,7 +287,7 @@ describe("api mocks", () => {
     expect(screen.getByLabelText("What do you want HAL to help with?")).toBeInTheDocument();
   });
 
-  it("includes live financial summary context in HAL ask requests when available", async () => {
+  it("does not attach the full dashboard summary payload to HAL ask requests", async () => {
     server.use(
       http.post("/api/hal9000", async ({ request }) => {
         const payload = (await request.json()) as {
@@ -295,7 +295,7 @@ describe("api mocks", () => {
           summary?: { latestDailyKpi?: { gross_production?: number } };
         };
         expect(payload.question).toBe("What is the latest daily gross production?");
-        expect(payload.summary?.latestDailyKpi?.gross_production).toBe(7759);
+        expect(payload.summary).toBeUndefined();
         return HttpResponse.json(
           buildHalAskMockResponse({
             answer: "Latest daily gross production is $7,759.",
@@ -306,35 +306,29 @@ describe("api mocks", () => {
       }),
     );
 
-    const halPayload = await askHalQuestion("What is the latest daily gross production?", {
-      summary: {
-        latestDailyKpi: { gross_production: 7759 },
-      } as Partial<FinancialSummaryResponse> as FinancialSummaryResponse,
-    });
+    const halPayload = await askHalQuestion("What is the latest daily gross production?");
 
     expect(halPayload.answer).toMatch(/7,759/);
   });
 
-  it("routes explicit HAL second-opinion requests to the dedicated endpoint", async () => {
+  it("uses the single Ask HAL endpoint for all chat requests", async () => {
     server.use(
-      http.post("/api/hal9000/second-opinion", async ({ request }) => {
+      http.post("/api/hal9000", async ({ request }) => {
         const payload = (await request.json()) as {
           question?: string;
-          summary?: { latestDailyKpi?: { gross_production?: number } };
         };
-        expect(payload.question).toBe("Give me a deeper second opinion on the latest daily gross production.");
-        expect(payload.summary?.latestDailyKpi?.gross_production).toBe(7759);
+        expect(payload.question).toBe("Give me a deeper review of the latest daily gross production.");
         return HttpResponse.json(
           buildHalAskMockResponse({
-            mode: "local-rag-phase-1:second-opinion",
-            answer: "HAL second-opinion review via qwen3:30b: collections are not present in the verified context.",
+            mode: "local-rag-phase-1:deeper-review",
+            answer: "HAL deeper review: collections are not present in the verified context.",
             sanitized_question: payload.question || "",
-            guardrails: ["approved local read-only scope", "explicit second-opinion lane: qwen3:30b"],
-            audit_id: "hal-ask-second-opinion-1",
+            guardrails: ["approved local read-only scope", "internal 30B deeper review after frontline answer was inconclusive"],
+            audit_id: "hal-ask-deeper-review-1",
             voice_profile: {
-              lane: "second_opinion",
-              label: "Second opinion",
-              tone: "slower and more evaluative",
+              lane: "deeper_review",
+              label: "HAL needed a deeper review",
+              tone: "grounded and staff-assistant",
               style_notes: [],
             },
           }),
@@ -342,15 +336,10 @@ describe("api mocks", () => {
       }),
     );
 
-    const halPayload = await askHalQuestion("Give me a deeper second opinion on the latest daily gross production.", {
-      lane: "second_opinion",
-      summary: {
-        latestDailyKpi: { gross_production: 7759 },
-      } as Partial<FinancialSummaryResponse> as FinancialSummaryResponse,
-    });
+    const halPayload = await askHalQuestion("Give me a deeper review of the latest daily gross production.");
 
-    expect(halPayload.mode).toBe("local-rag-phase-1:second-opinion");
-    expect(halPayload.answer).toMatch(/qwen3:30b/);
+    expect(halPayload.mode).toBe("local-rag-phase-1:deeper-review");
+    expect(halPayload.voice_profile.label).toBe("HAL needed a deeper review");
   });
 
   it("blocks overlapping HAL submits on the Ask Hal page while a request is still running", async () => {
@@ -421,7 +410,7 @@ describe("api mocks", () => {
 
     expect(screen.getByText("Ask at least 3 characters.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Ask HAL" })).toBeDisabled();
-    expect(screen.getByLabelText("Use deeper second opinion when needed")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Use deeper second opinion/i)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Ask HAL" }));
 

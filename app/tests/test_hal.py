@@ -22,6 +22,11 @@ from app.main import app
 
 client = TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def disable_hal_ask_model_routing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HAL_ASK_MODEL_ROUTING", "0")
+
 TEST_RUNTIME_ROOT = Path(__file__).resolve().parent / ".hal_test_runtime"
 TEST_AUTH_USERS_JSON = json.dumps(
     [

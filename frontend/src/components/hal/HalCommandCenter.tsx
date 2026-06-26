@@ -1,10 +1,8 @@
-import type { FormEvent } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 
 type HalCommandCenterProps = {
   question: string;
   setQuestion: (value: string) => void;
-  useSecondOpinion: boolean;
-  setUseSecondOpinion: (value: boolean) => void;
   questionTooShort: boolean;
   canSubmitQuestion: boolean;
   isPending: boolean;
@@ -14,13 +12,30 @@ type HalCommandCenterProps = {
 export function HalCommandCenter({
   question,
   setQuestion,
-  useSecondOpinion,
-  setUseSecondOpinion,
   questionTooShort,
   canSubmitQuestion,
   isPending,
   onSubmit,
 }: HalCommandCenterProps) {
+  function handleQuestionKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && event.shiftKey) {
+      event.preventDefault();
+      const target = event.currentTarget;
+      const start = target.selectionStart ?? question.length;
+      const end = target.selectionEnd ?? question.length;
+      setQuestion(`${question.slice(0, start)}\n${question.slice(end)}`);
+      return;
+    }
+    if (event.key !== "Enter") {
+      return;
+    }
+    event.preventDefault();
+    if (!canSubmitQuestion || isPending) {
+      return;
+    }
+    onSubmit(event);
+  }
+
   return (
     <section className="hal-workstation-card hal-command-center" aria-labelledby="hal-command-center-title">
       <div className="hal-workstation-card__header">
@@ -38,6 +53,7 @@ export function HalCommandCenter({
           id="hal-question"
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
+          onKeyDown={handleQuestionKeyDown}
           rows={5}
           placeholder="e.g. Review John Doe's denied crown claim and prepare next steps for staff review."
           required
@@ -50,16 +66,8 @@ export function HalCommandCenter({
             Ask at least 3 characters.
           </p>
         ) : null}
-        <label className="hal-command-center__checkbox">
-          <input
-            type="checkbox"
-            checked={useSecondOpinion}
-            onChange={(event) => setUseSecondOpinion(event.target.checked)}
-          />
-          Use deeper second opinion when needed
-        </label>
         <button type="submit" className="refresh-button" disabled={!canSubmitQuestion}>
-          {isPending ? "Asking HAL..." : "Ask HAL"}
+          {isPending ? "Thinking..." : "Ask HAL"}
         </button>
       </form>
     </section>

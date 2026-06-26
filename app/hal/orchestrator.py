@@ -39,12 +39,24 @@ from uuid import uuid4
 
 
 HAL_MODE = "local-rag-phase-1"
+PRIMARY_PROFILE_ALIAS = "chat"
+PRIMARY_NUM_PREDICT = 64
+PRIMARY_CONTEXT_LIMIT = 2
+PRIMARY_EXCERPT_CHAR_LIMIT = 300
+PRIMARY_SUMMARY_CHAR_LIMIT = 600
+ESCALATION_MARKER = "[NEEDS_ESCALATION]"
 SECOND_OPINION_PROFILE_ALIAS = "chat_second_opinion"
 SECOND_OPINION_CONTEXT_LIMIT = 2
 SECOND_OPINION_EXCERPT_CHAR_LIMIT = 300
 SECOND_OPINION_SUMMARY_CHAR_LIMIT = 1200
 SECOND_OPINION_NUM_PREDICT = 64
 LOCAL_MODEL_PROFILE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "evals" / "local_model_profiles.json"
+
+
+def _hal_ask_model_routing_enabled() -> bool:
+    return os.getenv("HAL_ASK_MODEL_ROUTING", "1").strip().lower() not in {"0", "false", "no", "off"}
+
+
 HAL_PHASES = [
     "Authenticate operator",
     "Sanitize question",
@@ -153,7 +165,7 @@ FOLLOW_UP_PHRASES = (
 HAL_VOICE_PROFILES = {
     "primary": {
         "lane": "primary",
-        "label": "Primary response",
+        "label": "Ask HAL",
         "tone": "direct and practical",
         "style_notes": [
             "Lead with the practical answer for the signed-in office user.",
@@ -161,9 +173,18 @@ HAL_VOICE_PROFILES = {
             "Use patient names when useful for authorized internal workflows.",
         ],
     },
+    "deeper_review": {
+        "lane": "deeper_review",
+        "label": "HAL needed a deeper review",
+        "tone": "grounded and staff-assistant",
+        "style_notes": [
+            "Internal deeper review completed after the frontline answer was inconclusive.",
+            "Call out missing data and the next safe action.",
+        ],
+    },
     "second_opinion": {
         "lane": "second_opinion",
-        "label": "Second opinion",
+        "label": "HAL needed a deeper review",
         "tone": "grounded and staff-assistant",
         "style_notes": [
             "Answer like an internal teammate reviewing the case.",
@@ -2524,18 +2545,270 @@ def compile_live_report_snippets(question: str) -> list[dict[str, str]]:
     return snippets
 
 
-def answer_hal_question(
+def _should_escalate_primary_answer(answer: str, *, generation_error: str | None = None) -> bool:
+    if generation_error:
+        return True
+    normalized = answer.strip()
+    if not normalized:
+        return True
+    if normalized.upper().startswith(ESCALATION_MARKER):
+        return True
+    lowered = normalized.lower()
+    escalation_phrases = (
+        "cannot determine",
+        "can't determine",
+        "cannot answer from",
+        "can't answer from",
+        "insufficient context",
+        "not enough information",
+        "unable to determine",
+        "do not have enough",
+        "don't have enough",
+        "unable to answer",
+    )
+    return any(phrase in lowered for phrase in escalation_phrases)
+
+
+def _strip_escalation_marker(answer: str) -> str:
+    normalized = answer.strip()
+    if normalized.upper().startswith(ESCALATION_MARKER):
+        remainder = normalized[len(ESCALATION_MARKER) :].strip(" :-")
+        return remainder
+    return normalized
+
+
+def _build_primary_chat_prompt(
+    *,
+    sanitized_question: str,
+    combined_context: list[dict[str, object]],
+    summary: dict[str, object] | None,
+) -> str:
+    context_blocks: list[str] = []
+    for index, item in enumerate(combined_context[:PRIMARY_CONTEXT_LIMIT], start=1):
+        excerpt = str(item.get("excerpt") or item.get("content") or "").strip()
+        if not excerpt:
+            continue
+        if len(excerpt) > PRIMARY_EXCERPT_CHAR_LIMIT:
+            excerpt = excerpt[:PRIMARY_EXCERPT_CHAR_LIMIT].rstrip() + "..."
+        context_blocks.append(f"[{index}] {_get_context_title(item)}\n{excerpt}")
+    context_text = "\n\n".join(context_blocks) if context_blocks else "No additional verified context retrieved."
+    summary_text = ""
+    if summary:
+        summary_payload = json.dumps(summary, indent=2, default=str)
+        if len(summary_payload) > PRIMARY_SUMMARY_CHAR_LIMIT:
+            summary_payload = summary_payload[:PRIMARY_SUMMARY_CHAR_LIMIT].rstrip() + "..."
+        summary_text = (
+            "\n\nPrior summary or dashboard context:\n"
+            f"{summary_payload}\n"
+        )
+    return (
+        "Answer for the signed-in office user as an authorized internal dental-office staff assistant. "
+        "Use only the verified local context provided. "
+        "Answer immediately in no more than 60 words. "
+        "Lead with the practical answer, then reason/source basis, then next action when useful. "
+        "Use 2 concise bullets when possible. "
+        "Do not explain your steps. "
+        "If you cannot determine the answer from the provided context, respond with exactly "
+        f"{ESCALATION_MARKER} and nothing else.\n\n"
+        f"Question:\n{sanitized_question}"
+        f"{summary_text}\n\n"
+        f"Verified local context:\n{context_text}\n"
+    )
+
+
+def _resolve_profile_for_alias(profile_alias: str) -> tuple[str, dict[str, object]] | None:
+    if not LOCAL_MODEL_PROFILE_CONFIG_PATH.exists():
+        return None
+    try:
+        generation_base_url = require_lane_runtime(profile_alias, purpose=f"HAL {profile_alias}")
+        profile_config = load_local_model_profile_config()
+        profile = dict(resolve_lane_profile(profile_config, profile_alias))
+        profile["think"] = False
+        return generation_base_url, profile
+    except Exception:
+        return None
+
+
+def _generate_profile_answer(
+    *,
+    profile_alias: str,
+    prompt: str,
+    num_predict_cap: int,
+) -> tuple[str | None, str | None]:
+    resolved = _resolve_profile_for_alias(profile_alias)
+    if resolved is None:
+        return None, "local model lane unavailable"
+    generation_base_url, profile = resolved
+    profile["num_predict"] = min(int(profile.get("num_predict") or num_predict_cap), num_predict_cap)
+    try:
+        answer_result = generate_response_result(
+            base_url=generation_base_url,
+            profile=profile,
+            prompt=prompt,
+            timeout_seconds=_get_profile_timeout_seconds(profile),
+            seed=profile.get("seed"),
+        )
+    except Exception as exc:
+        return None, str(exc)
+    answer = str(answer_result.get("response_text") or "").strip()
+    if not answer:
+        return None, "empty model response"
+    return answer, None
+
+
+def _build_model_hal_response(
+    *,
+    actor: str,
+    question: str,
+    session_id: str | None,
+    context_bundle: dict[str, object],
+    answer: str,
+    voice_profile_name: str,
+    mode_suffix: str,
+    guardrail_extras: list[str],
+) -> dict[str, object]:
+    state = context_bundle["state"]
+    patient_context = context_bundle["patient_context"]
+    sanitized = context_bundle["sanitized"]
+    sanitized_question = str(context_bundle["sanitized_question"])
+    hardware_review_actions = context_bundle["hardware_review_actions"]
+    softdent_aggregate_context = context_bundle["softdent_aggregate_context"]
+    combined_context = context_bundle["combined_context"]
+    answer = _append_governed_memory_proposal(_strip_escalation_marker(answer), question=question)
+    _update_conversation_state(
+        actor=actor,
+        session_id=session_id,
+        state=state,
+        question=question,
+        patient_context=patient_context,
+        softdent_aggregate_context=softdent_aggregate_context,
+        hardware_review_actions=hardware_review_actions,
+    )
+    append_ai_activity_log(
+        tier="tier_2",
+        actor=actor,
+        action="hal-ask-model",
+        detail=f"Answered a HAL question via {voice_profile_name} for sanitized request: {sanitized_question[:140]}",
+    )
+    audit_entry = record_hal_audit(
+        actor=actor,
+        mode=f"{HAL_MODE}:{mode_suffix}",
+        sanitized_question=sanitized_question,
+        retrieval_ids=[_get_context_source_id(item) for item in combined_context if isinstance(item, dict)],
+        response_summary=answer[:180],
+    )
+    patient_matched = bool(patient_context.get("matched")) if isinstance(patient_context, dict) else False
+    return {
+        "mode": f"{HAL_MODE}:{mode_suffix}",
+        "answer": answer,
+        "sanitized_question": sanitized_question,
+        "sanitization_findings": sanitized.get("findings", []),
+        "retrieved_context": combined_context,
+        "guardrails": [
+            "approved local read-only scope",
+            "sanitized retrieval only",
+            "read-only data boundary",
+            "truthful runtime claims only",
+            "audit log recorded",
+            "hardware mutations require human confirmation",
+            "tier-1 critical actions require explicit confirmation",
+            "tier-2 mismatches raise [ALERT]",
+            "tier-3 assistance stays concise",
+        ]
+        + guardrail_extras
+        + (["authorized internal office context"] if patient_matched else []),
+        "audit_id": audit_entry["audit_id"],
+        "access_policy": get_hal_access_policy(),
+        "review_actions": hardware_review_actions,
+        "voice_profile": _voice_profile(voice_profile_name),
+        "governance_notes": _build_governance_notes(
+            patient_context_used=patient_matched,
+            review_actions_present=bool(hardware_review_actions),
+        ),
+    }
+
+
+def _try_hal_model_answer_with_escalation(
     *,
     question: str,
     actor: str,
-    summary: dict[str, object] | None = None,
-    session_id: str | None = None,
-    roles: object | None = None,
-) -> dict[str, object]:
-    del summary
-    context_bundle = _collect_hal_question_context(
-        question=question, actor=actor, session_id=session_id, roles=roles
+    summary: dict[str, object] | None,
+    session_id: str | None,
+    context_bundle: dict[str, object],
+) -> dict[str, object] | None:
+    if not _hal_ask_model_routing_enabled():
+        return None
+    sanitized_question = str(context_bundle["sanitized_question"])
+    combined_context = context_bundle["combined_context"]
+    primary_prompt = _build_primary_chat_prompt(
+        sanitized_question=sanitized_question,
+        combined_context=combined_context if isinstance(combined_context, list) else [],
+        summary=summary,
     )
+    primary_answer, primary_error = _generate_profile_answer(
+        profile_alias=PRIMARY_PROFILE_ALIAS,
+        prompt=primary_prompt,
+        num_predict_cap=PRIMARY_NUM_PREDICT,
+    )
+    if primary_answer and not _should_escalate_primary_answer(primary_answer, generation_error=primary_error):
+        return _build_model_hal_response(
+            actor=actor,
+            question=question,
+            session_id=session_id,
+            context_bundle=context_bundle,
+            answer=primary_answer,
+            voice_profile_name="primary",
+            mode_suffix="chat",
+            guardrail_extras=["frontline 24B model response"],
+        )
+
+    escalation_prompt = _build_second_opinion_prompt(
+        sanitized_question=sanitized_question,
+        combined_context=combined_context if isinstance(combined_context, list) else [],
+        summary=summary,
+    )
+    deeper_answer, deeper_error = _generate_profile_answer(
+        profile_alias=SECOND_OPINION_PROFILE_ALIAS,
+        prompt=escalation_prompt,
+        num_predict_cap=SECOND_OPINION_NUM_PREDICT,
+    )
+    if deeper_answer and not _should_escalate_primary_answer(deeper_answer, generation_error=deeper_error):
+        return _build_model_hal_response(
+            actor=actor,
+            question=question,
+            session_id=session_id,
+            context_bundle=context_bundle,
+            answer=deeper_answer,
+            voice_profile_name="deeper_review",
+            mode_suffix="deeper-review",
+            guardrail_extras=[
+                "internal 30B deeper review after frontline answer was inconclusive",
+            ],
+        )
+
+    if primary_answer and not _should_escalate_primary_answer(primary_answer, generation_error=None):
+        return _build_model_hal_response(
+            actor=actor,
+            question=question,
+            session_id=session_id,
+            context_bundle=context_bundle,
+            answer=primary_answer,
+            voice_profile_name="primary",
+            mode_suffix="chat",
+            guardrail_extras=["frontline 24B model response"],
+        )
+
+    del primary_error, deeper_error
+    return None
+
+
+def _build_deterministic_hal_answer(
+    *,
+    question: str,
+    actor: str,
+    session_id: str | None,
+    context_bundle: dict[str, object],
+) -> dict[str, object]:
     state = context_bundle["state"]
     patient_context = context_bundle["patient_context"]
     sanitized = context_bundle["sanitized"]
@@ -2665,6 +2938,34 @@ def answer_hal_question(
         "voice_profile": voice_profile,
         "governance_notes": governance_notes,
     }
+
+
+def answer_hal_question(
+    *,
+    question: str,
+    actor: str,
+    summary: dict[str, object] | None = None,
+    session_id: str | None = None,
+    roles: object | None = None,
+) -> dict[str, object]:
+    context_bundle = _collect_hal_question_context(
+        question=question, actor=actor, session_id=session_id, roles=roles
+    )
+    model_result = _try_hal_model_answer_with_escalation(
+        question=question,
+        actor=actor,
+        summary=summary,
+        session_id=session_id,
+        context_bundle=context_bundle,
+    )
+    if model_result is not None:
+        return model_result
+    return _build_deterministic_hal_answer(
+        question=question,
+        actor=actor,
+        session_id=session_id,
+        context_bundle=context_bundle,
+    )
 
 
 def answer_hal_second_opinion_question(

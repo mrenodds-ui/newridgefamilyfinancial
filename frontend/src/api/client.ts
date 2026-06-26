@@ -851,18 +851,14 @@ export function createHalConversationId(): string {
 export async function askHalQuestion(
   question: string,
   options?: {
-    summary?: FinancialSummaryResponse | null;
-    lane?: "primary" | "second_opinion";
     conversationId?: string;
   },
 ): Promise<HalAskResponse> {
   const body = JSON.stringify({
     question,
-    summary: options?.summary ?? undefined,
     session_id: options?.conversationId ?? undefined,
   });
-  const path = options?.lane === "second_opinion" ? "/hal9000/second-opinion" : "/hal9000";
-  const primary = await requestJson(path, {
+  const primary = await requestJson("/hal9000", {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -871,7 +867,7 @@ export async function askHalQuestion(
     body,
   });
   if (!primary.response.ok) {
-    throw buildRequestError(`/api${path}`, primary.response, primary.payload);
+    throw buildRequestError(`/api/hal9000`, primary.response, primary.payload);
   }
   return parseHalAskResponse(primary.payload);
 }

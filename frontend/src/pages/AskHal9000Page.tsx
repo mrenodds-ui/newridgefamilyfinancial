@@ -87,8 +87,6 @@ function isAutomatedBrowserSession(): boolean {
 
 export default function AskHal9000Page() {
   const [question, setQuestion] = useState("");
-  const [lastRequestLane, setLastRequestLane] = useState<"primary" | "second_opinion">("primary");
-  const [useSecondOpinion, setUseSecondOpinion] = useState(false);
   const [selectedDraft, setSelectedDraft] = useState<SoftDentDraftArtifact | null>(null);
   const [selectedPacket, setSelectedPacket] = useState<SoftDentLocalPacketArtifact | null>(null);
   const [draftPrefillQuery, setDraftPrefillQuery] = useState("");
@@ -119,10 +117,8 @@ export default function AskHal9000Page() {
     queryFn: fetchHalStatus,
   });
   const halMutation = useMutation({
-    mutationFn: ({ nextQuestion, lane }: { nextQuestion: string; lane: "primary" | "second_opinion" }) =>
+    mutationFn: (nextQuestion: string) =>
       askHalQuestion(nextQuestion, {
-        summary: financialSummaryQuery.data ?? null,
-        lane,
         conversationId: conversationIdRef.current,
       }),
     onSettled: () => {
@@ -137,25 +133,24 @@ export default function AskHal9000Page() {
   const questionTooShort = trimmedQuestion.length > 0 && trimmedQuestion.length < HAL_QUESTION_MIN_LENGTH;
   const canSubmitQuestion = isHalQuestionSubmittable(question) && !halMutation.isPending;
 
-  function submitHalQuestion(lane: "primary" | "second_opinion") {
+  function submitHalQuestion() {
     if (!isHalQuestionSubmittable(question) || halMutation.isPending || askInFlightRef.current) {
       return;
     }
     askInFlightRef.current = true;
-    setLastRequestLane(lane);
     actionMutation.reset();
     setSpeechError(null);
     setIsSpeaking(false);
-    halMutation.mutate({ nextQuestion: trimmedQuestion, lane });
+    halMutation.mutate(trimmedQuestion);
   }
 
   function handleAsk(e: FormEvent) {
     e.preventDefault();
-    submitHalQuestion(useSecondOpinion ? "second_opinion" : "primary");
+    submitHalQuestion();
   }
 
   function handleRetryAsk() {
-    submitHalQuestion(lastRequestLane);
+    submitHalQuestion();
   }
 
   const response = halMutation.data;
@@ -340,8 +335,6 @@ export default function AskHal9000Page() {
             <HalCommandCenter
               question={question}
               setQuestion={setQuestion}
-              useSecondOpinion={useSecondOpinion}
-              setUseSecondOpinion={setUseSecondOpinion}
               questionTooShort={questionTooShort}
               canSubmitQuestion={canSubmitQuestion}
               isPending={halMutation.isPending}
@@ -362,7 +355,7 @@ export default function AskHal9000Page() {
               </div>
             ) : null}
 
-            <HalRecommendationBlock response={response} reviewDepth={lastRequestLane} speechControls={speechControls} />
+            <HalRecommendationBlock response={response} speechControls={speechControls} />
 
             {response ? (
               <section className="hal-workstation-card">

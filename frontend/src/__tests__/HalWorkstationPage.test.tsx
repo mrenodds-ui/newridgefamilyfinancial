@@ -193,24 +193,54 @@ describe("HAL workstation page", () => {
     await waitFor(() => expect(askHalQuestion).toHaveBeenCalled());
     expect(askHalQuestion).toHaveBeenCalledWith(
       "Review patient claim",
-      expect.objectContaining({ lane: "primary", conversationId: "hal-test-session" }),
+      expect.objectContaining({ conversationId: "hal-test-session" }),
     );
   });
 
-  it("routes to second opinion when the checkbox is selected", async () => {
+  it("sends on Enter and inserts a newline on Shift+Enter", async () => {
     renderPage();
-    fireEvent.change(screen.getByLabelText(/What do you want HAL to help with/i), {
-      target: { value: "Review patient claim deeply" },
-    });
-    fireEvent.click(screen.getByLabelText(/Use deeper second opinion/i));
-    fireEvent.click(screen.getByRole("button", { name: /Ask HAL/i }));
+    const textarea = screen.getByLabelText(/What do you want HAL to help with/i);
 
-    await waitFor(() =>
-      expect(askHalQuestion).toHaveBeenCalledWith(
-        "Review patient claim deeply",
-        expect.objectContaining({ lane: "second_opinion" }),
-      ),
+    fireEvent.change(textarea, { target: { value: "Review patient claim" } });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true });
+    expect(askHalQuestion).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue("Review patient claim\n");
+
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(askHalQuestion).toHaveBeenCalledTimes(1));
+    expect(askHalQuestion).toHaveBeenCalledWith(
+      "Review patient claim",
+      expect.objectContaining({ conversationId: "hal-test-session" }),
     );
+  });
+
+  it("does not send blank input or double-submit while pending", async () => {
+    let resolveRequest: (() => void) | undefined;
+    vi.mocked(askHalQuestion).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = () =>
+            resolve(
+              buildHalResponse({
+                answer: "Pending answer",
+              }),
+            );
+        }),
+    );
+
+    renderPage();
+    const textarea = screen.getByLabelText(/What do you want HAL to help with/i);
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(askHalQuestion).not.toHaveBeenCalled();
+
+    fireEvent.change(textarea, { target: { value: "Review patient claim" } });
+    fireEvent.click(screen.getByRole("button", { name: /Ask HAL/i }));
+    await waitFor(() => expect(askHalQuestion).toHaveBeenCalledTimes(1));
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(askHalQuestion).toHaveBeenCalledTimes(1);
+
+    resolveRequest?.();
+    await waitFor(() => expect(screen.getByText(/HAL's Response/i)).toBeInTheDocument());
   });
 
   it("creates draft and local packet artifacts with required safety wording", async () => {

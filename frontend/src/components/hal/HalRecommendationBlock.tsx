@@ -3,7 +3,6 @@ import type { HalAskResponse } from "../../api/schemas";
 
 type HalRecommendationBlockProps = {
   response: HalAskResponse | undefined;
-  reviewDepth: "primary" | "second_opinion";
   speechControls?: ReactNode;
 };
 
@@ -29,7 +28,7 @@ function splitAnswer(answer: string) {
   return sections;
 }
 
-export function HalRecommendationBlock({ response, reviewDepth, speechControls }: HalRecommendationBlockProps) {
+export function HalRecommendationBlock({ response, speechControls }: HalRecommendationBlockProps) {
   if (!response) {
     return (
       <section className="hal-workstation-card" aria-labelledby="hal-recommendation-title">
@@ -47,9 +46,7 @@ export function HalRecommendationBlock({ response, reviewDepth, speechControls }
         <p className="eyebrow">Recommendation / next step</p>
         <h2 id="hal-recommendation-title">HAL&apos;s Response</h2>
         <p>
-          Staff-assistant response ·{" "}
-          Review depth: {reviewDepth === "second_opinion" ? "Deeper second opinion" : "Primary response"} ·{" "}
-          {response.voice_profile.label}
+          Staff-assistant response · {response.voice_profile.label}
         </p>
       </div>
       <div className="hal-recommendation-grid">

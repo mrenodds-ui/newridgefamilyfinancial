@@ -41,7 +41,7 @@ export function HalSystemHealthPanel({
         </div>
         <div>
           <dt>30B lane</dt>
-          <dd>optional second opinion</dd>
+          <dd>internal deeper review fallback</dd>
         </div>
         <div>
           <dt>SoftDent claims</dt>

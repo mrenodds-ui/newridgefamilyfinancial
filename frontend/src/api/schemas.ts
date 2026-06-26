@@ -826,7 +826,7 @@ export const halReviewActionSchema = z.object({
 
 export const defaultHalVoiceProfile = {
   lane: "primary",
-  label: "Primary response",
+  label: "Ask HAL",
   tone: "direct and grounded",
   style_notes: [] as string[],
 };
