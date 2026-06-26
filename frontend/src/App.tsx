@@ -17,6 +17,7 @@ import PostingQueueReviewPage from "./pages/PostingQueueReviewPage";
 import QuickBooksPage from "./pages/QuickBooksPage";
 import SettingsPage from "./pages/SettingsPage";
 import SoftDentPage from "./pages/SoftDentPage";
+import InsuranceNarrativesPage from "./pages/InsuranceNarrativesPage";
 import TrendsPage from "./pages/TrendsPage";
 import RequireApiAuth from "./components/RequireApiAuth";
 
@@ -52,6 +53,10 @@ export default function App() {
         <Route path="/document-library" element={requireApiAuth("the document library", <DocumentLibraryPage />, [HAL_OPERATOR_ROLE])} />
         <Route path="/accounting-policy" element={requireApiAuth("the accounting policy guidance page", <AccountingPolicyPage />, [HAL_OPERATOR_ROLE])} />
         <Route path="/posting-queue" element={requireApiAuth("the posting queue review page", <PostingQueueReviewPage />, [HAL_OPERATOR_ROLE])} />
+        <Route
+          path="/insurance-narratives"
+          element={requireApiAuth("the insurance narrative workflow page", <InsuranceNarrativesPage />, [HAL_OPERATOR_ROLE])}
+        />
         <Route path={HAL_DASHBOARD_PATH} element={requireApiAuth("the HAL workspace", <AskHal9000Page />, [HAL_OPERATOR_ROLE, DASHBOARD_READ_ROLE])} />
         <Route path="/hal" element={<Navigate to={HAL_DASHBOARD_PATH} replace />} />
         <Route path="/hal-9000" element={<Navigate to={HAL_DASHBOARD_PATH} replace />} />

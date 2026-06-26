@@ -1119,3 +1119,145 @@ export type AccountingPostingQueueActivity = z.infer<typeof accountingPostingQue
 export type AccountingPostingQueueListResponse = z.infer<typeof accountingPostingQueueListSchema>;
 export type AccountingPostingQueueMetricsResponse = z.infer<typeof accountingPostingQueueMetricsSchema>;
 export type AccountingPostingQueueActivityListResponse = z.infer<typeof accountingPostingQueueActivityListSchema>;
+
+const narrativeMissingDataItemSchema = z.object({
+  code: z.string(),
+  label: z.string(),
+  severity: z.string(),
+  why_it_matters: z.string(),
+  blocking: z.boolean(),
+});
+
+const narrativeSourceFactSchema = z.object({
+  fact_id: z.string(),
+  source_type: z.string(),
+  source_label: z.string(),
+  source_date: z.string().nullable().optional(),
+  text: z.string(),
+  supports: z.array(z.string()).default([]),
+  source_strength: z.string().nullable().optional(),
+});
+
+const narrativeDraftCitationSchema = z.object({
+  fact_id: z.string(),
+  section_key: z.string(),
+  excerpt: z.string(),
+});
+
+const insuranceNarrativeCasePacketSchema = z
+  .object({
+    packet_id: z.string(),
+    created_at: z.string(),
+    actor: z.string(),
+    narrative_type: z.string(),
+    patient: z.object({ patient_ref: z.string(), chart_ref: z.string().nullable().optional(), label: z.string() }),
+    claim: z
+      .object({
+        claim_id: z.string(),
+        status: z.string().nullable().optional(),
+        payer_name: z.string().nullable().optional(),
+        billed_amount: z.number().nullable().optional(),
+        denial_reason: z.string().nullable().optional(),
+      })
+      .nullable()
+      .optional(),
+    procedures: z
+      .array(
+        z.object({
+          procedure_id: z.string(),
+          description: z.string(),
+          code: z.string().nullable().optional(),
+          tooth: z.string().nullable().optional(),
+          service_date: z.string().nullable().optional(),
+        }),
+      )
+      .default([]),
+    source_facts: z.array(narrativeSourceFactSchema).default([]),
+    missing_data: z.array(narrativeMissingDataItemSchema).default([]),
+    audit_metadata: z
+      .object({
+        created_at: z.string(),
+        created_by: z.string(),
+        adapter_name: z.string().nullable().optional(),
+        source_mode: z.string().nullable().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+const insuranceNarrativeDraftSchema = z
+  .object({
+    draft_id: z.string(),
+    packet_id: z.string(),
+    narrative_type: z.string(),
+    status: z.string(),
+    sections: z.array(z.object({ key: z.string(), title: z.string(), body: z.string() })).default([]),
+    citations: z.array(narrativeDraftCitationSchema).default([]),
+    warnings: z.array(z.object({ code: z.string(), message: z.string(), severity: z.string() })).default([]),
+    missing_data: z.array(narrativeMissingDataItemSchema).default([]),
+    created_at: z.string(),
+    actor: z.string(),
+    approval_required: z.boolean().optional(),
+    audit_metadata: z.object({ created_at: z.string(), created_by: z.string() }).passthrough(),
+  })
+  .passthrough();
+
+const narrativeCheckerSummarySchema = z
+  .object({
+    checker_status: z.string().nullable().optional(),
+    missing_data_count: z.number().optional(),
+    citation_issue_count: z.number().optional(),
+    possible_invented_fact_count: z.number().optional(),
+    contradiction_count: z.number().optional(),
+    ready_for_human_review: z.boolean().nullable().optional(),
+  })
+  .passthrough();
+
+const insuranceNarrativeReviewRecordSchema = z
+  .object({
+    review_id: z.string(),
+    packet_id: z.string(),
+    draft_id: z.string(),
+    draft_status: z.string(),
+    status: z.string(),
+    reviewer: z.string(),
+    reviewed_at: z.string().nullable().optional(),
+    notes: z.string().nullable().optional(),
+    approval_attestation: z.boolean().nullable().optional(),
+    checker_summary: narrativeCheckerSummarySchema.nullable().optional(),
+  })
+  .passthrough();
+
+const insuranceNarrativeExportSchema = z
+  .object({
+    export_id: z.string(),
+    packet_id: z.string(),
+    draft_id: z.string(),
+    review_id: z.string(),
+    format: z.string(),
+    title: z.string(),
+    body: z.string(),
+    citations: z.array(narrativeDraftCitationSchema).default([]),
+    missing_data_disclosures: z.array(narrativeMissingDataItemSchema).default([]),
+    submission_status: z.string(),
+    created_at: z.string(),
+    actor: z.string(),
+  })
+  .passthrough();
+
+export const insuranceNarrativeWorkflowResultSchema = z
+  .object({
+    packet: insuranceNarrativeCasePacketSchema,
+    draft: insuranceNarrativeDraftSchema,
+    checker_summary: narrativeCheckerSummarySchema.nullable().optional(),
+    review: insuranceNarrativeReviewRecordSchema.nullable().optional(),
+    export: insuranceNarrativeExportSchema.nullable().optional(),
+    status: z.string(),
+    warnings: z.array(z.object({ code: z.string(), message: z.string() })).default([]),
+    audit_events: z.array(z.unknown()).default([]),
+  })
+  .passthrough();
+
+export type InsuranceNarrativeCasePacket = z.infer<typeof insuranceNarrativeCasePacketSchema>;
+export type InsuranceNarrativeDraft = z.infer<typeof insuranceNarrativeDraftSchema>;
+export type InsuranceNarrativeWorkflowResult = z.infer<typeof insuranceNarrativeWorkflowResultSchema>;

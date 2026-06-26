@@ -257,6 +257,20 @@ Report JSON includes `packet_id`, `draft_id`, `review_id`, `export_id`, `workflo
 `submission_status` (always `not_submitted` for dry-run exports), `export_body`, optional
 `checker_summary`, and `warnings[]`. Raw CSV rows are never included.
 
+### Minimal operator UI (local export preview only)
+
+Route: `/app/insurance-narratives` (requires `hal:operator`).
+
+The page provides a scope form, **Create draft** (calls `POST /api/insurance-narratives/draft`),
+draft/missing-data/source-fact summary, and **Approve and create local export** (calls
+`POST /api/insurance-narratives/approve-export`). The fast_review checker is opt-in via a
+checkbox that maps to `run_checker` on the draft endpoint only — the page does not call
+`/api/hal9000/fast-review-check` directly.
+
+Export preview shows `submission_status` (always `not_submitted`), review/export ids, and the
+formatted export body with citations and missing-data disclosures. No payer submission, email,
+fax, or upload controls are provided.
+
 ### Operator-only API endpoints (internal)
 
 | Endpoint | Purpose |

@@ -50,6 +50,10 @@ import {
   kpiResponseSchema,
   localAccountingDocumentListSchema,
   monitorMutationExecutionResultSchema,
+  insuranceNarrativeWorkflowResultSchema,
+  type InsuranceNarrativeCasePacket,
+  type InsuranceNarrativeDraft,
+  type InsuranceNarrativeWorkflowResult,
 } from "./schemas";
 
 type BackendSchemas = components["schemas"];
@@ -967,6 +971,66 @@ export async function generateHalInsuranceNarrative(question: string): Promise<H
     throw buildRequestError("/api/hal9000/insurance-narrative", primary.response, primary.payload);
   }
   return halInsuranceNarrativeSchema.parse(primary.payload);
+}
+
+export type { InsuranceNarrativeCasePacket, InsuranceNarrativeDraft, InsuranceNarrativeWorkflowResult };
+
+export async function createInsuranceNarrativeDraftWorkflow(payload: {
+  patient_ref: string;
+  claim_id?: string | null;
+  procedure_ids?: string[] | null;
+  narrative_type: string;
+  run_checker?: boolean;
+}): Promise<InsuranceNarrativeWorkflowResult> {
+  const { response, payload: responsePayload } = await requestJson("/insurance-narratives/draft", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      patient_ref: payload.patient_ref,
+      claim_id: payload.claim_id ?? null,
+      procedure_ids: payload.procedure_ids ?? null,
+      narrative_type: payload.narrative_type,
+      run_checker: payload.run_checker ?? false,
+    }),
+  });
+  if (!response.ok) {
+    throw buildRequestError("/api/insurance-narratives/draft", response, responsePayload);
+  }
+  return insuranceNarrativeWorkflowResultSchema.parse(responsePayload);
+}
+
+export async function approveAndExportInsuranceNarrativeWorkflow(payload: {
+  packet: InsuranceNarrativeCasePacket;
+  draft: InsuranceNarrativeDraft;
+  reviewer: string;
+  notes: string;
+  approval_attestation: boolean;
+  export_format?: "markdown" | "plain_text";
+  checker_summary?: InsuranceNarrativeWorkflowResult["checker_summary"];
+}): Promise<InsuranceNarrativeWorkflowResult> {
+  const { response, payload: responsePayload } = await requestJson("/insurance-narratives/approve-export", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      packet: payload.packet,
+      draft: payload.draft,
+      reviewer: payload.reviewer,
+      notes: payload.notes,
+      approval_attestation: payload.approval_attestation,
+      export_format: payload.export_format ?? "markdown",
+      checker_summary: payload.checker_summary ?? null,
+    }),
+  });
+  if (!response.ok) {
+    throw buildRequestError("/api/insurance-narratives/approve-export", response, responsePayload);
+  }
+  return insuranceNarrativeWorkflowResultSchema.parse(responsePayload);
 }
 
 export async function fetchHalPatientDossier(question: string): Promise<HalPatientDossierResponse> {

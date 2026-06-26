@@ -39,6 +39,7 @@ const navGroups: NavGroup[] = [
     label: "Operations",
     items: [
       { label: "Claims", path: "/claims-workbench" },
+      { label: "Narratives", path: "/insurance-narratives" },
       { label: "Documents", path: "/accounting-documents" },
       { label: "Library", path: "/document-library" },
       { label: "Policy", path: "/accounting-policy" },
