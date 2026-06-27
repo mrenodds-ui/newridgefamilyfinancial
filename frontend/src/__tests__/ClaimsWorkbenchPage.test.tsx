@@ -3,7 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { FinancialSummaryResponse, HalStatusResponse } from "../api/client";
+import type { FinancialSummaryResponse } from "../api/client";
 import { fetchFinancialSummary, fetchHalStatus } from "../api/client";
 import ClaimsWorkbenchPage from "../pages/ClaimsWorkbenchPage";
 
@@ -18,9 +18,9 @@ vi.mock("../api/client", async () => {
   };
 });
 
-function buildHalStatus(): HalStatusResponse {
+function buildHalStatus() {
   return {
-    status: "ok",
+    mode: "local",
     financial_sources: {
       softdent: {
         live_claims: {
@@ -55,7 +55,7 @@ function buildHalStatus(): HalStatusResponse {
         },
       },
     },
-  } as HalStatusResponse;
+  } as unknown as Awaited<ReturnType<typeof fetchHalStatus>>;
 }
 
 function buildFinancialSummary(): FinancialSummaryResponse {
