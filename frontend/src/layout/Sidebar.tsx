@@ -34,6 +34,7 @@ const navGroups: NavGroup[] = [
       { label: "Financial dashboard", path: "/", requiresAdmin: true },
       { label: "SoftDent", path: "/softdent", requiresAdmin: true },
       { label: "QuickBooks", path: "/quickbooks", requiresAdmin: true },
+      { label: "Imports", path: "/imports", requiresAdmin: true },
       { label: "A/R details", path: "/ar", requiresAdmin: true },
       { label: "EBITDA", path: "/ebitda", requiresAdmin: true },
       { label: "Expenses", path: "/expenses", requiresAdmin: true },

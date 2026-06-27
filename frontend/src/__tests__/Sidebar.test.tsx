@@ -56,6 +56,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     expect(screen.queryByRole("link", { name: "SoftDent" })).toBeNull();
     expect(screen.queryByRole("link", { name: "QuickBooks" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Imports" })).toBeNull();
     expect(screen.queryByRole("link", { name: "EBITDA" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Financial dashboard" })).toBeNull();
   });
@@ -69,6 +70,7 @@ describe("Sidebar navigation", () => {
     const owner = within(ownerSection as HTMLElement);
     expect(owner.getByRole("link", { name: "SoftDent" })).toBeInTheDocument();
     expect(owner.getByRole("link", { name: "QuickBooks" })).toBeInTheDocument();
+    expect(owner.getByRole("link", { name: "Imports" })).toBeInTheDocument();
     expect(owner.getByRole("link", { name: "EBITDA" })).toBeInTheDocument();
     expect(owner.getByRole("link", { name: "Financial dashboard" })).toBeInTheDocument();
   });

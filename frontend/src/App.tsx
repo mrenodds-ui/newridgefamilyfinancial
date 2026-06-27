@@ -18,6 +18,7 @@ import QuickBooksPage from "./pages/QuickBooksPage";
 import SettingsPage from "./pages/SettingsPage";
 import SoftDentPage from "./pages/SoftDentPage";
 import InsuranceNarrativesPage from "./pages/InsuranceNarrativesPage";
+import ImportsPage from "./pages/ImportsPage";
 import TrendsPage from "./pages/TrendsPage";
 import RequireApiAuth from "./components/RequireApiAuth";
 
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/softdent" element={requireApiAuth("the SoftDent financial page", <SoftDentPage />, [DASHBOARD_READ_ROLE])} />
         <Route path="/quickbooks" element={requireApiAuth("the QuickBooks financial page", <QuickBooksPage />, [DASHBOARD_READ_ROLE])} />
+        <Route path="/imports" element={requireApiAuth("the practice imports page", <ImportsPage />, [DASHBOARD_READ_ROLE])} />
         <Route path="/ebitda" element={requireApiAuth("the EBITDA evaluation page", <EBITDAEvaluationPage />, [DASHBOARD_READ_ROLE])} />
         <Route path="/expenses" element={requireApiAuth("the expense analysis page", <ExpensesPage />, [DASHBOARD_READ_ROLE])} />
         <Route path="/ar" element={requireApiAuth("the A/R and collections page", <ARCollectionsPage />, [DASHBOARD_READ_ROLE])} />

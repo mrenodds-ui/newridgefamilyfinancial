@@ -1,16 +1,25 @@
 import ImportPanel from "../components/dashboard/ImportPanel";
+import { PageSurfaceHeader, PageSurfaceShell } from "../components/PageSurfaceHeader";
 
 export default function ImportsPage() {
   return (
-    <div className="dashboard-page">
+    <PageSurfaceShell className="imports-page">
+      <PageSurfaceHeader
+        breadcrumbs="Data sources / Imports"
+        eyebrow="Practice file intake"
+        title="Bring in files"
+        titleId="imports-page-title"
+        description="Stage SoftDent and QuickBooks exports through the backend import pipeline. Admin accounts upload files; everyone with dashboard access can review live import status and coverage."
+        badges={[
+          { label: "Admin Upload Only", tone: "warning" },
+          { label: "Backend Normalized" },
+          { label: "No Writeback" },
+        ]}
+        badgesAriaLabel="Import pipeline safety posture"
+      />
       <div className="page-content">
-        <header className="page-header">
-          <p className="eyebrow">Practice Files</p>
-          <h1>Bring In Files</h1>
-          <p>Add the latest SoftDent and QuickBooks exports to refresh the dashboard.</p>
-        </header>
         <ImportPanel />
       </div>
-    </div>
+    </PageSurfaceShell>
   );
 }
