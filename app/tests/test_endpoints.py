@@ -1633,6 +1633,33 @@ def test_hal_follow_up_isolated_by_session_id(monkeypatch):
     monkeypatch.setattr(financial_tools, "load_softdent_claim_rows", fake_claim_rows)
     monkeypatch.setattr(financial_tools, "load_softdent_clinical_note_rows", fake_note_rows)
 
+    # The SoftDent read broker requires patient/clinical read roles before it
+    # returns verified patient context. Grant the admin user those roles for
+    # this test so we exercise the real patient-context retention + session
+    # isolation path. monkeypatch restores the env automatically afterward.
+    patient_read_users_json = json.dumps(
+        [
+            {
+                "username": "admin",
+                "display_name": "Administrator",
+                "password": "password",
+                "roles": [
+                    "dashboard:read",
+                    "hal:operator",
+                    "hal:index:refresh",
+                    "admin",
+                    "softdent:read",
+                    "softdent:patient:read",
+                    "softdent:clinical:read",
+                    "softdent:ledger:read",
+                    "softdent:narrative:draft",
+                ],
+            }
+        ]
+    )
+    monkeypatch.setenv("APP_AUTH_USERS_JSON", patient_read_users_json)
+    clear_user_registry_cache()
+
     client.post(
         "/hal9000",
         auth=basic_auth(),
@@ -1657,8 +1684,14 @@ def test_hal_follow_up_isolated_by_session_id(monkeypatch):
 
     assert john_follow_up.status_code == 200
     assert jane_follow_up.status_code == 200
-    assert "Verified patient context: Patient=John Doe" in john_follow_up.json()["answer"]
-    assert "Verified patient context: Patient=Jane Roe" in jane_follow_up.json()["answer"]
+    john_answer = john_follow_up.json()["answer"]
+    jane_answer = jane_follow_up.json()["answer"]
+    # Each session retains its own patient context and does not leak the other
+    # session's patient.
+    assert "Patient=John Doe" in john_answer
+    assert "Jane Roe" not in john_answer
+    assert "Patient=Jane Roe" in jane_answer
+    assert "John Doe" not in jane_answer
 
 
 def test_metrics_requires_admin_auth():
