@@ -6,6 +6,14 @@ import { fetchFinancialSummary, fetchHalPatientDossier, fetchHalStatus, generate
 import { LoadingSpinner } from "../components/LoadingSpinner";
 import { TransactionFeedStatusNotice } from "../components/dashboard/TransactionFeedStatusNotice";
 import { queryKeys } from "../queryClient";
+import "../styles/page-surface.css";
+
+const CLAIMS_SAFETY_BADGES = [
+  "Local-Only",
+  "Read-Only Sources",
+  "Human Review Required",
+  "Not Submitted",
+] as const;
 
 function confidenceBadgeClass(label: string, reviewRequired: boolean) {
   if (label === "manual review") {
@@ -36,7 +44,7 @@ export default function ClaimsWorkbenchPage() {
 
   if (halStatusQuery.isPending || financialSummaryQuery.isPending) {
     return (
-      <div className="dashboard-page claims-workbench-page">
+      <div className="dashboard-page claims-workbench-page page-surface">
         <LoadingSpinner label="Loading claims workbench..." />
       </div>
     );
@@ -44,7 +52,7 @@ export default function ClaimsWorkbenchPage() {
 
   if (halStatusQuery.isError || financialSummaryQuery.isError || !halStatusQuery.data || !financialSummaryQuery.data) {
     return (
-      <div className="dashboard-page claims-workbench-page">
+      <div className="dashboard-page claims-workbench-page page-surface">
         <div className="page-state-card page-state-card--error">The claims workbench data could not be loaded right now.</div>
       </div>
     );
@@ -58,26 +66,53 @@ export default function ClaimsWorkbenchPage() {
   const claimsSummary = financialSummaryQuery.data.claimsSummary ?? null;
   const softDentCoverage = financialSummaryQuery.data.softDentCoverage ?? null;
   const coverageGaps = (softDentCoverage?.rows ?? []).filter((row) => row.status !== "available").slice(0, 3);
+  const claimsFeedReady = Boolean(claimsSource?.available && notesSource?.available);
 
   return (
-    <div className="dashboard-page claims-workbench-page">
-      <header className="page-header">
-        <p className="eyebrow">Claims Workbench</p>
-        <h1>Patient Claims Workbench</h1>
-        <p>
-          Search patient claim context, review source readiness, and generate one-click insurance narratives from approved local SoftDent
-          exports.
-        </p>
+    <div className="dashboard-page claims-workbench-page page-surface">
+      <header className="page-surface__hero" aria-labelledby="claims-workbench-title">
+        <div className="page-surface__hero-top">
+          <div className="page-surface__hero-copy">
+            <div className="page-surface__breadcrumbs">Billing / Patient claims review</div>
+            <p className="eyebrow">Claims workbench</p>
+            <h1 id="claims-workbench-title">Patient Claims Workbench</h1>
+            <p>
+              Search patient claim context, review SoftDent export readiness, and draft insurance narratives from approved local
+              files. All outputs stay on this machine for staff review.
+            </p>
+          </div>
+          <div className="page-surface__badges" aria-label="Claims workbench safety posture">
+            {CLAIMS_SAFETY_BADGES.map((badge) => (
+              <span key={badge} className="page-surface__badge page-surface__badge--neutral">
+                {badge}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="page-surface__status-strip" aria-label="Claims source status">
+          <div className="page-surface__status-item">
+            <span className="page-surface__status-label">Claims export</span>
+            <span className="page-surface__status-value">{claimsSource?.available ? "Imported (read-only)" : "Awaiting export"}</span>
+          </div>
+          <div className="page-surface__status-item">
+            <span className="page-surface__status-label">Clinical notes</span>
+            <span className="page-surface__status-value">{notesSource?.available ? "Imported (read-only)" : "Awaiting export"}</span>
+          </div>
+          <div className="page-surface__status-item">
+            <span className="page-surface__status-label">Aggregate claims</span>
+            <span className="page-surface__status-value">{claimsSummary?.available ? "Feeding this page" : "Not quantified yet"}</span>
+          </div>
+        </div>
       </header>
 
       <section className="claims-workbench-grid">
         <article className="admin-card">
-          <h2>Transaction Feed Status</h2>
+          <h2>Transaction feed health</h2>
           <TransactionFeedStatusNotice healthFlags={healthFlags} />
         </article>
 
         <article className="admin-card">
-          <h2>Source Readiness</h2>
+          <h2>Source readiness</h2>
           <div className="admin-audit-list">
             {[
               { label: "Transaction feed", item: transactionFeedSource },
@@ -113,7 +148,7 @@ export default function ClaimsWorkbenchPage() {
               </div>
             ))}
           </div>
-          {!claimsSource?.available || !notesSource?.available ? (
+          {!claimsFeedReady ? (
             <p className="claims-workbench-warning">
               Live patient work is ready in HAL, but real SoftDent claim and note export files are not present on this machine yet.
             </p>
@@ -121,7 +156,7 @@ export default function ClaimsWorkbenchPage() {
         </article>
 
         <article className="admin-card">
-          <h2>Claims Aggregate Snapshot</h2>
+          <h2>Claims aggregate snapshot</h2>
           <p className="admin-card__summary">
             {claimsSummary?.available
               ? "Approved SoftDent aggregate claim exports are now feeding true outstanding and unsubmitted claim exposure into this page."
@@ -165,7 +200,7 @@ export default function ClaimsWorkbenchPage() {
         </article>
 
         <article className="admin-card">
-          <h2>Patient Lookup</h2>
+          <h2>Patient lookup</h2>
           <form
             className="hal-form hal-form--narrative"
             onSubmit={(event) => {
@@ -188,7 +223,7 @@ export default function ClaimsWorkbenchPage() {
           </form>
           {dossierMutation.data ? (
             <div className="hal-answer-card">
-              <h3>Lookup Result</h3>
+              <h3>Lookup result</h3>
               <div className="hal-answer-card__section">{dossierMutation.data.summary}</div>
               <div className="hal-answer-card__section">
                 <strong>Response profile:</strong> {dossierMutation.data.voice_profile.label} · {dossierMutation.data.voice_profile.tone}
@@ -216,7 +251,7 @@ export default function ClaimsWorkbenchPage() {
         </article>
 
         <article className="admin-card admin-card--wide">
-          <h2>Insurance Narrative</h2>
+          <h2>Insurance narrative draft</h2>
           <form
             className="hal-form hal-form--narrative"
             onSubmit={(event) => {
@@ -239,7 +274,7 @@ export default function ClaimsWorkbenchPage() {
           </form>
           {narrativeMutation.data ? (
             <div className="hal-answer-card">
-              <h3>Narrative Output</h3>
+              <h3>Narrative output</h3>
               <div className="hal-answer-card__section hal-answer-card__section--lead">{narrativeMutation.data.narrative}</div>
               <div className="hal-answer-card__section">
                 <strong>Response profile:</strong> {narrativeMutation.data.voice_profile.label} · {narrativeMutation.data.voice_profile.tone}

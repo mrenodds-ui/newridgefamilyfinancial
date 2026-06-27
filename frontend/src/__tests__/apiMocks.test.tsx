@@ -684,7 +684,7 @@ describe("api mocks", () => {
     renderApp("/app/claims-workbench");
 
     expect(await screen.findByRole("heading", { name: "Patient Claims Workbench" })).toBeInTheDocument();
-    expect(screen.getByText("Claims Aggregate Snapshot")).toBeInTheDocument();
+    expect(screen.getByText("Claims aggregate snapshot")).toBeInTheDocument();
     expect(
       await screen.findByText(
         /Approved SoftDent aggregate claim exports are now feeding true outstanding and unsubmitted claim exposure into this page/,
@@ -700,7 +700,7 @@ describe("api mocks", () => {
       screen.getByText(/Coverage gaps still limit parts of this page: Unsubmitted Claims, Treatment Plans, Payment Plans/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Page coverage gaps/)).toBeInTheDocument();
-    expect(screen.getByText(/Claims export/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Claims export/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/Clinical notes export/)).toBeInTheDocument();
     expect(await screen.findByText("high confidence")).toBeInTheDocument();
     expect(await screen.findByText("review suggested")).toBeInTheDocument();
@@ -719,7 +719,7 @@ describe("api mocks", () => {
       },
     });
     fireEvent.click(screen.getByRole("button", { name: "Generate narrative" }));
-    expect(await screen.findByText(/Narrative Output/)).toBeInTheDocument();
+    expect(await screen.findByText(/Narrative output/)).toBeInTheDocument();
     expect(screen.getByText(/Insurance narrative for John Doe/)).toBeInTheDocument();
     expect(screen.getAllByText(/Governance:/).length).toBeGreaterThan(0);
   });
