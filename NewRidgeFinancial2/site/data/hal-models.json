@@ -1,10 +1,17 @@
 {
   "config": {
-    "mode": "offline",
+    "mode": "online",
     "localFirst": true,
     "externalCallsEnabled": false,
-    "activeLane": null,
-    "note": "HAL answers from the local registry first. Model lanes are staged but not connected. No external calls happen in offline mode."
+    "activeLane": "chat14b",
+    "localModel": {
+      "enabled": true,
+      "endpoint": "http://127.0.0.1:11434/api/chat",
+      "model": "queen3:14b",
+      "timeoutMs": 60000,
+      "temperature": 0.2
+    },
+    "note": "HAL answers from the local registry first. Only unmatched questions go to the local 14B chat lane on 127.0.0.1. The external-action firewall runs before the model, so submit/email/upload/writeback never reach it. The model is read-only: it drafts text only and takes no actions."
   },
   "lanes": [
     {
@@ -12,7 +19,7 @@
       "name": "14B chat lane",
       "model": "queen3:14b",
       "role": "Staff-facing conversation and plain-language answers",
-      "state": "Offline",
+      "state": "Connected (local)",
       "willAllow": [
         "Explain pages in plain language",
         "Summarize local read-only status",

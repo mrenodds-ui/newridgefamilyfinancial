@@ -121,20 +121,82 @@ function modelLanes() {
   return (halModels && halModels.lanes && halModels.lanes.length ? halModels.lanes : FALLBACK_MODELS.lanes) || [];
 }
 
-// Offline-safe model adapter. In offline mode it never makes an external call;
-// it only reports that the lane is staged but not connected.
-function consultModelLane() {
+function localModelConfig() {
   const config = modelConfig();
-  if (config.mode !== "online" || config.externalCallsEnabled !== true) {
-    const chat = modelLanes().find((lane) => lane.id === "chat14b");
-    const model = chat && chat.model ? chat.model : "queen3:14b";
-    return (
-      "Local data did not match that. The 14B chat lane (" +
-      model +
-      ") is staged but not connected yet, so I can only answer from the local program registry for now."
-    );
+  return config && config.localModel ? config.localModel : null;
+}
+
+function localModelReady() {
+  const config = modelConfig();
+  const lm = localModelConfig();
+  return config.mode === "online" && lm && lm.enabled === true && !!lm.endpoint && !!lm.model;
+}
+
+// Message shown when the local 14B lane is not reachable or not enabled.
+function offlineModelMessage() {
+  const chat = modelLanes().find((lane) => lane.id === "chat14b");
+  const model = chat && chat.model ? chat.model : "queen3:14b";
+  return (
+    "I could not reach the local 14B chat lane (" +
+    model +
+    ") on this machine, so I can only answer from the local program registry right now. " +
+    "Make sure the local model service is running, then try again."
+  );
+}
+
+// Read-only system grounding for the local 14B lane. The model drafts text only.
+function buildSystemPrompt() {
+  const firewall = halData.firewall || FALLBACK_HAL.firewall;
+  const registryText = registryList()
+    .map((entry) => `- ${entry.name} [${entry.state}; ${entry.safety}]: ${entry.purpose} Next: ${entry.nextAction}`)
+    .join("\n");
+  return [
+    "You are HAL, the local read-only program manager for NewRidgeFinancial 2.0, a dental-practice financial program.",
+    "Answer briefly and only about this program and its pages. If you are unsure, say so.",
+    "You are read-only. You never submit, email, fax, upload, post, or write back. A human performs any external step.",
+    "Blocked external actions: " + (firewall.blocked || []).join(", ") + ".",
+    "If the user asks for an external action, refuse and say it needs human review.",
+    "Program pages and current status:",
+    registryText,
+  ].join("\n");
+}
+
+// Strip optional <think> reasoning blocks some local models emit.
+function cleanModelText(text) {
+  return String(text)
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/<\/?think>/gi, "")
+    .trim();
+}
+
+async function callLocalModel(userText) {
+  const lm = localModelConfig();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), lm.timeoutMs || 60000);
+  try {
+    const response = await fetch(lm.endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: lm.model,
+        stream: false,
+        messages: [
+          { role: "system", content: buildSystemPrompt() },
+          { role: "user", content: userText },
+        ],
+        options: { temperature: typeof lm.temperature === "number" ? lm.temperature : 0.2 },
+      }),
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error("model http " + response.status);
+    const data = await response.json();
+    const raw = data && data.message && data.message.content ? data.message.content : "";
+    const text = cleanModelText(raw);
+    if (!text) throw new Error("empty model response");
+    return text + "\n\n(Local 14B draft · read-only · verify before acting)";
+  } finally {
+    clearTimeout(timer);
   }
-  return "Model online mode is not implemented in this build. Staying on local-only answers.";
 }
 
 function findPage(query) {
@@ -267,8 +329,10 @@ function routeHalCommand(rawQuery) {
   }
 
   return {
-    intent: "model: offline",
-    text: consultModelLane(),
+    intent: "model: query",
+    text: "",
+    useModel: true,
+    prompt: rawQuery,
     actions: [],
   };
 }
@@ -334,11 +398,36 @@ function renderAuditLog() {
     .join("");
 }
 
-function handleHalSubmit(query) {
+async function handleHalSubmit(query) {
   const trimmed = String(query).trim();
   if (!trimmed) return;
   halChatHistory.push({ role: "user", text: trimmed, actions: [] });
+
   const result = routeHalCommand(trimmed);
+
+  if (result.useModel) {
+    if (!localModelReady()) {
+      halChatHistory.push({ role: "hal", text: offlineModelMessage(), actions: [] });
+      logAudit(trimmed, "model: offline");
+      renderChatLog();
+      renderAuditLog();
+      return;
+    }
+    const lm = localModelConfig();
+    const placeholder = { role: "hal", text: "Thinking locally with " + (lm.model || "14B") + "…", actions: [] };
+    halChatHistory.push(placeholder);
+    logAudit(trimmed, "model: query");
+    renderChatLog();
+    renderAuditLog();
+    try {
+      placeholder.text = await callLocalModel(trimmed);
+    } catch (error) {
+      placeholder.text = offlineModelMessage();
+    }
+    renderChatLog();
+    return;
+  }
+
   halChatHistory.push({ role: "hal", text: result.text, actions: result.actions || [] });
   logAudit(trimmed, result.intent);
   renderChatLog();

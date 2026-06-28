@@ -7,7 +7,7 @@
       {
         "name": "14B chat lane",
         "role": "Staff-facing conversation and plain-language answers",
-        "state": "Planned"
+        "state": "Connected (local)"
       },
       {
         "name": "21B reasoning lane",
@@ -23,7 +23,7 @@
   },
   "askHal": {
     "title": "Ask HAL",
-    "summary": "HAL is currently operating as a local program manager. AI model lanes are intentionally not connected yet.",
+    "summary": "HAL answers from the local program registry first. Unmatched questions use the local 14B chat lane (queen3:14b) on this machine. HAL stays read-only and the external-action firewall runs before any model call.",
     "suggestions": [
       "Show what needs attention today",
       "What is ready to work on",
@@ -33,7 +33,7 @@
       "Explain the external action firewall",
       "Are you connected to a model?"
     ],
-    "response": "I can navigate the program, explain each page, show priorities, and keep work inside the read-only safety boundary. Model lanes will be added after this local manager layer is stable."
+    "response": "I can navigate the program, explain each page, show priorities, and keep work inside the read-only safety boundary. For other questions I use the local 14B chat lane on this machine, and external actions still require human review."
   },
   "sources": {
     "title": "Read-only source intake",
