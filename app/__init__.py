@@ -1,1 +1,1 @@
-# This file makes 'app' a package for imports
+# This file makes 'app' a package for imports.

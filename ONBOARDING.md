@@ -11,10 +11,10 @@
 1. Clone the repo
 2. Run `scripts/onboard.ps1` (Windows) or `scripts/onboard.sh` (Linux/macOS)
 3. Copy `.env.example` to `.env` and fill in secrets
-4. Run `docker-compose up` to start the frontend SPA only
+4. Run `npm run dashboard:start` to build the SPA and start the backend that serves it
 5. Access:
 
-   - Frontend: <http://localhost:5173>
+   - App: <http://127.0.0.1:8095/app>
 
 ## Troubleshooting
 

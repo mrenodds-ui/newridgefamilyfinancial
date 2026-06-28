@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
 function getCommitHash(): string {
   try {
@@ -13,10 +13,25 @@ function getCommitHash(): string {
   }
 }
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const buildOutDir = env.VITE_BUILD_OUT_DIR || "dist";
+
+  return {
   base: "/app/",
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "html-document-title",
+      transformIndexHtml(html) {
+        const title = env.VITE_APP_DOCUMENT_TITLE || "New Ridge Financial Browser App";
+        return html.replace(/<title>.*?<\/title>/, `<title>${title}</title>`);
+      },
+    },
+  ],
   build: {
+    outDir: buildOutDir,
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -42,14 +57,16 @@ export default defineConfig({
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
     __COMMIT_HASH__: JSON.stringify(process.env.GITHUB_SHA?.slice(0, 7) ?? getCommitHash()),
   },
-  server: {
+  // NewRidgeFinancial 2.0 is served by FastAPI on :8096/app.
+  preview: {
     host: "127.0.0.1",
-    port: 5173,
+    port: 4173,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8095",
+        target: "http://127.0.0.1:8096",
         changeOrigin: true,
       },
     },
   },
+};
 });

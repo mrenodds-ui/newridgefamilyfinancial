@@ -1,6 +1,6 @@
 # New Ridge Financial Browser App — Frontend
 
-React 18 + TypeScript + Vite SPA that caches dental practice KPIs in IndexedDB and syncs with the FastAPI backend. The primary runtime is the backend-served bundle at `http://127.0.0.1:8095/app`; the Vite dev server remains an optional frontend-only development surface.
+React 18 + TypeScript + Vite SPA that caches dental practice KPIs in IndexedDB and syncs with the FastAPI backend. The only runtime is the backend-served bundle at `http://127.0.0.1:8095/app`. Vite is used as the build tool; there is no standalone dev server.
 
 See `ARCHITECTURE_HARDENING.md` for security rules, browser API fallbacks, and backup/restore strategy.
 
@@ -27,14 +27,11 @@ npm run dashboard:watch
 
 That keeps the FastAPI-served `/app` entrypoint and rebuilds the production bundle whenever frontend files change.
 
-Optional frontend-only dev server in this folder:
+Frontend tooling in this folder:
 
 ```bash
 # Install dependencies
 npm install
-
-# Start dev server (proxied to backend at :8096)
-npm run dev
 
 # Type-check without emitting
 npm run typecheck
@@ -76,7 +73,7 @@ Playwright requires the Python backend to be running (`uvicorn app.main:app --ho
 Optional API mocking in local development:
 
 ```bash
-VITE_ENABLE_MSW=true npm run dev
+VITE_ENABLE_MSW=true npm run dashboard:watch
 ```
 
 When enabled, the app starts MSW browser handlers from `src/mocks/browser.ts`.

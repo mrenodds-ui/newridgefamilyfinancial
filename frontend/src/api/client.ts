@@ -11,6 +11,7 @@ import {
   type AccountingPostingQueueListResponse,
   type AccountingPostingQueueMetricsResponse,
   type AdminSummaryResponse,
+  type ClaimPacketReadinessResponse,
   type DocumentRagAskResponse,
   type DocumentRagDocumentListResponse,
   type DocumentRagUploadResponse,
@@ -23,17 +24,35 @@ import {
   type HalPatientDossierResponse,
   type HalStatusResponse,
   type HealthResponse,
+  type InsuranceNarrativeCasePacket,
+  type InsuranceNarrativeDraft,
+  type InsuranceNarrativeWorkflowResult,
   type JournalDraftResponse,
   type KpiResponse,
   type LocalAccountingDocumentListResponse,
   type MonitorMutationExecutionResult,
-  authSessionSchema,
+  type OfficeManagerAttentionResponse,
+  type OfficeManagerTaskCategory,
+  type OfficeManagerTaskCreateRequest,
+  type OfficeManagerTaskListResponse,
+  type OfficeManagerTaskMetricsResponse,
+  type OfficeManagerTaskPriority,
+  type OfficeManagerTaskResponse,
+  type OfficeManagerTaskStatus,
+  type OfficeManagerTaskUpdateRequest,
+  type SoftDentDraftArtifact,
+  type SoftDentDraftRequest,
+  type SoftDentEndOfDayAr,
+  type SoftDentLocalPacketArtifact,
+  type SoftDentLocalPacketRequest,
   accountingPolicyAnswerResponseSchema,
   accountingPostingQueueActivityListSchema,
   accountingPostingQueueEntrySchema,
   accountingPostingQueueListSchema,
   accountingPostingQueueMetricsSchema,
   adminSummarySchema,
+  authSessionSchema,
+  claimPacketReadinessResponseSchema,
   documentRagAskResponseSchema,
   documentRagDocumentListSchema,
   documentRagUploadResponseSchema,
@@ -46,37 +65,18 @@ import {
   halPatientDossierSchema,
   halStatusSchema,
   healthSchema,
+  insuranceNarrativeWorkflowResultSchema,
   journalDraftResponseSchema,
   kpiResponseSchema,
   localAccountingDocumentListSchema,
   monitorMutationExecutionResultSchema,
-  insuranceNarrativeWorkflowResultSchema,
   officeManagerAttentionResponseSchema,
   officeManagerTaskListResponseSchema,
   officeManagerTaskMetricsResponseSchema,
   officeManagerTaskResponseSchema,
-  claimPacketReadinessResponseSchema,
-  softDentEndOfDayArSchema,
   softDentDraftArtifactSchema,
+  softDentEndOfDayArSchema,
   softDentLocalPacketArtifactSchema,
-  type SoftDentDraftArtifact,
-  type SoftDentDraftRequest,
-  type SoftDentEndOfDayAr,
-  type SoftDentLocalPacketArtifact,
-  type SoftDentLocalPacketRequest,
-  type OfficeManagerAttentionResponse,
-  type OfficeManagerTaskCreateRequest,
-  type OfficeManagerTaskListResponse,
-  type OfficeManagerTaskMetricsResponse,
-  type OfficeManagerTaskResponse,
-  type OfficeManagerTaskUpdateRequest,
-  type OfficeManagerTaskCategory,
-  type OfficeManagerTaskPriority,
-  type OfficeManagerTaskStatus,
-  type ClaimPacketReadinessResponse,
-  type InsuranceNarrativeCasePacket,
-  type InsuranceNarrativeDraft,
-  type InsuranceNarrativeWorkflowResult,
 } from "./schemas";
 
 type BackendSchemas = components["schemas"];
@@ -869,7 +869,7 @@ export async function askHalQuestion(
     body,
   });
   if (!primary.response.ok) {
-    throw buildRequestError(`/api/hal9000`, primary.response, primary.payload);
+    throw buildRequestError("/api/hal9000", primary.response, primary.payload);
   }
   return parseHalAskResponse(primary.payload);
 }
@@ -1007,9 +1007,7 @@ export async function createSoftDentDraft(payload: SoftDentDraftRequest): Promis
   return softDentDraftArtifactSchema.parse(primary.payload);
 }
 
-export async function createSoftDentLocalPacket(
-  payload: SoftDentLocalPacketRequest,
-): Promise<SoftDentLocalPacketArtifact> {
+export async function createSoftDentLocalPacket(payload: SoftDentLocalPacketRequest): Promise<SoftDentLocalPacketArtifact> {
   const primary = await requestJson("/hal9000/softdent-local-packets", {
     method: "POST",
     headers: {
@@ -1075,9 +1073,7 @@ export async function fetchOfficeManagerTasks(options?: {
   return officeManagerTaskListResponseSchema.parse(primary.payload);
 }
 
-export async function createOfficeManagerTask(
-  payload: OfficeManagerTaskCreateRequest,
-): Promise<OfficeManagerTaskResponse> {
+export async function createOfficeManagerTask(payload: OfficeManagerTaskCreateRequest): Promise<OfficeManagerTaskResponse> {
   const primary = await requestJson("/hal9000/office-manager/tasks", {
     method: "POST",
     headers: {
@@ -1092,10 +1088,7 @@ export async function createOfficeManagerTask(
   return officeManagerTaskResponseSchema.parse(primary.payload);
 }
 
-export async function updateOfficeManagerTask(
-  taskId: string,
-  payload: OfficeManagerTaskUpdateRequest,
-): Promise<OfficeManagerTaskResponse> {
+export async function updateOfficeManagerTask(taskId: string, payload: OfficeManagerTaskUpdateRequest): Promise<OfficeManagerTaskResponse> {
   const primary = await requestJson(`/hal9000/office-manager/tasks/${encodeURIComponent(taskId)}`, {
     method: "PATCH",
     headers: {

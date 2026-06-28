@@ -56,7 +56,7 @@ const QUESTION_POOL = [
   "Based on everything above, what are the top three follow-up questions I should ask next?",
 ];
 
-const BASE_URL = process.env.HAL_AUDIT_BASE_URL || "http://127.0.0.1:5173";
+const BASE_URL = process.env.HAL_AUDIT_BASE_URL || "http://127.0.0.1:8095/app";
 const ROOT = path.resolve(import.meta.dirname, "..");
 const OUTPUT_DIR = path.resolve(ROOT, "..", "DataAnalysisExpert", "outputs", "hal_random_audit");
 const PROGRESS_LOG = path.join(OUTPUT_DIR, "hal_random_audit_progress.log");

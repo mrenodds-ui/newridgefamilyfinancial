@@ -11,25 +11,17 @@
   },
   "name": "newridgefamilyfinancial",
   "version": "1.0.0",
-  "description": "Workspace metadata for the New Ridge Family Financial backend and supported frontend app.",
+  "description": "Workspace root. The active program is NewRidgeFinancial 2.0 (mockup pages only) in NewRidgeFinancial2/, served on :8096. The legacy app/ and frontend/ are retired.",
   "main": "index.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
-    "contracts:generate": "npm --prefix frontend run generate:contracts",
-    "build": "npm run contracts:generate && npm run frontend:build",
-    "dev": "npm run dashboard:watch --",
-    "start": "npm run dashboard:start",
-    "start:reload": "npm run dashboard:start:reload",
-    "frontend:build": "npm --prefix frontend run build",
-    "backend:start": "node scripts/start_backend_host.cjs",
-    "backend:start:reload": "node scripts/start_backend_host.cjs --reload",
-    "dashboard:start": "npm run build && npm run backend:start",
-    "dashboard:start:reload": "npm run build && npm run backend:start:reload",
-    "dashboard:watch": "node scripts/start_dashboard_watch.cjs",
-    "test": "npm --prefix frontend run test",
-    "typecheck": "npm --prefix frontend run typecheck"
+    "build": "npm --prefix NewRidgeFinancial2/web run build",
+    "start": "node scripts/start_nr2.cjs",
+    "start:reload": "node scripts/start_nr2.cjs",
+    "nr2:build": "npm --prefix NewRidgeFinancial2/web run build",
+    "nr2:start": "node scripts/start_nr2.cjs"
   },
   "keywords": [],
   "author": "",

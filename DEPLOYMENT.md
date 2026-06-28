@@ -2,8 +2,8 @@
 
 ## Local Development
 
-- Use `docker-compose up` to start the frontend SPA.
-- Frontend: <http://localhost:5173>
+- Use `npm run dashboard:start` to build the SPA and start the FastAPI backend that serves it.
+- App: <http://127.0.0.1:8095/app>
 
 ## Production
 

@@ -1,12 +1,10 @@
 import { useMemo, useState } from "react";
 import { NavLink } from "react-router-dom";
-
-import { useAuthSession } from "../hooks/useAuthSession";
+import { appBranding } from "../config/branding";
 
 type NavItem = {
   label: string;
   path: string;
-  requiresAdmin?: boolean;
 };
 
 type NavGroup = {
@@ -31,38 +29,24 @@ const navGroups: NavGroup[] = [
     label: "Owner / Admin",
     muted: true,
     items: [
-      { label: "Financial dashboard", path: "/", requiresAdmin: true },
-      { label: "SoftDent", path: "/softdent", requiresAdmin: true },
-      { label: "QuickBooks", path: "/quickbooks", requiresAdmin: true },
-      { label: "Imports", path: "/imports", requiresAdmin: true },
-      { label: "A/R details", path: "/ar", requiresAdmin: true },
-      { label: "EBITDA", path: "/ebitda", requiresAdmin: true },
-      { label: "Expenses", path: "/expenses", requiresAdmin: true },
-      { label: "Trends", path: "/trends", requiresAdmin: true },
-      { label: "Posting", path: "/posting-queue", requiresAdmin: true },
-      { label: "Journal", path: "/journal-draft", requiresAdmin: true },
-      { label: "Policy", path: "/accounting-policy", requiresAdmin: true },
+      { label: "Financial dashboard", path: "/" },
+      { label: "SoftDent", path: "/softdent" },
+      { label: "QuickBooks", path: "/quickbooks" },
+      { label: "Imports", path: "/imports" },
+      { label: "A/R details", path: "/ar" },
+      { label: "EBITDA", path: "/ebitda" },
+      { label: "Expenses", path: "/expenses" },
+      { label: "Trends", path: "/trends" },
+      { label: "Posting", path: "/posting-queue" },
+      { label: "Journal", path: "/journal-draft" },
+      { label: "Policy", path: "/accounting-policy" },
       { label: "Settings", path: "/settings" },
-      { label: "Admin", path: "/admin", requiresAdmin: true },
+      { label: "Admin", path: "/admin" },
     ],
   },
 ];
 
-function canShowItem(item: NavItem, isAuthenticated: boolean, isRoleKnown: boolean, isLoading: boolean, isAdmin: boolean) {
-  if (!item.requiresAdmin) {
-    return true;
-  }
-  if (!isAuthenticated) {
-    return true;
-  }
-  if (!isRoleKnown || isLoading) {
-    return true;
-  }
-  return isAdmin;
-}
-
 export default function Sidebar() {
-  const { authenticatedUsername, isAuthenticated, isAdmin, isLoading, isRoleKnown, isSessionAuthenticated } = useAuthSession();
   const [query, setQuery] = useState("");
   const normalizedQuery = query.trim().toLowerCase();
   const visibleNavGroups = useMemo(
@@ -71,10 +55,6 @@ export default function Sidebar() {
         .map((group) => ({
           ...group,
           items: group.items.filter((item) => {
-            if (!canShowItem(item, isAuthenticated, isRoleKnown, isLoading, isAdmin)) {
-              return false;
-            }
-
             if (!normalizedQuery) {
               return true;
             }
@@ -83,22 +63,28 @@ export default function Sidebar() {
           }),
         }))
         .filter((group) => group.items.length > 0),
-    [isAdmin, isAuthenticated, isLoading, isRoleKnown, normalizedQuery],
+    [normalizedQuery],
   );
-  const sessionTitle = isSessionAuthenticated ? authenticatedUsername ?? "Connected workspace" : "Guest workspace";
-  const sessionDetail = isSessionAuthenticated
-    ? "Backend session is active for live dashboard, documents, and HAL data."
-    : "Sign in from the banner to unlock verified accounting and HAL data.";
 
   return (
     <aside className="dashboard-sidebar">
       <div className="dashboard-sidebar__brand">
         <div className="dashboard-sidebar__brand-mark" aria-hidden="true">
-          NR
+          <svg className="dashboard-sidebar__tooth-mark" viewBox="0 0 64 64" focusable="false">
+            <title>New Ridge tooth logo</title>
+            <path
+              d="M20.9 7.8c4.4 0 7.1 2.4 11.1 2.4s6.7-2.4 11.1-2.4c7.8 0 13.2 6.3 13.2 15.1 0 5.4-2.4 10.4-4.7 15.2-2.2 4.6-3.4 9.7-4.4 14.7-.6 3.1-2.5 5.2-5.1 5.2-3.1 0-4.5-2.9-5.6-6.4l-2.1-6.7c-.7-2.3-1.4-3.8-2.4-3.8s-1.7 1.5-2.4 3.8l-2.1 6.7c-1.1 3.5-2.5 6.4-5.6 6.4-2.6 0-4.5-2.1-5.1-5.2-1-5-2.2-10.1-4.4-14.7-2.3-4.8-4.7-9.8-4.7-15.2C7.7 14.1 13.1 7.8 20.9 7.8Z"
+              fill="none"
+              stroke="currentColor"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="4"
+            />
+          </svg>
         </div>
         <div className="dashboard-sidebar__brand-copy">
-          <span className="dashboard-sidebar__brand-kicker">Financial OS</span>
-          <strong>New Ridge Family Financial</strong>
+          <span className="dashboard-sidebar__brand-kicker">{appBranding.kicker}</span>
+          <strong>{appBranding.name}</strong>
         </div>
       </div>
       <label className="dashboard-sidebar__search">
@@ -139,8 +125,8 @@ export default function Sidebar() {
       </nav>
       <div className="dashboard-sidebar__footer">
         <span className="dashboard-sidebar__footer-label">Workspace</span>
-        <strong>{sessionTitle}</strong>
-        <span className="dashboard-sidebar__footer-copy">{sessionDetail}</span>
+        <strong>Mission control</strong>
+        <span className="dashboard-sidebar__footer-copy">{appBranding.name} mockup pages.</span>
         <NavLink to="/settings" className="dashboard-sidebar__footer-link">
           Open settings
         </NavLink>

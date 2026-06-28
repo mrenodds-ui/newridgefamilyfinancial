@@ -60,9 +60,7 @@
     },
     "/quickbooks/odbc/csv": {
       "get": {
-        "tags": [
-          "QuickBooks"
-        ],
+        "tags": ["QuickBooks"],
         "summary": "Get Quickbooks Odbc Csv",
         "description": "Run a SQL query against QuickBooks via QODBC and return the results as CSV.",
         "operationId": "get_quickbooks_odbc_csv_quickbooks_odbc_csv_get",
@@ -106,9 +104,7 @@
         }
       },
       "post": {
-        "tags": [
-          "QuickBooks"
-        ],
+        "tags": ["QuickBooks"],
         "summary": "Post Quickbooks Odbc Csv",
         "operationId": "post_quickbooks_odbc_csv_quickbooks_odbc_csv_post",
         "security": [
@@ -150,9 +146,7 @@
     },
     "/quickbooks/odbc": {
       "get": {
-        "tags": [
-          "QuickBooks"
-        ],
+        "tags": ["QuickBooks"],
         "summary": "Get Quickbooks Odbc",
         "description": "Run a SQL query against QuickBooks via QODBC and return the results.",
         "operationId": "get_quickbooks_odbc_quickbooks_odbc_get",
@@ -196,9 +190,7 @@
         }
       },
       "post": {
-        "tags": [
-          "QuickBooks"
-        ],
+        "tags": ["QuickBooks"],
         "summary": "Post Quickbooks Odbc",
         "operationId": "post_quickbooks_odbc_quickbooks_odbc_post",
         "security": [
@@ -240,9 +232,7 @@
     },
     "/auth/session": {
       "get": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Get Auth Session",
         "operationId": "get_auth_session_auth_session_get",
         "responses": {
@@ -266,9 +256,7 @@
     },
     "/api/auth/session": {
       "get": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Get Auth Session",
         "operationId": "get_auth_session_api_auth_session_get",
         "responses": {
@@ -292,9 +280,7 @@
     },
     "/auth/login": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Login Auth Session",
         "operationId": "login_auth_session_auth_login_post",
         "requestBody": {
@@ -333,9 +319,7 @@
     },
     "/api/auth/login": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Login Auth Session",
         "operationId": "login_auth_session_api_auth_login_post",
         "requestBody": {
@@ -374,9 +358,7 @@
     },
     "/auth/logout": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Logout Auth Session",
         "operationId": "logout_auth_session_auth_logout_post",
         "responses": {
@@ -395,9 +377,7 @@
     },
     "/api/auth/logout": {
       "post": {
-        "tags": [
-          "Auth"
-        ],
+        "tags": ["Auth"],
         "summary": "Logout Auth Session",
         "operationId": "logout_auth_session_api_auth_logout_post",
         "responses": {
@@ -2261,11 +2241,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "enum": [
-                    "pending_review",
-                    "approved",
-                    "rejected"
-                  ],
+                  "enum": ["pending_review", "approved", "rejected"],
                   "type": "string"
                 },
                 {
@@ -2624,9 +2600,7 @@
     },
     "/hardware/monitor-actions": {
       "post": {
-        "tags": [
-          "Hardware"
-        ],
+        "tags": ["Hardware"],
         "summary": "Execute Monitor Action",
         "operationId": "execute_monitor_action_hardware_monitor_actions_post",
         "requestBody": {
@@ -2672,9 +2646,7 @@
     },
     "/api/v1/mcp/tools": {
       "get": {
-        "tags": [
-          "mcp"
-        ],
+        "tags": ["mcp"],
         "summary": "List Tools",
         "operationId": "list_tools_api_v1_mcp_tools_get",
         "responses": {
@@ -2696,9 +2668,7 @@
     },
     "/api/v1/mcp/tools/call": {
       "post": {
-        "tags": [
-          "mcp"
-        ],
+        "tags": ["mcp"],
         "summary": "Call Tool",
         "operationId": "call_tool_api_v1_mcp_tools_call_post",
         "requestBody": {
@@ -2773,9 +2743,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "AccountingPolicyAnswerRequest"
       },
       "AccountingPolicyAnswerResponse": {
@@ -2834,14 +2802,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "answer",
-          "confidence",
-          "audit_id",
-          "access_policy",
-          "voice_profile"
-        ],
+        "required": ["mode", "answer", "confidence", "audit_id", "access_policy", "voice_profile"],
         "title": "AccountingPolicyAnswerResponse"
       },
       "AccountingPolicyCitation": {
@@ -2860,11 +2821,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "source_id",
-          "title",
-          "excerpt"
-        ],
+        "required": ["source_id", "title", "excerpt"],
         "title": "AccountingPolicyCitation"
       },
       "AccountingPostingQueueActivityListResponse": {
@@ -2886,10 +2843,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count",
-          "limit"
-        ],
+        "required": ["count", "limit"],
         "title": "AccountingPostingQueueActivityListResponse"
       },
       "AccountingPostingQueueActivityResponse": {
@@ -2912,11 +2866,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending_review",
-              "approved",
-              "rejected"
-            ],
+            "enum": ["pending_review", "approved", "rejected"],
             "title": "Status"
           },
           "description": {
@@ -2954,10 +2904,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "auto_validated_ai",
-                  "manual_review_queue"
-                ]
+                "enum": ["auto_validated_ai", "manual_review_queue"]
               },
               {
                 "type": "null"
@@ -3039,11 +2986,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "pending_review",
-              "approved",
-              "rejected"
-            ],
+            "enum": ["pending_review", "approved", "rejected"],
             "title": "Status"
           },
           "description": {
@@ -3081,10 +3024,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "auto_validated_ai",
-                  "manual_review_queue"
-                ]
+                "enum": ["auto_validated_ai", "manual_review_queue"]
               },
               {
                 "type": "null"
@@ -3229,11 +3169,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "pending_review",
-                  "approved",
-                  "rejected"
-                ]
+                "enum": ["pending_review", "approved", "rejected"]
               },
               {
                 "type": "null"
@@ -3250,11 +3186,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count",
-          "total_count",
-          "limit"
-        ],
+        "required": ["count", "total_count", "limit"],
         "title": "AccountingPostingQueueListResponse"
       },
       "AccountingPostingQueueMetricsResponse": {
@@ -3277,12 +3209,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "total_count",
-          "pending_review_count",
-          "approved_count",
-          "rejected_count"
-        ],
+        "required": ["total_count", "pending_review_count", "approved_count", "rejected_count"],
         "title": "AccountingPostingQueueMetricsResponse"
       },
       "AccountingPostingQueueRequest": {
@@ -3337,10 +3264,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "auto_validated_ai",
-                  "manual_review_queue"
-                ]
+                "enum": ["auto_validated_ai", "manual_review_queue"]
               },
               {
                 "type": "null"
@@ -3350,23 +3274,14 @@
           }
         },
         "type": "object",
-        "required": [
-          "description",
-          "transaction_date",
-          "accounting_period",
-          "amount",
-          "source_audit_id"
-        ],
+        "required": ["description", "transaction_date", "accounting_period", "amount", "source_audit_id"],
         "title": "AccountingPostingQueueRequest"
       },
       "AccountingPostingQueueReviewRequest": {
         "properties": {
           "action": {
             "type": "string",
-            "enum": [
-              "approved",
-              "rejected"
-            ],
+            "enum": ["approved", "rejected"],
             "title": "Action"
           },
           "review_note": {
@@ -3383,9 +3298,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "action"
-        ],
+        "required": ["action"],
         "title": "AccountingPostingQueueReviewRequest"
       },
       "AuthLoginRequest": {
@@ -3400,10 +3313,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "username",
-          "password"
-        ],
+        "required": ["username", "password"],
         "title": "AuthLoginRequest"
       },
       "AuthLogoutResponse": {
@@ -3414,9 +3324,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "title": "AuthLogoutResponse"
       },
       "AuthSessionResponse": {
@@ -3438,11 +3346,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "username",
-          "display_name",
-          "roles"
-        ],
+        "required": ["username", "display_name", "roles"],
         "title": "AuthSessionResponse"
       },
       "Body_api_hal9000_document_rag_upload_api_hal9000_document_rag_documents_post": {
@@ -3454,9 +3358,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_api_hal9000_document_rag_upload_api_hal9000_document_rag_documents_post"
       },
       "Body_quickbooks_import_quickbooks_import_post": {
@@ -3468,9 +3370,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_quickbooks_import_quickbooks_import_post"
       },
       "Body_softdent_import_softdent_import_post": {
@@ -3482,9 +3382,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "file"
-        ],
+        "required": ["file"],
         "title": "Body_softdent_import_softdent_import_post"
       },
       "ClaimsSummaryResponse": {
@@ -3525,9 +3423,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "available"
-        ],
+        "required": ["available"],
         "title": "ClaimsSummaryResponse"
       },
       "ControlLaneRuntimeSummary": {
@@ -3594,12 +3490,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "lane",
-          "base_url",
-          "model",
-          "api_reachable"
-        ],
+        "required": ["lane", "base_url", "model", "api_reachable"],
         "title": "ControlLaneRuntimeSummary"
       },
       "ControlModelSummary": {
@@ -3657,9 +3548,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "ControlModelSummary"
       },
       "ControlRouteAlternative": {
@@ -3680,10 +3569,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "model",
-          "score"
-        ],
+        "required": ["model", "score"],
         "title": "ControlRouteAlternative"
       },
       "ControlRouteRequest": {
@@ -3696,15 +3582,7 @@
           },
           "task_kind": {
             "type": "string",
-            "enum": [
-              "chat",
-              "coding",
-              "analysis",
-              "dashboard",
-              "vision",
-              "automation",
-              "second_opinion"
-            ],
+            "enum": ["chat", "coding", "analysis", "dashboard", "vision", "automation", "second_opinion"],
             "title": "Task Kind",
             "default": "chat"
           },
@@ -3738,11 +3616,7 @@
           },
           "quality_priority": {
             "type": "string",
-            "enum": [
-              "speed",
-              "balanced",
-              "quality"
-            ],
+            "enum": ["speed", "balanced", "quality"],
             "title": "Quality Priority",
             "default": "balanced"
           },
@@ -3761,9 +3635,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "objective"
-        ],
+        "required": ["objective"],
         "title": "ControlRouteRequest"
       },
       "ControlRouteResponse": {
@@ -3842,12 +3714,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "available",
-          "task_kind",
-          "quality_priority",
-          "runtime"
-        ],
+        "required": ["available", "task_kind", "quality_priority", "runtime"],
         "title": "ControlRouteResponse"
       },
       "ControlRuntimeStatusResponse": {
@@ -3906,13 +3773,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "base_url",
-          "api_reachable",
-          "installed",
-          "running",
-          "model_count"
-        ],
+        "required": ["base_url", "api_reachable", "installed", "running", "model_count"],
         "title": "ControlRuntimeStatusResponse"
       },
       "ControlScoreRequest": {
@@ -3940,11 +3801,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "objective",
-          "model",
-          "response_text"
-        ],
+        "required": ["objective", "model", "response_text"],
         "title": "ControlScoreRequest"
       },
       "ControlScoreResponse": {
@@ -3995,12 +3852,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "passed",
-          "score",
-          "word_count",
-          "sentence_count"
-        ],
+        "required": ["passed", "score", "word_count", "sentence_count"],
         "title": "ControlScoreResponse"
       },
       "ControlScoreRubric": {
@@ -4060,15 +3912,7 @@
           },
           "task_kind": {
             "type": "string",
-            "enum": [
-              "chat",
-              "coding",
-              "analysis",
-              "dashboard",
-              "vision",
-              "automation",
-              "second_opinion"
-            ],
+            "enum": ["chat", "coding", "analysis", "dashboard", "vision", "automation", "second_opinion"],
             "title": "Task Kind",
             "default": "chat"
           },
@@ -4102,11 +3946,7 @@
           },
           "quality_priority": {
             "type": "string",
-            "enum": [
-              "speed",
-              "balanced",
-              "quality"
-            ],
+            "enum": ["speed", "balanced", "quality"],
             "title": "Quality Priority",
             "default": "balanced"
           },
@@ -4137,9 +3977,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "objective"
-        ],
+        "required": ["objective"],
         "title": "ControlWorkflowPreviewRequest"
       },
       "ControlWorkflowPreviewResponse": {
@@ -4194,14 +4032,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "workflow_id",
-          "objective",
-          "task_kind",
-          "automation_ready",
-          "score_threshold",
-          "runtime"
-        ],
+        "required": ["workflow_id", "objective", "task_kind", "automation_ready", "score_threshold", "runtime"],
         "title": "ControlWorkflowPreviewResponse"
       },
       "ControlWorkflowStep": {
@@ -4229,12 +4060,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "step_id",
-          "title",
-          "purpose",
-          "endpoint"
-        ],
+        "required": ["step_id", "title", "purpose", "endpoint"],
         "title": "ControlWorkflowStep"
       },
       "DeltaResponse": {
@@ -4245,9 +4071,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "delta"
-        ],
+        "required": ["delta"],
         "title": "DeltaResponse"
       },
       "FinancialHealthFlagResponse": {
@@ -4365,13 +4189,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "key",
-          "code",
-          "status",
-          "sourceSystem",
-          "message"
-        ],
+        "required": ["key", "code", "status", "sourceSystem", "message"],
         "title": "FinancialHealthFlagResponse"
       },
       "FinancialSourceReviewItemResponse": {
@@ -4439,13 +4257,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "sourceSystem",
-          "status",
-          "summary",
-          "confidenceLabel",
-          "reviewRequired"
-        ],
+        "required": ["sourceSystem", "status", "summary", "confidenceLabel", "reviewRequired"],
         "title": "FinancialSourceReviewItemResponse"
       },
       "FinancialSummaryLatestArResponse": {
@@ -5650,11 +5462,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "transactionConfigured",
-          "dataSyncTransactionEmitted",
-          "sqliteTransactionRows"
-        ],
+        "required": ["transactionConfigured", "dataSyncTransactionEmitted", "sqliteTransactionRows"],
         "title": "FinancialTransactionDiagnosticsResponse"
       },
       "HTTPValidationError": {
@@ -5726,14 +5534,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "auth_requirement",
-          "network_boundary",
-          "audited",
-          "allowed_sources",
-          "disallowed_actions"
-        ],
+        "required": ["mode", "auth_requirement", "network_boundary", "audited", "allowed_sources", "disallowed_actions"],
         "title": "HalAccessPolicy"
       },
       "HalAskRequest": {
@@ -5771,9 +5572,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "HalAskRequest"
       },
       "HalAskResponse": {
@@ -5848,14 +5647,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "answer",
-          "sanitized_question",
-          "audit_id",
-          "access_policy",
-          "voice_profile"
-        ],
+        "required": ["mode", "answer", "sanitized_question", "audit_id", "access_policy", "voice_profile"],
         "title": "HalAskResponse"
       },
       "HalAuditEntryResponse": {
@@ -5893,14 +5685,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "audit_id",
-          "created_at_utc",
-          "actor",
-          "mode",
-          "sanitized_question",
-          "response_summary"
-        ],
+        "required": ["audit_id", "created_at_utc", "actor", "mode", "sanitized_question", "response_summary"],
         "title": "HalAuditEntryResponse"
       },
       "HalAuditListResponse": {
@@ -5918,9 +5703,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count"
-        ],
+        "required": ["count"],
         "title": "HalAuditListResponse"
       },
       "HalAutonomyProfileResponse": {
@@ -5951,9 +5734,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode"
-        ],
+        "required": ["mode"],
         "title": "HalAutonomyProfileResponse"
       },
       "HalAutonomyRunListResponse": {
@@ -5971,9 +5752,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count"
-        ],
+        "required": ["count"],
         "title": "HalAutonomyRunListResponse"
       },
       "HalAutonomyRunRequest": {
@@ -5993,9 +5772,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "objective"
-        ],
+        "required": ["objective"],
         "title": "HalAutonomyRunRequest"
       },
       "HalAutonomyRunResponse": {
@@ -6026,12 +5803,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "queued",
-              "running",
-              "completed",
-              "blocked"
-            ],
+            "enum": ["queued", "running", "completed", "blocked"],
             "title": "Status"
           },
           "max_steps": {
@@ -6137,14 +5909,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "tier",
-          "priority",
-          "label",
-          "scope",
-          "execution_policy",
-          "escalation_rule"
-        ],
+        "required": ["tier", "priority", "label", "scope", "execution_policy", "escalation_rule"],
         "title": "HalCapabilityTierRule"
       },
       "HalChartPlanApprovalRequest": {
@@ -6157,9 +5922,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "review_plan_path"
-        ],
+        "required": ["review_plan_path"],
         "title": "HalChartPlanApprovalRequest"
       },
       "HalChartPlanApprovalResponse": {
@@ -6229,14 +5992,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "status",
-          "review_plan_path",
-          "rendered_output_path",
-          "audit_id",
-          "access_policy"
-        ],
+        "required": ["mode", "status", "review_plan_path", "rendered_output_path", "audit_id", "access_policy"],
         "title": "HalChartPlanApprovalResponse"
       },
       "HalChartPlanListItemResponse": {
@@ -6286,16 +6042,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "review_plan_path",
-          "created_at_utc",
-          "status",
-          "question",
-          "title",
-          "chart_type",
-          "planned_output_path",
-          "audit_id"
-        ],
+        "required": ["review_plan_path", "created_at_utc", "status", "question", "title", "chart_type", "planned_output_path", "audit_id"],
         "title": "HalChartPlanListItemResponse"
       },
       "HalChartPlanListResponse": {
@@ -6328,10 +6075,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count",
-          "limit"
-        ],
+        "required": ["count", "limit"],
         "title": "HalChartPlanListResponse"
       },
       "HalChartPlanRequest": {
@@ -6344,9 +6088,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "HalChartPlanRequest"
       },
       "HalChartPlanResponse": {
@@ -6461,12 +6203,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "source_id",
-          "title",
-          "category",
-          "excerpt"
-        ],
+        "required": ["source_id", "title", "category", "excerpt"],
         "title": "HalContextSnippet"
       },
       "HalDocumentRagAskRequest": {
@@ -6486,9 +6223,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "HalDocumentRagAskRequest"
       },
       "HalDocumentRagAskResponse": {
@@ -6542,12 +6277,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "answer",
-          "sanitized_question",
-          "audit_id"
-        ],
+        "required": ["mode", "answer", "sanitized_question", "audit_id"],
         "title": "HalDocumentRagAskResponse"
       },
       "HalDocumentRagDocumentListResponse": {
@@ -6580,10 +6310,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count",
-          "limit"
-        ],
+        "required": ["count", "limit"],
         "title": "HalDocumentRagDocumentListResponse"
       },
       "HalDocumentRagDocumentResponse": {
@@ -6633,15 +6360,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "document_id",
-          "source_name",
-          "stored_path",
-          "mime_type",
-          "sha256",
-          "uploaded_at_utc",
-          "uploaded_by"
-        ],
+        "required": ["document_id", "source_name", "stored_path", "mime_type", "sha256", "uploaded_at_utc", "uploaded_by"],
         "title": "HalDocumentRagDocumentResponse"
       },
       "HalDocumentRagUploadResponse": {
@@ -6655,10 +6374,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "message",
-          "document"
-        ],
+        "required": ["message", "document"],
         "title": "HalDocumentRagUploadResponse"
       },
       "HalGovernanceNote": {
@@ -6673,10 +6389,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "label",
-          "detail"
-        ],
+        "required": ["label", "detail"],
         "title": "HalGovernanceNote"
       },
       "HalIndexRefreshResponse": {
@@ -6742,9 +6455,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "HalInsuranceNarrativeRequest"
       },
       "HalInsuranceNarrativeResponse": {
@@ -6805,15 +6516,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "matched",
-          "narrative",
-          "sanitized_question",
-          "audit_id",
-          "access_policy",
-          "voice_profile"
-        ],
+        "required": ["mode", "matched", "narrative", "sanitized_question", "audit_id", "access_policy", "voice_profile"],
         "title": "HalInsuranceNarrativeResponse"
       },
       "HalPageResponse": {
@@ -6831,11 +6534,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "message",
-          "mode",
-          "access_policy"
-        ],
+        "required": ["message", "mode", "access_policy"],
         "title": "HalPageResponse"
       },
       "HalPatientDossierRequest": {
@@ -6848,9 +6547,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "question"
-        ],
+        "required": ["question"],
         "title": "HalPatientDossierRequest"
       },
       "HalPatientDossierResponse": {
@@ -6911,15 +6608,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "matched",
-          "summary",
-          "sanitized_question",
-          "audit_id",
-          "access_policy",
-          "voice_profile"
-        ],
+        "required": ["mode", "matched", "summary", "sanitized_question", "audit_id", "access_policy", "voice_profile"],
         "title": "HalPatientDossierResponse"
       },
       "HalResponseVoiceProfile": {
@@ -6945,11 +6634,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "lane",
-          "label",
-          "tone"
-        ],
+        "required": ["lane", "label", "tone"],
         "title": "HalResponseVoiceProfile"
       },
       "HalReviewAction": {
@@ -6996,15 +6681,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "action_id",
-          "action_type",
-          "target_device",
-          "target_value",
-          "status",
-          "title",
-          "confirmation_message"
-        ],
+        "required": ["action_id", "action_type", "target_device", "target_value", "status", "title", "confirmation_message"],
         "title": "HalReviewAction"
       },
       "HalSanitizationFinding": {
@@ -7019,10 +6696,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "label",
-          "replacement"
-        ],
+        "required": ["label", "replacement"],
         "title": "HalSanitizationFinding"
       },
       "HalShellCommandEntry": {
@@ -7037,10 +6711,7 @@
           },
           "invocation_type": {
             "type": "string",
-            "enum": [
-              "api_endpoint",
-              "npm_script"
-            ],
+            "enum": ["api_endpoint", "npm_script"],
             "title": "Invocation Type"
           },
           "target": {
@@ -7062,14 +6733,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "command_id",
-          "summary",
-          "invocation_type",
-          "target",
-          "working_directory",
-          "category"
-        ],
+        "required": ["command_id", "summary", "invocation_type", "target", "working_directory", "category"],
         "title": "HalShellCommandEntry"
       },
       "HalShellCommandsResponse": {
@@ -7132,10 +6796,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "purpose",
-          "verification_endpoint"
-        ],
+        "required": ["purpose", "verification_endpoint"],
         "title": "HalShellCommandsResponse"
       },
       "HalStagedImportFileRequest": {
@@ -7160,11 +6821,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "file_name",
-          "mime_type",
-          "content"
-        ],
+        "required": ["file_name", "mime_type", "content"],
         "title": "HalStagedImportFileRequest"
       },
       "HalStagedImportFileResponse": {
@@ -7183,11 +6840,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "file_name",
-          "bytes_written",
-          "destination_path"
-        ],
+        "required": ["file_name", "bytes_written", "destination_path"],
         "title": "HalStagedImportFileResponse"
       },
       "HalStagedImportRequest": {
@@ -7228,11 +6881,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "message",
-          "actor",
-          "file_count"
-        ],
+        "required": ["message", "actor", "file_count"],
         "title": "HalStagedImportResponse"
       },
       "HalStatusResponse": {
@@ -7273,14 +6922,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "document_count",
-          "storage_path",
-          "vector_path",
-          "backend",
-          "embedding_provider"
-        ],
+        "required": ["mode", "document_count", "storage_path", "vector_path", "backend", "embedding_provider"],
         "title": "HalStatusResponse"
       },
       "JournalDraftRequest": {
@@ -7314,12 +6956,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "description",
-          "transaction_date",
-          "accounting_period",
-          "amount"
-        ],
+        "required": ["description", "transaction_date", "accounting_period", "amount"],
         "title": "JournalDraftRequest"
       },
       "JournalDraftResponse": {
@@ -7367,10 +7004,7 @@
           },
           "draft_status": {
             "type": "string",
-            "enum": [
-              "draft_only",
-              "enqueued"
-            ],
+            "enum": ["draft_only", "enqueued"],
             "title": "Draft Status",
             "default": "draft_only"
           },
@@ -7389,11 +7023,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "enum": [
-                  "pending_review",
-                  "approved",
-                  "rejected"
-                ]
+                "enum": ["pending_review", "approved", "rejected"]
               },
               {
                 "type": "null"
@@ -7432,13 +7062,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "mode",
-          "summary",
-          "validation",
-          "audit_id",
-          "access_policy"
-        ],
+        "required": ["mode", "summary", "validation", "audit_id", "access_policy"],
         "title": "JournalDraftResponse"
       },
       "JournalDraftValidation": {
@@ -7477,13 +7101,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "balanced",
-          "debit_total",
-          "credit_total",
-          "open_period",
-          "account_validation_passed"
-        ],
+        "required": ["balanced", "debit_total", "credit_total", "open_period", "account_validation_passed"],
         "title": "JournalDraftValidation"
       },
       "JournalLine": {
@@ -7521,10 +7139,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "account_code",
-          "account_name"
-        ],
+        "required": ["account_code", "account_name"],
         "title": "JournalLine"
       },
       "KPIResponse": {
@@ -7538,9 +7153,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "kpis"
-        ],
+        "required": ["kpis"],
         "title": "KPIResponse"
       },
       "LiteLLMProxyConfigResponse": {
@@ -7584,13 +7197,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "proxy_base_url",
-          "config_path",
-          "routing_strategy",
-          "startup_command",
-          "config_yaml"
-        ],
+        "required": ["proxy_base_url", "config_path", "routing_strategy", "startup_command", "config_yaml"],
         "title": "LiteLLMProxyConfigResponse"
       },
       "LiteLLMProxyStatusResponse": {
@@ -7647,13 +7254,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "proxy_base_url",
-          "health_endpoint",
-          "config_path",
-          "reachable",
-          "startup_command"
-        ],
+        "required": ["proxy_base_url", "health_endpoint", "config_path", "reachable", "startup_command"],
         "title": "LiteLLMProxyStatusResponse"
       },
       "LiteLLMRouteAliasResponse": {
@@ -7682,10 +7283,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "alias",
-          "purpose"
-        ],
+        "required": ["alias", "purpose"],
         "title": "LiteLLMRouteAliasResponse"
       },
       "LocalAccountingDocumentListResponse": {
@@ -7734,10 +7332,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "count",
-          "limit"
-        ],
+        "required": ["count", "limit"],
         "title": "LocalAccountingDocumentListResponse"
       },
       "LocalAccountingDocumentResponse": {
@@ -7896,9 +7491,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "name"
-        ],
+        "required": ["name"],
         "title": "MCPToolCall"
       },
       "MessageResponse": {
@@ -7909,20 +7502,14 @@
           }
         },
         "type": "object",
-        "required": [
-          "message"
-        ],
+        "required": ["message"],
         "title": "MessageResponse"
       },
       "MonitorMutationExecutionResult": {
         "properties": {
           "status": {
             "type": "string",
-            "enum": [
-              "executed",
-              "rejected",
-              "failed"
-            ],
+            "enum": ["executed", "rejected", "failed"],
             "title": "Status"
           },
           "action_type": {
@@ -7977,9 +7564,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "title": "MonitorMutationExecutionResult"
       },
       "PhasesResponse": {
@@ -8048,11 +7633,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "enabled",
-          "status",
-          "summary"
-        ],
+        "required": ["enabled", "status", "summary"],
         "title": "PullSectionResponse"
       },
       "QuickBooksDiagnosticRequest": {
@@ -8063,9 +7644,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "sql"
-        ],
+        "required": ["sql"],
         "title": "QuickBooksDiagnosticRequest"
       },
       "ReportPullStatusResponse": {
@@ -8088,9 +7667,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "daily_refresh_enabled"
-        ],
+        "required": ["daily_refresh_enabled"],
         "title": "ReportPullStatusResponse"
       },
       "SoftDentCoverageCountsResponse": {
@@ -8109,11 +7686,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "missing",
-          "limited",
-          "available"
-        ],
+        "required": ["missing", "limited", "available"],
         "title": "SoftDentCoverageCountsResponse"
       },
       "SoftDentCoverageMetricBreakdownRowResponse": {
@@ -8132,11 +7705,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "label",
-          "amount",
-          "count"
-        ],
+        "required": ["label", "amount", "count"],
         "title": "SoftDentCoverageMetricBreakdownRowResponse"
       },
       "SoftDentCoverageMetricResponse": {
@@ -8290,11 +7859,7 @@
           },
           "status": {
             "type": "string",
-            "enum": [
-              "missing",
-              "limited",
-              "available"
-            ],
+            "enum": ["missing", "limited", "available"],
             "title": "Status"
           },
           "summary": {
@@ -8364,10 +7929,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "summary",
-          "counts"
-        ],
+        "required": ["summary", "counts"],
         "title": "SoftDentCoverageSummaryResponse"
       },
       "StatusResponse": {
@@ -8378,9 +7940,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "title": "StatusResponse"
       },
       "ValidationError": {
@@ -8416,11 +7976,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError"
       },
       "WidgetUpdateResponse": {
@@ -8470,16 +8026,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "accepted",
-          "manager",
-          "received_at",
-          "widget_count",
-          "source_count",
-          "job_count",
-          "auth_mode",
-          "message"
-        ],
+        "required": ["accepted", "manager", "received_at", "widget_count", "source_count", "job_count", "auth_mode", "message"],
         "title": "WidgetUpdateResponse"
       }
     },

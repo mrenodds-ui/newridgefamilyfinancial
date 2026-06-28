@@ -1,32 +1,8 @@
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("../hooks/useAuthSession", () => ({
-  useAuthSession: vi.fn(),
-}));
+import { afterEach, describe, expect, it } from "vitest";
 
 import Sidebar from "../layout/Sidebar";
-import { useAuthSession } from "../hooks/useAuthSession";
-
-function mockSession(overrides: Partial<ReturnType<typeof useAuthSession>> = {}) {
-  vi.mocked(useAuthSession).mockReturnValue({
-    authenticatedUsername: "staff",
-    session: null,
-    roles: [],
-    isAuthenticated: true,
-    isSessionAuthenticated: true,
-    isSessionVerified: true,
-    isLoading: false,
-    isError: false,
-    isRoleKnown: true,
-    error: null,
-    sessionStatusCode: null,
-    isAdmin: false,
-    retry: vi.fn(),
-    ...overrides,
-  } as unknown as ReturnType<typeof useAuthSession>);
-}
 
 function renderSidebar() {
   render(
@@ -38,12 +14,10 @@ function renderSidebar() {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
 });
 
 describe("Sidebar navigation", () => {
   it("puts staff workflows in an Office group", () => {
-    mockSession();
     renderSidebar();
     expect(screen.getByText("Office")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Command Center" })).toBeInTheDocument();
@@ -51,18 +25,7 @@ describe("Sidebar navigation", () => {
     expect(screen.getByRole("link", { name: "Ask HAL" })).toBeInTheDocument();
   });
 
-  it("hides source-system/financial pages from non-admin staff", () => {
-    mockSession({ isAdmin: false });
-    renderSidebar();
-    expect(screen.queryByRole("link", { name: "SoftDent" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "QuickBooks" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Imports" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "EBITDA" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Financial dashboard" })).toBeNull();
-  });
-
-  it("shows source-system/financial pages under Owner / Admin for admins", () => {
-    mockSession({ isAdmin: true });
+  it("shows source-system and financial pages under Owner / Admin", () => {
     renderSidebar();
     const ownerLabel = screen.getByText("Owner / Admin");
     const ownerSection = ownerLabel.closest("section");
@@ -76,7 +39,6 @@ describe("Sidebar navigation", () => {
   });
 
   it("de-emphasizes the Owner / Admin section but not the Office section", () => {
-    mockSession({ isAdmin: true });
     renderSidebar();
     const officeSection = screen.getByText("Office").closest("section");
     const ownerSection = screen.getByText("Owner / Admin").closest("section");

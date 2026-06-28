@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:v2": "tsc -b && vite build --mode v2",
     "generate:contracts": "..\\.venv\\Scripts\\python.exe ..\\scripts\\export_openapi.py src/api/generated/backend-openapi.json && openapi-typescript src/api/generated/backend-openapi.json -o src/api/generated/backend-openapi.ts",
     "build:watch": "vite build --watch",
     "preview": "vite preview",

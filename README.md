@@ -83,16 +83,18 @@ HAL still does not expose raw patient records or arbitrary QuickBooks SQL execut
 For the recommended QuickBooks Desktop safety model for this repo, see `docs/quickbooks_desktop_safe_architecture.md`.
 For the local SQLite + OCR + automation accounting stack, see `docs/accounting/local_ai_accounting_stack.md`.
 
-### Run Frontend Locally
+### Run the App
 
-Use this only when you explicitly want the separate Vite dev server. The supported merged runtime is the backend-served dashboard at `http://127.0.0.1:8095/app`.
+The program is a single unified app served entirely by the FastAPI backend at
+`http://127.0.0.1:8095/app`. There is no separate Vite dev server. Build the
+frontend bundle and start the backend (the one-click launcher does both):
 
 ```sh
 npm install --prefix frontend
-npm run dev --prefix frontend
+npm run dashboard:start
 ```
 
-Open: <http://localhost:5173/app>
+Open: <http://127.0.0.1:8095/app>
 
 ---
 
@@ -103,13 +105,12 @@ For insurance narrative case packets and SoftDent export-file adapters (claims, 
 
 Single-page application (SPA) for financial analysis of New Ridge Family Dental.
 
-- The supported SPA lives in `frontend/` and runs on <http://localhost:5173/app> by default.
-- The supported integrated runtime serves that SPA from FastAPI at <http://127.0.0.1:8095/app> after `npm run dashboard:start`.
-- It uses React, TypeScript, and Vite.
+- The SPA lives in `frontend/` and is served by FastAPI at <http://127.0.0.1:8095/app>.
+- It uses React, TypeScript, and Vite (Vite is the build tool only; there is no standalone dev server).
 - It consumes backend APIs and can cache selected dashboard state in-browser.
 - No writes are made to production databases from the SPA.
 
-If you are developing the SPA, use the `frontend/` workspace and run Vite only when you specifically need its isolated dev server or hot-reload workflow.
+If you are developing the SPA, use `npm run dashboard:watch`, which rebuilds the backend-served bundle on change.
 
 ## Run Locally
 
@@ -122,20 +123,13 @@ npm run dashboard:start
 
 Open: <http://127.0.0.1:8095/app>
 
-Merged watch mode for local development:
+Watch mode for local development (rebuilds the backend-served bundle on change):
 
 ```sh
 npm run dashboard:watch
 ```
 
-Optional separate frontend dev server:
-
-```sh
-npm install --prefix frontend
-npm run dev --prefix frontend
-```
-
-Open: <http://localhost:5173/app>
+Open: <http://127.0.0.1:8095/app>
 
 ## CI/CD Host Header Validation
 
@@ -172,9 +166,9 @@ Pandas is not installed by default due to missing wheels on Windows without buil
 
 ## CORS/Proxy/Frontend Integration
 
-The frontend defaults to `/api`. In the merged runtime, those requests stay same-origin against the FastAPI server. In optional local Vite development, the dev server proxies that traffic to `http://127.0.0.1:8095`. If you override `VITE_API_BASE_URL`, keep it aligned with the backend host and port. If you bypass the Vite proxy and call the backend directly from a browser origin, configure your reverse proxy or deployment boundary accordingly.
+The frontend defaults to `/api`. In the unified runtime, those requests stay same-origin against the FastAPI server at `http://127.0.0.1:8095`. If you override `VITE_API_BASE_URL`, keep it aligned with the backend host and port. (Playwright e2e uses `vite preview`, which proxies `/api` to the backend; this is the only place a Vite-served surface exists, and it is not part of normal runtime.)
 
-For merged-runtime development, prefer `npm run dashboard:watch` so frontend file changes rebuild the backend-served bundle automatically without reintroducing a separate always-on browser entrypoint.
+For local development, prefer `npm run dashboard:watch` so frontend file changes rebuild the backend-served bundle automatically without reintroducing a separate always-on browser entrypoint.
 
 ## Service Worker Caching
 

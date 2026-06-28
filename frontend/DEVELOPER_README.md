@@ -5,10 +5,13 @@
 npm install
 ```
 
-## Dev Server
+## Run the app (backend-served, watch mode)
 ```sh
-npm run dev
+cd ..
+npm run dashboard:watch
 ```
+
+Open: http://127.0.0.1:8095/app
 
 ## Build
 ```sh

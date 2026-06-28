@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { installHalApiAuth } from './halAuditAuth.mjs';
 
-const BASE_URL = process.env.HAL_AUDIT_BASE_URL || 'http://127.0.0.1:5173';
+const BASE_URL = process.env.HAL_AUDIT_BASE_URL || 'http://127.0.0.1:8095/app';
 const questionsPath = path.resolve('..', 'AI_Workspace', 'hal-ui-governance-questions-2026-06-19.txt');
 const outPath = path.resolve('..', 'AI_Workspace', 'hal-ui-governance-probe-output.json');
 const transcriptPath = path.resolve('..', 'AI_Workspace', 'hal-ui-governance-transcript-2026-06-19.json');
