@@ -437,9 +437,15 @@ const HalCore = (function () {
 
   function matchPacketRoute(query) {
     const q = String(query).toLowerCase().trim();
-    if (/clear evidence packet|clear packet/.test(q)) return { type: "clear" };
-    if (/show evidence packet|show packet/.test(q)) return { type: "show" };
-    if (/build evidence packet|build packet|create evidence packet/.test(q)) return { type: "build" };
+    if (/clear evidence packet|clear (local )?packet|reset evidence packet/.test(q)) return { type: "clear" };
+    if (/show evidence packet|show (the )?packet|display evidence packet|view evidence packet|open packet text/.test(q)) {
+      return { type: "show" };
+    }
+    if (
+      /build evidence packet|build packet|build the packet|create evidence packet|create packet|assemble evidence packet|make evidence packet/.test(q)
+    ) {
+      return { type: "build" };
+    }
     return null;
   }
 
@@ -626,19 +632,19 @@ const HalCore = (function () {
 
   function matchReadinessRoute(query) {
     const q = String(query).toLowerCase().trim();
-    if (/clear diagnostic|clear readiness/.test(q)) return { type: "clear" };
-    if (/show diagnostic|show readiness/.test(q)) return { type: "show" };
+    if (/clear diagnostic|clear readiness|reset diagnostic/.test(q)) return { type: "clear" };
+    if (/show diagnostic|show readiness|display diagnostic/.test(q)) return { type: "show" };
     if (/run readiness|readiness check|check hal|hal diagnostic|self[\s-]?check|diagnostic check/.test(q)) return { type: "run" };
     return null;
   }
 
   function matchSessionRoute(query) {
     const q = String(query).toLowerCase().trim();
-    if (/show (active|current) session|active session|work session status|current work session/.test(q)) {
-      return { type: "show" };
-    }
-    if (/reset (work )?session|clear session|end session/.test(q)) {
+    if (/reset ((the )?(work |current ))?session|clear (work )?session|end (the )?session/.test(q)) {
       return { type: "reset" };
+    }
+    if (/show (active|current) session|active session|active work session|work session status|current work session|current session|session status/.test(q)) {
+      return { type: "show" };
     }
     if (/draft handoff|handoff note|draft session note/.test(q)) {
       return { type: "handoff" };
@@ -665,7 +671,7 @@ const HalCore = (function () {
       };
     }
 
-    if (/\b(help|what can you do|capabilit\w*|how do you work|what do you do|what are you able to)\b/.test(query)) {
+    if (/\b(help|what can you do|tell me what you can do|capabilit\w*|how do you work|what do you do|what are you able to)\b/.test(query)) {
       return {
         intent: "help",
         lane: "local",
