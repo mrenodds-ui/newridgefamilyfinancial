@@ -1,14 +1,13 @@
-# NewRidgeFinancial 2.0 — Mock pages only
+# NewRidgeFinancial 2.0
 
-Pure static design references. **No FastAPI, no React, no Vite, no build step,
-no server, and no link to the old program.**
+Standalone mission-control program for New Ridge Family Financial.
 
-The mock pages are the approved mockup images, shown exactly as designed.
+The legacy program in `_legacy/` is for reference only and is not used here.
 
 ## Run
 
 Double-click `StartNewRidgeFinancial2.bat` (repo root), or run
-`scripts\start_mockpages_1966.ps1`.
+`scripts\start_nr2_1966.ps1`.
 
 **URL:** http://127.0.0.1:1966/
 
@@ -17,15 +16,13 @@ Double-click `StartNewRidgeFinancial2.bat` (repo root), or run
 ```
 NewRidgeFinancial2/
   site/
-    index.html        sidebar + image viewer
-    styles.css        dark mission-control styling for the shell
-    app.js            switches between the 9 mock pages
-    mockups/          the 9 approved design images
+    index.html        sidebar + page viewer
+    styles.css        mission-control shell styling
+    app.js            switches between the 9 program pages
+    pages/            the 9 mission-control page images
+  serve.py            static file server on port 1966
 ```
 
-That is the entire program. Nothing else is required to render the mock pages.
+## Stop
 
-## Legacy
-
-The old program (`app/`, `frontend/`, `_legacy/`) is retired and is **not**
-used or referenced here.
+`StopNewRidgeFinancial2.bat`

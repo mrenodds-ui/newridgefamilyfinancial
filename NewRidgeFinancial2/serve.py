@@ -1,4 +1,4 @@
-"""Serve NewRidgeFinancial 2.0 mock pages (static files only) on port 1966."""
+"""Serve NewRidgeFinancial 2.0 on port 1966."""
 
 import http.server
 import socketserver
@@ -24,5 +24,5 @@ if __name__ == "__main__":
         raise SystemExit(f"Site not found: {SITE_DIR / 'index.html'}")
 
     with socketserver.TCPServer((HOST, PORT), Handler) as httpd:
-        print(f"NewRidgeFinancial 2.0 mock pages: http://{HOST}:{PORT}/")
+        print(f"NewRidgeFinancial 2.0: http://{HOST}:{PORT}/")
         httpd.serve_forever()

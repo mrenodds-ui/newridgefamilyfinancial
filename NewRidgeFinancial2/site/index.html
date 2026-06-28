@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NewRidgeFinancial 2.0 — Mock Pages</title>
+    <title>NewRidgeFinancial 2.0</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -31,8 +31,8 @@
 
         <div class="foot">
           <span class="foot-label">Workspace</span>
-          <strong>Mock pages only</strong>
-          <span class="foot-copy">Static design references.</span>
+          <strong>Mission control</strong>
+          <span class="foot-copy">New Ridge Family Financial</span>
         </div>
       </aside>
 
@@ -48,10 +48,22 @@
         </header>
 
         <section class="stage">
-          <img id="mockImage" class="mock" alt="" />
+          <div class="page-frame" id="pageFrame">
+            <img id="pageImage" class="page-image" alt="" />
+            <div class="hotspot-layer" id="hotspotLayer" aria-label="HAL Command Center actions"></div>
+          </div>
         </section>
       </main>
     </div>
+
+    <aside class="drawer" id="drawer" aria-hidden="true">
+      <div class="drawer__panel">
+        <button class="drawer__close" id="drawerClose" type="button" aria-label="Close panel">Close</button>
+        <p class="drawer__eyebrow">HAL Command Center</p>
+        <h2 id="drawerTitle"></h2>
+        <div id="drawerContent" class="drawer__content"></div>
+      </div>
+    </aside>
 
     <script src="app.js"></script>
   </body>

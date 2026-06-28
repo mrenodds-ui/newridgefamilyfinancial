@@ -1,0 +1,133 @@
+{
+  "status": {
+    "title": "HAL Command Center",
+    "summary": "Local program manager for NewRidgeFinancial 2.0. HAL can guide staff through the pages, surface priorities, explain local status, and preserve the external-action firewall.",
+    "posture": ["Local-only", "Read-only", "Human review required", "Not submitted"],
+    "modelLanes": [
+      {
+        "name": "14B chat lane",
+        "role": "Staff-facing conversation and plain-language answers",
+        "state": "Planned"
+      },
+      {
+        "name": "21B reasoning lane",
+        "role": "Program review, prioritization, and structured reasoning",
+        "state": "Planned"
+      },
+      {
+        "name": "30B escalation lane",
+        "role": "Second-opinion review for complex or high-risk questions",
+        "state": "Planned"
+      }
+    ]
+  },
+  "askHal": {
+    "title": "Ask HAL",
+    "summary": "HAL is currently operating as a local program manager. AI model lanes are intentionally not connected yet.",
+    "suggestions": [
+      "Show what needs attention today",
+      "Open the claims workbench",
+      "Review read-only source health",
+      "Explain the external action firewall"
+    ],
+    "response": "I can navigate the program, explain each page, show priorities, and keep work inside the read-only safety boundary. Model lanes will be added after this local manager layer is stable."
+  },
+  "sources": {
+    "title": "Read-only source intake",
+    "summary": "Source pages are treated as read-only views. HAL can explain status and route staff to the right page, but it cannot write back.",
+    "items": [
+      {
+        "label": "SoftDent",
+        "status": "Read-only",
+        "detail": "Production, collections, A/R, and export health."
+      },
+      {
+        "label": "QuickBooks",
+        "status": "Read-only",
+        "detail": "P&L, expenses, EBITDA candidates, and sync status."
+      },
+      {
+        "label": "Documents",
+        "status": "Local review",
+        "detail": "Accounting document queue, extraction, and review status."
+      },
+      {
+        "label": "Library",
+        "status": "Indexed reference",
+        "detail": "Policies, statements, claims, clinical files, and reports."
+      }
+    ]
+  },
+  "reasoning": {
+    "title": "Local reasoning core",
+    "summary": "The reasoning core is staged but model-free. It organizes local program state into Ready, Needs review, and Blocked lanes.",
+    "lanes": [
+      {
+        "label": "Ready",
+        "count": 9,
+        "detail": "Pages and queues that can be reviewed immediately."
+      },
+      {
+        "label": "Needs review",
+        "count": 4,
+        "detail": "Items that require staff confirmation before any next step."
+      },
+      {
+        "label": "Blocked",
+        "count": 2,
+        "detail": "Items waiting on missing information or external systems."
+      }
+    ]
+  },
+  "workSurfaces": {
+    "title": "Staff work surfaces",
+    "summary": "HAL can open each program surface and explain what staff should use it for.",
+    "items": [
+      {
+        "label": "Financial Dashboard",
+        "target": "financial",
+        "detail": "Owner-level production, collections, A/R, EBITDA, payer mix, and provider view."
+      },
+      {
+        "label": "Claims Workbench",
+        "target": "claims",
+        "detail": "Draft, needs-review, ready, and denied claim review lanes."
+      },
+      {
+        "label": "Insurance Narratives",
+        "target": "narratives",
+        "detail": "Review-only narrative drafting flow and source-fact references."
+      },
+      {
+        "label": "Accounting Documents",
+        "target": "documents",
+        "detail": "Document intake, extraction, posting queue review, and period summary."
+      },
+      {
+        "label": "A/R & Collections",
+        "target": "ar",
+        "detail": "Outstanding A/R, aging buckets, collections trend, and follow-up queue."
+      },
+      {
+        "label": "Document Library",
+        "target": "library",
+        "detail": "Searchable read-only repository and selected document preview."
+      }
+    ]
+  },
+  "firewall": {
+    "title": "External action firewall",
+    "summary": "HAL cannot perform external actions from this program. The safety boundary is enforced by design.",
+    "blocked": ["No email", "No fax", "No upload", "No payer contact", "No writeback", "No submission"],
+    "allowed": ["Open local program pages", "Explain local status", "Prepare review notes", "Flag missing information"]
+  },
+  "priorities": {
+    "title": "Today’s operator priorities",
+    "items": [
+      "Review claims in the Needs Review lane before any payer-facing work.",
+      "Check SoftDent and QuickBooks read-only source freshness.",
+      "Use the A/R & Collections page to identify aged balances.",
+      "Keep document posting work in review status until staff approval."
+    ]
+  }
+}
