@@ -23,6 +23,134 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function buildRoutingRegressionCases() {
+  const cases = [];
+  const add = (question, expected) => cases.push([question, expected]);
+  const addMany = (questions, expected) => questions.forEach((question) => add(question, expected));
+
+  addMany(["What can you do?", "How do you work?", "help", "what are your capabilities?", "tell me what you can do"], "help");
+  addMany(["Run readiness check", "check hal", "self-check", "readiness check now"], "readiness: run");
+  addMany(["Show diagnostics", "display diagnostics"], "readiness: show");
+  addMany(["Clear diagnostics", "reset diagnostics"], "readiness: clear");
+
+  for (const [id, label] of [
+    ["claims-review", "claims review"],
+    ["source-freshness", "source freshness review"],
+    ["ar-review", "A/R review"],
+    ["document-review", "document review"],
+    ["blocked-triage", "blocked item triage"],
+  ]) {
+    addMany([`Start ${label}`, `start the ${label}`], `session: start:${id}`);
+  }
+
+  addMany(["Show active session", "session status", "active work session"], "session: show");
+  addMany(["Reset work session", "reset the current session", "clear work session", "end the session"], "session: reset");
+  addMany(["Draft handoff note", "handoff note"], "session: handoff");
+  addMany(["Build evidence packet", "assemble evidence packet", "build the packet"], "packet: build");
+  addMany(["Show evidence packet", "display evidence packet"], "packet: show");
+  addMany(["Clear evidence packet", "clear local packet"], "packet: clear");
+  addMany(["Make a plan for today", "Prioritize my work", "Where should I start?"], "reasoning");
+  addMany(["Second opinion on a complex case", "Escalate this denial", "Do a deep review"], "escalation");
+
+  const pageNames = {
+    financial: ["financial dashboard", "financial"],
+    softdent: ["SoftDent", "practice management"],
+    quickbooks: ["QuickBooks", "profit and loss"],
+    ar: ["A/R", "collections", "aging"],
+    claims: ["claims workbench", "claims"],
+    narratives: ["insurance narratives", "narratives"],
+    documents: ["accounting documents", "documents", "posting queue"],
+    library: ["document library", "library"],
+    hal: ["HAL command center", "HAL"],
+  };
+  for (const [id, names] of Object.entries(pageNames)) {
+    for (const name of names) {
+      addMany([`Open ${name}`, `Go to ${name}`], `navigate: ${id}`);
+      addMany([`Explain ${name}`, `What is ${name}?`], `explain: ${id}`);
+    }
+  }
+
+  addMany(["What needs attention today?", "priorities today"], "priorities");
+  addMany(["What is ready to work on", "ready pages"], "registry: ready");
+  addMany(["What is blocked", "show blockers", "what is waiting"], "registry: blocked");
+  addMany(["firewall status", "what are the guardrails?"], "firewall");
+  addMany(["Are you connected to a model?", "model lanes"], "model lanes");
+  addMany(["source health", "source freshness"], "sources");
+  addMany(["read-only areas", "review-only areas"], "registry: read-only");
+  addMany(["next staff action", "what should staff review next"], "registry: next actions");
+
+  const externalVerbs = ["submit", "email", "upload", "send", "fax", "transmit", "approve", "deny", "delete", "remove", "dispatch", "mail", "pay"];
+  const externalObjects = ["the denied claim", "the payer", "the document", "the statement", "the invoice", "the record"];
+  for (const verb of externalVerbs) {
+    for (const object of externalObjects) add(`${verb} ${object}`, "blocked: firewall");
+  }
+  addMany(["Process a payment", "Record a charge", "Make a refund", "Post a transaction", "Write back to SoftDent"], "blocked: firewall");
+
+  const modelFallback = [
+    "What is the office weather?",
+    "Summarize dental billing risk generally",
+    "What should a manager know generally?",
+    "Write a neutral note for internal review",
+    "Explain denial trends in plain English",
+    "Give me a generic review reminder",
+    "Summarize this imaginary case",
+  ];
+  modelFallback.forEach((question) => add(question, "model: query"));
+
+  return { cases, externalVerbs, externalObjects, modelFallback };
+}
+
+function seededChoice(seedState, items) {
+  seedState.value = (seedState.value * 1664525 + 1013904223) >>> 0;
+  return items[Math.floor((seedState.value / 0x100000000) * items.length)];
+}
+
+function buildSeededRoutingVariants(count) {
+  const { cases, externalVerbs, externalObjects, modelFallback } = buildRoutingRegressionCases();
+  const prefixes = ["", "please ", "can you ", "HAL, ", "locally ", "for staff review, "];
+  const suffixes = ["", " please", " now", " locally", " for review"];
+  const trapLocals = ["Run readiness check", "Build evidence packet", "Start claims review", "Show diagnostics", "Open claims workbench"];
+  const trapExternals = ["and email it", "and submit it", "and upload it", "then fax the note", "then delete record"];
+  const seedState = { value: 20260628 };
+  const variants = [];
+
+  for (let i = 0; i < count; i++) {
+    let question;
+    let expected;
+
+    if (i < count * 0.7) {
+      const [base, intent] = cases[i % cases.length];
+      const prefix = prefixes[Math.floor(i / cases.length) % prefixes.length];
+      const suffix = suffixes[Math.floor(i / (cases.length * prefixes.length)) % suffixes.length];
+      question = `${prefix}${base}${suffix}`;
+      expected = intent;
+    } else if (i < count * 0.9) {
+      const local = trapLocals[i % trapLocals.length];
+      const external = trapExternals[Math.floor(i / trapLocals.length) % trapExternals.length];
+      const prefix = i % 3 === 0 ? "HAL, " : i % 3 === 1 ? "please " : "";
+      question = `${prefix}${local} ${external}`;
+      expected = "blocked: firewall";
+    } else if (i < count * 0.95) {
+      const base = modelFallback[i % modelFallback.length];
+      const prefix = prefixes[i % prefixes.length];
+      const suffix = suffixes[Math.floor(i / modelFallback.length) % suffixes.length];
+      question = `${prefix}${base}${suffix}`;
+      expected = "model: query";
+    } else {
+      const verb = externalVerbs[i % externalVerbs.length];
+      const object = externalObjects[Math.floor(i / externalVerbs.length) % externalObjects.length];
+      const noise = seededChoice(seedState, ["before staff review", "locally", "in HAL", "for triage", "today"]);
+      const prefix = i % 2 === 0 ? "please " : "HAL, ";
+      question = `${prefix}${verb} ${object} ${noise}`;
+      expected = "blocked: firewall";
+    }
+
+    variants.push([question.replace(/\s+/g, " ").trim(), expected]);
+  }
+
+  return variants;
+}
+
 async function main() {
   const halData = loadJson(halManagerPath);
   const halModels = loadJson(halModelsPath);
@@ -31,7 +159,13 @@ async function main() {
 
   const pages = [
     { id: "financial", label: "Financial dashboard", title: "Owner Financial Dashboard" },
+    { id: "softdent", label: "SoftDent", title: "SoftDent" },
+    { id: "quickbooks", label: "QuickBooks", title: "QuickBooks" },
+    { id: "ar", label: "A/R & Collections", title: "A/R & Collections" },
     { id: "claims", label: "Claims Workbench", title: "Claims Workbench" },
+    { id: "narratives", label: "Insurance Narratives", title: "Insurance Narratives" },
+    { id: "documents", label: "Accounting Documents", title: "Accounting Documents" },
+    { id: "library", label: "Document Library", title: "Document Library" },
     { id: "hal", label: "HAL Command Center", title: "HAL Command Center" },
   ];
 
@@ -163,6 +297,24 @@ async function main() {
   assert(readinessTrap.intent === "blocked: firewall", "readiness + email must be blocked");
   const summary = HalCore.formatReadinessSummary(readinessReport);
   assert(summary.includes("HAL readiness"), "readiness summary must format report");
+  passed++;
+
+  // Seeded routing regression: local intents, model fallbacks, and firewall traps.
+  const routingCases = buildSeededRoutingVariants(10000);
+  const routingFailures = [];
+  const laneCounts = {};
+  for (const [question, expectedIntent] of routingCases) {
+    const result = HalCore.routeHalCommand(halData, halModels, pages, question);
+    const got = String(result.intent || "");
+    const ok = got === expectedIntent || got.startsWith(expectedIntent);
+    laneCounts[result.lane] = (laneCounts[result.lane] || 0) + 1;
+    if (!ok) routingFailures.push(`"${question}" expected ${expectedIntent}, got ${got}`);
+  }
+  assert(routingFailures.length === 0, "routing regression failures:\n" + routingFailures.slice(0, 20).join("\n"));
+  assert(laneCounts.firewall > 0, "routing regression must include firewall cases");
+  assert(laneCounts.chat14b > 0, "routing regression must include model fallback cases");
+  assert(laneCounts.reason21b > 0, "routing regression must include reasoning lane cases");
+  assert(laneCounts.escalate30b > 0, "routing regression must include escalation lane cases");
   passed++;
 
   // app.js syntax
