@@ -8,10 +8,13 @@
   "use strict";
 
   const HAL9000 = {
-    rate: 0.78,
+    rate: 0.82,
     pitch: 0.82,
     volume: 1,
     voiceHints: ["david", "mark", "guy", "male", "english united states"],
+    // Calm HAL delivery — used to sync the on-screen typewriter with speech.
+    charsPerSecondAtRate1: 13.5,
+    maxReplyChars: 1600,
   };
 
   const HAL9000_TEMPLATES = {
@@ -19,8 +22,6 @@
     broadcast: "I should inform you. A broadcast message has arrived from {sender}.",
   };
 
-  // Varied HAL phrasings (sender only — never the message contents). One is
-  // picked at random each time so HAL does not repeat the same line.
   const HAL9000_VARIANTS = {
     direct: [
       "Good afternoon. I have a message for you from {sender}.",
@@ -76,9 +77,50 @@
     return String(tmpl || HAL9000_TEMPLATES.direct).replace(/\{sender\}/g, sender || "Unknown");
   }
 
+  function normalizeReplyText(text) {
+    return String(text || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function estimateDurationMs(text) {
+    const raw = normalizeReplyText(text);
+    if (!raw) return 0;
+    const charsPerSec = HAL9000.charsPerSecondAtRate1 * HAL9000.rate;
+    return Math.max(1400, Math.round((raw.length / charsPerSec) * 1000));
+  }
+
+  function splitForSpeech(text, maxChars) {
+    const raw = normalizeReplyText(text);
+    if (!raw) return [];
+    if (raw.length <= maxChars) return [raw];
+    const sentences = raw.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [raw];
+    const chunks = [];
+    let buf = "";
+    sentences.forEach((sentence) => {
+      const piece = sentence.trim();
+      if (!piece) return;
+      const next = buf ? `${buf} ${piece}` : piece;
+      if (next.length > maxChars && buf) {
+        chunks.push(buf.trim());
+        buf = piece;
+      } else {
+        buf = next;
+      }
+    });
+    if (buf.trim()) chunks.push(buf.trim());
+    return chunks.length ? chunks : [raw.slice(0, maxChars)];
+  }
+
+  function cancelSpeech() {
+    if (!global.speechSynthesis) return false;
+    global.speechSynthesis.cancel();
+    return true;
+  }
+
   function speak(text, { interrupt } = {}) {
     if (!global.speechSynthesis || !text) return false;
-    if (interrupt) global.speechSynthesis.cancel();
+    if (interrupt) cancelSpeech();
     const utter = new SpeechSynthesisUtterance(String(text));
     const voice = pickVoice();
     if (voice) utter.voice = voice;
@@ -98,13 +140,21 @@
     return speak(formatTemplate(pickVariant(broadcast), sender), { interrupt: true });
   }
 
-  function speakHalReply(text) {
-    const raw = String(text || "").trim();
-    if (!raw) return false;
-    // Keep chat speech short — first sentence or up to ~220 chars.
-    const sentence = raw.match(/^[^.!?]+[.!?]?/)?.[0]?.trim() || raw;
-    const clip = sentence.length > 220 ? sentence.slice(0, 217).trim() + "…" : sentence;
-    return speak(clip, { interrupt: true });
+  function speakHalReply(text, { interrupt = true, maxChars = HAL9000.maxReplyChars } = {}) {
+    const raw = normalizeReplyText(text);
+    if (!raw || !global.speechSynthesis) return { started: false, durationMs: 0 };
+    if (interrupt) cancelSpeech();
+    const chunks = splitForSpeech(raw, maxChars);
+    const voice = pickVoice();
+    chunks.forEach((chunk) => {
+      const utter = new SpeechSynthesisUtterance(chunk);
+      if (voice) utter.voice = voice;
+      utter.rate = HAL9000.rate;
+      utter.pitch = HAL9000.pitch;
+      utter.volume = HAL9000.volume;
+      global.speechSynthesis.speak(utter);
+    });
+    return { started: true, durationMs: estimateDurationMs(raw) };
   }
 
   function test() {
@@ -115,6 +165,8 @@
     speak,
     announceSidenote,
     speakHalReply,
+    cancelSpeech,
+    estimateDurationMs,
     test,
     templates: HAL9000_TEMPLATES,
     isAvailable: () => !!global.speechSynthesis,

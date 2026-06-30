@@ -60,10 +60,6 @@ const HalSkills = (function () {
     return { sanitizedText: sanitized, findings };
   }
 
-  /* ============================================================
-   * Accounting — port of accounting_tools.py + accounting_validation.py
-   * ========================================================== */
-
   const CHART_OF_ACCOUNTS = {
     1010: "Cash",
     1100: "Accounts Receivable",
@@ -141,8 +137,35 @@ const HalSkills = (function () {
 
   const CLOSED_PERIODS = new Set(["2024-12", "2025-01"]);
 
+  /** JS fallback COA for CI/browser-dev; desktop uses Python via resolveChartOfAccounts(). */
+  let coaCache = null;
+
   function getChartOfAccounts() {
-    return Object.assign({}, CHART_OF_ACCOUNTS);
+    return Object.assign({}, coaCache || CHART_OF_ACCOUNTS);
+  }
+
+  async function resolveChartOfAccounts() {
+    if (coaCache) return coaCache;
+    const bridge =
+      typeof DesktopBridge !== "undefined"
+        ? DesktopBridge
+        : typeof globalThis !== "undefined" && globalThis.DesktopBridge
+          ? globalThis.DesktopBridge
+          : null;
+    if (bridge && typeof bridge.hasDesktopApi === "function" && bridge.hasDesktopApi() && typeof bridge.getChartOfAccounts === "function") {
+      try {
+        const remote = await bridge.getChartOfAccounts();
+        const accounts = remote && remote.accounts;
+        if (accounts && typeof accounts === "object" && Object.keys(accounts).length) {
+          coaCache = accounts;
+          return coaCache;
+        }
+      } catch {
+        /* fallback */
+      }
+    }
+    coaCache = CHART_OF_ACCOUNTS;
+    return coaCache;
   }
 
   function isPeriodOpen(period) {
@@ -203,7 +226,7 @@ const HalSkills = (function () {
 
   function buildJournalValidation(opts) {
     const { lines, chartOfAccounts, openPeriod } = opts || {};
-    const coa = chartOfAccounts || CHART_OF_ACCOUNTS;
+    const coa = chartOfAccounts || getChartOfAccounts();
     const debit = collectJournalAmounts(lines, "debit");
     const credit = collectJournalAmounts(lines, "credit");
     const invalidAmountFields = debit.invalid.concat(credit.invalid);
@@ -235,7 +258,7 @@ const HalSkills = (function () {
     const { description, period, amount, context } = opts || {};
     const lines = draftJournalEntry({ description, amount, context });
     const openPeriod = isPeriodOpen(period);
-    const validation = buildJournalValidation({ lines, chartOfAccounts: CHART_OF_ACCOUNTS, openPeriod });
+    const validation = buildJournalValidation({ lines, chartOfAccounts: getChartOfAccounts(), openPeriod });
     return {
       meta: skillMeta("accounting.journalDraft", "accounting"),
       description,
@@ -247,7 +270,42 @@ const HalSkills = (function () {
       draftStatus: "draftOnly",
       postingStatus: "pendingReview",
       safety: { localOnly: true, notSubmitted: true, humanReviewRequired: true, postedToLedger: false },
+      source: "javascript",
     };
+  }
+
+  async function draftAndValidateJournalAsync(opts) {
+    const bridge =
+      typeof DesktopBridge !== "undefined"
+        ? DesktopBridge
+        : typeof globalThis !== "undefined" && globalThis.DesktopBridge
+          ? globalThis.DesktopBridge
+          : null;
+    if (bridge && typeof bridge.hasDesktopApi === "function" && bridge.hasDesktopApi() && typeof bridge.draftJournalEntry === "function") {
+      try {
+        await resolveChartOfAccounts();
+        const remote = await bridge.draftJournalEntry({
+          description: opts && opts.description,
+          period: opts && opts.period,
+          amount: opts && opts.amount,
+          context: (opts && opts.context) || {},
+        });
+        if (remote && Array.isArray(remote.lines)) {
+          return Object.assign({}, remote, {
+            postingStatus: "pendingReview",
+            safety: Object.assign(
+              { localOnly: true, notSubmitted: true, humanReviewRequired: true, postedToLedger: false },
+              remote.safety || {},
+            ),
+            source: "python",
+          });
+        }
+      } catch {
+        /* fallback to JS port for browser-dev / offline */
+      }
+    }
+    await resolveChartOfAccounts();
+    return draftAndValidateJournal(opts);
   }
 
   function formatJournalDraft(draft) {
@@ -1243,6 +1301,10 @@ const HalSkills = (function () {
     arOutstandingClaims: "ar",
     narrativeWorkflow: "narratives",
     documentLibrary: "library",
+    officeManagerPriorities: "office-manager",
+    officeManagerTasks: "office-manager",
+    officeManagerSurfaces: "office-manager",
+    officeManagerBoundaries: "office-manager",
   };
 
   const WIDGET_ORDER = [
@@ -1298,8 +1360,8 @@ const HalSkills = (function () {
     softdentResponsibility: ["SoftDent dashboard export with insurance and patient responsibility values"],
     softdentSourceHealth: ["SoftDent dashboard, claims, clinical notes, and optional A/R export files"],
     softdentExportHistory: ["SoftDent export files in the canonical import folder"],
-    newPatients: ["SoftDent new patient export (not yet automated)"],
-    treatmentPlanSummary: ["SoftDent treatment_plan_summary.csv export (not yet automated)"],
+    newPatients: ["SoftDent new patient export (analytics sync via softdent_practice_exports.py when tables exist)"],
+    treatmentPlanSummary: ["SoftDent treatment_plan_summary.csv (analytics sync via softdent_practice_exports.py when tables exist)"],
     caseAcceptance: ["SoftDent case acceptance export or derived treatment plan summary"],
     narrativeWorkflow: ["Local narrative drafts or claim source facts from SoftDent claims"],
     documentLibrary: ["Local library documents or indexed document metadata"],
@@ -1462,6 +1524,15 @@ const HalSkills = (function () {
       const production = parseMetricNumber(overview.productionTotal);
       const collections = parseMetricNumber(overview.collectionsTotal);
       const expenses = parseMetricNumber((snapshot.dashboards?.quickbooks || {}).expenses);
+      if (production !== null && collections !== null && collections === 0 && production > 0) {
+        addCommitIssue(
+          issues,
+          "practiceFinancialOverview",
+          "collectionsTotal",
+          "warning",
+          "Collections not reported for this period — verify daysheet export; this is not a true 0% rate.",
+        );
+      }
       if (revenue !== null && expenses !== null && netIncome !== null && !nearlyEqual(revenue - expenses, netIncome, 1)) {
         addCommitIssue(
           issues,
@@ -1491,12 +1562,85 @@ const HalSkills = (function () {
       }
     }
 
+    const finDash = snapshot.dashboards && snapshot.dashboards.financial;
+    if (finDash && finDash.collectionsMissing) {
+      addCommitIssue(
+        issues,
+        "practiceFinancialOverview",
+        "collectionsTotal",
+        "warning",
+        "SoftDent collections are not reported for the current dashboard period.",
+      );
+    }
+    if (finDash && finDash.collectionsZeroWithProduction) {
+      addCommitIssue(
+        issues,
+        "practiceFinancialOverview",
+        "collectionsTotal",
+        "warning",
+        "Latest SoftDent period shows $0 collections with production — verify final daysheet export; this is not a true 0% rate.",
+      );
+      addCommitIssue(
+        issues,
+        "dataFreshnessQuality",
+        "qualityScore",
+        "warning",
+        "Import quality score is reduced because collection health failed on the latest SoftDent period.",
+      );
+    }
+    if (finDash && finDash.periodAlignment && finDash.periodAlignment.aligned === false && finDash.periodAlignment.message) {
+      addCommitIssue(
+        issues,
+        "practiceFinancialOverview",
+        "monthlyRevenue",
+        "warning",
+        finDash.periodAlignment.message,
+      );
+    }
+
+    const qbDash = snapshot.dashboards && snapshot.dashboards.quickbooks;
+    if (qbDash && qbDash.expenseCategories && qbDash.expenseCategories.scope === "unlabeled") {
+      addCommitIssue(
+        issues,
+        "ebitdaNormalization",
+        "expenseCategoriesTotal",
+        "info",
+        "Expense category pivot has no period column — total may be cumulative; compare to monthly P&L expenses before period close.",
+      );
+    }
+
+    if (finDash && finDash.collectionRateMetrics && finDash.collectionRateMetrics.latestMonthIncomplete) {
+      addCommitIssue(
+        issues,
+        "payerMixAndCollections",
+        "latestMonthCollectionRate",
+        "info",
+        `Latest month ${finDash.collectionRateMetrics.latestMonthPeriod} is incomplete ($0 or missing collections). Use trailing rate (${finDash.collectionRateMetrics.trailingRate || "n/a"}) for period-close review.`,
+      );
+    }
+
+    const arCross = finDash && finDash.arCrossCheck;
+    if (arCross && arCross.comparable && arCross.withinTolerance === false) {
+      addCommitIssue(issues, "arAgingAndCollections", "arCrossSourceVariance", "warning", arCross.message);
+    } else if (arCross && !arCross.comparable && arCross.softdentTotal != null) {
+      addCommitIssue(issues, "arAgingAndCollections", "quickbooksArTotal", "info", arCross.message);
+    }
+
     if (qbDetail) {
       const revenue = parseMetricNumber(qbDetail.revenue);
       const cogs = parseMetricNumber(qbDetail.cogs);
       const grossProfit = parseMetricNumber(qbDetail.grossProfit);
       const operatingExpenses = parseMetricNumber(qbDetail.operatingExpenses);
       const netIncome = parseMetricNumber(qbDetail.netIncome);
+      if (qbDash && qbDash.plReconcile && qbDash.plReconcile.matches === false) {
+        addCommitIssue(
+          issues,
+          "quickbooksProfitLossDetail",
+          "netIncome",
+          "warning",
+          "QuickBooks P&L net income does not match revenue minus expenses from import files.",
+        );
+      }
       if (revenue !== null && cogs !== null && grossProfit !== null && !nearlyEqual(revenue - cogs, grossProfit, 1)) {
         addCommitIssue(issues, "quickbooksProfitLossDetail", "grossProfit", "warning", "QuickBooks gross profit does not equal revenue minus COGS.");
       }
@@ -1583,7 +1727,7 @@ const HalSkills = (function () {
     // sources), so health must be judged by whether real import data is present
     // — not by mere object existence — or empty widgets falsely read SUCCESS.
     const dashHasData = (d) => Boolean(d && (d.dataSource === "import" || d.dataSource === "persisted"));
-    const dashPartial = (d) => Boolean(d && d.importDepth === "partial");
+    const dashPartial = (d) => Boolean(d && (d.importDepth === "partial" || d.importDepth === "degraded"));
     const widgetStatusFromDash = (d) => {
       if (!dashHasData(d)) return "FAILED";
       if (dashPartial(d)) return "DEGRADED";
@@ -1605,6 +1749,16 @@ const HalSkills = (function () {
     const fin = dashboards.financial || {};
     const sd = dashboards.softdent || {};
     const qb = dashboards.quickbooks || {};
+    const collectionHealthDegraded = Boolean(
+      fin.collectionsMissing ||
+        fin.collectionsZeroWithProduction ||
+        ((fin.quality && fin.quality.categories) || []).some(
+          (category) => category.label === "Collection health" && Number(category.score) < 15,
+        ),
+    );
+    const financialQualityStatus = collectionHealthDegraded
+      ? "DEGRADED"
+      : financialStatus;
     const arDash = dashboards.ar || {};
     const practiceDash = dashboards.practice || {};
     const contractCtx = buildContractContext(snap, {
@@ -1622,8 +1776,12 @@ const HalSkills = (function () {
       "practiceFinancialOverview",
       contractCtx,
       mergeWidgetStatus(qbStatus, softdentStatus),
-      "Practice revenue from QuickBooks and production/collections from the SoftDent import cache. Dental A/R is not sourced from QuickBooks.",
+      "QuickBooks revenue reflects cash-basis deposits; SoftDent production/collections are operational PMS metrics. Compare collections to QB revenue — not production. Dental A/R is not sourced from QuickBooks.",
     );
+    if (overviewWidget) {
+      overviewWidget.metricLabels = WIDGET_METRIC_LABELS.practiceFinancialOverview;
+      if (collectionHealthDegraded) overviewWidget.status = "DEGRADED";
+    }
     const trendWidget = buildContractWidget(
       "financialProductionTrend",
       contractCtx,
@@ -1699,9 +1857,11 @@ const HalSkills = (function () {
       practiceFinancialOverview: overviewWidget || {
         key: "practiceFinancialOverview",
         title: "Practice Financial Overview",
-        status: mergeWidgetStatus(qbStatus, softdentStatus),
-        summary: "Practice revenue from QuickBooks and production/collections from the SoftDent import cache. Dental A/R is not sourced from QuickBooks.",
+        status: collectionHealthDegraded ? "DEGRADED" : mergeWidgetStatus(qbStatus, softdentStatus),
+        summary:
+          "QuickBooks revenue reflects cash-basis deposits; SoftDent production/collections are operational PMS metrics. Compare collections to QB revenue — not production. Dental A/R is not sourced from QuickBooks.",
         navTarget: WIDGET_NAV.practiceFinancialOverview,
+        metricLabels: WIDGET_METRIC_LABELS.practiceFinancialOverview,
         metrics: {
           monthlyRevenue,
           monthlyNetIncome,
@@ -1713,24 +1873,37 @@ const HalSkills = (function () {
         key: "financialProductionTrend",
         title: "Production Trend & YTD",
         status: financialStatus,
-        summary: "Production trend and year-to-date production/collections indicators from the financial dashboard cache.",
+        summary:
+          "Production trend and trailing collection rate from imported SoftDent months. Incomplete latest months are excluded from the trailing rate.",
         navTarget: WIDGET_NAV.financialProductionTrend,
+        metricLabels: WIDGET_METRIC_LABELS.financialProductionTrend,
         metrics: {
           productionMtd: metricValue(fin.productionMtd?.value),
           productionTrendLatest: lastSeriesValue(fin.productionTrend?.production),
           ytdProduction: metricValue((fin.productionTrend?.ytd || []).find((m) => m.label === "YTD Production")?.value),
-          ytdCollectionRate: metricValue((fin.productionTrend?.ytd || []).find((m) => m.label === "YTD Collection Rate")?.value),
+          trailingCollectionRate: metricValue(
+            (fin.productionTrend?.ytd || []).find((m) => m.label === "Trailing Collection Rate")?.value ||
+              (fin.productionTrend?.ytd || []).find((m) => m.label === "YTD Collection Rate")?.value,
+          ),
         },
       },
       payerMixAndCollections: payerWidget || {
         key: "payerMixAndCollections",
         title: "Payer Mix & Collections",
         status: financialStatus,
-        summary: "Payer mix, collection rate, and top payer share from the owner financial dashboard.",
+        summary:
+          "Payer mix and trailing collection rate from imported SoftDent months. Latest incomplete month is shown separately — do not use it for period close.",
         navTarget: WIDGET_NAV.payerMixAndCollections,
+        metricLabels: WIDGET_METRIC_LABELS.payerMixAndCollections,
         metrics: {
           payerMixTotal: metricValue(fin.payerMix?.total),
-          collectionRate: metricValue(fin.payerMix?.rate || (fin.metrics || []).find((m) => m.subLabel === "Collection Rate")?.subValue),
+          collectionRate: metricValue(fin.collectionRateMetrics?.trailingRate || fin.payerMix?.rate),
+          latestMonthCollectionRate: metricValue(
+            fin.collectionRateMetrics?.latestMonthRate
+              ? `${fin.collectionRateMetrics.latestMonthRate}${fin.collectionRateMetrics.latestMonthIncomplete ? " (incomplete)" : ""}`
+              : null,
+          ),
+          trailingCollectionPeriods: metricValue(fin.collectionRateMetrics?.trailingPeriods),
           topPayer: metricValue(firstItem(fin.payerMix?.slices)?.label),
           topPayerShare: metricValue(firstItem(fin.payerMix?.slices)?.pct != null ? `${firstItem(fin.payerMix?.slices).pct}%` : null),
         },
@@ -1751,9 +1924,11 @@ const HalSkills = (function () {
       dataFreshnessQuality: {
         key: "dataFreshnessQuality",
         title: "Data Freshness & Quality",
-        status: financialStatus,
-        summary: "Source freshness and dashboard quality score for the financial program inputs.",
+        status: financialQualityStatus,
+        summary:
+          "Source freshness and import wiring quality for financial inputs. Quality score reflects export freshness and collection health — not collection rate alone.",
         navTarget: WIDGET_NAV.dataFreshnessQuality,
+        metricLabels: WIDGET_METRIC_LABELS.dataFreshnessQuality,
         metrics: {
           qualityScore: metricValue(fin.quality?.score != null ? `${fin.quality.score}%` : null),
           syncedSources: healthyCount(fin.freshness),
@@ -1764,13 +1939,17 @@ const HalSkills = (function () {
       ebitdaNormalization: {
         key: "ebitdaNormalization",
         title: "EBITDA Normalization",
-        status: mergeWidgetStatus(qbStatus, financialStatus),
-        summary: "Potential EBITDA add-backs and expense-category totals from the financial and QuickBooks import cache.",
+        status: mergeWidgetStatus(qbStatus, financialQualityStatus),
+        summary:
+          "Potential EBITDA add-backs and expense-category totals from the financial and QuickBooks import cache. Compare category pivot scope to monthly P&L expenses.",
         navTarget: WIDGET_NAV.ebitdaNormalization,
+        metricLabels: WIDGET_METRIC_LABELS.ebitdaNormalization,
         metrics: {
           ebitdaAddBackTotal: metricValue(qb.ebitdaTotal),
           ebitdaCandidateCount: metricValue((qb.ebitdaCandidates || []).length || null),
           expenseCategoriesTotal: metricValue(qb.expenseCategories?.total),
+          expenseCategoriesScope: metricValue(qb.expenseCategories?.scopeLabel),
+          monthlyExpensesLatest: metricValue(qb.expenseCategories?.monthlyExpensesLatest || qb.expenses),
         },
       },
       quickbooksProfitLossDetail: {
@@ -1899,13 +2078,27 @@ const HalSkills = (function () {
       arAgingAndCollections: {
         key: "arAgingAndCollections",
         title: "A/R Aging & Collections",
-        status: arStatus,
+        status:
+          fin.arCrossCheck && fin.arCrossCheck.comparable && fin.arCrossCheck.withinTolerance === false
+            ? "DEGRADED"
+            : arStatus,
         summary: arAvailable
-          ? "A/R aging buckets, collections trend, and follow-up queue counts from the A/R dashboard cache."
+          ? "A/R aging buckets, collections trend, and follow-up queue counts from the A/R dashboard cache. Cross-check SoftDent A/R against QuickBooks balance-sheet A/R when both exports exist."
           : "A/R dashboard cache is present but verified dental A/R totals are unavailable until an explicit SoftDent A/R export is present.",
         navTarget: WIDGET_NAV.arAgingAndCollections,
+        metricLabels: WIDGET_METRIC_LABELS.arAgingAndCollections,
         metrics: {
           totalOutstanding: metricValue(kpiValue(arDash.kpis, "Total Outstanding")),
+          quickbooksArTotal: metricValue(
+            fin.arCrossCheck && fin.arCrossCheck.quickbooksTotal != null
+              ? `$${Number(fin.arCrossCheck.quickbooksTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              : null,
+          ),
+          arCrossSourceVariance: metricValue(
+            fin.arCrossCheck && fin.arCrossCheck.comparable && fin.arCrossCheck.variance != null
+              ? `$${Number(fin.arCrossCheck.variance).toFixed(2)}${fin.arCrossCheck.withinTolerance ? " (OK)" : " (review)"}`
+              : null,
+          ),
           aging90PlusPct: metricValue(kpiValue(arDash.kpis, "90+ Days %")),
           collectionsThisPeriod: metricValue(kpiValue(arDash.kpis, "Collections This 30 Days")),
           followUpQueueCount: sumCounts(arDash.followUp),
@@ -2284,31 +2477,79 @@ const HalSkills = (function () {
     return feed;
   }
 
-  function formatWidgetMetricLabel(key) {
+  function formatWidgetMetricLabel(key, widgetKey) {
+    const scoped = widgetKey && WIDGET_METRIC_LABELS[widgetKey] && WIDGET_METRIC_LABELS[widgetKey][key];
+    if (scoped) return scoped;
     return String(key || "")
       .replace(/([A-Z])/g, " $1")
       .replace(/^./, (c) => c.toUpperCase())
       .trim();
   }
 
+  const WIDGET_METRIC_LABELS = {
+    practiceFinancialOverview: {
+      monthlyRevenue: "QB Revenue (cash basis)",
+      monthlyNetIncome: "QB Net Income",
+      productionTotal: "SoftDent Production (operational)",
+      collectionsTotal: "SoftDent Collections",
+    },
+    dataFreshnessQuality: {
+      qualityScore: "Import Quality Score",
+      syncedSources: "Synced Sources",
+      delayedSource: "Delayed Source",
+      refreshedAt: "Refreshed At",
+    },
+    ebitdaNormalization: {
+      ebitdaAddBackTotal: "EBITDA Add-Back Total",
+      ebitdaCandidateCount: "EBITDA Candidate Count",
+      expenseCategoriesTotal: "Expense Categories Total",
+      expenseCategoriesScope: "Category Pivot Scope",
+      monthlyExpensesLatest: "Monthly Expenses (P&L)",
+    },
+    arAgingAndCollections: {
+      totalOutstanding: "SoftDent A/R Total",
+      quickbooksArTotal: "QuickBooks A/R Total",
+      arCrossSourceVariance: "A/R Cross-Source Variance",
+      aging90PlusPct: "90+ Days %",
+      collectionsThisPeriod: "Collections This Period",
+      followUpQueueCount: "Follow-Up Queue Count",
+    },
+    payerMixAndCollections: {
+      payerMixTotal: "Payer Mix Total",
+      collectionRate: "Trailing Collection Rate (imported months)",
+      latestMonthCollectionRate: "Latest Month Collection Rate",
+      trailingCollectionPeriods: "Trailing Periods",
+      topPayer: "Top Payer",
+      topPayerShare: "Top Payer Share",
+    },
+    financialProductionTrend: {
+      productionMtd: "Production MTD",
+      productionTrendLatest: "Production Trend Latest",
+      ytdProduction: "YTD Production",
+      ytdCollectionRate: "Trailing Collection Rate",
+      trailingCollectionRate: "Trailing Collection Rate",
+    },
+  };
+
   function formatWidgetMetrics(widget) {
     const metrics = (widget && widget.metrics) || {};
+    const widgetKey = widget && widget.key;
     const pairs = Object.entries(metrics)
       .filter(([, v]) => v !== null && v !== undefined && v !== "")
-      .map(([k, v]) => `${formatWidgetMetricLabel(k)}: ${v}`);
+      .map(([k, v]) => `${formatWidgetMetricLabel(k, widgetKey)}: ${v}`);
     return pairs.length ? pairs.join(" · ") : "No verified metrics in this snapshot.";
   }
 
   function widgetMissingMetrics(widget) {
     return Object.entries((widget && widget.metrics) || {})
       .filter(([, value]) => value === null || value === undefined || value === "" || value === "—")
-      .map(([key]) => formatWidgetMetricLabel(key));
+      .map(([key]) => formatWidgetMetricLabel(key, widget && widget.key));
   }
 
   function widgetPresentMetrics(widget) {
     return Object.entries((widget && widget.metrics) || {})
       .filter(([, value]) => !(value === null || value === undefined || value === "" || value === "—"))
-      .map(([key]) => formatWidgetMetricLabel(key));
+      .map(([key]) => formatWidgetMetricLabel(key, widget && widget.key));
   }
 
   /* ==========================================================
@@ -2323,12 +2564,12 @@ const HalSkills = (function () {
     "softdent.claims": { label: "SoftDent claims export", files: ["softdent_claims_export.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: ["ClaimId"], optional: ["PatientName", "Payer", "ServiceDate", "ClaimAmount", "ClaimStatus"], automated: true },
     "softdent.clinicalNotes": { label: "SoftDent clinical notes export", files: ["softdent_clinical_notes_data.json"], importDir: "app_data/nr2/document_inbox/softdent", required: [], optional: ["PatientName", "Provider", "NoteDate", "NoteText"], automated: true },
     "softdent.ar": { label: "SoftDent A/R aging export", files: ["softdent_ar_aging.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: ["Bucket"], optional: ["Balance"], automated: true },
-    "softdent.newPatients": { label: "SoftDent new patients export", files: ["softdent_new_patients.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: ["Count"], optional: ["Period"], automated: false },
-    "softdent.treatmentPlans": { label: "SoftDent treatment plan summary export", files: ["treatment_plan_summary.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: [], optional: ["Presented", "Accepted", "Amount"], automated: false },
-    "softdent.caseAcceptance": { label: "SoftDent case acceptance export", files: ["case_acceptance.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: [], optional: ["AcceptanceRate", "Presented", "Accepted"], automated: false },
+    "softdent.newPatients": { label: "SoftDent new patients export", files: ["softdent_new_patients.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: ["Count"], optional: ["Period"], automated: true, generatedBy: ["softdent_practice_exports.py"] },
+    "softdent.treatmentPlans": { label: "SoftDent treatment plan summary export", files: ["treatment_plan_summary.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: [], optional: ["Presented", "Accepted", "Amount"], automated: true, generatedBy: ["softdent_practice_exports.py"] },
+    "softdent.caseAcceptance": { label: "SoftDent case acceptance export", files: ["case_acceptance.csv"], importDir: "app_data/nr2/document_inbox/softdent", required: [], optional: ["AcceptanceRate", "Presented", "Accepted"], automated: true, generatedBy: ["softdent_practice_exports.py"] },
     "quickbooks.revenue": { label: "QuickBooks revenue/P&L export", files: ["quickbooks_revenue.csv"], importDir: "app_data/nr2/document_inbox/quickbooks", required: ["TotalIncome"], optional: ["Month"], automated: true },
     "quickbooks.expenses": { label: "QuickBooks expenses export", files: ["quickbooks_expenses.csv"], importDir: "app_data/nr2/document_inbox/quickbooks", required: ["TotalExpense"], optional: ["Month"], automated: true },
-    "quickbooks.expenseCategories": { label: "QuickBooks expense categories export", files: ["quickbooks_expense_categories.csv"], importDir: "app_data/nr2/document_inbox/quickbooks", required: ["Category"], optional: ["Amount"], automated: true },
+    "quickbooks.expenseCategories": { label: "QuickBooks expense categories export", files: ["quickbooks_expense_categories.csv"], importDir: "app_data/nr2/document_inbox/quickbooks", required: ["Category"], optional: ["Amount", "Period", "Scope"], automated: true },
     "quickbooks.ar": { label: "QuickBooks A/R export", files: ["quickbooks_ar.csv"], importDir: "app_data/nr2/document_inbox/quickbooks", required: ["Bucket"], optional: ["Balance"], automated: false },
     "local:documents": { label: "Local accounting documents", files: ["app_data/nr2/document_inbox (drop)", "app_data/nr2/document_inbox/softdent", "app_data/nr2/document_inbox/quickbooks", "document_source_import.py", "sync_document_sources.py", "app_data/nr2/accounting_documents.sqlite3 (OCR ledger)", "nr2:v2:documents (desktop store)"], importDir: "app_data/nr2/document_inbox", required: [], optional: [], automated: true, local: true },
     "local:narratives": { label: "Local narrative drafts", files: ["(local narrative drafts)"], importDir: "local records", required: [], optional: [], automated: true, local: true },
@@ -2896,6 +3137,7 @@ const HalSkills = (function () {
       "Data quality check before recommendations:",
       "",
       `Widget publish status: ${feed.jobs?.widgetPublish?.status || "UNKNOWN"}`,
+      `Accounting/excel validation: ${feed.accountingExcelValidation?.status || "UNKNOWN"}`,
       `Failed widgets: ${failed.length}`,
       `Degraded widgets: ${degraded.length}`,
       "",
@@ -2903,9 +3145,15 @@ const HalSkills = (function () {
       "1. Confirm SoftDent and QuickBooks import freshness before using totals.",
       "2. Leave A/R blank unless a verified SoftDent A/R export exists.",
       "3. Confirm provider performance is only Dr. Michael Reno.",
-      "4. Compare SoftDent production/collections to QuickBooks revenue only as a review signal, not as proof they must match.",
-      "5. Flag blanks, conflicting periods, missing claim statuses, and missing document metadata before recommendations.",
+      "4. Compare SoftDent collections to QuickBooks revenue as a review signal — not production to revenue.",
+      "5. Flag blanks, conflicting periods, zero collections with production, and missing document metadata before recommendations.",
     ];
+    if (feed.accountingExcelValidation?.issues?.length) {
+      lines.push("", "Accounting validation issues:");
+      feed.accountingExcelValidation.issues.slice(0, 8).forEach((issue) => {
+        lines.push(`- [${issue.severity}] ${issue.widgetKey}: ${issue.message}`);
+      });
+    }
     if (degraded.length) lines.push("", "Degraded: " + degraded.map((w) => w.title).join(", "));
     if (failed.length) lines.push("Failed: " + failed.map((w) => w.title).join(", "));
     return lines.join("\n");
@@ -2984,6 +3232,65 @@ const HalSkills = (function () {
       });
     }
     lines.push("", "Keep all posting decisions in human review. HAL may draft notes and Excel-style workbooks but cannot post to QuickBooks.");
+    lines.push(
+      "",
+      "Accounting basis note: QuickBooks revenue reflects cash-basis deposits; SoftDent production reflects date-of-service billing. Reconcile collections to QB revenue — not production.",
+    );
+    return lines.join("\n");
+  }
+
+  function formatAccountingReconciliationChecklist(feed, snapshot) {
+    const widgets = (feed && feed.widgets) || {};
+    const fin = widgets.practiceFinancialOverview;
+    const ar = widgets.softdentArAging;
+    const qb = snapshot?.dashboards?.quickbooks || {};
+    const finDash = snapshot?.dashboards?.financial || {};
+    const arCross = finDash.arCrossCheck || {};
+    const period = finDash.periodAlignment?.softdentPeriod || finDash.periodAlignment?.quickbooksPeriod || "current period";
+    const periodLines = [
+      `Current period focus: ${period}`,
+      fin ? `Financial overview: [${fin.status}] ${formatWidgetMetrics(fin)}` : "Financial overview: not available.",
+      ar ? `SoftDent A/R: [${ar.status}] ${formatWidgetMetrics(ar)}` : "SoftDent A/R: not available.",
+      qb.expenses != null ? `QuickBooks monthly expenses (latest import): ${qb.expenses}` : "QuickBooks monthly expenses: not loaded.",
+      qb.expenseCategories?.scopeLabel ? `Expense category pivot scope: ${qb.expenseCategories.scopeLabel}` : "Expense category pivot scope: unlabeled export.",
+      arCross.comparable
+        ? `A/R cross-check: SoftDent $${Number(arCross.softdentTotal || 0).toLocaleString()} vs QuickBooks $${Number(arCross.quickbooksTotal || 0).toLocaleString()} · variance $${Number(arCross.variance || 0).toFixed(2)}${arCross.withinTolerance ? " (within $500 tolerance)" : " (review required)"}`
+        : arCross.softdentTotal != null
+          ? `A/R cross-check: ${arCross.message}`
+          : "A/R cross-check: SoftDent A/R export not loaded.",
+      finDash.collectionRateMetrics?.trailingRate
+        ? `Trailing collection rate: ${finDash.collectionRateMetrics.trailingRate} (${finDash.collectionRateMetrics.trailingPeriods})`
+        : null,
+      finDash.collectionRateMetrics?.latestMonthIncomplete
+        ? `Latest month ${finDash.collectionRateMetrics.latestMonthPeriod}: ${finDash.collectionRateMetrics.latestMonthRate} — incomplete, excluded from trailing rate`
+        : null,
+    ].filter(Boolean);
+    const lines = [
+      "SoftDent + QuickBooks reconciliation checklist (local read-only):",
+      "",
+      "Industry context: SoftDent has no native QuickBooks sync. Monthly reconciliation compares PMS collections to QB deposits — not production to revenue.",
+      "",
+      ...periodLines,
+      "",
+      "Staff steps:",
+      "1. SoftDent → Reports → Collection Reports → Reconciliation Report for the prior month; confirm bank deposits match.",
+      "2. SoftDent → run a final daysheet for each day in the current month before trusting collections totals.",
+      "3. Compare SoftDent collections (not production) to QuickBooks bank deposits / revenue for the same period.",
+      "4. Compare SoftDent A/R aging total to QuickBooks balance-sheet A/R (export quickbooks_ar.csv to app_data/nr2/document_inbox/quickbooks/).",
+      "5. In NR2, run Work document workbook and review Tab 4 exceptions before period close.",
+      "6. Investigate any $0 collections with production > 0 — usually incomplete daysheet export, not a true 0% rate.",
+      "",
+      "NR2 validation status:",
+      `Accounting/excel validation: ${feed.accountingExcelValidation?.status || "UNKNOWN"}`,
+    ];
+    if (feed.accountingExcelValidation?.issues?.length) {
+      feed.accountingExcelValidation.issues.slice(0, 6).forEach((issue) => {
+        lines.push(`- [${issue.severity}] ${issue.widgetKey}: ${issue.message}`);
+      });
+    } else {
+      lines.push("- No active accounting validation exceptions.");
+    }
+    lines.push("", "Posting to QuickBooks remains human-reviewed only.");
     return lines.join("\n");
   }
 
@@ -3044,12 +3351,25 @@ const HalSkills = (function () {
     }
     lines.push("", "Tab 3 — Expense Category Pivot");
     const ebitda = widgets.ebitdaNormalization;
-    if (ebitda && ebitda.metrics && ebitda.metrics.topAddBackCategory) {
-      lines.push(`- Top add-back category: ${ebitda.metrics.topAddBackCategory}`);
-      lines.push(`- Add-back total: ${ebitda.metrics.addBackTotal || "—"}`);
+    if (ebitda && ebitda.metrics) {
+      if (ebitda.metrics.expenseCategoriesScope) lines.push(`- Scope: ${ebitda.metrics.expenseCategoriesScope}`);
+      if (ebitda.metrics.expenseCategoriesTotal) lines.push(`- Category pivot total: ${ebitda.metrics.expenseCategoriesTotal}`);
+      if (ebitda.metrics.monthlyExpensesLatest) lines.push(`- Monthly P&L expenses (compare here): ${ebitda.metrics.monthlyExpensesLatest}`);
+      if (ebitda.metrics.topAddBackCategory) lines.push(`- Top add-back category: ${ebitda.metrics.topAddBackCategory}`);
+      if (ebitda.metrics.addBackTotal) lines.push(`- Add-back total: ${ebitda.metrics.addBackTotal}`);
+      if (
+        !ebitda.metrics.expenseCategoriesTotal &&
+        !ebitda.metrics.topAddBackCategory
+      ) {
+        lines.push("- Expense category pivot waiting on QuickBooks expense categories import.");
+      }
     } else {
       lines.push("- Expense category pivot waiting on QuickBooks expense categories import.");
     }
+    lines.push(
+      "",
+      "Accounting basis note: QB revenue = cash-basis deposits; SoftDent production = date-of-service billing. Reconcile collections to QB revenue.",
+    );
     lines.push("", "Tab 4 — Reconciliation & Exceptions");
     lines.push("- Match document vendor/amount to QuickBooks expense categories before posting.");
     lines.push("- Flag documents in Pending Review before period close.");
@@ -3125,6 +3445,7 @@ const HalSkills = (function () {
     draftJournalEntry,
     buildJournalValidation,
     draftAndValidateJournal,
+    draftAndValidateJournalAsync,
     formatJournalDraft,
     // claim packet readiness
     assessClaimReadiness,
@@ -3194,6 +3515,7 @@ const HalSkills = (function () {
     formatEmptyWidgetExplanation,
     formatDailyOwnerBriefing,
     formatAccountingReviewQueue,
+    formatAccountingReconciliationChecklist,
     formatDocumentExcelWorkbook,
     formatExcelReconciliation,
     formatWidgetDetail,

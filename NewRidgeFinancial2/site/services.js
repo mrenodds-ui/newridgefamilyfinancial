@@ -352,6 +352,7 @@ const Services = (function () {
               queueCount: (documentsState.queue || []).length,
               posting: documentsState.posting || [],
               period: documentsState.period || null,
+              postingAudit: (documentsState.postingAudit || []).slice(0, 25),
               sourceCounts: summary.sourceCounts,
               top: summary.top,
               workbookSample: summary.workbookSample,
@@ -587,6 +588,62 @@ const Services = (function () {
     return out;
   }
 
+  function postingApi() {
+    if (typeof DocumentPosting !== "undefined") return DocumentPosting;
+    if (typeof window !== "undefined" && window.DocumentPosting) return window.DocumentPosting;
+    return null;
+  }
+
+  function validateDocumentStatusTransition(doc, nextStatus, opts) {
+    const api = postingApi();
+    if (api && typeof api.validateDocumentStatusTransition === "function") {
+      return api.validateDocumentStatusTransition(doc, nextStatus, opts);
+    }
+    return { ok: true, issues: [] };
+  }
+
+  function recordPostingAudit(state, entry) {
+    const api = postingApi();
+    if (api && typeof api.appendPostingAudit === "function") {
+      api.appendPostingAudit(state, entry);
+      return;
+    }
+    const audit = Array.isArray(state.postingAudit) ? state.postingAudit : [];
+    audit.unshift(entry);
+    state.postingAudit = audit.slice(0, 100);
+  }
+
+  function inferDocumentTransactionType(doc) {
+    const type = String((doc && doc.type) || "").toLowerCase();
+    if (type.includes("payroll")) return "payroll_accrual";
+    if (type.includes("supply") || type.includes("supplies")) return "supplies_accrual";
+    if (type.includes("equipment")) return "equipment_purchase";
+    if (type.includes("insurance") || type.includes("prepaid")) return "prepaid_insurance";
+    if (type.includes("depreciation")) return "depreciation";
+    return "vendor_bill";
+  }
+
+  async function maybeEnqueueJournalFromDocument(doc, opts) {
+    if (!opts || !opts.enqueueJournal || !doc || doc.status !== "Posted") return null;
+    const bridge = typeof DesktopBridge !== "undefined" ? DesktopBridge : null;
+    if (!bridge || typeof bridge.enqueueJournalPosting !== "function") return null;
+    const amount = parseMoney(doc.amount);
+    if (!(amount > 0)) return null;
+    const period = String(doc.date || "").slice(0, 7) || new Date().toISOString().slice(0, 7);
+    const description = `${doc.type || "Document"} — ${doc.vendor || "Vendor"} (${doc.id})`;
+    try {
+      return await bridge.enqueueJournalPosting({
+        description,
+        period,
+        amount,
+        actor: String((opts && opts.reviewedBy) || doc.reviewedBy || "Staff"),
+        context: { transaction_type: inferDocumentTransactionType(doc), document_id: doc.id },
+      });
+    } catch {
+      return null;
+    }
+  }
+
   function parseMoney(value) {
     const amount = Number(String(value || "").replace(/[^0-9.-]/g, ""));
     return Number.isFinite(amount) ? amount : 0;
@@ -673,6 +730,38 @@ const Services = (function () {
     notifyDocumentsSynced(syncResult);
   }
 
+  const documentsSyncState = { status: "idle", error: null, syncedAt: null };
+  let documentsSyncPromise = null;
+
+  function getDocumentsSyncState() {
+    return clone(documentsSyncState);
+  }
+
+  async function waitForDocumentsSync() {
+    const br = bridge();
+    if (!br || typeof br.syncAccountingDocuments !== "function") {
+      documentsSyncState.status = "ready";
+      return documentsSyncState;
+    }
+    if (documentsSyncState.status === "ready" && !documentsSyncPromise) return documentsSyncState;
+    if (documentsSyncPromise) {
+      try {
+        await documentsSyncPromise;
+      } catch {
+        /* surfaced via documentsSyncState */
+      }
+      return documentsSyncState;
+    }
+    if (documentsSyncState.status === "idle") {
+      try {
+        await ensureDocumentsSynced();
+      } catch {
+        /* surfaced via documentsSyncState */
+      }
+    }
+    return documentsSyncState;
+  }
+
   function notifyDocumentsSynced(result) {
     if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
     const state = (result && result.state) || mem.documents || null;
@@ -690,18 +779,40 @@ const Services = (function () {
 
   async function ensureDocumentsSynced() {
     const br = bridge();
-    if (!br || typeof br.syncAccountingDocuments !== "function") return;
-    try {
-      const result = await br.syncAccountingDocuments();
-      if (result && result.state && typeof result.state === "object") {
-        applySyncedDocumentsState(result);
-        return;
-      }
-      delete mem.documents;
-      notifyDocumentsSynced(result);
-    } catch (err) {
-      if (typeof RuntimeIssues !== "undefined") RuntimeIssues.record("services.ensureDocumentsSynced", err);
+    if (!br || typeof br.syncAccountingDocuments !== "function") {
+      documentsSyncState.status = "ready";
+      return { ok: true, skipped: true };
     }
+    if (documentsSyncPromise) return documentsSyncPromise;
+    documentsSyncState.status = "loading";
+    documentsSyncState.error = null;
+    documentsSyncPromise = (async () => {
+      try {
+        const result = await br.syncAccountingDocuments();
+        if (result && result.state && typeof result.state === "object") {
+          applySyncedDocumentsState(result);
+          documentsSyncState.status = "ready";
+          documentsSyncState.syncedAt = result.syncedAt || new Date().toISOString();
+          return result;
+        }
+        documentsSyncState.status = result && result.ok === false ? "error" : "ready";
+        if (documentsSyncState.status === "error") {
+          documentsSyncState.error = (result && result.error) || "Document sync failed";
+        } else {
+          documentsSyncState.syncedAt = new Date().toISOString();
+        }
+        notifyDocumentsSynced(result);
+        return result;
+      } catch (err) {
+        documentsSyncState.status = "error";
+        documentsSyncState.error = err.message || String(err);
+        if (typeof RuntimeIssues !== "undefined") RuntimeIssues.record("services.ensureDocumentsSynced", err);
+        throw err;
+      } finally {
+        documentsSyncPromise = null;
+      }
+    })();
+    return documentsSyncPromise;
   }
 
   const documents = {
@@ -717,7 +828,13 @@ const Services = (function () {
       if (filter && filter.status && filter.status !== "All") {
         queue = queue.filter((d) => d.status === filter.status);
       }
-      return clone({ entity: state.entity, queue, posting: recomputePosting(state.queue), period: state.period });
+      return clone({
+        entity: state.entity,
+        queue,
+        posting: recomputePosting(state.queue),
+        period: state.period,
+        postingAudit: (state.postingAudit || []).slice(0, 50),
+      });
     },
     async get(id) {
       const state = await load("documents", emptyDocuments);
@@ -760,16 +877,66 @@ const Services = (function () {
       });
       state.entity = state.entity || "New Ridge Family Financial";
       state.period = recomputeDocumentPeriod(state.queue);
+      const posting = postingApi();
+      if (posting && typeof posting.buildPostingAuditEntry === "function") {
+        recordPostingAudit(
+          state,
+          posting.buildPostingAuditEntry({
+            doc,
+            previousStatus: null,
+            nextStatus: status,
+            note: "Document added to queue",
+          }),
+        );
+      }
       await save("documents", state);
       return clone(doc);
     },
-    async updateStatus(id, status) {
+    async updateStatus(id, status, opts) {
       await delay(160);
       const state = clone(await load("documents", emptyDocuments));
       const doc = (state.queue || []).find((d) => d.id === id);
       if (!doc) throw new Error("Document not found");
+      const validation = validateDocumentStatusTransition(doc, status, opts || {});
+      if (!validation.ok) throw new Error(validation.issues.join(" "));
+      const previousStatus = doc.status;
       doc.status = status;
       doc.statusTone = status === "Posted" ? "info" : status === "Ready to Post" ? "ok" : "warn";
+      if (status === "Posted") {
+        doc.reviewedBy = String((opts && opts.reviewedBy) || doc.reviewedBy || "").trim();
+        doc.reviewedAt = new Date().toISOString();
+      }
+      const posting = postingApi();
+      if (posting && typeof posting.buildPostingAuditEntry === "function" && previousStatus !== status) {
+        recordPostingAudit(
+          state,
+          posting.buildPostingAuditEntry({
+            doc,
+            previousStatus,
+            nextStatus: status,
+            reviewedBy: (opts && opts.reviewedBy) || doc.reviewedBy,
+            actor: (opts && opts.actor) || "Staff",
+          }),
+        );
+      }
+      const enqueueResult = await maybeEnqueueJournalFromDocument(doc, opts || {});
+      if (enqueueResult && enqueueResult.queueEntry) {
+        doc.journalQueueId = enqueueResult.queueEntry.queueId || enqueueResult.queueEntry.queue_id;
+        const postingApiRef = postingApi();
+        if (postingApiRef && typeof postingApiRef.buildPostingAuditEntry === "function") {
+          recordPostingAudit(
+            state,
+            postingApiRef.buildPostingAuditEntry({
+              doc,
+              previousStatus: status,
+              nextStatus: status,
+              reviewedBy: (opts && opts.reviewedBy) || doc.reviewedBy,
+              actor: (opts && opts.actor) || "Staff",
+              note: `Journal draft enqueued (${doc.journalQueueId})`,
+            }),
+          );
+        }
+      }
       state.period = recomputeDocumentPeriod(state.queue);
       await save("documents", state);
       return clone(doc);
@@ -879,6 +1046,8 @@ const Services = (function () {
     officeManager,
     composeNarrative,
     resetAll,
+    waitForDocumentsSync,
+    getDocumentsSyncState,
   };
 })();
 

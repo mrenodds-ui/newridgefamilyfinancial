@@ -27,6 +27,19 @@ const HalRouteExec = (function () {
     );
   }
 
+  function extractRememberText(query) {
+    const patterns = [
+      /\bremember this[:.]?\s+(.+)$/i,
+      /\bsave (?:this |that )?(?:to )?memory[:.]?\s+(.+)$/i,
+      /\blearn(?:ing)?[:.]?\s+(.+)$/i,
+    ];
+    for (const pattern of patterns) {
+      const match = String(query || "").match(pattern);
+      if (match && match[1]) return match[1].trim();
+    }
+    return "";
+  }
+
   async function execute(result, trimmed, toolResults, ctx) {
     if (result.useEscalation || result.useReasoning || result.useModel) return null;
 
@@ -229,7 +242,7 @@ const HalRouteExec = (function () {
           "I can draft a journal entry locally (draft only — never posted). Tell me the amount and the type, e.g. " +
           '"Draft a journal entry for $1,200 prepaid insurance" or include a period like 2025-05.';
       } else {
-        const draft = HalSkills.draftAndValidateJournal({
+        const draft = await HalSkills.draftAndValidateJournalAsync({
           description: req.description,
           period: req.period,
           amount: req.amount,
@@ -274,6 +287,62 @@ const HalRouteExec = (function () {
         (briefing && briefing.officeManager) ||
         officeApi.buildOfficeManagerState(snapshot, ctx, briefing || { officePriorities: officeApi.buildOfficePriorities(snapshot, ctx) });
       return outcome(officeApi.formatDailyOfficeBriefing(state, snapshot), "office", result.intent, [], { refreshHal: true });
+    }
+
+    if (result.useRememberMemory) {
+      const desktop = typeof DesktopBridge !== "undefined" ? DesktopBridge : window.DesktopBridge;
+      if (!desktop || !desktop.hasDesktopApi || !desktop.hasDesktopApi()) {
+        const message =
+          desktop && desktop.desktopRequiredMessage
+            ? desktop.desktopRequiredMessage("Saving durable HAL learned facts")
+            : "Learning requires the NR2 desktop app.";
+        return outcome(message, "memory", result.intent);
+      }
+      const wantsWeb = /\bweb\b/i.test(trimmed);
+      if (wantsWeb && typeof HalAgent !== "undefined" && HalAgent.getLastWebResearch) {
+        const last = HalAgent.getLastWebResearch();
+        if (last && Array.isArray(last.results) && last.results.length) {
+          try {
+            const saved = await desktop.rememberHalWebFindings(last.query || last.originalQuery || trimmed, last.results);
+            const memory = saved && saved.memory;
+            return outcome(
+              `Saved public web findings to durable HAL memory${memory && memory.id ? ` (${memory.id})` : ""}. I can use this as guidance in future answers.`,
+              "memory",
+              result.intent,
+            );
+          } catch (error) {
+            return outcome(
+              error && error.message ? error.message : "Could not save web findings to memory.",
+              "memory",
+              result.intent,
+            );
+          }
+        }
+        return outcome(
+          "No recent web research is available to save. Ask a web research question first, then say Remember the web findings.",
+          "memory",
+          result.intent,
+        );
+      }
+      const fact = extractRememberText(trimmed);
+      if (!fact) {
+        return outcome(
+          'Tell me what to remember, for example: Remember this: SoftDent needs a final daysheet per date for accurate A/R.',
+          "memory",
+          result.intent,
+        );
+      }
+      try {
+        const saved = await desktop.rememberHalFact(fact);
+        const memory = saved && saved.memory;
+        return outcome(
+          `Saved to durable HAL memory${memory && memory.id ? ` (${memory.id})` : ""}:\n- ${memory ? memory.text : fact}`,
+          "memory",
+          result.intent,
+        );
+      } catch (error) {
+        return outcome(error && error.message ? error.message : "Could not save memory.", "memory", result.intent);
+      }
     }
 
     if (result.useTaskList) {
@@ -392,6 +461,7 @@ const HalRouteExec = (function () {
         explainEmpty: () => HalSkills.formatEmptyWidgetExplanation(feed, result.prompt || trimmed),
         dailyOwnerBriefing: () => HalSkills.formatDailyOwnerBriefing(feed, snapshot),
         accountingReviewQueue: () => HalSkills.formatAccountingReviewQueue(feed, snapshot),
+        accountingReconciliationChecklist: () => HalSkills.formatAccountingReconciliationChecklist(feed, snapshot),
         documentExcelWorkbook: () => HalSkills.formatDocumentExcelWorkbook(feed, snapshot),
         excelReconciliation: () => HalSkills.formatExcelReconciliation(feed, snapshot),
       };

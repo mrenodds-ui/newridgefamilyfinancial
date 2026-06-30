@@ -14,7 +14,8 @@ inventory-only discovery until a report is staged into the canonical import lane
 | --- | --- |
 | `SOFTDENT_END_OF_DAY_REPORT_PATH` | Optional explicit path to one report file |
 | `SOFTDENT_END_OF_DAY_REPORT_DIR` | Optional directory containing multiple dated reports |
-| Default directory | `app/data/imports/softdent/daily_end_of_day/` |
+| Default directory | `app/data/imports/softdent/daily_end_of_day/` (legacy FastAPI lane) |
+| NR2 desktop cache | `app_data/nr2/document_inbox/softdent/` — migrated on first `import_sync` |
 | Latest alias (after source sync) | `softdent_daily_end_of_day_latest.txt` or `.pdf` |
 
 ## Supported formats (initial)

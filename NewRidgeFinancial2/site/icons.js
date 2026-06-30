@@ -2,7 +2,7 @@
  * Shared inline SVG icons for nav, HAL widgets, and page surfaces.
  * Uses currentColor so icons inherit sidebar/toolbar/badge tones.
  */
-const AppIcons = (function () {
+var AppIcons = (function () {
   const BASE =
     'xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"';
 
@@ -22,6 +22,7 @@ const AppIcons = (function () {
     library: svg('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>'),
     "office-manager": svg('<circle cx="12" cy="12" r="3"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="m4.9 4.9 2.1 2.1"/><path d="m16.9 16.9 2.1 2.1"/><path d="M2 12h3"/><path d="M19 12h3"/><path d="m4.9 19.1 2.1-2.1"/><path d="m16.9 7.1 2.1-2.1"/>'),
     hal: svg('<path d="M12 3 4 9v6l8 6 8-6V9Z"/><path d="M12 12 4 9"/><path d="m12 12 8-3"/><path d="M12 12v9"/>'),
+    sidenotes: svg('<path d="M21 15a2 2 0 0 1-2 2H8l-5 3V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8"/><path d="M8 13h5"/>'),
   };
 
   const WIDGET = {
@@ -57,6 +58,7 @@ const AppIcons = (function () {
     officeManagerTasks: svg('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'),
     officeManagerBoundaries: svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12h6"/>'),
     officeManagerSurfaces: svg('<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/>'),
+    sidenotesProgram: NAV.sidenotes,
   };
 
   const UI = {
@@ -73,6 +75,19 @@ const AppIcons = (function () {
     unpin: svg('<path d="m3 3 18 18"/><path d="M12 17v5"/><path d="M8 3h8l-1 8 3 3v3H8"/>'),
     close: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
     voice: svg('<path d="M11 5 6 9H3v6h3l5 4Z"/><path d="M16 9.5a4 4 0 0 1 0 5"/><path d="M19 7a8 8 0 0 1 0 10"/>'),
+    check: svg('<path d="M20 6 9 17l-5-5"/>'),
+    send: svg('<path d="m5 12 14-7-4 14 4-7 14-7Z"/>'),
+    smoke: svg('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M12 8v4"/><path d="M12 16h.01"/>'),
+    handoff: svg('<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14h6"/><path d="M9 18h6"/><path d="M9 10h6"/>'),
+    audit: svg('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'),
+    surface: svg('<rect x="3" y="4" width="7" height="7" rx="1"/><rect x="14" y="4" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/>'),
+    info: svg('<circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/>'),
+    add: svg('<path d="M12 5v14"/><path d="M5 12h14"/>'),
+    copy: svg('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+    monitor: svg('<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/><circle cx="12" cy="10" r="2"/>'),
+    chevronRight: svg('<path d="m9 18 6-6-6-6"/>'),
+    activity: svg('<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'),
+    insights: svg('<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2Z"/>'),
   };
 
   const GLANCE = [
@@ -118,6 +133,9 @@ const AppIcons = (function () {
 
 if (typeof module !== "undefined" && module.exports) {
   module.exports = AppIcons;
+}
+if (typeof globalThis !== "undefined") {
+  globalThis.AppIcons = AppIcons;
 }
 if (typeof window !== "undefined") {
   window.AppIcons = AppIcons;

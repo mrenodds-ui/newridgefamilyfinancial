@@ -87,10 +87,8 @@ for (const page of FUNCTIONAL_PAGES) {
   for (const check of page.checks) {
     assert.ok(html.includes(check), `${page.id} must include ${check}`);
   }
-  if (page.id !== "office-manager") {
     assert.ok(html.includes("data-hal-widget-key"), `${page.id} must wire HAL into page widgets`);
     assert.ok(html.includes("pv-hal-strip") || html.includes("pv-hal-widget__badge"), `${page.id} must show HAL placement chrome`);
-  }
   if (page.id === "financial") {
     assert.ok(!html.includes("Dr. Adams"), "financial page must not render sample provider names");
     assert.ok(!html.includes("Hygiene Team"), "financial page must not render sample provider names");
@@ -173,7 +171,7 @@ const diagnostics = ImportDiagnostics.evaluateBundle(diagBundle, manifest);
 assert.ok(diagnostics.datasets.length === Object.keys(manifest.datasets).length, "diagnostics must evaluate all manifest datasets");
 ["softdent.newPatients", "softdent.treatmentPlans", "softdent.caseAcceptance"].forEach((datasetKey) => {
   const item = diagnostics.datasets.find((row) => row.datasetKey === datasetKey);
-  assert.ok(item && item.status === "not_configured", `${datasetKey} must report not_configured until exports exist`);
+  assert.ok(item && item.status === "missing", `${datasetKey} must report missing until exports exist`);
 });
 const importStatus = ImportLoaderPage.formatImportStatus(Object.assign({}, diagBundle, { diagnostics }));
 assert.ok(importStatus.includes("Dataset health:"), "import status text must include dataset health block");

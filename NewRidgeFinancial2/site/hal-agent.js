@@ -28,6 +28,7 @@ const HalAgent = (function () {
       "monitor sidenotes", "run readiness checks", "search local library",
       "refresh local imports", "place verified data into local dashboards/widgets",
       "prioritize office work", "publish daily office briefings",
+      "research public web docs for practice reference (no PHI sent)",
     ],
     rules: [
       "Apply metacognition: self-check every answer against tool results and missing-data rules before responding.",
@@ -37,6 +38,7 @@ const HalAgent = (function () {
       "Never claim an external action was performed.",
       "If data is stale or unavailable, say so before recommending.",
       "Cite which local source or tool informed the answer when possible.",
+      "When web research tool results are present, use them for public reference context and say they are not verified against this practice's live data.",
       "When planning or prioritizing, prefer the proactive office manager assessment over generic advice.",
     ],
   };
@@ -155,6 +157,72 @@ const HalAgent = (function () {
         return { ok: true, summary: HalSkills.formatRagResult(rag).slice(0, 2500), query: q };
       },
     },
+    research_web: {
+      label: "Research public web (practice reference)",
+      run: async (ctx, args) => {
+        const cfg = ctx.halModels && ctx.halModels.config && ctx.halModels.config.webResearch;
+        if (!cfg || cfg.enabled !== true) {
+          return { ok: false, summary: "Web research is disabled in HAL config." };
+        }
+        const bridge =
+          typeof DesktopBridge !== "undefined"
+            ? DesktopBridge
+            : typeof window !== "undefined" && window.DesktopBridge
+              ? window.DesktopBridge
+              : null;
+        if (!bridge || typeof bridge.webResearch !== "function") {
+          return { ok: false, summary: "Web research requires the NR2 desktop app." };
+        }
+        const q = String(args.query || "").trim();
+        if (!q) return { ok: false, summary: "No query for web research." };
+        const payload = await bridge.webResearch(q, { maxResults: cfg.maxResults || 5, enrich: true });
+        if (!payload || payload.ok === false) {
+          const err = (payload && (payload.error || payload.policy)) || "lookup failed";
+          return { ok: false, summary: `Web research unavailable: ${err}` };
+        }
+        const lines = (payload.results || []).map((row, idx) => {
+          const title = row.title || "Result";
+          const snippet = row.snippet || "";
+          const url = row.url || "";
+          return `${idx + 1}. ${title}\n   ${snippet}${url ? `\n   ${url}` : ""}`;
+        });
+        const header = `Public web research for: ${payload.query || q}`;
+        const warning = payload.warnings && payload.warnings.length ? `\nSanitization: ${payload.warnings.join(" ")}` : "";
+        lastWebResearch = payload;
+        return {
+          ok: true,
+          summary: `${header}${warning}\n\n${lines.join("\n\n")}`.slice(0, 3500),
+          research: payload,
+        };
+      },
+    },
+    remember_fact: {
+      label: "Save learned fact to durable memory",
+      run: async (ctx, args) => {
+        const bridge =
+          typeof DesktopBridge !== "undefined"
+            ? DesktopBridge
+            : typeof window !== "undefined" && window.DesktopBridge
+              ? window.DesktopBridge
+              : null;
+        if (!bridge || typeof bridge.rememberHalFact !== "function") {
+          return { ok: false, summary: "Learning requires the NR2 desktop app." };
+        }
+        const text = String(args.text || args.query || "").trim();
+        if (!text) return { ok: false, summary: "No fact text to remember." };
+        try {
+          const saved = await bridge.rememberHalFact(text, { source: args.source || "staff:remember" });
+          approvedMemories = ((saved && (await bridge.listHalMemories())) || {}).items || approvedMemories;
+          return {
+            ok: true,
+            summary: `Saved to durable HAL memory (${saved.memory && saved.memory.id ? saved.memory.id : "learned"}). Future answers may use this as guidance.`,
+            memory: saved.memory,
+          };
+        } catch (error) {
+          return { ok: false, summary: error && error.message ? error.message : String(error) };
+        }
+      },
+    },
     explain_firewall: {
       label: "Explain external-action firewall",
       run: async (ctx) => {
@@ -214,6 +282,9 @@ const HalAgent = (function () {
   let workingMemory = createWorkingMemory();
   let longTermMemory = createLongTermMemory();
   let repairLog = [];
+  let approvedMemories = [];
+  let memoriesLoaded = false;
+  let lastWebResearch = null;
   let memoryLoaded = false;
   let memoryDirty = false;
   let health = {
@@ -276,7 +347,45 @@ const HalAgent = (function () {
     return "local_command";
   }
 
-  function buildPlan(query, route, working, longTerm) {
+  const WEB_RESEARCH_PRACTICE_RE =
+    /\b(accounting|softdent|quickbooks|reconcil|production|collections|daysheet|ebitda|p&l|profit|ledger|month.?end|close|a\/r|receivable|claim|insurance|payer|denial|narrative|eob|era|credential|prior auth|compliance|hipaa|osha|cdt|coding|fee schedule|hygien|staff|schedul|front desk|carestream|sensei|dentrix|eaglesoft|treatment plan|case acceptance|vendor|documentation|best practice|regulation|billing|reimbursement|write.?off|adjustment)\b/i;
+
+  const WEB_RESEARCH_EXPLICIT_RE =
+    /\b(search the web|look up online|web research|research online|find (?:out|info) (?:about|on)|what does .+ say about|latest (?:on|about)|public documentation|vendor docs?)\b/i;
+
+  function webResearchEnabled(ctx, query, route) {
+    const cfg = ctx && ctx.halModels && ctx.halModels.config && ctx.halModels.config.webResearch;
+    if (!cfg || cfg.enabled !== true) return false;
+    const r = route || {};
+    if (r.intent === "blocked: firewall" || r.text) return false;
+    if (r.useWebResearch === true) return true;
+    if (WEB_RESEARCH_EXPLICIT_RE.test(query)) return true;
+
+    const mode = String(cfg.mode || "broad").toLowerCase();
+    if (mode === "accounting") {
+      return /\b(accounting|softdent|quickbooks|reconcil|production|collections|daysheet|ebitda|p&l|profit|ledger|month.?end|close|a\/r|receivable|cash basis|accrual)\b/i.test(
+        query,
+      );
+    }
+
+    // broad: model-backed and substantive practice questions
+    if (r.useModel || r.useReasoning || r.useEscalation || r.useOss) return true;
+    if (
+      (r.useClaimReadiness ||
+        r.useWidgetGuidance ||
+        r.useProactiveBriefing ||
+        r.useOfficeBriefing ||
+        r.useDocRag ||
+        r.useProgramSnapshot) &&
+      WEB_RESEARCH_PRACTICE_RE.test(query)
+    ) {
+      return true;
+    }
+    if (WEB_RESEARCH_PRACTICE_RE.test(query) && String(query).trim().length >= 12) return true;
+    return false;
+  }
+
+  function buildPlan(query, route, working, longTerm, ctx) {
     const intent = route.intent || "";
     const isUnsafe = intent === "blocked: firewall";
     const tools = [];
@@ -348,8 +457,10 @@ const HalAgent = (function () {
       tools.push("read_office_briefing");
     }
     if (intent === "firewall" || /\bfirewall\b/i.test(query)) tools.push("explain_firewall");
+    if (ctx && webResearchEnabled(ctx, query, route)) tools.push("research_web");
 
-    const uniqueTools = [...new Set(tools)].slice(0, AGENT_BUDGET.maxTools);
+    const toolBudget = tools.includes("research_web") ? 4 : AGENT_BUDGET.maxTools;
+    const uniqueTools = [...new Set(tools)].slice(0, toolBudget);
 
     return {
       questionType: classifyQuestion(query, route),
@@ -422,6 +533,21 @@ const HalAgent = (function () {
         `- Report style: ${longTerm.preferences.reportStyle}`,
         `- Priority pages: ${(longTerm.preferences.priorityPages || []).join(", ")}`,
       );
+    }
+
+    const webCfg = ctx.halModels && ctx.halModels.config && ctx.halModels.config.webResearch;
+    if (webCfg && webCfg.enabled === true) {
+      parts.push(
+        "",
+        "Local tools you may rely on when results are provided:",
+        "- research_web: sanitized public web reference (practice ops, vendors, insurance, compliance)",
+        "- read_program_snapshot, read_widget_feed, read_source_health, and other local-only tools",
+      );
+    }
+
+    if (window.HalSkills && approvedMemories.length) {
+      const guidance = HalSkills.memoryGuidanceText(approvedMemories);
+      if (guidance) parts.push("", guidance);
     }
 
     const toolText = summarizeToolResults(toolResults);
@@ -499,10 +625,30 @@ const HalAgent = (function () {
     return row;
   }
 
+  async function loadApprovedMemories(ctx) {
+    const bridge =
+      typeof DesktopBridge !== "undefined"
+        ? DesktopBridge
+        : typeof window !== "undefined" && window.DesktopBridge
+          ? window.DesktopBridge
+          : null;
+    if (!bridge || typeof bridge.listHalMemories !== "function") return;
+    try {
+      const payload = await bridge.listHalMemories();
+      approvedMemories = (payload && payload.items) || [];
+      memoriesLoaded = true;
+    } catch {
+      /* memory load is best-effort */
+    }
+  }
+
   async function loadMemory(ctx) {
     // Load exactly once per session; subsequent queries reuse in-memory state.
     memoryLoaded = true;
-    if (!ctx || typeof ctx.persistGet !== "function") return;
+    if (!ctx || typeof ctx.persistGet !== "function") {
+      await loadApprovedMemories(ctx);
+      return;
+    }
     try {
       const savedWorking = await ctx.persistGet(WORKING_KEY);
       const savedLong = await ctx.persistGet(MEMORY_KEY);
@@ -513,6 +659,7 @@ const HalAgent = (function () {
     } catch {
       /* memory load is best-effort */
     }
+    await loadApprovedMemories(ctx);
   }
 
   async function saveMemory(ctx) {
@@ -569,10 +716,10 @@ const HalAgent = (function () {
       return { text, lane: "reason21b" };
     }
     if (route.useModel) {
-      if (!ctx.localModelReady()) return { text: ctx.offlineModelMessage("chat14b"), lane: "chat14b · offline" };
+      if (!ctx.localModelReady()) return { text: ctx.offlineModelMessage("chat8b"), lane: "chat8b · offline" };
       const lm = ctx.localModelConfig();
       const text = await ctx.runModel(lm, combinedPrompt, query, "Local chat draft", onToken);
-      return { text, lane: "chat14b" };
+      return { text, lane: "chat8b" };
     }
     return null;
   }
@@ -593,7 +740,7 @@ const HalAgent = (function () {
     recordTurn("user", trimmed, { focus: workingMemory.currentPage });
 
     const route = HalCore.routeHalCommand(ctx.halData, ctx.halModels, ctx.pages, trimmed);
-    const plan = buildPlan(trimmed, route, workingMemory, longTermMemory);
+    const plan = buildPlan(trimmed, route, workingMemory, longTermMemory, ctx);
     const isModelLane = !!(route.useModel || route.useReasoning || route.useEscalation || route.useOss);
 
     // Instant local-command path: deterministic routes that need no tools and no
@@ -715,6 +862,14 @@ const HalAgent = (function () {
     return longTermMemory.preferences;
   }
 
+  function getLastWebResearch() {
+    return lastWebResearch ? Object.assign({}, lastWebResearch) : null;
+  }
+
+  function getApprovedMemories() {
+    return approvedMemories.slice();
+  }
+
   return {
     ARCHITECTURE_VERSION,
     AGENT_BUDGET,
@@ -731,6 +886,8 @@ const HalAgent = (function () {
     getLongTermMemory,
     getRepairLog,
     getHealth,
+    getLastWebResearch,
+    getApprovedMemories,
     updatePreferences,
     logRepair,
   };

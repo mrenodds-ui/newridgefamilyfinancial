@@ -107,9 +107,17 @@ def _load_dataset(directory: Path, names: tuple[str, ...]) -> dict[str, Any] | N
     if path is None:
         return None
     rows = _read_tabular(path)
+    file_sha: str | None = None
+    try:
+        from import_cache_ttl import sha256_file
+
+        file_sha = sha256_file(path)
+    except Exception:
+        pass
     return {
         "sourceFile": path.name,
         "modifiedAt": _mtime_iso(path),
+        "sha256": file_sha,
         "rows": rows,
     }
 
@@ -155,12 +163,22 @@ def load_import_bundle(*, sync: bool = True, deep: bool = False) -> dict[str, An
         },
     }
     try:
+        from import_cache_ttl import load_manifest
         from import_diagnostics import check_upstream_health, evaluate_bundle
 
-        # `deep` controls the expensive recursive upstream-directory scan. The UI
-        # hot path (get_import_bundle) calls with deep=False so dashboards render
-        # immediately; background/sync paths pass deep=True for full diagnostics.
-        bundle["diagnostics"] = evaluate_bundle(bundle, deep=deep)
+        sync_diagnostics = None
+        if isinstance(sync_status.get("result"), dict):
+            sync_diagnostics = sync_status["result"].get("diagnostics")
+        if sync_diagnostics:
+            bundle["diagnostics"] = sync_diagnostics
+        else:
+            manifest_cache = load_manifest()
+            previous_checksums = dict((manifest_cache or {}).get("datasetChecksums") or {})
+            bundle["diagnostics"] = evaluate_bundle(
+                bundle,
+                deep=deep,
+                previous_checksums=previous_checksums,
+            )
         bundle["upstreamHealth"] = check_upstream_health() if deep else None
         if sync_status.get("result") and isinstance(sync_status["result"], dict):
             sync_status["result"].setdefault("diagnostics", bundle["diagnostics"])

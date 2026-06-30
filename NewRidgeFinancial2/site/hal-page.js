@@ -12,8 +12,100 @@ const HalPage = (function () {
       .replaceAll("'", "&#039;");
   }
 
+  function iconsApi() {
+    if (typeof AppIcons !== "undefined") return AppIcons;
+    if (typeof globalThis !== "undefined" && globalThis.AppIcons) return globalThis.AppIcons;
+    if (typeof window !== "undefined" && window.AppIcons) return window.AppIcons;
+    return null;
+  }
+
   function uiIcon(key) {
-    return typeof AppIcons !== "undefined" ? AppIcons.ui(key) : "";
+    const api = iconsApi();
+    if (!api) return "";
+    const icon = api.ui(key);
+    return icon ? api.wrap("hp-ico", icon) : "";
+  }
+
+  function widgetIcon(key) {
+    const api = iconsApi();
+    if (!api) return "";
+    const icon = api.widget(key);
+    return icon ? api.wrap("hp-ico hp-ico--widget", icon) : "";
+  }
+
+  function navIcon(pageId) {
+    const api = iconsApi();
+    if (!api) return "";
+    const icon = api.nav(pageId);
+    return icon ? api.wrap("hp-ico", icon) : "";
+  }
+
+  function cardIconRaw(type, key) {
+    const api = iconsApi();
+    if (!api) return "";
+    if (type === "nav") return api.nav(key) || "";
+    if (type === "widget") return api.widget(key) || "";
+    if (type === "ui") return api.ui(key) || "";
+    if (type === "hal") return api.hal() || "";
+    return "";
+  }
+
+  function cardIcon(type, key) {
+    const icon = cardIconRaw(type, key);
+    const api = iconsApi();
+    return icon && api ? api.wrap("hp-card__ico", icon) : "";
+  }
+
+  function promptIcon(text) {
+    const q = String(text || "").toLowerCase();
+    if (q.includes("sidenote")) return navIcon("sidenotes");
+    if (q.includes("widget") || q.includes("fill all") || q.includes("missing data by widget")) {
+      return widgetIcon("officeManagerPriorities");
+    }
+    if (q.includes("claim")) return navIcon("claims");
+    if (q.includes("journal") || q.includes("accounting") || q.includes("reconcil")) return navIcon("documents");
+    if (q.includes("import") || q.includes("pull") || q.includes("softdent") || q.includes("quickbooks")) {
+      return navIcon("softdent");
+    }
+    if (q.includes("briefing") || q.includes("attention") || q.includes("plan for today")) {
+      return navIcon("office-manager");
+    }
+    if (q.includes("firewall")) return uiIcon("shield");
+    if (q.includes("snapshot") || q.includes("program") || q.includes("blocked") || q.includes("ready")) {
+      return cardIcon("hal");
+    }
+    if (q.includes("task")) return widgetIcon("officeManagerTasks");
+    if (q.includes("library") || q.includes("search") || q.includes("narrative")) return navIcon("narratives");
+    if (q.includes("readiness") || q.includes("smoke") || q.includes("handoff")) return uiIcon("check");
+    if (q.includes("monitor")) return uiIcon("monitor");
+    return uiIcon("send");
+  }
+
+  function actionChip(label, attrs) {
+    return `<button type="button" class="hp-action hp-action--icon" ${attrs}>${promptIcon(label)}<span class="hp-action__text">${esc(label)}</span></button>`;
+  }
+
+  function cardHead(titleHtml, drawerKey, drawerLabel, iconSvg) {
+    const iconPart = iconSvg
+      ? `<button type="button" class="hp-card__ico hp-card__ico--btn" data-hal-drawer="${esc(drawerKey)}" title="${esc(drawerLabel)}" aria-label="${esc(drawerLabel)}">${iconSvg}</button>`
+      : "";
+    return `<div class="hp-card__head"><h3>${iconPart}${titleHtml}</h3>${drawerInfoBtn(drawerKey, drawerLabel)}</div>`;
+  }
+
+  function surfNavTarget(item) {
+    const target = item && item.target;
+    if (target === "hal" || target === "sidenotes") return "sidenotes";
+    return target || "";
+  }
+
+  function surfNavIcon(item) {
+    const target = surfNavTarget(item);
+    if (target === "sidenotes") return navIcon("sidenotes");
+    return navIcon(item && item.target);
+  }
+
+  function drawerInfoBtn(panelKey, label) {
+    return `<button type="button" class="hp-info" data-hal-drawer="${esc(panelKey)}" title="${esc(label)}" aria-label="${esc(label)}">${uiIcon("info")}<span class="hp-info__label">i</span></button>`;
   }
 
   function formatStatus(value) {
@@ -50,15 +142,52 @@ const HalPage = (function () {
     return `<p class="hp-live-note">${esc(message)}</p>`;
   }
 
+  function isSideNotesInboxLive(inbox) {
+    const mon = inbox && inbox.monitor;
+    if (!mon) return false;
+    const checkedMs = mon.checkedAt ? Date.parse(mon.checkedAt) : NaN;
+    return Number.isFinite(checkedMs) && Date.now() - checkedMs < 45000;
+  }
+
+  function stationRosterHtml(inbox) {
+    const stations = (inbox && inbox.monitor && inbox.monitor.stations) || [];
+    if (!stations.length) {
+      return `<p class="hp-sn-empty">No workstation watchers registered yet. Run <code>run-sidenotes-helper.bat</code> on each SideNotesIM PC.</p>`;
+    }
+    const rows = stations
+      .map((station) => {
+        const live = station.live === true;
+        const badge = live
+          ? '<span class="hp-sn-badge hp-sn-badge--ok">LIVE</span>'
+          : '<span class="hp-sn-badge hp-sn-badge--off">OFFLINE</span>';
+        const flags = [
+          station.announce ? "voice" : "silent",
+          station.bellSuppressed ? "bell muted" : "bell on",
+        ].join(" · ");
+        const checked = station.checkedAt ? esc(station.checkedAt.slice(11, 19)) + " UTC" : "—";
+        return `<tr>
+          <td><strong>${esc(station.station || "—")}</strong></td>
+          <td>${badge}</td>
+          <td>${esc(flags)}</td>
+          <td>${esc(checked)}</td>
+        </tr>`;
+      })
+      .join("");
+    return `<div class="hp-sn-stations-wrap">
+      <table class="hp-table hp-sn-stations"><thead><tr><th>Station</th><th>Watcher</th><th>Mode</th><th>Checked</th></tr></thead><tbody>${rows}</tbody></table>
+    </div>`;
+  }
+
+  function sideNotesHubFootnote(hubPath, online) {
+    const hub = hubPath ? `<code>${esc(hubPath)}</code>` : "<code>NR2_SIDENOTES_HUB_DATA</code> (not configured)";
+    return `<p class="hp-sn-foot">Shared hub: ${hub} · external SideNotesIM helper · routing metadata only · ${online ? "network feed active" : "waiting for watchers"}</p>`;
+  }
+
   function liveSideNotesHtml(inbox) {
     // Live feed from the SideNotesIM watcher helper (routing metadata only —
     // message bodies are never read). `inbox` is null when the helper is offline.
     const mon = (inbox && inbox.monitor) || {};
-    // The inbox file persists after the watcher stops, so treat a stale
-    // heartbeat (>45s) as offline rather than trusting mere file existence.
-    const checkedMs = mon.checkedAt ? Date.parse(mon.checkedAt) : NaN;
-    const fresh = Number.isFinite(checkedMs) && Date.now() - checkedMs < 45000;
-    const online = !!(inbox && inbox.monitor) && fresh;
+    const online = isSideNotesInboxLive(inbox);
     const items = (inbox && Array.isArray(inbox.items) ? inbox.items : []).slice().reverse();
     const statusBadge = online
       ? '<span class="hp-sn-badge hp-sn-badge--ok">LIVE</span>'
@@ -112,7 +241,7 @@ const HalPage = (function () {
     </div>`;
   }
 
-  function sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox) {
+  function sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox, hubPath) {
     const notes = halSideNotes || [];
     const mon = halSideNoteMonitor || { activeCount: 0, openCount: 0, pinnedCount: 0, highPriorityCount: 0 };
     const active = notes.filter((n) => n.status !== "archived");
@@ -134,6 +263,7 @@ const HalPage = (function () {
       : '<li class="hp-sn-empty">No local notes — add one below or ask HAL.</li>';
     return `<div class="hp-sidenotes-monitor" data-panel="sidenotes">
       ${liveSideNotesHtml(halSideNotesInbox)}
+      ${stationRosterHtml(halSideNotesInbox)}
       <div class="hp-sn-head hp-sn-head--local">
         <h4>LOCAL NOTES</h4>
         ${changeBadge}
@@ -142,10 +272,34 @@ const HalPage = (function () {
       <ul class="hp-sn-list">${listHtml}</ul>
       <form class="hp-sn-form" id="hpSideNoteForm" onsubmit="return false">
         <input class="hp-sn-input" id="hpSideNoteInput" type="text" maxlength="500" placeholder="Quick sidenote — local only, HAL monitors changes" aria-label="Add sidenote" />
-        <button type="button" class="hp-sn-add" data-hal-sidenote-add>+ ADD</button>
+        <button type="button" class="hp-sn-add" data-hal-sidenote-add>${uiIcon("add")} ADD</button>
       </form>
-      <p class="hp-sn-foot">Local scratch notes · not submitted · HAL reads SoftDent and QuickBooks only</p>
+      <div class="hp-chips hp-sn-actions">
+        <button type="button" class="hp-action hp-action--icon" data-hal-cmd="Monitor sidenotes">${uiIcon("monitor")} Monitor</button>
+        <button type="button" class="hp-action hp-action--icon" data-hal-cmd="Show sidenotes">${navIcon("sidenotes")} Show notes</button>
+        <button type="button" class="hp-action hp-action--icon" data-hal-drawer="sidenotes">${uiIcon("info")} Setup</button>
+      </div>
+      ${sideNotesHubFootnote(hubPath, isSideNotesInboxLive(halSideNotesInbox))}
     </div>`;
+  }
+
+  function sideNotesProgramCardHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox, hubPath) {
+    const online = isSideNotesInboxLive(halSideNotesInbox);
+    const stationCount = (halSideNotesInbox && halSideNotesInbox.monitor && halSideNotesInbox.monitor.stationCount) || 0;
+    const unread = ((halSideNotesInbox && halSideNotesInbox.items) || []).filter((m) => m && m.unread).length;
+    const statusChip = online
+      ? `<span class="hp-sn-badge hp-sn-badge--ok">${stationCount > 1 ? stationCount + " STATIONS" : "LIVE"}</span>`
+      : '<span class="hp-sn-badge hp-sn-badge--off">WATCHERS OFFLINE</span>';
+    return `<section class="hp-card hp-card--sidenotes" data-panel="sidenotes" style="grid-area:sidenotes;">
+      ${cardHead(
+        `SIDENOTES PROGRAM <span class="hp-muted">(SIDENOTESIM · EXTERNAL)</span>`,
+        "sidenotes",
+        "Open SideNotes program setup and station detail",
+        cardIconRaw("nav", "sidenotes"),
+      )}
+      <div class="hp-sn-head__tools hp-sn-head__tools--card">${statusChip}${unread ? `<span class="hp-sn-badge hp-sn-badge--change">${unread} UNREAD</span>` : ""}</div>
+      <div class="hp-sidenotes-program">${sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox, hubPath)}</div>
+    </section>`;
   }
 
   function widgetMetricsText(widget) {
@@ -170,7 +324,7 @@ const HalPage = (function () {
     if (!halWidgetFeed || !halWidgetFeed.widgets) {
       return `<div class="hp-widgets" data-panel="widgets">
         <div class="hp-sn-head"><h4>MANAGER DASHBOARD WIDGETS</h4><span class="hp-sn-badge hp-sn-badge--off">NO FEED</span></div>
-        <p class="hp-sn-empty">Widget feed not loaded yet. Ask HAL to show manager dashboard widgets.</p>
+        <p class="hp-sn-empty">Widget feed not loaded yet. <button type="button" class="hp-action" data-hal-cmd="Show manager dashboard widgets">Load widgets</button></p>
       </div>`;
     }
     const order =
@@ -182,15 +336,16 @@ const HalPage = (function () {
         const w = halWidgetFeed.widgets[key];
         if (!w) return "";
         const nav = w.navTarget || "";
-        return `<article class="hp-wg-card" data-hal-widget-key="${esc(key)}">
+        const widgetCmd = `Explain why the ${w.title} widget shows its current status and what data is missing`;
+        return `<article class="hp-wg-card hp-wg-card--active" data-hal-widget-key="${esc(key)}" data-hal-cmd="${esc(widgetCmd)}" title="${esc(widgetCmd)}">
           <div class="hp-wg-head">
-            <span class="hp-wg-ico">${typeof AppIcons !== "undefined" ? AppIcons.widget(key) : ""}</span>
+            <span class="hp-wg-ico">${widgetIcon(key)}</span>
             <strong>${esc(w.title)}</strong>
             <span class="hp-wg-badge ${widgetStatusClass(w.status)}">${esc(w.status)}</span>
           </div>
           <p class="hp-wg-metrics">${esc(widgetMetricsText(w))}</p>
           <p class="hp-wg-summary">${esc(w.summary)}</p>
-          <button type="button" class="hp-wg-open" data-hal-widget-nav="${esc(nav)}">OPEN PAGE</button>
+          <button type="button" class="hp-wg-open" data-hal-widget-nav="${esc(nav)}">${uiIcon("externalLink")} OPEN PAGE</button>
         </article>`;
       })
       .join("");
@@ -222,11 +377,12 @@ const HalPage = (function () {
     const inventoryPreview = inventory.slice(0, 4).join(" · ");
     const inventoryMore = inventory.length > 4 ? ` +${inventory.length - 4} more` : "";
     const runtimes = [cfg.localModel, cfg.reasoningModel, cfg.escalationModel];
+    const webResearchOn = cfg.webResearch && cfg.webResearch.enabled === true;
     const lanesLive =
       cfg.mode === "online" &&
       cfg.externalCallsEnabled === false &&
       runtimes.every((runtime) => runtime && runtime.enabled && String(runtime.endpoint || "").includes("127.0.0.1"));
-    const displayLabel = lanesLive ? "(local only)" : "(display only)";
+    const displayLabel = lanesLive ? (webResearchOn ? "(local models + web research)" : "(local only)") : "(display only)";
 
     return `
       <div class="hp-ai-ready">
@@ -276,8 +432,8 @@ const HalPage = (function () {
       <div class="hp-stress__row">
         <label class="hp-stress__label" for="hpStressCount">Questions</label>
         <input class="hp-stress__input" id="hpStressCount" type="number" min="100" step="1000" value="${esc(total)}" ${running ? "disabled" : ""} />
-        <button type="button" class="hp-stress__run" id="hpStressRun" data-hal-stress-run ${running ? "disabled" : ""}>Run</button>
-        <button type="button" class="hp-stress__stop" id="hpStressStop" data-hal-stress-stop ${running ? "" : "disabled"}>Stop</button>
+        <button type="button" class="hp-stress__run" id="hpStressRun" data-hal-stress-run ${running ? "disabled" : ""}>${uiIcon("check")} Run</button>
+        <button type="button" class="hp-stress__stop" id="hpStressStop" data-hal-stress-stop ${running ? "" : "disabled"}>${uiIcon("close")} Stop</button>
       </div>
       <div class="hp-stress__bar" aria-hidden="true"><span class="hp-stress__bar-fill" id="hpStressBar" style="width:${pct}%"></span></div>
       <dl class="hp-stress__stats">
@@ -319,7 +475,7 @@ const HalPage = (function () {
   function render(ctx) {
     const root = ctx.root;
     if (!root) return;
-    const { halData, halModels, halAudit, halChatHistory, halAskDraft, halAskLoading, halInlineFirewallResult, halSideNotes, halSideNoteMonitor, halSideNotesInbox, halWidgetFeed, halProactiveBriefing, halStressTest, halAgentHealth } = ctx;
+    const { halData, halModels, halAudit, halChatHistory, halAskDraft, halAskLoading, halInlineFirewallResult, halSideNotes, halSideNoteMonitor, halSideNotesInbox, halWidgetFeed, halProactiveBriefing, halStressTest, halAgentHealth, sidenotesHubPath } = ctx;
     const suggestions = (halData.askHal?.suggestions || []).slice(0, 12);
     // One message at a time: only the most recent turn is shown (no scrolling).
     const messages = (halChatHistory || []).slice(-1);
@@ -330,7 +486,7 @@ const HalPage = (function () {
               `<div class="hp-chat-row hp-chat-row--${m.role === "user" ? "user" : "hal"}">
                 <div class="hp-chat-row__head">
                   <span>${m.role === "user" ? "You" : "HAL"}${m.lane ? ` · ${esc(m.lane)}` : ""}</span>
-                  ${m.role === "hal" ? `<button type="button" class="hp-chat-copy" data-hal-copy-response title="Copy response (Ctrl+C also works)">Copy</button>` : ""}
+                  ${m.role === "hal" ? `<button type="button" class="hp-chat-copy" data-hal-copy-response title="Copy response (Ctrl+C also works)">${uiIcon("copy")} Copy</button>` : ""}
                 </div>
                 <p>${esc(m.text)}</p>
               </div>`,
@@ -347,11 +503,13 @@ const HalPage = (function () {
         const useLive = live && live.hasData;
         const freshness = useLive ? live.freshness : item.freshness || "Not available";
         const statusKey = useLive ? mapLiveSourceStatus(live) : mapSourceStatus(item);
-        return `<tr>
-          <td>${esc(item.label)}</td>
+        const sourceCmd = `Review read-only source health for ${item.label}`;
+        return `<tr class="hp-table__row--active" data-hal-source-nav="${esc(item.target)}" data-hal-cmd="${esc(sourceCmd)}" role="button" tabindex="0" title="${esc(sourceCmd)} · click arrow to open page">
+          <td><span class="hp-table__label">${navIcon(item.target)}<span>${esc(item.label)}</span></span></td>
           <td>${esc(item.status || "unknown")}</td>
           <td>${esc(freshness || "Not available")}</td>
           <td>${esc(formatStatus(statusKey))}</td>
+          <td class="hp-table__go"><button type="button" class="hp-table__open" data-hal-source-open="${esc(item.target)}" title="Open ${esc(item.label)}" aria-label="Open ${esc(item.label)}">${uiIcon("chevronRight")}</button></td>
         </tr>`;
       })
       .join("");
@@ -367,14 +525,17 @@ const HalPage = (function () {
           live && live.items != null
             ? `${live.items}${live.itemsLabel ? " " + live.itemsLabel : ""}`
             : "—";
-        return `<li>
-          <span class="hp-surf__ico" aria-hidden="true">◳</span>
+        const surfCmd = `Explain the ${item.label} work surface and what staff should do next`;
+        const surfOpen = surfNavTarget(item);
+        return `<li class="hp-surf__row" data-hal-surf-nav="${esc(surfOpen)}" data-hal-cmd="${esc(surfCmd)}" role="button" tabindex="0" title="${esc(surfCmd)}">
+          <span class="hp-surf__ico" aria-hidden="true">${surfNavIcon(item)}</span>
           <div class="hp-surf__main"><strong>${esc(item.label)}</strong><span>${esc(item.detail || "")}</span></div>
           <div class="hp-surf__meta">
             <span>State<br><b>${esc(state)}</b></span>
             <span>Updated<br><b>${esc(updated)}</b></span>
             <span>Items<br><b>${esc(items)}</b></span>
           </div>
+          <button type="button" class="hp-surf__chev" data-hal-surf-open="${esc(surfOpen)}" title="Open ${esc(item.label)}" aria-label="Open ${esc(item.label)}">${uiIcon("chevronRight")}</button>
         </li>`;
       })
       .join("");
@@ -384,7 +545,7 @@ const HalPage = (function () {
       ? activity
           .map(
             (row) =>
-              `<li><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span>${esc(row.query || row.label || "")}</span><time>${esc(row.time || "")}</time></li>`,
+              `<li class="hp-log__row--active" data-hal-activity-cmd="${esc(row.query || row.label || "")}" role="button" tabindex="0" title="Ask HAL again"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span>${esc(row.query || row.label || "")}</span><time>${esc(row.time || "")}</time></li>`,
           )
           .join("")
       : emptyNote("No HAL activity in this session yet.");
@@ -399,12 +560,18 @@ const HalPage = (function () {
             : String(e.state).toLowerCase().includes("review")
               ? "medium"
               : "low";
-        return `<li><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span>${esc(e.name)}: ${esc(e.nextAction)}</span><b class="hp-conf hp-conf--${conf === "high" ? "high" : conf === "medium" ? "med" : "low"}">${esc(conf)} confidence</b></li>`;
+        const insightCmd = `Open ${e.name} and ${e.nextAction}`;
+        return `<li class="hp-insight__row--active" data-hal-insight-nav="${esc(e.id)}" data-hal-cmd="${esc(insightCmd)}" role="button" tabindex="0" title="${esc(insightCmd)}"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span>${esc(e.name)}: ${esc(e.nextAction)}</span><b class="hp-conf hp-conf--${conf === "high" ? "high" : conf === "medium" ? "med" : "low"}">${esc(conf)} confidence</b><button type="button" class="hp-insight__open" data-hal-insight-open="${esc(e.id)}" title="Open ${esc(e.name)}" aria-label="Open ${esc(e.name)}">${uiIcon("chevronRight")}</button></li>`;
       })
       .join("");
 
     const blocked = (halData.firewall?.blocked || []).slice(0, 5);
-    const fwList = blocked.map((item) => `<li><span>${esc(item)}</span><b>BLOCKED</b></li>`).join("");
+    const fwList = blocked
+      .map((item) => {
+        const fwCmd = `Explain why "${item}" is blocked by the firewall`;
+        return `<li class="hp-fw__row--active" data-hal-cmd="${esc(fwCmd)}" role="button" tabindex="0" title="${esc(fwCmd)}"><span>${esc(item)}</span><b>BLOCKED</b></li>`;
+      })
+      .join("");
 
     const now = new Date();
     const registry = halData.registry || [];
@@ -438,7 +605,7 @@ const HalPage = (function () {
             .slice(0, 3)
             .map(
               (item) =>
-                `<li class="hp-insight__lead"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>${esc(item.severity.toUpperCase())}</b> — ${esc(item.title)}</span></li>`,
+                `<li class="hp-insight__lead hp-insight__row--active" data-hal-cmd="Explain ${esc(item.title)}" role="button" tabindex="0" title="Ask HAL about this recommendation"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>${esc(item.severity.toUpperCase())}</b> — ${esc(item.title)}</span></li>`,
             )
             .join("")
         : "";
@@ -509,35 +676,35 @@ const HalPage = (function () {
       <div class="hp-body">
         <header class="hp-top">
           <div class="hp-top__brand">
-            <span class="hp-top__mark" aria-hidden="true">${toothMark}</span>
+            <button type="button" class="hp-top__mark hp-top__mark--btn" data-hal-cmd="What can you do" title="Ask HAL what it can do" aria-label="Ask HAL what it can do">${toothMark}</button>
             <div class="hp-top__copy"><strong>HAL COMMAND CENTER</strong><span>Direct. Orchestrate. Protect.</span></div>
           </div>
           <div class="hp-top__status">
-            <span class="hp-status"><i class="hp-status__dot hp-status__dot--ok" aria-hidden="true"></i>HAL STATUS <b>${esc(halStatusLabel)}</b></span>
-            <span class="hp-status"><i class="hp-status__dot hp-status__dot--ok" aria-hidden="true"></i>LOCAL CORE <b>${esc(coreStatusLabel)}</b></span>
-            <span class="hp-status hp-status--red"><i class="hp-status__dot hp-status__dot--red" aria-hidden="true"></i>FIREWALL <b>ACTIVE</b></span>
+            <button type="button" class="hp-status hp-status--btn" data-hal-cmd="What can you do" title="Ask HAL what it can do"><i class="hp-status__dot hp-status__dot--ok" aria-hidden="true"></i>HAL STATUS <b>${esc(halStatusLabel)}</b></button>
+            <button type="button" class="hp-status hp-status--btn" data-hal-cmd="Run readiness check" title="Run local readiness check"><i class="hp-status__dot hp-status__dot--ok" aria-hidden="true"></i>LOCAL CORE <b>${esc(coreStatusLabel)}</b></button>
+            <button type="button" class="hp-status hp-status--btn hp-status--red" data-hal-cmd="Explain the external action firewall" title="Explain the external action firewall"><i class="hp-status__dot hp-status__dot--red" aria-hidden="true"></i>FIREWALL <b>ACTIVE</b></button>
             <span class="hp-clock"><strong>${esc(now.toISOString().slice(11, 19))} UTC</strong><span>${esc(now.toISOString().slice(0, 10))}</span></span>
           </div>
         </header>
         <div class="hp-grid">
           <section class="hp-card hp-card--ask" data-panel="askHal" style="grid-area:ask;">
-            <div class="hp-card__head"><h3>ASK HAL</h3><button type="button" class="hp-info" data-hal-drawer="askHal" title="Open Ask HAL detail and command examples" aria-label="Open Ask HAL detail and command examples">i</button></div>
+            ${cardHead("ASK HAL", "askHal", "Open Ask HAL detail and command examples", cardIconRaw("hal"))}
             <form class="hp-ask__box hp-live-form" id="hpAskForm">
               <textarea class="hp-live-input hp-live-textarea" id="hpAskInput" rows="3" enterkeyhint="send" placeholder="Ask HAL anything. Be direct.  (Enter to send · Shift+Enter for a new line)" aria-label="Ask HAL">${esc(halAskDraft || "")}</textarea>
               <div class="hp-ask__bar">
                 <span class="hp-ask__mode">MODE</span>
                 <span class="hp-ask__sel">${esc(halModels?.config?.mode === "online" ? "Auto" : "Registry only")}</span>
                 <span class="hp-ask__hint" aria-hidden="true">↵ Enter to send</span>
-                <button class="hp-ask__send hp-live-send" type="submit" ${halAskLoading ? "disabled" : ""}>${halAskLoading ? "…" : "➤ SEND"}</button>
+                <button class="hp-ask__send hp-live-send" type="submit" ${halAskLoading ? "disabled" : ""}>${halAskLoading ? "…" : `${uiIcon("send")} SEND`}</button>
               </div>
             </form>
             <div class="hp-inline-chat">${chatHtml}</div>
-            <div class="hp-chips hp-live-actions">${suggestions.map((s) => `<button type="button" class="hp-action" data-hal-suggest="${esc(s)}">${esc(s)}</button>`).join("")}</div>
+            <div class="hp-chips hp-live-actions">${suggestions.map((s) => actionChip(s, `data-hal-suggest="${esc(s)}"`)).join("")}</div>
           </section>
           <section class="hp-card hp-card--reason" data-panel="reasoning" style="grid-area:reason;">
-            <div class="hp-card__head"><h3>LOCAL REASONING CORE</h3><button type="button" class="hp-info" data-hal-drawer="reasoning" title="Open reasoning detail: active work session, plan, and evidence packet" aria-label="Open reasoning detail: active work session, plan, and evidence packet">i</button></div>
+            ${cardHead("LOCAL REASONING CORE", "reasoning", "Open reasoning detail: active work session, plan, and evidence packet", cardIconRaw("widget", "officeManagerBoundaries"))}
             <div class="hp-reason">
-              <div class="hp-ring hp-ring--${ringState}" data-hal-drawer="reasoning" role="button" tabindex="0" title="${esc(ringTitle)}" aria-label="${esc(ringTitle)}">
+              <div class="hp-ring hp-ring--${ringState}" data-hal-drawer="reasoning" data-hal-ring-cmd="Make a plan for today" role="button" tabindex="0" title="${esc(ringTitle)} · double-click for today's plan" aria-label="${esc(ringTitle)}">
                 ${gaugeSvg}
                 <span class="hp-ring__bezel" aria-hidden="true"></span>
                 <span class="hp-ring__radar" aria-hidden="true"></span>
@@ -561,48 +728,49 @@ const HalPage = (function () {
             </div>
             ${aiReadinessHtml(halModels)}
             <p class="hp-card__foot">All reasoning stays local. No data leaves this environment.</p>
-            <div class="hp-chips">${(halData.reasoning?.actions || []).map((a) => `<button type="button" class="hp-action" data-hal-cmd="${esc(a.command)}">${esc(a.label)}</button>`).join("") || emptyNote("No reasoning actions configured.")}</div>
+            <div class="hp-chips">${(halData.reasoning?.actions || []).map((a) => actionChip(a.label, `data-hal-cmd="${esc(a.command)}"`)).join("") || emptyNote("No reasoning actions configured.")}</div>
           </section>
           <section class="hp-card" data-panel="sources" style="grid-area:source;">
-            <div class="hp-card__head"><h3>SOURCE INTAKE <span class="hp-muted">(READ-ONLY)</span></h3><button type="button" class="hp-info" data-hal-drawer="sources" title="Open source intake detail" aria-label="Open source intake detail">i</button></div>
-            <table class="hp-table"><thead><tr><th>SOURCE</th><th>TYPE</th><th>FRESHNESS</th><th>STATUS</th></tr></thead><tbody>${sourceRows || `<tr><td colspan="4">No sources configured</td></tr>`}</tbody></table>
+            ${cardHead('SOURCE INTAKE <span class="hp-muted">(READ-ONLY)</span>', "sources", "Open source intake detail", cardIconRaw("widget", "dataFreshnessQuality"))}
+            <table class="hp-table"><thead><tr><th>SOURCE</th><th>TYPE</th><th>FRESHNESS</th><th>STATUS</th><th aria-label="Open"></th></tr></thead><tbody>${sourceRows || `<tr><td colspan="5">No sources configured</td></tr>`}</tbody></table>
             <p class="hp-card__foot hp-muted">Freshness reflects local SoftDent and QuickBooks import files only.</p>
-            ${sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox)}
           </section>
+          ${sideNotesProgramCardHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox, sidenotesHubPath)}
           <section class="hp-card" data-panel="workSurfaces" style="grid-area:staff;">
-            <div class="hp-card__head"><h3>STAFF WORK SURFACES</h3><button type="button" class="hp-info" data-hal-drawer="workSurfaces" title="Open staff work surfaces detail" aria-label="Open staff work surfaces detail">i</button></div>
+            ${cardHead("STAFF WORK SURFACES", "workSurfaces", "Open staff work surfaces detail", cardIconRaw("ui", "surface"))}
             <ul class="hp-surf">${surfaces || emptyNote("No work surfaces configured.")}</ul>
           </section>
           <section class="hp-card hp-card--fw" data-panel="firewall" style="grid-area:firewall;">
-            <div class="hp-card__head"><h3>EXTERNAL ACTION FIREWALL</h3><button type="button" class="hp-info" data-hal-drawer="firewall" title="Open firewall detail: allowed actions, blocked actions, and simulator" aria-label="Open firewall detail: allowed actions, blocked actions, and simulator">i</button></div>
-            <p class="hp-fw__active"><span>✓</span> ENFORCED (read-only program)</p>
+            ${cardHead("EXTERNAL ACTION FIREWALL", "firewall", "Open firewall detail: allowed actions, blocked actions, and simulator", cardIconRaw("ui", "shield"))}
+            <button type="button" class="hp-fw__active hp-fw__active--btn" data-hal-cmd="Explain the external action firewall" title="Explain the external action firewall">${uiIcon("check")} ENFORCED (read-only program)</button>
             <ul class="hp-fw__list">${fwList}</ul>
             <p class="hp-fw__allowed"><b>Allowed (local):</b> ${allowedActions.length ? allowedActions.slice(0, 6).map(esc).join(" · ") : "Open pages · Explain status · Prepare notes"}</p>
             ${halInlineFirewallResult ? `<p class="hp-live-note">${esc(halInlineFirewallResult.text || "")}</p>` : ""}
           </section>
           <section class="hp-card" data-panel="status" style="grid-area:recent;">
-            <div class="hp-card__head"><h3>RECENT HAL ACTIVITY</h3><button type="button" class="hp-info" data-hal-drawer="status" title="Open recent activity and local audit log" aria-label="Open recent activity and local audit log">i</button></div>
+            ${cardHead("RECENT HAL ACTIVITY", "status", "Open recent activity and local audit log", cardIconRaw("ui", "activity"))}
             <ul class="hp-log">${activityHtml}</ul>
           </section>
           <section class="hp-card" data-panel="priorities" style="grid-area:insights;">
-            <div class="hp-card__head"><h3>HAL INSIGHTS</h3><button type="button" class="hp-info" data-hal-drawer="priorities" title="Open priorities, recommendations, and next steps" aria-label="Open priorities, recommendations, and next steps">i</button></div>
+            ${cardHead("HAL INSIGHTS", "priorities", "Open priorities, recommendations, and next steps", cardIconRaw("ui", "insights"))}
             <ul class="hp-insight">
-              <li class="hp-insight__lead"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>TOP PRIORITY</b> — ${esc(topPriority)}</span></li>
-              <li class="hp-insight__lead"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>PROGRAM ACCESS</b> — ${esc(programAccessLabel)} <em class="hp-muted">(writes blocked)</em></span></li>
-              <li class="hp-insight__lead"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>NEXT SAFE STEP</b> — ${esc(nextSafeStep)}</span></li>
+              <li class="hp-insight__lead hp-insight__row--active" data-hal-cmd="Show full program snapshot" role="button" tabindex="0" title="Show full program snapshot"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>TOP PRIORITY</b> — ${esc(topPriority)}</span></li>
+              <li class="hp-insight__lead hp-insight__row--active" data-hal-cmd="Explain the external action firewall" role="button" tabindex="0" title="Explain program access rules"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>PROGRAM ACCESS</b> — ${esc(programAccessLabel)} <em class="hp-muted">(writes blocked)</em></span></li>
+              <li class="hp-insight__lead hp-insight__row--active" data-hal-cmd="What needs review" role="button" tabindex="0" title="What needs review"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>NEXT SAFE STEP</b> — ${esc(nextSafeStep)}</span></li>
               ${proactiveInsight}
-              <li class="hp-insight__lead"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>ACTIVE WORK</b> — ${esc(needsReviewCount)} in review · ${esc(blockedCount)} blocked <em class="hp-muted">(local registry)</em></span></li>
+              <li class="hp-insight__lead hp-insight__row--active" data-hal-cmd="What needs review" role="button" tabindex="0" title="What needs review"><i class="hp-log__dot hp-log__dot--gold" aria-hidden="true"></i><span><b>ACTIVE WORK</b> — ${esc(needsReviewCount)} in review · ${esc(blockedCount)} blocked <em class="hp-muted">(local registry)</em></span></li>
               ${insights || emptyNote("No registry insights available.")}
             </ul>
             ${widgetsMonitorHtml(halWidgetFeed)}
           </section>
           <section class="hp-card" data-panel="controls" style="grid-area:controls;">
-            <div class="hp-card__head"><h3>SYSTEM CONTROLS</h3><button type="button" class="hp-info" data-hal-drawer="controls" title="Open system controls: readiness, smoke test, and local receipts" aria-label="Open system controls: readiness, smoke test, and local receipts">i</button></div>
+            ${cardHead("SYSTEM CONTROLS", "controls", "Open system controls: readiness, smoke test, and local receipts", cardIconRaw("ui", "check"))}
             <div class="hp-ctrl">
-              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Run readiness check"><span class="hp-ctrl__ico">✓</span><strong>Readiness</strong><span>Local check</span></button>
-              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Run operator smoke test"><span class="hp-ctrl__ico">⛉</span><strong>Smoke test</strong><span>Local only</span></button>
-              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Staff handoff summary"><span class="hp-ctrl__ico">▤</span><strong>Handoff</strong><span>Build summary</span></button>
-              <button type="button" class="hp-ctrl__btn" data-hal-drawer="status"><span class="hp-ctrl__ico">▦</span><strong>Audit log</strong><span>${auditList.length ? esc("Last " + (lastReceipt.time || "—")) : "0 actions"}</span></button>
+              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Run readiness check"><span class="hp-ctrl__ico">${uiIcon("check")}</span><strong>Readiness</strong><span class="hp-ctrl__detail">Local check</span></button>
+              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Run operator smoke test"><span class="hp-ctrl__ico">${uiIcon("smoke")}</span><strong>Smoke test</strong><span class="hp-ctrl__detail">Local only</span></button>
+              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Staff handoff summary"><span class="hp-ctrl__ico">${uiIcon("handoff")}</span><strong>Handoff</strong><span class="hp-ctrl__detail">Build summary</span></button>
+              <button type="button" class="hp-ctrl__btn" data-hal-cmd="Monitor sidenotes"><span class="hp-ctrl__ico">${navIcon("sidenotes")}</span><strong>SideNotes</strong><span class="hp-ctrl__detail">Live monitor</span></button>
+              <button type="button" class="hp-ctrl__btn" data-hal-drawer="status"><span class="hp-ctrl__ico">${uiIcon("audit")}</span><strong>Audit log</strong><span class="hp-ctrl__detail">${auditList.length ? esc("Last " + (lastReceipt.time || "—")) : "0 actions"}</span></button>
             </div>
             <p class="hp-card__foot">Last local receipt: ${esc(lastReceiptText)} · receipts stay on this device.</p>
             ${agentHealthHtml(halAgentHealth, halModels, halSideNotesInbox)}
@@ -615,7 +783,7 @@ const HalPage = (function () {
     if (input && halAskDraft) input.value = halAskDraft;
   }
 
-  return { render, sideNotesMonitorHtml, widgetsMonitorHtml };
+  return { render, sideNotesMonitorHtml, sideNotesProgramCardHtml, widgetsMonitorHtml, isSideNotesInboxLive, surfNavTarget };
 })();
 
 if (typeof module !== "undefined" && module.exports) {

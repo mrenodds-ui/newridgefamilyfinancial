@@ -1,0 +1,11 @@
+# HAL chat 8B — GPU-pinned staff conversation lane (dual-resident with hal-helper:14b on 16 GB VRAM).
+FROM deepseek-r1:8b
+
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
+PARAMETER num_ctx 3072
+PARAMETER repeat_penalty 1.05
+
+SYSTEM """You are HAL, the local read-only program manager for NewRidgeFinancial 2.0.
+Answer clearly from the context provided. Never fabricate import data.
+You are read-only: no submit, email, fax, upload, post, delete, or external delivery."""

@@ -7,6 +7,7 @@ multi-period totals cannot keep stacking in widgets.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -71,12 +72,49 @@ def _import_dirs() -> list[Path]:
     return [softdent_import_dir(), quickbooks_import_dir()]
 
 
+def sha256_file(path: Path) -> str | None:
+    if not path.is_file():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def collect_dataset_checksums(softdent_dir: Path, quickbooks_dir: Path) -> dict[str, dict[str, str]]:
+    """SHA256 fingerprints for the newest on-disk file per import contract dataset."""
+    from import_contract import _FALLBACK_DATASET_NAMES
+    from import_loader import _newest_existing
+
+    system_dirs = {"softdent": softdent_dir, "quickbooks": quickbooks_dir}
+    checksums: dict[str, dict[str, str]] = {}
+    for dataset_key, names in _FALLBACK_DATASET_NAMES.items():
+        system = dataset_key.split(".", 1)[0]
+        directory = system_dirs.get(system)
+        if directory is None:
+            continue
+        path = _newest_existing(directory, names)
+        if path is None:
+            continue
+        file_sha = sha256_file(path)
+        if not file_sha:
+            continue
+        checksums[dataset_key] = {
+            "sourceFile": path.name,
+            "sha256": file_sha,
+            "modifiedAt": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+        }
+    return checksums
+
+
 def _ocr_archive_dirs() -> list[Path]:
     """Retention-managed OCR archive folders that can feed document previews."""
     dirs: list[Path] = []
     nr2_processed = REPO_ROOT / "app_data" / "nr2" / "document_inbox" / "processed"
     legacy_processed = REPO_ROOT / "local_accounting_inbox" / "processed"
-    for candidate in (nr2_processed, legacy_processed):
+    legacy_imports_processed = REPO_ROOT / "app" / "data" / "imports" / "processed"
+    for candidate in (nr2_processed, legacy_processed, legacy_imports_processed):
         if candidate not in dirs:
             dirs.append(candidate)
     configured = os.environ.get("NR2_DOCUMENT_INBOX_ARCHIVE", "").strip()
@@ -146,6 +184,7 @@ def write_manifest(
     synced_at: str,
     periods: dict[str, list[str]],
     purge_result: dict[str, Any] | None = None,
+    dataset_checksums: dict[str, dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     started = _parse_iso(synced_at) or _utc_now()
     expires = started + timedelta(days=retention_days())
@@ -156,6 +195,8 @@ def write_manifest(
         "periods": periods,
         "policy": "relevant-periods-only",
     }
+    if dataset_checksums:
+        payload["datasetChecksums"] = dataset_checksums
     if purge_result:
         payload["lastPurge"] = purge_result
     path = manifest_path()

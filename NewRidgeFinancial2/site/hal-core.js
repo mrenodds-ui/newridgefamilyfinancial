@@ -86,7 +86,8 @@ const HalCore = (function () {
     // A lane may carry its own runtime block; prefer it so any local model can be enabled.
     const lane = modelLanes(halModels).find((l) => l.id === laneId);
     if (lane && lane.runtime) return lane.runtime;
-    if (laneId === "chat14b") return config.localModel || null;
+    if (laneId === "chat8b" || laneId === "chat14b") return config.localModel || null;
+    if (laneId === "helper14b" || laneId === "helper8b") return config.fastModel || null;
     if (laneId === "reason21b") return config.reasoningModel || null;
     if (laneId === "escalate30b") return config.escalationModel || null;
     return null;
@@ -445,6 +446,20 @@ const HalCore = (function () {
     if (/\baccounting review queue\b|\bshow accounting review\b|\bquickbooks\b.*\bdocuments\b.*\breview\b/.test(query)) {
       return { intent: "accounting: review-queue", lane: "local", useWidgetGuidance: true, widgetGuidance: "accountingReviewQueue", text: "", actions: [] };
     }
+    if (
+      /\breconciliation checklist\b|\bsoftdent\b.*\bquickbooks\b.*\breconcil|\baccounting reconciliation\b|\breconcile\b.*\b(softdent|quickbooks)\b/.test(
+        query,
+      )
+    ) {
+      return {
+        intent: "accounting: reconciliation-checklist",
+        lane: "local",
+        useWidgetGuidance: true,
+        widgetGuidance: "accountingReconciliationChecklist",
+        text: "",
+        actions: [],
+      };
+    }
     if (/\b(document workbook|work documents|excel documents|accounting documents workbook|work the documents)\b/.test(query)) {
       return { intent: "documents: excel-workbook", lane: "local", useWidgetGuidance: true, widgetGuidance: "documentExcelWorkbook", text: "", actions: [] };
     }
@@ -531,6 +546,14 @@ const HalCore = (function () {
     return lines.join("\n");
   }
 
+  function webResearchPromptLine() {
+    return (
+      "Public web research is available for sanitized practice-reference lookups (vendor docs, insurance billing, compliance, coding, office operations). " +
+      "Never send patient names, amounts, or account numbers to the web. " +
+      "When tool results include web research, cite it as public reference — not as verified practice-specific facts."
+    );
+  }
+
   function buildSystemPrompt(halData, programContext) {
     const firewall = (halData && halData.firewall) || FALLBACK_FIREWALL;
     const access = (halData && halData.programAccess) || {};
@@ -546,6 +569,7 @@ const HalCore = (function () {
       "Never fabricate missing SoftDent, QuickBooks, A/R, claims, document, or library data; say what is missing and what staff should verify.",
       "SoftDent and QuickBooks are separate systems: SoftDent = practice ops (production, claims, verified dental A/R). QuickBooks = accounting GL (revenue, expenses, P&L). Never treat their totals as the same number.",
       "You are read-only. You never submit, email, fax, upload, post, or write back. A human performs any external step.",
+      webResearchPromptLine(),
       "Blocked external actions: " + (firewall.blocked || []).join(", ") + ".",
       "If the user asks for an external action, refuse and say it needs human review.",
     ];
@@ -570,6 +594,7 @@ const HalCore = (function () {
       "Order work by readiness and risk: handle Needs Review and Blocked items carefully, and never advance payer-facing work without human review.",
       "Recommendations must say what data supports them and what data is still missing.",
       "You are read-only. You never submit, email, fax, upload, post, or write back. A human performs any external step.",
+      webResearchPromptLine(),
       "Blocked external actions: " + (firewall.blocked || []).join(", ") + ".",
     ];
     if (programContext) {
@@ -592,6 +617,7 @@ const HalCore = (function () {
       "Give a careful second-opinion review for a complex or high-risk question.",
       "Be conservative: call out risks, assumptions, and exactly what a human must verify before acting.",
       "You are read-only. You never submit, email, fax, upload, post, or write back. A human performs any external step.",
+      webResearchPromptLine(),
       "Blocked external actions: " + (firewall.blocked || []).join(", ") + ".",
     ];
     if (programContext) {
@@ -1234,12 +1260,20 @@ const HalCore = (function () {
       };
     }
 
+    if (
+      /\b(remember this|save (?:this |that )?(?:to )?memory|save (?:the )?web (?:finding|research)|remember (?:what you found|the web))\b/i.test(
+        query,
+      )
+    ) {
+      return { intent: "memory: remember", lane: "local", useRememberMemory: true, text: "", prompt: rawQuery, actions: [] };
+    }
+
     if (/\b(help|what can you do|tell me what you can do|capabilit\w*|how do you work|what do you do|what are you able to)\b/.test(query)) {
       return {
         intent: "help",
         lane: "local",
         text:
-          "I am HAL, the local read-only program manager for NewRidgeFinancial 2.0. My top priority is to monitor the program, place correct data into the right financial and accounting views, apply accounting and Excel-style review, and recommend the next safe staff action. I have full read access to local program pages and service data. I run an agent loop: plan the question, gather local tool data, answer, and self-check before responding. I can: open and explain pages; show the full program snapshot; show priorities and source health; start read-only work sessions; build local evidence packets; run readiness checks; check claim packet readiness; draft journal-entry review notes; show manager dashboard widgets; explain missing widget data; prioritize widget imports; build daily owner briefings; show accounting review queues; perform Excel-style reconciliation; search the local library; list and create local tasks; monitor, list, and create sidenotes; report local AI model lanes; and simulate the external-action firewall. I use the local 24B shared chat/helper model for unmatched questions and keep reasoning/escalation local. I remember recent conversation context and local office preferences. I do not submit, send, upload, post, delete, or change outside systems.",
+          "I am HAL, the local read-only program manager for NewRidgeFinancial 2.0. My top priority is to monitor the program, place correct data into the right financial and accounting views, apply accounting and Excel-style review, and recommend the next safe staff action. I have full read access to local program pages and service data. I run an agent loop: plan the question, gather local tool data, answer, and self-check before responding. I can: open and explain pages; show the full program snapshot; show priorities and source health; start read-only work sessions; build local evidence packets; run readiness checks; check claim packet readiness; draft journal-entry review notes; show manager dashboard widgets; explain missing widget data; prioritize widget imports; build daily owner briefings; show accounting review queues; perform Excel-style reconciliation; search the local library; research public web reference material for practice operations (sanitized — no patient data sent); save durable learned facts when you say Remember this: ...; list and create local tasks; monitor, list, and create sidenotes; report local AI model lanes; and simulate the external-action firewall. I use local GPU chat and helper models for unmatched questions, reasoning on demand, and keep escalation local. I remember recent conversation context, approved learned facts, and local office preferences. I do not submit, send, upload, post, delete, or change outside systems.",
         actions: [],
       };
     }
@@ -1364,6 +1398,22 @@ const HalCore = (function () {
 
     if (/second opinion|escalat|double[\s-]?check|high[\s-]?risk|complex case|deep review|review carefully|sanity check|scrutin/.test(query)) {
       return { intent: "escalation", lane: "escalate30b", text: "", useEscalation: true, prompt: rawQuery, actions: [] };
+    }
+
+    if (
+      /\b(search the web|look up online|web research|research online|find (?:out|info) (?:about|on)|latest (?:on|about)|public documentation)\b/i.test(
+        query,
+      )
+    ) {
+      return {
+        intent: "research: web",
+        lane: "chat8b",
+        text: "",
+        useModel: true,
+        useWebResearch: true,
+        prompt: rawQuery,
+        actions: [],
+      };
     }
 
     if (/prioriti[sz]e|make a plan|draft a plan|\bplan (my|for|the)\b|analy[sz]e|reason through|think through|recommend|\bstrategy\b|focus first|where (do|should) (i|we) start/.test(query)) {
@@ -1557,7 +1607,7 @@ const HalCore = (function () {
 
     return {
       intent: "model: query",
-      lane: "chat14b",
+      lane: "chat8b",
       text: "",
       useModel: true,
       prompt: rawQuery,

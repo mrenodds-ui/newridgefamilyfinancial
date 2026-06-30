@@ -94,6 +94,7 @@ const PageViews = (function () {
     const reg = registryEntry(halData, pageId);
     return {
       pageId,
+      halData: halData || null,
       halWidgetFeed: halWidgetFeed || null,
       title: (reg && reg.name) || (outline && outline.eyebrow) || pageId,
       eyebrow: (outline && outline.eyebrow) || "Program page",
@@ -107,7 +108,12 @@ const PageViews = (function () {
   }
 
   function dataBadgeFor(record) {
-    if (record && record.importDepth === "partial") return "Partial import";
+    if (!record) return "No data loaded";
+    if (record.importDepth === "degraded") return "Degraded import";
+    if (record.importDepth === "partial") {
+      if (record.singleSource) return "Partial — single source";
+      return "Partial import";
+    }
     const empty = typeof EmptyStates !== "undefined" ? EmptyStates : null;
     if (empty && typeof empty.dataBadge === "function") return empty.dataBadge(record && record.dataSource);
     if (record && record.dataSource === "import") return "Import data";
@@ -198,20 +204,33 @@ const PageViews = (function () {
     return HW.pageStrip(state.pageId, halFeed(state));
   }
 
+  const PAGE_HAL_COMMANDS = {
+    financial: ["Summarize MTD production", "Compare to prior month", "Explain payer mix"],
+    softdent: ["Review A/R aging", "Open new patient summary", "Explain case acceptance"],
+    quickbooks: ["Explain YTD net income", "Review EBITDA add-backs", "Show supply spend"],
+    ar: ["List claims over 60 days", "Prioritize follow-up calls", "Summarize collections"],
+    claims: ["Show open claims", "Review denied claims", "Open claim detail"],
+    narratives: ["Draft crown narrative", "Insert prior history", "Save draft for review"],
+    documents: ["Browse recent documents", "Preview selected document", "Review journal entries"],
+    library: ["Search library", "Open selected file", "Filter by category"],
+    "office-manager": ["Show today's priorities", "Summarize open A/R", "Jump to billing"],
+    hal: ["Summarize June production", "List claims over 60 days", "Summarize period close"],
+  };
+
   function halCommandSurface(state) {
     const pilot = pilotWidgetsApi();
     if (!pilot || typeof pilot.plainCommandPalette !== "function") return "";
     const pageId = state && state.pageId ? state.pageId : "global";
     const title = state && state.title ? state.title : pageId;
+    const registry = registryEntry(state && state.halData, pageId);
+    const registryCmd = registry && registry.nextAction ? [registry.nextAction] : [];
+    const pageCmds = PAGE_HAL_COMMANDS[pageId] || [];
+    const commands = [...new Set([...registryCmd, ...pageCmds, `Ask HAL about ${title}`])].slice(0, 4);
     return `<div class="pv-hal-command-wrap">${pilot.plainCommandPalette({
       pageId,
       widgetKey: "halCommandPalette",
       includeForce: true,
-      commands: [
-        `Ask HAL about ${title}`,
-        `Explain widgets on ${title}`,
-        "Show data sources",
-      ],
+      commands,
     })}</div>`;
   }
 
@@ -219,6 +238,7 @@ const PageViews = (function () {
   function trendClass(dir) {
     if (dir === "up") return "pv-trend--up";
     if (dir === "down") return "pv-trend--down";
+    if (dir === "flat") return "pv-trend--flat";
     return "";
   }
 
@@ -307,7 +327,10 @@ const PageViews = (function () {
       if (!Svc) throw new Error("Services layer unavailable");
       const html = await renderFn(state, slot);
       if (!mountStillCurrent(generation, container, slotId, state.pageId)) return;
-      if (slot) slot.innerHTML = html;
+      if (slot) {
+        slot.innerHTML = html;
+        wireReconciliationExport(container);
+      }
       const pilot = pilotWidgetsApi();
       if (pilot && typeof pilot.init === "function") pilot.init(container);
     } catch (err) {
@@ -322,8 +345,63 @@ const PageViews = (function () {
     container.querySelectorAll("[data-pv-nav]").forEach((btn) => btn.addEventListener("click", () => onNavigate && onNavigate(btn.getAttribute("data-pv-nav"))));
     const ref = container.querySelector("[data-pv-refresh]");
     if (ref) ref.addEventListener("click", refresh);
+    wireReconciliationExport(container);
     const pilot = pilotWidgetsApi();
     if (pilot && typeof pilot.init === "function") pilot.init(container);
+  }
+
+  function downloadTextFile(filename, text, mime) {
+    if (typeof document === "undefined") return;
+    const blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function wireReconciliationExport(container) {
+    if (!container || typeof MonthEndClose === "undefined" || !Svc) return;
+    container.querySelectorAll("[data-recon-export]").forEach((btn) => {
+      if (btn.dataset.reconBound === "1") return;
+      btn.dataset.reconBound = "1";
+      btn.addEventListener("click", async () => {
+        try {
+          const snap = await Svc.readProgramSnapshot();
+          const payload = MonthEndClose.buildReconciliationPayload(snap || {});
+          const format = btn.getAttribute("data-recon-export") || "text";
+          const period = payload.period || new Date().toISOString().slice(0, 7);
+          if (format === "csv") {
+            downloadTextFile(`nr2-reconciliation-${period}.csv`, MonthEndClose.formatReconciliationCsv(payload), "text/csv;charset=utf-8");
+          } else {
+            downloadTextFile(`nr2-reconciliation-${period}.txt`, MonthEndClose.formatReconciliationExport(payload), "text/plain;charset=utf-8");
+          }
+        } catch (err) {
+          alert(err.message || String(err));
+        }
+      });
+    });
+    container.querySelectorAll("[data-recon-copy]").forEach((btn) => {
+      if (btn.dataset.reconBound === "1") return;
+      btn.dataset.reconBound = "1";
+      btn.addEventListener("click", async () => {
+        try {
+          const snap = await Svc.readProgramSnapshot();
+          const payload = MonthEndClose.buildReconciliationPayload(snap || {});
+          const text = MonthEndClose.formatReconciliationExport(payload);
+          if (typeof DesktopBridge !== "undefined" && DesktopBridge.writeClipboard) {
+            await DesktopBridge.writeClipboard(text);
+          } else if (typeof navigator !== "undefined" && navigator.clipboard) {
+            await navigator.clipboard.writeText(text);
+          } else {
+            downloadTextFile(`nr2-reconciliation-${payload.period || "period"}.txt`, text);
+          }
+        } catch (err) {
+          alert(err.message || String(err));
+        }
+      });
+    });
   }
 
   function wireModal(container) {
@@ -373,11 +451,14 @@ const PageViews = (function () {
   }
 
   function trendArrow(dir) {
-    return dir === "down" ? "↓" : "↑";
+    if (dir === "down") return "↓";
+    if (dir === "flat") return "•";
+    return "↑";
   }
 
   async function renderFinancial(state) {
-    const d = await Svc.readDashboard("financial");
+    const snap = await Svc.readProgramSnapshot();
+    const d = (snap && snap.dashboards && snap.dashboards.financial) || (await Svc.readDashboard("financial"));
     const p = d.productionMtd;
     const feed = halFeed(state);
 
@@ -449,7 +530,7 @@ const PageViews = (function () {
         <div class="pv-donut-chart" style="background:conic-gradient(${stops})"><div class="pv-donut-chart__hole"><strong>${esc(pm.total)}</strong><span>Total</span></div></div>
         <div class="pv-payer-legend">${payerLegend}</div>
       </div>
-      <div class="pv-payer-foot"><span>INSURANCE COLLECTION RATE</span><strong>${esc(pm.rate)}</strong><em class="pv-trend pv-trend--up">${esc(pm.rateTrend)}</em></div>`,
+      <div class="pv-payer-foot"><span>INSURANCE COLLECTION RATE</span><strong>${esc(pm.rate)}</strong><em class="pv-trend ${trendClass(pm.rateTrendDir || "flat")}">${esc(pm.rateTrend)}</em></div>`,
       "pv-card--donut",
       null,
       "payerMixAndCollections",
@@ -482,15 +563,26 @@ const PageViews = (function () {
       : `<div class="pv-fresh-cards">${freshCells}</div>`;
     const freshCard = card("Data Freshness", freshnessInner, "pv-card--half", null, "dataFreshnessQuality", state);
 
-    const qualityCats = d.quality.categories.map((c) => `<div class="pv-qcat"><span>✓ ${esc(c.label)}</span><strong>${c.score}/100</strong></div>`).join("");
-    const qualityCard = card(
-      "Data Quality Score",
-      `<div class="pv-quality"><div class="pv-quality__ring pv-quality__ring--green"><strong>${d.quality.score}</strong><span>/100</span></div><div class="pv-quality__cats">${qualityCats}</div></div><a class="pv-gold-link" href="#">View Data Quality →</a>`,
-      "pv-card--half",
-      null,
-      "dataFreshnessQuality",
-      state,
+    const qualityCats = (d.quality?.categories || [])
+      .map((c) => `<div class="pv-qcat"><span>${c.score >= 20 ? "✓" : "⚠"} ${esc(c.label)}</span><strong>${c.score}/100</strong></div>`)
+      .join("");
+    const collectionHealthFailed = (d.quality?.categories || []).some(
+      (category) => category.label === "Collection health" && Number(category.score) < 15,
     );
+    const qualityRingClass =
+      (d.quality?.score || 0) >= 70 && !collectionHealthFailed && !d.collectionsZeroWithProduction
+        ? "pv-quality__ring--green"
+        : "";
+    const qualityCard = d.quality && d.quality.score > 0
+      ? card(
+          "Data Quality Score",
+          `<div class="pv-quality"><div class="pv-quality__ring ${qualityRingClass}"><strong>${d.quality.score}</strong><span>/100</span></div><div class="pv-quality__cats">${qualityCats}</div></div><a class="pv-gold-link" href="#">View Data Quality →</a>`,
+          "pv-card--half",
+          null,
+          "dataFreshnessQuality",
+          state,
+        )
+      : "";
 
     const header = U.TopBar({
       title: "Owner Financial Dashboard",
@@ -499,8 +591,33 @@ const PageViews = (function () {
       dataBadge: dataBadgeFor(d),
       actions: [toolbarDate(d.dateRange), toolbarBtn(d.compareRange, uiIcon("chevronDown")), toolbarBtn("Filters", uiIcon("filter"))],
     });
+    const periodBanner = d.periodAlignment && !d.periodAlignment.aligned
+      ? `<div class="pv-banner pv-banner--warn" role="status">${esc(d.periodAlignment.message)}</div>`
+      : "";
+    const collectionsBanner = d.collectionsMissing
+      ? `<div class="pv-banner pv-banner--warn" role="status">Collections not reported for this period — verify daysheet export; this is not a true 0% collection rate.</div>`
+      : d.collectionsZeroWithProduction
+        ? `<div class="pv-banner pv-banner--warn" role="status">Latest SoftDent period shows $0 collections with production — run final daysheet export before period close.</div>`
+        : "";
+    const singleSourceBanner = d.singleSource
+      ? `<div class="pv-banner pv-banner--warn" role="status">Partial — single source loaded. Cross-source comparison is unavailable until both SoftDent and QuickBooks imports are present.</div>`
+      : "";
+    const monthEndCard =
+      typeof MonthEndClose !== "undefined"
+        ? MonthEndClose.renderChecklistHtml(
+            MonthEndClose.buildMonthEndChecklist({
+              financial: d,
+              documents: snap?.documents,
+              importBundle: snap?.importBundle,
+            }),
+            esc,
+          )
+        : "";
     return `
       ${header}
+      ${periodBanner}
+      ${collectionsBanner}
+      ${singleSourceBanner}
       ${halStrip(state)}
       ${halCommandSurface(state)}
       <div class="pv-fin-top">${prodCard}${metricsCard}</div>
@@ -510,6 +627,7 @@ const PageViews = (function () {
         ${providerCard}
         ${freshCard}
         ${qualityCard}
+        ${monthEndCard}
       </div>
       ${pageFooter(`<em>${esc(d.footer.disclaimer)}</em>`, `Last refreshed: ${esc(d.footer.refreshed)} ↻`)}
     `;
@@ -543,10 +661,10 @@ const PageViews = (function () {
     });
 
     const heroInner = `
-      <div class="pv-card__head"><h3>${esc(d.hero.label)} <i class="pv-info">ⓘ</i></h3><span class="pv-trend pv-trend--${esc(d.hero.trendDir)}">↑ ${esc(d.hero.trend)}</span></div>
+      <div class="pv-card__head"><h3>${esc(d.hero.label)} <i class="pv-info">ⓘ</i></h3><span class="pv-trend ${trendClass(d.hero.trendDir)}">${trendArrow(d.hero.trendDir)} ${esc(d.hero.trend)}</span></div>
       <div class="pv-sd-hero__body">
         <div class="pv-sd-hero__value"><strong>${esc(d.hero.value)}</strong><span>${esc(d.hero.subtitle)}</span></div>
-        <div class="pv-sd-hero__spark">${softdentSparkline(d.hero.spark || [1, 2, 3])}</div>
+        ${d.hero.spark ? `<div class="pv-sd-hero__spark">${softdentSparkline(d.hero.spark)}</div>` : d.hero.sparkNote ? `<p class="pv-muted pv-sd-hero__spark-note">${esc(d.hero.sparkNote)}</p>` : ""}
       </div>
       <div class="pv-sd-submetrics">${d.subMetrics.map((m) => `<div><span>${esc(m.label)}</span><strong>${esc(m.value)}</strong></div>`).join("")}</div>`;
     const hero = HW
@@ -689,7 +807,7 @@ const PageViews = (function () {
           `<div class="pv-pl__row${r.highlight ? " pv-pl__row--net" : ""}">
             <span class="pv-pl__cat">${esc(r.category)}</span>
             <span class="pv-pl__amt">${esc(r.amount)}</span>
-            <span class="pv-pl__chg ${r.changeTone === "up" ? "pv-trend--up" : "pv-trend--down"}">${esc(r.change)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>
+            <span class="pv-pl__chg ${r.changeTone === "up" ? "pv-trend--up" : r.changeTone === "down" ? "pv-trend--down" : "pv-trend--flat"}">${esc(r.change)}${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</span>
           </div>`,
       )
       .join("")}</div>`;
@@ -1095,6 +1213,62 @@ const PageViews = (function () {
   }
 
   /* ---- Documents (interactive) ---- */
+  function renderJournalPostingQueueCard(queueData, state) {
+    const unavailable = !queueData || queueData.unavailable;
+    const metrics = (queueData && queueData.metrics) || {};
+    const items = (queueData && queueData.items) || [];
+    if (unavailable) {
+      return card(
+        "Journal Posting Queue (SQLite)",
+        `<p class="pv-muted">Requires the NR2 desktop app. Validated journal drafts queue in <code>nr2.sqlite3</code> for human QuickBooks posting — NR2 never posts externally.</p>`,
+        "pv-card--wide pv-journal-queue",
+        null,
+        "journalPostingQueue",
+        state,
+      );
+    }
+    const metricInner = `<div class="pv-post-grid">${[
+      ["Pending review", metrics.pendingReview || 0, "warn"],
+      ["Approved", metrics.approved || 0, "ok"],
+      ["Rejected", metrics.rejected || 0, "info"],
+    ]
+      .map(([label, count, tone]) => `<article class="pv-post-card pv-post-card--${tone}"><span>${esc(label)}</span><strong>${esc(String(count))}</strong></article>`)
+      .join("")}</div>`;
+    const rows = items.length
+      ? items
+          .map((item) => {
+            const pending = item.status === "pending_review";
+            const actions = pending
+              ? `<div class="pv-journal-queue__actions">${U.Button({ label: "Approve", variant: "primary", attrs: { "data-pq-approve": item.queueId } })} ${U.Button({ label: "Reject", attrs: { "data-pq-reject": item.queueId } })}</div>`
+              : `<span class="pv-muted">${esc(item.reviewerActor || "—")}</span>`;
+            return `<tr>
+              <td>${esc(item.queueId)}</td>
+              <td>${esc(item.description || "—")}</td>
+              <td>${esc(item.accountingPeriod || "—")}</td>
+              <td>${esc(String(item.amount != null ? item.amount : "—"))}</td>
+              <td>${badge(item.status || "—", pending ? "warn" : item.status === "approved" ? "ok" : "muted")}</td>
+              <td>${actions}</td>
+            </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="6"><span class="pv-muted">No journal drafts enqueued yet.</span></td></tr>`;
+    const body = `${metricInner}
+      <div class="pv-table-wrap"><table class="pv-table pv-table--compact pv-journal-queue__table"><thead><tr><th>Queue ID</th><th>Description</th><th>Period</th><th>Amount</th><th>Status</th><th>Review</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="pv-journal-queue__enqueue">
+        <h4>Enqueue validated draft</h4>
+        <div class="pv-form-grid">
+          ${U.FormField({ id: "pq-description", name: "description", label: "Description", value: "Prepaid insurance payment", required: true })}
+          ${U.FormField({ id: "pq-period", name: "period", label: "Period (YYYY-MM)", value: new Date().toISOString().slice(0, 7), required: true })}
+          ${U.FormField({ id: "pq-amount", name: "amount", label: "Amount", value: "1200", required: true })}
+          ${U.FormField({ id: "pq-reviewer", name: "reviewer", label: "Reviewer name (approve/reject)", placeholder: "Controller name" })}
+        </div>
+        ${U.Button({ label: "Enqueue journal draft", variant: "primary", attrs: { "data-pq-enqueue": "1" } })}
+        ${U.Button({ label: "Export approved (CSV)", attrs: { "data-pq-export-approved": "1" } })}
+        <p class="pv-lock-note">Draft must balance and use known account codes. Queue is local SQLite only.</p>
+      </div>`;
+    return card("Journal Posting Queue (SQLite)", body, "pv-card--wide pv-journal-queue", null, "journalPostingQueue", state);
+  }
+
   function documentPreviewFooter(preview) {
     if (preview && preview.sourceExpired) {
       return `<footer class="pv-preview-foot pv-preview-foot--warn">Source file expired (retention) · Uploaded ${esc(preview.uploaded || "—")}</footer>`;
@@ -1127,6 +1301,18 @@ const PageViews = (function () {
     const preview = data.preview || {};
     const posting = data.posting || [];
     const period = data.period || {};
+    const reviewedPct = period.documents ? (period.reviewedPct || 0) : 0;
+    const periodDonutInner = period.documents
+      ? conicDonut(
+          [
+            { label: "Posted", pct: period.postedPct || 0, color: "#3f73e6" },
+            { label: "Pending", pct: period.pendingPct || 0, color: "#d6b15e" },
+            { label: "Ready to Post", pct: period.readyPct || 0, color: "#78a86b" },
+          ],
+          `<strong>${esc(period.postedPct || 0)}%</strong><span>Posted</span>`,
+          142,
+        )
+      : `<p class="pv-muted">No documents in queue yet.</p>`;
     const addDocModal = U.Modal({
       id: "document-intake-modal",
       open: false,
@@ -1176,6 +1362,21 @@ const PageViews = (function () {
         ? `<div class="pv-invoice-preview"><div class="pv-invoice-preview__head">${esc(preview.vendor)}</div><p>Invoice # ${esc(preview.invoice)}</p><p>Date: ${esc(preview.date)}</p><p class="pv-invoice-preview__total">Total ${esc(preview.total)}</p>${documentPreviewExtractedBlock(preview)}</div>${documentPreviewFooter(preview)}`
         : U.EmptyState({ title: "No document selected", message: "Select a row to preview." });
     const exportDropHint = `<aside class="pv-export-drop-hint" role="note"><strong>Source exports land here (manual drop or auto-pull):</strong> SoftDent → <code>app_data/nr2/document_inbox/softdent</code> · QuickBooks → <code>app_data/nr2/document_inbox/quickbooks</code> · Invoices/receipts → <code>app_data/nr2/document_inbox</code> (root). Auto-pull copies upstream files into the softdent/quickbooks folders; HAL reads only from there.</aside>`;
+    const monthEndCard =
+      typeof MonthEndClose !== "undefined"
+        ? MonthEndClose.renderChecklistHtml(
+            data.monthEndChecklist ||
+              MonthEndClose.buildMonthEndChecklist({
+                financial: data.financialSnapshot || null,
+                documents: { posting, period, queueCount: data.queue.length, postingAudit: data.postingAudit },
+                importBundle: data.importBundle || null,
+              }),
+            esc,
+          )
+        : "";
+    const auditCard =
+      typeof MonthEndClose !== "undefined" ? MonthEndClose.renderPostingAuditHtml(data.postingAudit, esc) : "";
+    const journalQueueCard = renderJournalPostingQueueCard(data.journalPostingQueue, state);
     return `
       ${addDocModal}
       ${topBar(state, [badge("Read-Only", "warn"), `<span class="pv-entity">Entity: ${esc(data.entity || "—")}</span>`], null, dataBadgeFor({ dataSource: (data.queue || []).length ? "persisted" : "empty" }))}
@@ -1185,9 +1386,12 @@ const PageViews = (function () {
       <div class="pv-bento pv-bento--documents">
         ${card("Document Intake & Posting Queue", queueInner, "pv-card--queue", null, "documentIntakeQueue", state)}
         ${card("Selected Document Preview", previewInner, "pv-card--preview", null, "documentPreview", state)}
-        ${card("Posting Queue Review", `<div class="pv-post-grid">${posting.map((p) => `<article class="pv-post-card pv-post-card--${p.tone}"><span>${esc(p.label)}</span><strong>${p.count}</strong>${p.amount ? `<em>${esc(String(p.amount))}</em>` : ""}</article>`).join("")}</div><div class="pv-review-workload"><span>Review Workload</span><div><i style="width:${esc(period.reviewedPct || 24)}%"></i></div><em>${esc(period.reviewedPct || 24)}%</em></div><a class="pv-gold-link" href="#">View All Documents →</a>`, "pv-card--wide", null, "accountsPayableAutomation", state)}
-        ${card("Period Summary", `<div class="pv-period-summary"><dl>${[["Period", period.label], ["Documents", period.documents], ["Total Amount", period.totalAmount], ["Posted Amount", period.postedAmount], ["Pending Amount", period.pendingAmount]].map(([l, v]) => `<div><dt>${esc(l)}</dt><dd>${esc(v || "—")}</dd></div>`).join("")}</dl>${conicDonut([{ label: "Posted", pct: period.postedPct || 88, color: "#3f73e6" }, { label: "Pending", pct: period.pendingPct || 11, color: "#d6b15e" }, { label: "Ready to Post", pct: period.readyPct || 1, color: "#78a86b" }], `<strong>${esc(period.postedPct || 88)}%</strong><span>Posted</span>`, 142)}</div><a class="pv-gold-link" href="#">View Period Close →</a>`, "pv-card--period", null, "periodCloseAndPosting", state)}
-        ${selectedId ? `<div class="pv-doc-actions">${U.FormField({ id: "doc-new-status", name: "status", label: "Update status", type: "select", value: (data.queue.find((q) => q.id === selectedId) || {}).status, options: ["Pending Review", "Ready to Post", "Posted"] })} ${U.Button({ label: "Save status", variant: "primary", attrs: { "data-doc-save": selectedId } })} ${U.Button({ label: "Remove", attrs: { "data-doc-delete": selectedId } })}</div>` : ""}
+        ${card("Posting Queue Review", `<div class="pv-post-grid">${posting.map((p) => `<article class="pv-post-card pv-post-card--${p.tone}"><span>${esc(p.label)}</span><strong>${p.count}</strong>${p.amount ? `<em>${esc(String(p.amount))}</em>` : ""}</article>`).join("")}</div><div class="pv-review-workload"><span>Review Workload</span><div><i style="width:${esc(reviewedPct)}%"></i></div><em>${esc(reviewedPct)}%</em></div>`, "pv-card--wide", null, "accountsPayableAutomation", state)}
+        ${card("Period Summary", `<div class="pv-period-summary"><dl>${[["Period", period.label], ["Documents", period.documents], ["Total Amount", period.totalAmount], ["Posted Amount", period.postedAmount], ["Pending Amount", period.pendingAmount]].map(([l, v]) => `<div><dt>${esc(l)}</dt><dd>${esc(v || "—")}</dd></div>`).join("")}</dl>${periodDonutInner}</div>`, "pv-card--period", null, "periodCloseAndPosting", state)}
+        ${monthEndCard}
+        ${auditCard}
+        ${journalQueueCard}
+        ${selectedId ? `<div class="pv-doc-actions">${U.FormField({ id: "doc-new-status", name: "status", label: "Update status", type: "select", value: (data.queue.find((q) => q.id === selectedId) || {}).status, options: ["Pending Review", "Ready to Post", "Posted"] })} ${U.FormField({ id: "doc-reviewed-by", name: "reviewedBy", label: "Reviewer (required for Posted)", placeholder: "Controller or reviewer name", value: (data.queue.find((q) => q.id === selectedId) || {}).reviewedBy || "" })} <label class="pv-checkbox"><input type="checkbox" id="doc-enqueue-journal" /> Queue journal draft when marking Posted</label> ${U.Button({ label: "Save status", variant: "primary", attrs: { "data-doc-save": selectedId } })} ${U.Button({ label: "Remove", attrs: { "data-doc-delete": selectedId } })}</div>` : ""}
       </div>`;
   }
 
@@ -1196,12 +1400,52 @@ const PageViews = (function () {
     let filter = { query: "", status: "All" };
     async function refresh() {
       const slot = container.querySelector(".pv-body") || container;
-      slot.innerHTML = U.LoadingState({ label: "Loading documents…" });
+      slot.innerHTML = U.LoadingState({ label: "Syncing documents…" });
       try {
+        if (Svc.waitForDocumentsSync) await Svc.waitForDocumentsSync();
+        const syncState = Svc.getDocumentsSyncState ? Svc.getDocumentsSyncState() : null;
+        if (syncState && syncState.status === "error") {
+          slot.innerHTML = U.ErrorState({
+            title: "Document sync failed",
+            message: syncState.error || "Unable to sync accounting documents.",
+          });
+          slot.querySelector("[data-retry]")?.addEventListener("click", refresh);
+          return;
+        }
         const list = await Svc.documents.list(filter);
         if (selectedId && !list.queue.find((q) => q.id === selectedId) && list.queue.length) selectedId = list.queue[0].id;
         const detail = selectedId ? await Svc.documents.get(selectedId) : { preview: null };
-        slot.innerHTML = documentsBody(state, Object.assign({}, list, { preview: detail.preview, queue: list.queue }), selectedId, filter);
+        const snap = await Svc.readProgramSnapshot();
+        const monthEndChecklist =
+          typeof MonthEndClose !== "undefined"
+            ? MonthEndClose.buildMonthEndChecklist({
+                financial: snap?.dashboards?.financial,
+                documents: Object.assign({}, list, { queueCount: list.queue.length }),
+                importBundle: snap?.importBundle,
+              })
+            : null;
+        let journalPostingQueue = { items: [], metrics: {}, unavailable: true };
+        if (typeof DesktopBridge !== "undefined" && DesktopBridge.listPostingQueue) {
+          try {
+            journalPostingQueue = await DesktopBridge.listPostingQueue({ limit: 12 });
+          } catch {
+            journalPostingQueue = { items: [], metrics: {}, unavailable: true };
+          }
+        }
+        slot.innerHTML = documentsBody(
+          state,
+          Object.assign({}, list, {
+            preview: detail.preview,
+            queue: list.queue,
+            monthEndChecklist,
+            financialSnapshot: snap?.dashboards?.financial,
+            importBundle: snap?.importBundle,
+            journalPostingQueue,
+          }),
+          selectedId,
+          filter,
+        );
+        wireReconciliationExport(container);
         wireDocumentsInteractions(container, state, onNavigate, refresh, () => selectedId, (id) => { selectedId = id; }, () => filter, (f) => { filter = f; });
       } catch (err) {
         slot.innerHTML = U.ErrorState({ message: err.message });
@@ -1254,12 +1498,79 @@ const PageViews = (function () {
     container.querySelector("[data-doc-save]")?.addEventListener("click", async (ev) => {
       const id = ev.target.getAttribute("data-doc-save");
       const status = container.querySelector("#doc-new-status")?.value;
-      try { await Svc.documents.updateStatus(id, status); refresh(); } catch (e) { alert(e.message); }
+      const reviewedBy = container.querySelector("#doc-reviewed-by")?.value || "";
+      const enqueueJournal = Boolean(container.querySelector("#doc-enqueue-journal")?.checked);
+      try { await Svc.documents.updateStatus(id, status, { reviewedBy, enqueueJournal }); refresh(); } catch (e) { alert(e.message); }
     });
     container.querySelector("[data-doc-delete]")?.addEventListener("click", async (ev) => {
       const id = ev.target.getAttribute("data-doc-delete");
       if (!confirm("Remove document from queue?")) return;
       try { await Svc.documents.remove(id); setSelected(null); refresh(); } catch (e) { alert(e.message); }
+    });
+    container.querySelector("[data-pq-enqueue]")?.addEventListener("click", async () => {
+      if (typeof DesktopBridge === "undefined" || !DesktopBridge.enqueueJournalPosting) {
+        alert("Journal posting queue requires the NR2 desktop app.");
+        return;
+      }
+      const description = container.querySelector("#pq-description")?.value || "";
+      const period = container.querySelector("#pq-period")?.value || "";
+      const amount = Number(container.querySelector("#pq-amount")?.value || 0);
+      if (!description.trim() || !period.trim() || !(amount > 0)) {
+        alert("Description, period, and a positive amount are required.");
+        return;
+      }
+      try {
+        await DesktopBridge.enqueueJournalPosting({ description, period, amount, actor: "Staff" });
+        refresh();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+    const reviewQueue = async (queueId, action) => {
+      if (typeof DesktopBridge === "undefined" || !DesktopBridge.reviewPostingQueueEntry) {
+        alert("Posting queue review requires the NR2 desktop app.");
+        return;
+      }
+      const reviewer = container.querySelector("#pq-reviewer")?.value || "";
+      if (!String(reviewer).trim()) {
+        alert("Enter reviewer name in the Journal Posting Queue section.");
+        return;
+      }
+      try {
+        await DesktopBridge.reviewPostingQueueEntry(queueId, action, reviewer, "");
+        refresh();
+      } catch (e) {
+        alert(e.message);
+      }
+    };
+    container.querySelectorAll("[data-pq-approve]").forEach((btn) => {
+      btn.addEventListener("click", () => reviewQueue(btn.getAttribute("data-pq-approve"), "approved"));
+    });
+    container.querySelectorAll("[data-pq-reject]").forEach((btn) => {
+      btn.addEventListener("click", () => reviewQueue(btn.getAttribute("data-pq-reject"), "rejected"));
+    });
+    container.querySelector("[data-pq-export-approved]")?.addEventListener("click", async () => {
+      if (typeof DesktopBridge === "undefined" || !DesktopBridge.exportApprovedPostingQueue) {
+        alert("Approved queue export requires the NR2 desktop app.");
+        return;
+      }
+      try {
+        const payload = await DesktopBridge.exportApprovedPostingQueue({ limit: 200 });
+        const csv = payload && payload.csv;
+        if (!csv) {
+          alert("No approved journal entries to export.");
+          return;
+        }
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `nr2-approved-journal-queue-${new Date().toISOString().slice(0, 10)}.csv`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(e.message);
+      }
     });
   }
 

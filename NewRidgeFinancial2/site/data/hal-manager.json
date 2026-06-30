@@ -118,8 +118,10 @@
   },
   "askHal": {
     "title": "Ask HAL",
-    "summary": "HAL answers from the local program registry and full program snapshot using an agent loop: plan → local tools → answer → self-check. Its primary job is program monitoring, correct data placement, accounting/Excel-style analysis, and recommendations. Unmatched questions use the local 24B shared chat/helper lane with tool-enriched context. Planning requests use the reasoning lane; second-opinion requests use the escalation lane. The firewall runs before every model. Recent conversation and local preferences are remembered on this device.",
+    "summary": "HAL answers from the local program registry and full program snapshot using an agent loop: plan → local tools → answer → self-check. Its primary job is program monitoring, correct data placement, accounting/Excel-style analysis, and recommendations. HAL can also research public web reference material (sanitized practice queries — no PHI). Unmatched questions use the local GPU chat lane with tool-enriched context. Planning uses the reasoning lane; second-opinion uses escalation. The firewall runs before every model. Recent conversation and local preferences are remembered on this device.",
     "suggestions": [
+      "Monitor sidenotes",
+      "Show sidenotes",
       "Show what needs attention today",
       "Recommend the next accounting review",
       "Show office manager attention",
@@ -140,12 +142,14 @@
       "Explain why this widget is empty",
       "Build daily owner briefing",
       "Show accounting review queue",
+      "Show accounting reconciliation checklist",
       "Work document workbook",
       "Show Excel-style reconciliation",
+      "Search the web for SoftDent daysheet guidance",
+      "Remember this: SoftDent needs a final daysheet per date for accurate A/R",
       "Search the library for compliance",
       "Show my tasks",
-      "Monitor sidenotes",
-      "Show sidenotes",
+      "Add sidenote: follow up on hygiene recall",
       "Show full program snapshot",
       "What is ready to work on",
       "What is blocked",
@@ -160,13 +164,25 @@
       "Build evidence packet",
       "Run readiness check"
     ],
-    "response": "I monitor the program, place the correct data in the right financial and accounting views, apply accounting and Excel-style review, and recommend next safe actions. I plan each question, run local tools, self-check my answer, and remember recent context on this device. I can navigate the program, explain each page, show full snapshots, show priorities, review source freshness, draft read-only work notes, build evidence packets, check claim readiness, draft journal-entry review notes, show widget-filling guidance, build owner briefings, reconcile imported tables, search the local library, list tasks, monitor sidenotes, simulate the firewall, and report local AI model status. For other questions I use local model lanes on this machine; external actions still require human review.",
+    "response": "I monitor the program, place the correct data in the right financial and accounting views, apply accounting and Excel-style review, and recommend next safe actions. I plan each question, run local tools, self-check my answer, and remember recent context on this device. I can navigate the program, explain each page, show full snapshots, show priorities, review source freshness, draft read-only work notes, build evidence packets, check claim readiness, draft journal-entry review notes, show widget-filling guidance, build owner briefings, reconcile imported tables, search the local library, research public web reference for practice operations (sanitized — no patient data sent), list tasks, monitor sidenotes, simulate the firewall, and report local AI model status. For other questions I use local model lanes on this machine; external actions still require human review.",
     "commandExamples": [
       "Open claims workbench",
       "Explain QuickBooks",
       "What is ready to work on",
       "Make a plan for today",
       "Trace widgets"
+    ]
+  },
+  "sidenotes": {
+    "title": "SideNotes program",
+    "summary": "External SideNotesIM workstation watchers publish routing-only metadata into the shared hub. HAL announces senders via voice, shows the live feed, and monitors local staff scratch notes — message bodies are never read.",
+    "helperPath": "sidenotes-helper/run-sidenotes-helper.bat",
+    "hubEnv": "NR2_SIDENOTES_HUB_DATA",
+    "setupSteps": [
+      "Install SideNotesIM on each operatory and front-desk PC.",
+      "Copy sidenotes-helper to each workstation and run run-sidenotes-helper.bat (or Start-HAL-SideNotes.bat from the workstation package).",
+      "Point NR2_SIDENOTES_HUB_DATA at the shared folder where station inbox JSON files are written.",
+      "Launch NR2 desktop on the server/manager PC — HAL merges all station inboxes into this panel."
     ]
   },
   "sources": {
@@ -219,6 +235,7 @@
     "title": "Local reasoning core",
     "summary": "Work is organized from the live program registry into Ready and Needs review lanes. HAL uses accounting and Excel-style review to place correct data, reconcile what is available, identify missing values, and recommend the next safe staff action.",
     "actions": [
+      { "label": "Monitor sidenotes", "command": "Monitor sidenotes", "lane": "local" },
       { "label": "Make a plan for today", "command": "Make a plan for today", "lane": "reason21b" },
       { "label": "Recommend accounting review", "command": "Recommend the next accounting review", "lane": "reason21b" },
       { "label": "Explain review items", "command": "What needs review", "lane": "local" },
@@ -258,6 +275,11 @@
         "label": "Document Library",
         "target": "library",
         "detail": "Searchable read-only repository and selected document preview."
+      },
+      {
+        "label": "SideNotes program",
+        "target": "sidenotes",
+        "detail": "Live SideNotesIM routing feed from workstation watchers plus HAL local scratch notes."
       }
     ]
   },
@@ -265,7 +287,7 @@
     "title": "External action firewall",
     "summary": "HAL only reads data from SoftDent and QuickBooks. It cannot perform external actions from this program, and the safety boundary is enforced before any model call.",
     "blocked": ["No email", "No fax", "No upload", "No payer contact", "SoftDent read-only", "QuickBooks read-only", "No submission"],
-    "allowed": ["Open local program pages", "Read full program snapshot", "Explain local status", "Prepare review notes", "Flag missing information", "Draft a journal entry (local review only)", "Assess claim packet readiness", "Build office-manager attention list", "Create local office tasks", "Monitor local sidenotes", "Add local sidenotes", "Read QuickBooks and SoftDent directly (authorized practice employee, read-only)"],
+    "allowed": ["Open local program pages", "Read full program snapshot", "Explain local status", "Prepare review notes", "Flag missing information", "Draft a journal entry (local review only)", "Assess claim packet readiness", "Build office-manager attention list", "Create local office tasks", "Monitor local sidenotes", "Add local sidenotes", "Read QuickBooks and SoftDent directly (authorized practice employee, read-only)", "Research public web reference material for practice operations (sanitized queries, no PHI)"],
     "examples": [
       { "text": "Open the claims workbench", "expected": "allowed" },
       { "text": "Explain A/R aging", "expected": "allowed" },
@@ -576,6 +598,7 @@
       "Explain why this widget is empty": "widgets: explain-empty",
       "Build daily owner briefing": "briefing: owner-daily",
       "Show accounting review queue": "accounting: review-queue",
+      "Show accounting reconciliation checklist": "accounting: reconciliation-checklist",
       "Work document workbook": "documents: excel-workbook",
       "Show Excel-style reconciliation": "reconciliation: excel-style",
       "Search the library for compliance": "library: ask",

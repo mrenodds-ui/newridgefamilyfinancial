@@ -146,6 +146,7 @@ const EmptyStates = (function () {
         pendingPct: 0,
         readyPct: 0,
       },
+      postingAudit: [],
     },
     library: {
       results: 0,

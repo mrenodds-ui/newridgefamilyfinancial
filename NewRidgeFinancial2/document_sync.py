@@ -392,6 +392,17 @@ def sync_accounting_documents(store: Any) -> dict[str, Any]:
         "manualKept": 0,
         "warnings": [],
     }
+    try:
+        from import_cache_ttl import purge_expired_ocr_files
+
+        removed_ocr = purge_expired_ocr_files()
+        if removed_ocr:
+            result["removedOcrFiles"] = removed_ocr
+            result["warnings"].append(
+                f"Removed {len(removed_ocr)} OCR archive file(s) older than retention window."
+            )
+    except Exception as exc:
+        result["warnings"].append(f"OCR archive retention purge skipped: {exc}")
     if financial_only:
         result["warnings"].append(
             "HAL financial-numbers-only mode: OCR invoices and bill line items are not synced into Documents."

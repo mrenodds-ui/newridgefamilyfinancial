@@ -25,6 +25,9 @@ class LocalStore:
                 )
                 """
             )
+            from posting_queue_store import init_posting_queue_schema
+
+            init_posting_queue_schema(conn)
 
     def get(self, key: str) -> str | None:
         with sqlite3.connect(self.db_path) as conn:

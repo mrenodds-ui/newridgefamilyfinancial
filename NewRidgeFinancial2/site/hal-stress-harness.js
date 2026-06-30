@@ -188,6 +188,7 @@ const HalStressHarness = (function () {
           explainEmpty: () => HalSkills.formatEmptyWidgetExplanation(feed, result.prompt || trimmed),
           dailyOwnerBriefing: () => HalSkills.formatDailyOwnerBriefing(feed, snapshot),
           accountingReviewQueue: () => HalSkills.formatAccountingReviewQueue(feed, snapshot),
+          accountingReconciliationChecklist: () => HalSkills.formatAccountingReconciliationChecklist(feed, snapshot),
           documentExcelWorkbook: () => HalSkills.formatDocumentExcelWorkbook(feed, snapshot),
           excelReconciliation: () => HalSkills.formatExcelReconciliation(feed, snapshot),
         };

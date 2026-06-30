@@ -10,29 +10,32 @@ memory. It never writes to SoftDent, QuickBooks, payers, or any external service
 
 ## What stays resident
 
-The always-on default is the shared 24B model the program's active chat and
-helper lanes use:
+The always-on default is the dual GPU lane layout for 16 GB VRAM:
 
-- `mistral-small3.1:24b-fast` (text-only Q4_K_S — chat / general / helper)
+- `hal-chat:8b` (DeepSeek-R1 8B — staff chat)
+- `hal-helper:14b` (Queen3 14B — helper / triage)
 
-To build or refresh the fast quant:
+Install or refresh both tags:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\Install-HAL-Mistral-24B-Fast.ps1
+powershell -ExecutionPolicy Bypass -File .\NewRidgeFinancial2\model-automation\Install-HAL-GPU-Dual-Lanes.ps1
 ```
 
-The legacy vision-inclusive `mistral-small3.1:24b` remains in inventory but is not the default lane.
+Reasoning uses `mistral-small3.1:24b-fast` on demand (not dual-resident with 8B+14B):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\NewRidgeFinancial2\model-automation\Install-HAL-Mistral-24B-Fast.ps1
+```
 
 The model names are read live from `..\site\data\hal-models.json`, so they stay
 in sync with the program config.
 
 ### GPU reality (16 GB)
 
-All configured models **cannot** co-reside on a 16 GB GPU at once (the set
-includes 24B, 30B, 32B, 120B, and 235B models). Pinning every model just causes
-constant load/evict thrashing. The larger reasoning/escalation lanes are loaded
-on demand and pinned while loaded; use the switches below if you want to force
-them warm anyway.
+All configured models **cannot** co-reside on a 16 GB GPU at once. The default
+pins only `hal-chat:8b` + `hal-helper:14b` (~14 GB weights with capped context).
+The 24B reasoning lane loads on demand and may evict one of the GPU lanes
+briefly while active.
 
 ## Run once
 
@@ -64,10 +67,8 @@ The warmer also starts `ollama serve` if the API is not already reachable.
 
 ### Options
 
-- `-IncludeReasoningLanes` — also pin the reasoning and escalation lanes.
-  Since the reasoning lane already shares `mistral-small3.1:24b`, this mainly
-  adds `qwen3:30b` (escalation). It will not co-reside with the shared 24B
-  chat/helper model on 16 GB; expect on-demand swapping.
+- `-IncludeReasoningLanes` — also pin `mistral-small3.1:24b-fast` and `qwen3:30b`.
+  These will not co-reside with both GPU lanes on 16 GB; expect on-demand swapping.
 - `-AllConfigured` — attempt to pin every model in the config (not advisable on
   16 GB VRAM; provided for larger GPUs).
 - `-SystemBoot` — register a pre-logon boot task that runs as SYSTEM at machine

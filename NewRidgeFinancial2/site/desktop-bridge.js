@@ -144,6 +144,100 @@ const DesktopBridge = (function () {
     return null;
   }
 
+  async function getChartOfAccounts() {
+    if (hasDesktopApi() && window.pywebview.api.get_chart_of_accounts) {
+      return window.pywebview.api.get_chart_of_accounts();
+    }
+    return null;
+  }
+
+  async function draftJournalEntry({ description, period, amount, context }) {
+    if (hasDesktopApi() && window.pywebview.api.draft_journal_entry) {
+      return window.pywebview.api.draft_journal_entry(
+        String(description || ""),
+        String(period || ""),
+        Number(amount || 0),
+        JSON.stringify(context || {}),
+      );
+    }
+    return null;
+  }
+
+  async function listPostingQueue(options) {
+    if (hasDesktopApi() && window.pywebview.api.list_posting_queue) {
+      const limit = options && options.limit != null ? Number(options.limit) : 20;
+      const status = options && options.status ? String(options.status) : "";
+      return window.pywebview.api.list_posting_queue(limit, status);
+    }
+    return { items: [], metrics: { pendingReview: 0, approved: 0, rejected: 0, total: 0 }, unavailable: true };
+  }
+
+  async function enqueueJournalPosting(payload) {
+    if (hasDesktopApi() && window.pywebview.api.enqueue_journal_posting) {
+      return window.pywebview.api.enqueue_journal_posting(JSON.stringify(payload || {}));
+    }
+    throw new Error(desktopRequiredMessage("Journal posting queue"));
+  }
+
+  async function reviewPostingQueueEntry(queueId, action, reviewerActor, reviewNote) {
+    if (hasDesktopApi() && window.pywebview.api.review_posting_queue_entry) {
+      return window.pywebview.api.review_posting_queue_entry(
+        String(queueId || ""),
+        String(action || ""),
+        String(reviewerActor || ""),
+        String(reviewNote || ""),
+      );
+    }
+    throw new Error(desktopRequiredMessage("Posting queue review"));
+  }
+
+  async function exportApprovedPostingQueue(options) {
+    if (hasDesktopApi() && window.pywebview.api.export_approved_posting_queue) {
+      const limit = options && options.limit != null ? Number(options.limit) : 200;
+      return window.pywebview.api.export_approved_posting_queue(limit);
+    }
+    throw new Error(desktopRequiredMessage("Approved posting queue export"));
+  }
+
+  async function webResearch(query, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    if (hasDesktopApi() && window.pywebview.api.web_research) {
+      return window.pywebview.api.web_research(String(query || ""), JSON.stringify(opts));
+    }
+    return {
+      ok: false,
+      error: "desktop_required",
+      results: [],
+      policy: "public_docs_only_no_phi",
+    };
+  }
+
+  async function listHalMemories() {
+    if (hasDesktopApi() && window.pywebview.api.list_hal_memories) {
+      return window.pywebview.api.list_hal_memories();
+    }
+    return { items: [], count: 0 };
+  }
+
+  async function rememberHalFact(text, options) {
+    const opts = options && typeof options === "object" ? options : {};
+    if (hasDesktopApi() && window.pywebview.api.remember_hal_fact) {
+      return window.pywebview.api.remember_hal_fact(
+        String(text || ""),
+        String(opts.source || "staff:remember"),
+        String(opts.category || ""),
+      );
+    }
+    throw new Error(desktopRequiredMessage("Saving HAL learned facts"));
+  }
+
+  async function rememberHalWebFindings(query, findings) {
+    if (hasDesktopApi() && window.pywebview.api.remember_hal_web_findings) {
+      return window.pywebview.api.remember_hal_web_findings(String(query || ""), JSON.stringify(findings || []));
+    }
+    throw new Error(desktopRequiredMessage("Saving HAL web findings"));
+  }
+
   function isTextField(el) {
     if (!el || typeof el !== "object") return false;
     const tag = String(el.tagName || "").toUpperCase();
@@ -339,6 +433,16 @@ const DesktopBridge = (function () {
     listPracticeSourceCatalog,
     fetchPracticeSource,
     pullPracticeSources,
+    getChartOfAccounts,
+    draftJournalEntry,
+    listPostingQueue,
+    enqueueJournalPosting,
+    reviewPostingQueueEntry,
+    exportApprovedPostingQueue,
+    webResearch,
+    listHalMemories,
+    rememberHalFact,
+    rememberHalWebFindings,
     readClipboard,
     writeClipboard,
     installClipboardHandlers,

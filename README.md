@@ -35,16 +35,19 @@ StopNewRidgeFinancial2.bat
 
 ## Import data
 
-Live SoftDent / QuickBooks exports sync into:
+Live SoftDent / QuickBooks exports sync into the NR2 document-inbox cache:
 
 ```text
-app/data/imports/softdent/
-app/data/imports/quickbooks/
+app_data/nr2/document_inbox/softdent/
+app_data/nr2/document_inbox/quickbooks/
 ```
 
 Sync authority: `NewRidgeFinancial2/import_sync.py`  
-Automation: `NewRidgeFinancial2/import-automation/Sync-HAL-Imports.ps1`
+Automation: `NewRidgeFinancial2/import-automation/Sync-HAL-Imports.ps1`  
+Documents sync: `NewRidgeFinancial2/import-automation/Sync-HAL-Document-Sources.ps1`  
+Pre-flight: `NewRidgeFinancial2/import-automation/Verify-HAL-Readiness.ps1`
 
+Legacy `app/data/imports/` is migrated automatically on first sync.  
 Legacy `scripts/sync_softdent_bridge.ps1` is **retired**.
 
 ## Layout
@@ -54,7 +57,7 @@ Legacy `scripts/sync_softdent_bridge.ps1` is **retired**.
 | `NewRidgeFinancial2/desktop_app.py` | Desktop launcher |
 | `NewRidgeFinancial2/import_sync.py` | Export → import cache sync |
 | `NewRidgeFinancial2/import_loader.py` | Import cache reader |
-| `app/data/imports/` | Canonical import cache (gitignored) |
+| `app_data/nr2/document_inbox/` | Canonical import cache (gitignored under `app_data/`) |
 | `app_data/nr2/` | Desktop SQLite state |
 
 See `NewRidgeFinancial2/README.md` for page/HAL details.

@@ -154,7 +154,7 @@ const ImportDiagnostics = (function () {
     return { path: best, sourceFile: require("node:path").basename(best), modifiedAt, ageMinutes: ageMinutes(modifiedAt) };
   }
 
-  function evaluateDataset(datasetKey, contract, datasetPayload, manifest, upstreamRoots) {
+  function evaluateDataset(datasetKey, contract, datasetPayload, manifest, upstreamRoots, previousChecksums) {
     const automated = contract && contract.automated !== false;
     const severity = (contract && contract.severity) || "warning";
     const freshnessMax = Number((contract && contract.freshnessMaxMinutes) || 1440);
@@ -234,6 +234,21 @@ const ImportDiagnostics = (function () {
       detail = `Upstream export is stale (${upstreamFile.ageMinutes} min old). ${detail}`;
     }
 
+    const currentSha = datasetPayload && datasetPayload.sha256 ? String(datasetPayload.sha256) : "";
+    const previous = previousChecksums && previousChecksums[datasetKey];
+    let checksumChanged = false;
+    if (previous && currentSha) {
+      const previousSha = previous.sha256 ? String(previous.sha256) : "";
+      const previousFile = previous.sourceFile ? String(previous.sourceFile) : "";
+      const currentFile = datasetPayload.sourceFile ? String(datasetPayload.sourceFile) : "";
+      if (previousSha && previousSha !== currentSha) checksumChanged = true;
+      else if (previousFile && currentFile && previousFile !== currentFile) checksumChanged = true;
+    }
+    if (checksumChanged && status === STATUS.CONNECTED) {
+      status = STATUS.PARTIAL;
+      detail = `Dataset changed since last sync (checksum). ${detail}`;
+    }
+
     return {
       datasetKey,
       system: contract && contract.system,
@@ -250,13 +265,16 @@ const ImportDiagnostics = (function () {
       requiredFieldFailures,
       collectorHint: hint,
       upstreamFile,
+      sha256: currentSha || null,
+      checksumChanged,
       detail,
     };
   }
 
-  function evaluateBundle(bundle, manifest) {
-    const resolvedManifest = manifest || loadManifest() || { datasets: {} };
+  function evaluateBundle(bundle, manifest, previousChecksums) {
+    const resolvedManifest = manifest || loadManifest() || { datasets: {}, upstreamRoots: {} };
     const datasetsManifest = resolvedManifest.datasets || {};
+    const checksums = previousChecksums || resolvedManifest.datasetChecksums || {};
     const items = [];
     const summary = { total: 0, connected: 0, partial: 0, stale: 0, missing: 0, notConfigured: 0 };
     const softdentRoots = resolveUpstreamRoots("softdent", resolvedManifest);
@@ -269,7 +287,7 @@ const ImportDiagnostics = (function () {
       const systemPayload = (bundle && bundle[system]) || {};
       const datasetPayload = systemPayload[bundleKey] || null;
       const roots = system === "softdent" ? softdentRoots : quickbooksRoots;
-      const item = evaluateDataset(datasetKey, contract, datasetPayload, resolvedManifest, roots);
+      const item = evaluateDataset(datasetKey, contract, datasetPayload, resolvedManifest, roots, checksums);
       items.push(item);
       summary.total += 1;
       if (item.status === STATUS.CONNECTED) summary.connected += 1;
@@ -333,7 +351,8 @@ const ImportDiagnostics = (function () {
       const file = item.sourceFile ? ` file=${item.sourceFile}` : "";
       const rows = item.found ? ` rows=${item.rowCount}` : "";
       const hint = item.collectorHint ? ` collector=${item.collectorHint}` : "";
-      return `- ${item.datasetKey}: ${label}${file}${rows}. ${item.detail || ""}${hint}`;
+      const checksum = item.checksumChanged ? " checksum-changed" : "";
+      return `- ${item.datasetKey}: ${label}${file}${rows}${checksum}. ${item.detail || ""}${hint}`;
     });
   }
 

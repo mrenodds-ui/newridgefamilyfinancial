@@ -128,6 +128,57 @@ function Add-Check {
 
 $checks = @()
 
+function Test-UpstreamRootsConfigured {
+    param(
+        [string]$System,
+        [hashtable]$ManifestRoots
+    )
+    if (-not $ManifestRoots) { return $false }
+    foreach ($envName in @($ManifestRoots.envVars)) {
+        $configured = [Environment]::GetEnvironmentVariable($envName)
+        if (-not [string]::IsNullOrWhiteSpace($configured) -and (Test-Path $configured)) {
+            return $true
+        }
+    }
+    foreach ($raw in @($ManifestRoots.defaultPaths)) {
+        if (-not [string]::IsNullOrWhiteSpace($raw) -and (Test-Path $raw)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+$importManifestPath = Join-Path $projectRoot "import-manifest.json"
+$importManifest = $null
+if (Test-Path $importManifestPath) {
+    try {
+        $importManifest = Get-Content -Raw -Encoding UTF8 $importManifestPath | ConvertFrom-Json
+    } catch {
+        $importManifest = $null
+    }
+}
+
+$sdUpstream = if ($importManifest -and $importManifest.upstreamRoots) { $importManifest.upstreamRoots.softdent } else { $null }
+$qbUpstream = if ($importManifest -and $importManifest.upstreamRoots) { $importManifest.upstreamRoots.quickbooks } else { $null }
+$sdRootsOk = Test-UpstreamRootsConfigured "softdent" $sdUpstream
+$qbRootsOk = Test-UpstreamRootsConfigured "quickbooks" $qbUpstream
+
+Add-Check "0" "upstream.softdent" "SoftDent upstream export path" $sdRootsOk `
+    $(if ($sdRootsOk) {
+        "NR2_SOFTDENT_EXPORT_SOURCE or SOFTDENT_SOURCE_DIR resolves to an existing folder"
+    } else {
+        "No SoftDent upstream folder found (env vars unset and default paths missing)"
+    }) `
+    "Set NR2_SOFTDENT_EXPORT_SOURCE or SOFTDENT_SOURCE_DIR in repo .env (see NewRidgeFinancial2/.env.example)"
+
+Add-Check "0" "upstream.quickbooks" "QuickBooks upstream export path" $qbRootsOk `
+    $(if ($qbRootsOk) {
+        "NR2_QUICKBOOKS_EXPORT_SOURCE or QUICKBOOKS_SOURCE_DIR resolves to an existing folder"
+    } else {
+        "No QuickBooks upstream folder found (env vars unset and default paths missing)"
+    }) `
+    "Set NR2_QUICKBOOKS_EXPORT_SOURCE or QUICKBOOKS_SOURCE_DIR in repo .env (see NewRidgeFinancial2/.env.example)"
+
 # --- Phase 1: highest impact ---
 $claimsFile = Find-NewestFile $softdentDir @(
     "softdent_claims_export.csv",
@@ -230,7 +281,7 @@ foreach ($key in $optionalSd.Keys) {
 }
 
 # --- Report ---
-$required = $checks | Where-Object { $_.Phase -in @("1", "2") -and $_.Id -ne "local.documents.review" }
+$required = $checks | Where-Object { $_.Phase -in @("0", "1", "2") -and $_.Id -ne "local.documents.review" }
 $requiredMissing = @($required | Where-Object { -not $_.Ok })
 $phase1Missing = @($checks | Where-Object { $_.Phase -eq "1" -and -not $_.Ok })
 $optionalMissing = @($checks | Where-Object { $_.Phase -eq "3" -and -not $_.Ok })
@@ -242,8 +293,9 @@ if (-not $Quiet) {
     Write-Host "QuickBooks cache: $quickbooksDir"
     Write-Host ""
 
-    foreach ($phase in @("1", "2", "3")) {
+    foreach ($phase in @("0", "1", "2", "3")) {
         $phaseLabel = switch ($phase) {
+            "0" { "Phase 0 - upstream paths (.env)" }
             "1" { "Phase 1 - do first (claims, dashboard depth, A/R)" }
             "2" { "Phase 2 - QuickBooks + documents" }
             "3" { "Phase 3 - optional practice widgets" }

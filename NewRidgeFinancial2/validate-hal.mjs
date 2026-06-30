@@ -363,7 +363,7 @@ async function main() {
   }
   assert(routingFailures.length === 0, "routing regression failures:\n" + routingFailures.slice(0, 20).join("\n"));
   assert(laneCounts.firewall > 0, "routing regression must include firewall cases");
-  assert(laneCounts.chat14b > 0, "routing regression must include model fallback cases");
+  assert(laneCounts.chat8b > 0, "routing regression must include model fallback cases");
   assert(laneCounts.reason21b > 0, "routing regression must include reasoning lane cases");
   assert(laneCounts.escalate30b > 0, "routing regression must include escalation lane cases");
   assert(laneCounts.oss120b > 0, "routing regression must include oss120b lane cases");
@@ -377,6 +377,8 @@ async function main() {
   passed++;
 
   // HAL page surfaces required manager signals (no backend, local data only)
+  require(join(siteDir, "icons.js"));
+  globalThis.AppIcons = require(join(siteDir, "icons.js"));
   const HalPageMod = require(join(siteDir, "hal-page.js"));
   let halHtml = "";
   const halRoot = {
@@ -414,7 +416,7 @@ async function main() {
         practiceFinancialOverview: {
           title: "Practice Financial Overview",
           status: "SUCCESS",
-          summary: "Practice revenue from QuickBooks and production/collections from the SoftDent import cache.",
+          summary: "QuickBooks revenue reflects cash-basis deposits; SoftDent production/collections are operational PMS metrics.",
           navTarget: "financial",
           metrics: { monthlyRevenue: "$120,000" },
         },
@@ -441,9 +443,21 @@ async function main() {
         },
       },
     },
+    sidenotesHubPath: "C:\\softdent\\HAL-SideNotes-Workstation\\data",
   });
-  assert(halHtml.includes("MODE"), "HAL page must show current mode");
+  assert(halHtml.includes("SIDENOTES PROGRAM"), "HAL page must render the dedicated SideNotes program card");
   assert(halHtml.includes("SIDENOTESIM MONITOR"), "HAL page must render the SideNotesIM live monitor");
+  assert(halHtml.includes("data-hal-surf-nav=\"sidenotes\""), "HAL page must wire SideNotes work surface navigation");
+  assert(halHtml.includes("data-hal-surf-open="), "HAL page must wire work surface open chevrons");
+  assert(halHtml.includes("data-hal-source-nav="), "HAL page must wire source intake rows to HAL");
+  assert(halHtml.includes("hp-wg-card--active"), "HAL page must wire widget cards to HAL");
+  assert(halHtml.includes("data-hal-activity-cmd="), "HAL page must wire activity log replay to HAL");
+  assert(halHtml.includes("hp-status--btn"), "HAL page must wire status chips to HAL");
+  assert(halHtml.includes("hp-action--icon"), "HAL page must render icon-backed prompt chips");
+  assert(halHtml.includes("data-hal-source-open"), "HAL page must wire source row open controls");
+  assert(halHtml.includes("<svg") && halHtml.includes('class="app-ico"'), "HAL page must render SVG icons");
+  assert(halHtml.includes("hp-card__ico"), "HAL page must render section header icons");
+  assert(halHtml.includes("hp-ctrl__ico"), "HAL page must render system control icons");
   assert(halHtml.includes("MANAGER DASHBOARD WIDGETS"), "HAL page must render manager dashboard widgets");
   assert(halHtml.includes("Practice Financial Overview"), "HAL page must render financial widget");
   assert(halHtml.includes("OPEN PAGE"), "HAL page must render widget navigation controls");
@@ -461,6 +475,8 @@ async function main() {
 
   // AI readiness display; local model lanes enabled on loopback only
   assert(halModels.config.externalCallsEnabled === false, "external model calls must stay disabled");
+  assert(halModels.config.webResearch && halModels.config.webResearch.enabled === true, "web research must be enabled");
+  assert(halModels.config.webResearch.mode === "broad", "web research must use broad practice scope");
   for (const runtime of [halModels.config.localModel, halModels.config.reasoningModel, halModels.config.escalationModel]) {
     assert(runtime.enabled === true, "model lane must be enabled for local execution");
     assert(HalCore.isLocalModelEndpoint(runtime.endpoint), `model endpoint must be loopback-only: ${runtime.endpoint}`);
@@ -476,16 +492,18 @@ async function main() {
   assert(halHtml.includes("LOCAL AI READINESS"), "HAL page must render AI readiness");
   assert(halHtml.includes("local only"), "HAL page must label AI lanes as local only");
   assert(halHtml.includes("Available inventory"), "HAL page must show available model inventory");
-  assert(halModels.readinessDisplay.configuredModels.local.model === "mistral-small3.1:24b-fast", "local model must use the shared fast 24B lane");
-  assert(halModels.readinessDisplay.configuredModels.helper.model === "mistral-small3.1:24b-fast", "helper model must use the shared fast 24B lane");
-  assert(halHtml.includes("mistral-small3.1:24b-fast"), "HAL page must show fast 24B model inventory");
+  assert(halModels.readinessDisplay.configuredModels.local.model === "hal-chat:8b", "local model must use the GPU 8B chat lane");
+  assert(halModels.readinessDisplay.configuredModels.helper.model === "hal-helper:14b", "helper model must use the GPU 14B helper lane");
+  assert(halHtml.includes("hal-chat:8b"), "HAL page must show GPU 8B chat model inventory");
+  assert(halHtml.includes("hal-helper:14b"), "HAL page must show GPU 14B helper model inventory");
+  assert(halHtml.includes("mistral-small3.1:24b-fast"), "HAL page must show on-demand 24B reasoning model inventory");
   assert(halHtml.includes("qwen3:30b"), "HAL page must show escalation model inventory");
   assert(halModels.readinessDisplay.gpu && halModels.readinessDisplay.gpu.verified === true, "GPU must be marked verified in readiness display");
   assert(/Radeon RX 9060 XT|ROCm/i.test(halHtml), "HAL page must show the verified GPU device");
   assert(/sensitive raw data|SoftDent|QuickBooks/i.test(halHtml), "HAL page must show sensitive-data no-egress policy");
-  assert(HalCore.laneReady(halModels, "helper24b"), "helper lane must be execution-ready on loopback");
+  assert(HalCore.laneReady(halModels, "helper14b"), "helper lane must be execution-ready on loopback");
   assert(halModels.readinessDisplay.configuredModels.helper.gpuResidentWithLocal === true, "helper lane must be verified co-resident with local lane");
-  assert(HalCore.laneReady(halModels, "chat14b"), "chat lane must be execution-ready on loopback");
+  assert(HalCore.laneReady(halModels, "chat8b"), "chat lane must be execution-ready on loopback");
   assert(HalCore.laneReady(halModels, "reason21b"), "reasoning lane must be execution-ready on loopback");
   assert(HalCore.laneReady(halModels, "escalate30b"), "escalation lane must be execution-ready on loopback");
   assert(HalCore.laneReady(halModels, "oss120b"), "oss120b lane must be execution-ready on loopback");
@@ -534,6 +552,13 @@ async function main() {
   assert(qbPostBlocked.intent === "blocked: firewall", "Post to QuickBooks must be blocked");
   const softdentWriteBlocked = HalCore.routeHalCommand(halData, halModels, pages, "Write to SoftDent");
   assert(softdentWriteBlocked.intent === "blocked: firewall", "Write to SoftDent must be blocked");
+  const rememberRoute = HalCore.routeHalCommand(
+    halData,
+    halModels,
+    pages,
+    "Remember this: SoftDent needs a final daysheet per date for accurate A/R",
+  );
+  assert(rememberRoute.intent === "memory: remember" && rememberRoute.useRememberMemory === true, "remember-this must route to durable memory");
   const journal = HalSkills.draftAndValidateJournal({ description: "Prepaid insurance payment", period: "2025-05", amount: 1200, context: {} });
   assert(journal.meta && journal.meta.schema === "nr2-hal-skill-v1", "journal draft must use the NewRidge skill schema envelope");
   assert(journal.transactionType === "prepaid_insurance", "journal type inference must work");
@@ -751,6 +776,7 @@ async function main() {
     ["Explain why this widget is empty", "widgets: explain-empty", "explainEmpty", HalSkills.formatEmptyWidgetExplanation(feed, "Explain why this widget is empty"), "Why widgets are empty"],
     ["Build daily owner briefing", "briefing: owner-daily", "dailyOwnerBriefing", HalSkills.formatDailyOwnerBriefing(feed, snapshot), "Daily owner briefing"],
     ["Show accounting review queue", "accounting: review-queue", "accountingReviewQueue", HalSkills.formatAccountingReviewQueue(feed, snapshot), "Accounting review queue"],
+    ["Show accounting reconciliation checklist", "accounting: reconciliation-checklist", "accountingReconciliationChecklist", HalSkills.formatAccountingReconciliationChecklist(feed, snapshot), "SoftDent + QuickBooks reconciliation checklist"],
     ["Work document workbook", "documents: excel-workbook", "documentExcelWorkbook", HalSkills.formatDocumentExcelWorkbook(feed, snapshot), "Accounting document workbook"],
     ["Show Excel-style reconciliation", "reconciliation: excel-style", "excelReconciliation", HalSkills.formatExcelReconciliation(feed, snapshot), "Excel-style reconciliation"],
   ];
@@ -1200,14 +1226,19 @@ async function main() {
   const emptyDiag = ImportDiagnostics.evaluateBundle({ softdent: {}, quickbooks: {} }, manifest);
   ["softdent.newPatients", "softdent.treatmentPlans", "softdent.caseAcceptance"].forEach((datasetKey) => {
     const item = emptyDiag.datasets.find((row) => row.datasetKey === datasetKey);
-    assert(item && item.status === "not_configured", `${datasetKey} must report not_configured until exports exist`);
+    assert(item && item.status === "missing", `${datasetKey} must report missing until sync generates or stages exports`);
+    assert(item.automated === true, `${datasetKey} must be marked automated via analytics sync`);
     assert(item.collectorHint, `${datasetKey} must include collector guidance`);
   });
   const practiceFeed = HalSkills.buildWidgetFeed({
     dashboards: { practice: { dataSource: "empty" }, financial: { dataSource: "empty" }, softdent: { dataSource: "empty" }, quickbooks: { dataSource: "empty" } },
     importBundle: { diagnostics: emptyDiag },
   });
-  assert(practiceFeed.widgets.newPatients.metrics.newPatientCount === "Not Configured", "new patients widget must stay honest when export is not configured");
+  assert(
+    practiceFeed.widgets.newPatients.metrics.newPatientCount === "Not Configured" ||
+      practiceFeed.widgets.newPatients.metrics.newPatientCount === "—",
+    "new patients widget must stay honest when export is not configured",
+  );
 
   const HalOfficeManager = require(join(siteDir, "hal-office-manager.js"));
   assert(HalOfficeManager.ROLE_SUMMARY.includes("internal office manager"), "HAL must define internal office manager role");

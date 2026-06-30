@@ -118,26 +118,77 @@ def _merge_metric(existing: float, candidate: float) -> float:
     return max(existing, candidate)
 
 
-def _build_period_row(period: str, sources: list[dict[str, float]]) -> dict[str, Any]:
+def _merge_collections(existing: float | None, candidate: float | None, *, reported: bool) -> tuple[float | None, bool]:
+    if not reported:
+        return existing, existing is not None
+    if candidate is None:
+        return existing, existing is not None
+    if existing is None:
+        return float(candidate), True
+    return _merge_metric(existing, float(candidate)), True
+
+
+def _include_collections_from_source(source: dict[str, Any]) -> tuple[float | None, bool]:
+    kind = str(source.get("_source") or "")
+    if source.get("collectionsReported") is False:
+        return None, False
+    if "collections" not in source:
+        return None, False
+    value = float(source.get("collections") or 0)
+    production = float(source.get("production") or 0)
+    if value > 0:
+        return value, True
+    if kind == "daysheet":
+        return value, True
+    if production > 0 and kind == "bridge":
+        return None, False
+    return value, True
+
+
+def _prior_source_dict(prior: dict[str, Any]) -> dict[str, Any]:
+    production = float(prior.get("production") or 0)
+    collections = float(prior.get("collections") or 0)
+    reported = prior.get("collectionsReported")
+    if reported is None and production > 0 and collections == 0:
+        reported = False
+    payload = {
+        "_source": "prior",
+        "production": production,
+        "insurance": float(prior.get("insurance") or 0),
+        "patient": float(prior.get("patient") or 0),
+    }
+    if reported is False:
+        payload["collectionsReported"] = False
+    else:
+        payload["collections"] = collections
+    return payload
+
+
+def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
     production = 0.0
-    collections = 0.0
+    collections: float | None = None
+    collections_reported = False
     insurance = 0.0
     patient = 0.0
     for source in sources:
         production = _merge_metric(production, float(source.get("production") or 0))
-        collections = _merge_metric(collections, float(source.get("collections") or 0))
+        candidate, reported = _include_collections_from_source(source)
+        collections, collections_reported = _merge_collections(collections, candidate, reported=reported)
         insurance = _merge_metric(insurance, float(source.get("insurance") or 0))
         patient = _merge_metric(patient, float(source.get("patient") or 0))
-    if patient <= 0 and collections > 0:
+    if patient <= 0 and collections is not None and collections > 0:
         patient = max(0.0, collections - insurance)
-    return {
+    row = {
         "provider": PRACTICE_NAME,
         "period": period,
         "production": production,
-        "collections": collections,
+        "collections": collections if collections is not None else 0.0,
         "insurance": insurance,
         "patient": patient,
     }
+    if production > 0 and not collections_reported:
+        row["collectionsReported"] = False
+    return row
 
 
 def _month_rows(db_path: Path | None, periods: list[str]) -> list[dict[str, Any]]:
@@ -148,15 +199,46 @@ def _month_rows(db_path: Path | None, periods: list[str]) -> list[dict[str, Any]
     for period in periods:
         sources: list[dict[str, float]] = []
         if period in daysheet:
-            sources.append(daysheet[period])
+            sources.append({"_source": "daysheet", **daysheet[period]})
         if period in provider_prod:
-            sources.append({"production": provider_prod[period], "collections": 0.0, "insurance": 0.0, "patient": 0.0})
+            sources.append({"_source": "provider_prod", "production": provider_prod[period]})
         if period in bridge:
-            sources.append(bridge[period])
+            sources.append({"_source": "bridge", **bridge[period]})
         if not sources:
             continue
         rows.append(_build_period_row(period, sources))
     return rows
+
+
+def diagnose_collections_gap(db_path: Path | None, periods: list[str] | None = None) -> dict[str, Any]:
+    periods = periods or relevant_period_labels()
+    daysheet = _aggregate_daysheet(db_path, periods) if db_path and db_path.is_file() else {}
+    bridge = _bridge_rows_by_period()
+    issues: list[str] = []
+    for period in periods:
+        ds = daysheet.get(period)
+        br = bridge.get(period)
+        if ds and float(ds.get("collections") or 0) > 0:
+            continue
+        if ds and float(ds.get("production") or 0) > 0:
+            issues.append(f"{period}: daysheet row exists but collections are zero — rerun final daysheet in SoftDent.")
+            continue
+        if br and float(br.get("production") or 0) > 0:
+            if db_path and db_path.is_file():
+                issues.append(
+                    f"{period}: production without daysheet_totals row in {db_path.name} — export daysheet before period close."
+                )
+            else:
+                issues.append(
+                    f"{period}: bridge production without daysheet collections — configure NR2_FINANCIAL_ANALYTICS_DB."
+                )
+    return {
+        "periods": periods,
+        "daysheetPeriods": sorted(daysheet.keys()),
+        "bridgePeriods": sorted(bridge.keys()),
+        "analyticsDb": str(db_path) if db_path else None,
+        "issues": issues,
+    }
 
 
 def sync_dashboard_period_rows() -> dict[str, Any]:
@@ -179,18 +261,7 @@ def sync_dashboard_period_rows() -> dict[str, Any]:
         period = str(row["period"])
         prior = by_period.get(period)
         if prior:
-            by_period[period] = _build_period_row(
-                period,
-                [
-                    {
-                        "production": float(prior.get("production") or 0),
-                        "collections": float(prior.get("collections") or 0),
-                        "insurance": float(prior.get("insurance") or 0),
-                        "patient": float(prior.get("patient") or 0),
-                    },
-                    row,
-                ],
-            )
+            by_period[period] = _build_period_row(period, [_prior_source_dict(prior), row])
         else:
             by_period[period] = row
     merged = [by_period[p] for p in sorted(by_period.keys()) if p in periods] + [
@@ -199,12 +270,14 @@ def sync_dashboard_period_rows() -> dict[str, Any]:
     if not merged:
         merged = list(by_period.values())
     path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    diagnostic = diagnose_collections_gap(db_path, periods)
     return {
         "ok": bool(merged),
         "path": str(path),
         "periods": [row.get("period") for row in merged if row.get("period") in periods],
         "rowCount": len(merged),
         "source": str(db_path) if db_path else None,
+        "collectionsDiagnostic": diagnostic,
     }
 
 

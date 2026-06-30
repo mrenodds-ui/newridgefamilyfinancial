@@ -23,7 +23,7 @@ function Get-ConfiguredModels {
     )
 
     if (-not (Test-Path $modelsConfigPath)) {
-        return @("mistral-small3.1:24b-fast")
+        return @("hal-chat:8b", "hal-helper:14b")
     }
 
     $config = Get-Content $modelsConfigPath -Raw | ConvertFrom-Json
@@ -37,10 +37,11 @@ function Get-ConfiguredModels {
         }
     }
 
-    # Always-resident default: the shared chat/helper model the program's active
-    # lane uses. Sharing one larger model keeps quality high without extra
-    # model load/evict churn.
+    # Always-resident default: GPU-pinned 8B chat + 14B helper models.
     $lane = @()
+    if ($config.config.fastModel.model) {
+        $lane += $config.config.fastModel.model
+    }
     $lane += $config.config.localModel.model
     if ($config.readinessDisplay.configuredModels.helper.model) {
         $lane += $config.readinessDisplay.configuredModels.helper.model

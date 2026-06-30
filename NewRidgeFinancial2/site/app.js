@@ -199,6 +199,7 @@ let halSideNoteMonitorTimer = null;
 // Live SideNotesIM feed captured by the local watcher helper (routing only).
 let halSideNotesInbox = null;
 let halSideNotesAnnouncedIds = new Set();
+let nr2SidenotesHubPath = null;
 // HAL manager dashboard widgets (derived from program snapshot).
 let halWidgetFeed = null;
 let halStressTest = {
@@ -344,9 +345,108 @@ function refreshSideNoteMonitor({ patchUi } = {}) {
 
 function patchSideNoteMonitorDom() {
   if (!halPageRoot || !window.HalPage) return;
-  const el = halPageRoot.querySelector(".hp-sidenotes-monitor");
+  const el = halPageRoot.querySelector(".hp-sidenotes-program");
   if (!el) return;
-  el.outerHTML = HalPage.sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox);
+  el.innerHTML = HalPage.sideNotesMonitorHtml(halSideNotes, halSideNoteMonitor, halSideNotesInbox, nr2SidenotesHubPath);
+}
+
+function scrollHalPanelIntoView(panelKey) {
+  if (!halPageRoot || !panelKey) return;
+  const panel = halPageRoot.querySelector(`[data-panel="${panelKey}"]`);
+  if (panel && typeof panel.scrollIntoView === "function") {
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function isHalPanelTarget(target) {
+  return target === "sidenotes";
+}
+
+async function activateSideNotesPanel({ scroll } = {}) {
+  await loadSideNotesInbox();
+  refreshSideNoteMonitor({ patchUi: true });
+  if (scroll) scrollHalPanelIntoView("sidenotes");
+}
+
+async function runHalPageCmd(cmd) {
+  const text = String(cmd || "").trim();
+  if (!text) return;
+  await handleHalSubmit(text);
+  renderHalScreen();
+}
+
+function handleHalPageNav(target) {
+  if (!target) return;
+  if (isHalPanelTarget(target)) {
+    activateSideNotesPanel({ scroll: true }).then(() => renderHalScreen());
+    return;
+  }
+  select(target);
+}
+
+function handleHalSurfaceNav(target) {
+  handleHalPageNav(target);
+}
+
+function sideNotesDrawerHtml() {
+  const data = (halData && halData.sidenotes) || {};
+  const inbox = halSideNotesInbox;
+  const online = window.HalPage && HalPage.isSideNotesInboxLive ? HalPage.isSideNotesInboxLive(inbox) : false;
+  const steps = (data.setupSteps || [])
+    .map((step, index) => `<li>${index + 1}. ${escapeHtml(step)}</li>`)
+    .join("");
+  const hub = nr2SidenotesHubPath
+    ? `<p class="drawer-meta">Hub folder: <code>${escapeHtml(nr2SidenotesHubPath)}</code></p>`
+    : `<p class="drawer-meta">Set <code>${escapeHtml(data.hubEnv || "NR2_SIDENOTES_HUB_DATA")}</code> to the shared workstation data folder.</p>`;
+  const stations = (inbox && inbox.monitor && inbox.monitor.stations) || [];
+  const stationRows = stations.length
+    ? stations
+        .map(
+          (station) =>
+            `<tr><td>${escapeHtml(station.station || "—")}</td><td>${station.live ? "live" : "offline"}</td><td>${escapeHtml(station.checkedAt || "—")}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="3">No watchers yet</td></tr>`;
+  const feed = ((inbox && inbox.items) || [])
+    .slice(-8)
+    .reverse()
+    .map(
+      (item) =>
+        `<li>${escapeHtml(item.senderLabel || item.sender || "Unknown")} → ${escapeHtml(item.recipientLabel || item.recipient || "—")} · ${escapeHtml([item.date, item.time].filter(Boolean).join(" "))}</li>`,
+    )
+    .join("");
+  const localNotes = (halSideNotes || [])
+    .filter((n) => n.status !== "archived")
+    .slice(0, 8)
+    .map((n) => `<li>${escapeHtml(n.text)} <em>(${escapeHtml(n.priority)})</em></li>`)
+    .join("");
+  const commands = ["Monitor sidenotes", "Show sidenotes", "Add sidenote: follow up on hygiene recall"]
+    .map((cmd) => `<button class="drawer-action drawer-action--sm" type="button" data-hal-command="${escapeHtml(cmd)}">${escapeHtml(cmd)}</button>`)
+    .join("");
+  return `
+    <p>${escapeHtml(data.summary || "SideNotesIM external program integration.")}</p>
+    ${hub}
+    <p class="drawer-meta">Helper: <code>${escapeHtml(data.helperPath || "sidenotes-helper/run-sidenotes-helper.bat")}</code> · network status: <strong>${online ? "live" : "offline"}</strong></p>
+    <div class="drawer-section">
+      <h3 class="drawer-section__title">Workstation setup</h3>
+      <ol class="drawer-checklist drawer-checklist--ordered">${steps || "<li>See sidenotes-helper/README.md</li>"}</ol>
+    </div>
+    <div class="drawer-section">
+      <h3 class="drawer-section__title">Station watchers</h3>
+      <table class="hp-table hp-sn-stations"><thead><tr><th>Station</th><th>Status</th><th>Checked</th></tr></thead><tbody>${stationRows}</tbody></table>
+    </div>
+    <div class="drawer-section">
+      <h3 class="drawer-section__title">Recent SideNotesIM routing</h3>
+      <ul class="drawer-checklist">${feed || "<li>No messages in merged inbox yet.</li>"}</ul>
+    </div>
+    <div class="drawer-section">
+      <h3 class="drawer-section__title">Local HAL notes</h3>
+      <ul class="drawer-checklist">${localNotes || "<li>No local notes yet.</li>"}</ul>
+    </div>
+    <div class="drawer-section">
+      <h3 class="drawer-section__title">HAL commands</h3>
+      <div class="drawer-grid">${commands}</div>
+    </div>`;
 }
 
 function startSideNoteMonitor() {
@@ -920,6 +1020,10 @@ function handleHalLiveWidgetEvent(event) {
   });
   invalidateProgramCaches("hal-live-widget-event");
   scheduleHalWidgetRefresh();
+  const action = String(record.halAction || "").trim();
+  if (action) {
+    void runHalPageCmd(action);
+  }
 }
 
 async function loadProgramSnapshot() {
@@ -1092,7 +1196,7 @@ function pageInfoMap() {
 }
 
 function localModelConfig() {
-  return HalCore.laneRuntime(halModels, "chat14b");
+  return HalCore.laneRuntime(halModels, "chat8b");
 }
 
 function reasoningModelConfig() {
@@ -1108,7 +1212,7 @@ function ossModelConfig() {
 }
 
 function localModelReady() {
-  return HalCore.laneReady(halModels, "chat14b");
+  return HalCore.laneReady(halModels, "chat8b");
 }
 
 function reasoningModelReady() {
@@ -1429,6 +1533,11 @@ function buildHalAgentCtx(extras) {
 async function handleHalSubmit(query) {
   const trimmed = String(query).trim();
   if (!trimmed || halAskLoading) return;
+  if (window.HalVoice && HalVoice.cancelSpeech) HalVoice.cancelSpeech();
+  if (halTypeTimer) {
+    clearInterval(halTypeTimer);
+    halTypeTimer = null;
+  }
   halAskLoading = true;
   renderHalScreen();
   halChatHistory.push({ role: "user", text: trimmed, actions: [] });
@@ -1439,7 +1548,7 @@ async function handleHalSubmit(query) {
   let placeholder = null;
   let streamRenderAt = 0;
   if (isModelLane && window.HalAgent) {
-    const lane = preRoute.lane || "chat14b";
+    const lane = preRoute.lane || "chat8b";
     const label = preRoute.useEscalation ? "Escalating" : preRoute.useReasoning ? "Reasoning" : "Thinking";
     placeholder = { role: "hal", text: label + " locally…", lane, actions: [] };
     halChatHistory.push(placeholder);
@@ -1480,8 +1589,8 @@ async function handleHalSubmit(query) {
     placeholder.text = outcome.text;
     placeholder.lane = outcome.lane || placeholder.lane;
     placeholder.actions = normalizeActions(outcome.actions);
-    // We already showed the streamed text; stop the typewriter from replaying it.
-    halTypeSig = halChatHistory.length + ":" + String(outcome.text).length;
+    // Replay the final answer with synced typewriter + voice (stream preview is replaced).
+    halTypeSig = null;
   } else {
     halChatHistory.push({
       role: "hal",
@@ -1496,6 +1605,7 @@ async function handleHalSubmit(query) {
   renderAuditLog();
   if (outcome.refreshHal) renderHalScreen();
   if (outcome.refreshPanel && currentDrawerKey) renderPanel(currentDrawerKey);
+  if (/^sidenotes:/.test(String(outcome.intent || ""))) scrollHalPanelIntoView("sidenotes");
   halAskLoading = false;
   renderHalScreen();
 }
@@ -1512,9 +1622,15 @@ function escapeHtml(value) {
 function bindOpenPageButtons(root) {
   root.querySelectorAll("[data-open-page]").forEach((button) => {
     button.addEventListener("click", () => {
-      logAudit("Open " + button.dataset.openPage, "navigate: drawer");
+      const target = button.dataset.openPage;
+      logAudit("Open " + target, "navigate: drawer");
       closeDrawer();
-      select(button.dataset.openPage);
+      if (isHalPanelTarget(target)) {
+        if (halPage && halPage.hidden) select("hal");
+        handleHalSurfaceNav(target);
+        return;
+      }
+      select(target);
     });
   });
 }
@@ -1643,6 +1759,7 @@ function workSurfacePanel(items) {
         })
         .join("");
       const blocked = reg && reg.blocked ? reg.blocked.map((b) => `<span class="status-chip status-chip--blocked">${escapeHtml(b)}</span>`).join("") : "";
+      const pageTarget = item.target === "hal" || item.target === "sidenotes" ? "sidenotes" : item.target;
       return `<div class="drawer-card drawer-card--surface">
         <strong>${escapeHtml(item.label)}</strong>
         <p>${escapeHtml(item.detail)}</p>
@@ -1650,8 +1767,9 @@ function workSurfacePanel(items) {
         ${reg ? `<p class="drawer-meta">Next: ${escapeHtml(reg.nextAction)}</p>` : ""}
         ${blocked ? `<div>${blocked}</div>` : ""}
         <div class="drawer-card__actions">
-          <button class="drawer-action drawer-action--sm" type="button" data-open-page="${escapeHtml(item.target)}">Open page</button>
+          <button class="drawer-action drawer-action--sm" type="button" data-open-page="${escapeHtml(pageTarget)}">${pageTarget === "sidenotes" ? "Open SideNotes panel" : "Open page"}</button>
           <button class="drawer-action drawer-action--sm" type="button" data-hal-command="Explain ${escapeHtml(item.label)}">Explain</button>
+          ${pageTarget === "sidenotes" ? `<button class="drawer-action drawer-action--sm" type="button" data-hal-command="Monitor sidenotes">Monitor</button>` : ""}
         </div>
         ${relatedBtns ? `<div class="hal-suggest">${relatedBtns}</div>` : ""}
       </div>`;
@@ -1917,6 +2035,12 @@ function renderPanel(key) {
     return;
   }
 
+  if (key === "sidenotes") {
+    drawerContent.innerHTML = sideNotesDrawerHtml();
+    bindHalCommands(drawerContent);
+    return;
+  }
+
   drawerContent.innerHTML = `<p>${escapeHtml(data.summary || "")}</p>`;
 }
 
@@ -1964,8 +2088,6 @@ function typewriteLastHalMessage() {
   const p = last.querySelector("p");
   if (!p) return;
   const full = p.textContent;
-  // Only type a given HAL message once; unrelated re-renders keep the same
-  // signature and are skipped so the text does not replay.
   const sig = halChatHistory.length + ":" + full.length;
   if (sig === halTypeSig) return;
   halTypeSig = sig;
@@ -1976,12 +2098,25 @@ function typewriteLastHalMessage() {
   const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (reduce || full.length < 2) {
     p.textContent = full;
+    p.classList.remove("hp-typing");
+    if (window.HalVoice && HalVoice.speakHalReply) HalVoice.speakHalReply(full);
     return;
   }
   p.textContent = "";
   p.classList.add("hp-typing");
-  const step = Math.max(1, Math.ceil(full.length / 140));
-  const typeDelayMs = 245; // 3.4x slower than the previous 72ms cadence.
+  const step = Math.max(1, Math.ceil(full.length / 110));
+  const iterations = Math.ceil(full.length / step);
+  let speechMs = 2400;
+  if (window.HalVoice) {
+    if (HalVoice.speakHalReply) {
+      const spoken = HalVoice.speakHalReply(full, { interrupt: true });
+      speechMs = (spoken && spoken.durationMs) || speechMs;
+    } else if (HalVoice.estimateDurationMs) {
+      speechMs = HalVoice.estimateDurationMs(full);
+    }
+  }
+  // Type quickly enough to stay ahead of HAL's voice, but not instant.
+  const typeDelayMs = Math.max(16, Math.min(42, Math.floor(speechMs / Math.max(iterations, 1))));
   let i = 0;
   halTypeTimer = setInterval(() => {
     i += step;
@@ -1992,9 +2127,6 @@ function typewriteLastHalMessage() {
       halTypeTimer = null;
       p.textContent = full;
       p.classList.remove("hp-typing");
-      if (window.HalVoice && full.length <= 320) {
-        HalVoice.speakHalReply(full);
-      }
     }
   }, typeDelayMs);
 }
@@ -2155,6 +2287,7 @@ function renderHalScreen() {
     halProactiveBriefing,
     halStressTest,
     halAgentHealth: window.HalAgent ? HalAgent.getHealth() : null,
+    sidenotesHubPath: nr2SidenotesHubPath,
   });
   typewriteLastHalMessage();
 }
@@ -2199,7 +2332,12 @@ function select(id) {
   }
   pageTitle.textContent = page.title;
   renderSidebar(page.id);
-  if (isHal) renderHalScreen();
+  if (isHal) {
+    renderHalScreen();
+    activateSideNotesPanel().catch(() => {
+      /* sidenotes inbox optional */
+    });
+  }
   closeDrawer();
   if (window.location.hash !== "#" + page.id) {
     window.location.hash = page.id;
@@ -2244,7 +2382,32 @@ if (halPage) {
       if (!form) return;
       if (typeof form.requestSubmit === "function") form.requestSubmit();
       else form.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+      return;
     }
+    const surfOpen = event.target.closest("[data-hal-surf-open]");
+    if (surfOpen && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      handleHalSurfaceNav(surfOpen.getAttribute("data-hal-surf-open"));
+      return;
+    }
+    const halCmdKey = event.target.closest("[data-hal-cmd],[data-hal-activity-cmd]");
+    if (halCmdKey && (event.key === "Enter" || event.key === " ")) {
+      event.preventDefault();
+      const cmd =
+        halCmdKey.getAttribute("data-hal-cmd") || halCmdKey.getAttribute("data-hal-activity-cmd");
+      if (cmd) {
+        handleHalSubmit(cmd).then(() => renderHalScreen());
+      }
+    }
+  });
+
+  halPage.addEventListener("dblclick", async (event) => {
+    const ring = event.target.closest("[data-hal-ring-cmd]");
+    if (!ring) return;
+    const cmd = ring.getAttribute("data-hal-ring-cmd");
+    if (!cmd) return;
+    await handleHalSubmit(cmd);
+    renderHalScreen();
   });
 
   halPage.addEventListener("click", async (event) => {
@@ -2269,10 +2432,49 @@ if (halPage) {
       openDrawer(drawerBtn.getAttribute("data-hal-drawer"));
       return;
     }
+    const surfOpen = event.target.closest("[data-hal-surf-open]");
+    if (surfOpen) {
+      event.stopPropagation();
+      handleHalSurfaceNav(surfOpen.getAttribute("data-hal-surf-open"));
+      return;
+    }
+    const sourceOpen = event.target.closest("[data-hal-source-open]");
+    if (sourceOpen) {
+      event.stopPropagation();
+      handleHalPageNav(sourceOpen.getAttribute("data-hal-source-open"));
+      return;
+    }
+    const insightOpen = event.target.closest("[data-hal-insight-open]");
+    if (insightOpen) {
+      event.stopPropagation();
+      handleHalPageNav(insightOpen.getAttribute("data-hal-insight-open"));
+      return;
+    }
+    const widgetCard = event.target.closest("[data-hal-widget-key]");
+    if (widgetCard && !event.target.closest("[data-hal-widget-nav]") && !event.target.closest("[data-hal-action]")) {
+      let cmd = widgetCard.getAttribute("data-hal-cmd");
+      if (!cmd) {
+        const key = widgetCard.getAttribute("data-hal-widget-key");
+        if (key) cmd = `Explain ${key} widget on this page`;
+      }
+      if (cmd) await runHalPageCmd(cmd);
+      return;
+    }
+    const activityReplay = event.target.closest("[data-hal-activity-cmd]");
+    if (activityReplay) {
+      const cmd = activityReplay.getAttribute("data-hal-activity-cmd");
+      if (cmd) await runHalPageCmd(cmd);
+      return;
+    }
+    const widgetNav = event.target.closest("[data-hal-widget-nav]");
+    if (widgetNav) {
+      const target = widgetNav.getAttribute("data-hal-widget-nav");
+      if (target) select(target);
+      return;
+    }
     const suggest = event.target.closest("[data-hal-suggest]");
     if (suggest) {
-      await handleHalSubmit(suggest.getAttribute("data-hal-suggest"));
-      renderHalScreen();
+      await runHalPageCmd(suggest.getAttribute("data-hal-suggest"));
       return;
     }
     const voiceTest = event.target.closest("[data-hal-voice-test]");
@@ -2290,12 +2492,6 @@ if (halPage) {
     const stressStop = event.target.closest("[data-hal-stress-stop]");
     if (stressStop) {
       stopHalStressTest();
-      return;
-    }
-    const widgetNav = event.target.closest("[data-hal-widget-nav]");
-    if (widgetNav) {
-      const target = widgetNav.getAttribute("data-hal-widget-nav");
-      if (target) select(target);
       return;
     }
     const sideNoteAdd = event.target.closest("[data-hal-sidenote-add]");
@@ -2334,8 +2530,7 @@ if (halPage) {
     }
     const cmd = event.target.closest("[data-hal-cmd]");
     if (cmd) {
-      await handleHalSubmit(cmd.getAttribute("data-hal-cmd"));
-      renderHalScreen();
+      await runHalPageCmd(cmd.getAttribute("data-hal-cmd"));
     }
   });
 }
@@ -2426,6 +2621,12 @@ async function refreshImportsInBackground() {
 async function boot() {
   renderRuntimeModeBanner();
   await loadPersistedState();
+  try {
+    const info = await DesktopBridge.getAppInfo();
+    if (info && info.sidenotesHub) nr2SidenotesHubPath = info.sidenotesHub;
+  } catch {
+    /* desktop info optional in browser preview */
+  }
   try {
     halData = await DesktopBridge.readDataFile("hal-manager.json");
   } catch {

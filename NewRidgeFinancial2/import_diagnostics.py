@@ -111,6 +111,7 @@ def evaluate_dataset(
     *,
     manifest: dict[str, Any] | None = None,
     upstream_roots: list[Path] | None = None,
+    previous_checksums: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     manifest = manifest or load_manifest_payload()
     automated = contract.get("automated", True) is not False
@@ -201,6 +202,21 @@ def evaluate_dataset(
             status = STATUS_STALE
             detail = f"Upstream export is stale ({upstream_age} min old). {detail}"
 
+    current_sha = str(dataset_payload.get("sha256") or "").strip() or None
+    previous = (previous_checksums or {}).get(dataset_key) if isinstance(previous_checksums, dict) else None
+    checksum_changed = False
+    if isinstance(previous, dict) and current_sha:
+        previous_sha = str(previous.get("sha256") or "").strip()
+        previous_file = str(previous.get("sourceFile") or "").strip()
+        current_file = str(dataset_payload.get("sourceFile") or "").strip()
+        if previous_sha and previous_sha != current_sha:
+            checksum_changed = True
+        elif previous_file and current_file and previous_file != current_file:
+            checksum_changed = True
+    if checksum_changed and status == STATUS_CONNECTED:
+        status = STATUS_PARTIAL
+        detail = f"Dataset changed since last sync (checksum). {detail}"
+
     return {
         "datasetKey": dataset_key,
         "system": contract.get("system"),
@@ -217,6 +233,8 @@ def evaluate_dataset(
         "requiredFieldFailures": required_failures,
         "collectorHint": collector_hint,
         "upstreamFile": upstream_file,
+        "sha256": current_sha,
+        "checksumChanged": checksum_changed,
         "detail": detail,
     }
 
@@ -226,6 +244,7 @@ def evaluate_bundle(
     *,
     manifest: dict[str, Any] | None = None,
     deep: bool = False,
+    previous_checksums: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Evaluate the import cache against dataset contracts.
 
@@ -250,7 +269,14 @@ def evaluate_bundle(
         system_payload = bundle.get(system) if isinstance(bundle.get(system), dict) else {}
         dataset_payload = system_payload.get(bundle_key) if isinstance(system_payload, dict) else None
         roots = softdent_roots if system == "softdent" else quickbooks_roots
-        item = evaluate_dataset(dataset_key, contract, dataset_payload, manifest=manifest, upstream_roots=roots)
+        item = evaluate_dataset(
+            dataset_key,
+            contract,
+            dataset_payload,
+            manifest=manifest,
+            upstream_roots=roots,
+            previous_checksums=previous_checksums,
+        )
         items.append(item)
         by_status[item["status"]] = by_status.get(item["status"], 0) + 1
 

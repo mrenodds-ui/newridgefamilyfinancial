@@ -56,17 +56,27 @@ class DesktopApi:
             "dbPath": str(self.store.db_path),
             "documentInbox": str(resolve_inbox_path()),
             "documentArchive": str(resolve_archive_path()),
+            "sidenotesHub": str(SIDENOTES_HUB_DATA_DIR),
         }
 
     def read_data_file(self, name: str) -> str:
         if name.startswith("sidenotes-inbox"):
             hub_path = SIDENOTES_HUB_DATA_DIR / name
-            if hub_path.is_file():
-                return hub_path.read_text(encoding="utf-8")
             site_fallback = self.site_dir / "data" / name
-            if site_fallback.is_file():
-                return site_fallback.read_text(encoding="utf-8")
-            return json.dumps({"items": [], "monitor": None})
+            candidates: list[tuple[str, Path]] = []
+            for path in (hub_path, site_fallback):
+                if not path.is_file():
+                    continue
+                try:
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    checked = str((data.get("monitor") or {}).get("checkedAt") or data.get("generatedAt") or "")
+                except json.JSONDecodeError:
+                    checked = ""
+                candidates.append((checked, path))
+            if not candidates:
+                return json.dumps({"items": [], "monitor": None})
+            candidates.sort(key=lambda item: item[0], reverse=True)
+            return candidates[0][1].read_text(encoding="utf-8")
         path = self.site_dir / "data" / name
         if not path.is_file():
             raise FileNotFoundError(f"Data file not found: {name}")
@@ -223,6 +233,102 @@ class DesktopApi:
         opts = _json.loads(options or "{}") if isinstance(options, str) else (options or {})
         full = bool(opts.get("fullPull"))
         return pull_all_practice_sources(full=full)
+
+    def get_chart_of_accounts(self) -> dict:
+        from accounting_tools import get_chart_of_accounts
+
+        return {"accounts": get_chart_of_accounts(), "source": "accounting_tools.py"}
+
+    def draft_journal_entry(self, description: str, period: str, amount: float, context_json: str = "{}") -> dict:
+        from accounting_bridge import draft_journal_payload, parse_context_json
+
+        return draft_journal_payload(
+            description=description,
+            period=period,
+            amount=float(amount),
+            context=parse_context_json(context_json),
+        )
+
+    def list_posting_queue(self, limit: int = 20, status: str = "") -> dict:
+        from accounting_bridge import list_posting_queue
+
+        return list_posting_queue(self.store.db_path, limit=int(limit or 20), status=status or None)
+
+    def enqueue_journal_posting(self, payload_json: str) -> dict:
+        from accounting_bridge import enqueue_journal_posting, parse_context_json
+        import json as _json
+
+        payload = _json.loads(payload_json or "{}")
+        if not isinstance(payload, dict):
+            raise ValueError("enqueue_journal_posting requires a JSON object")
+        return enqueue_journal_posting(
+            self.store.db_path,
+            description=str(payload.get("description") or "Journal entry"),
+            period=str(payload.get("period") or ""),
+            amount=float(payload.get("amount") or 0),
+            actor=str(payload.get("actor") or "Staff"),
+            context=parse_context_json(_json.dumps(payload.get("context") or {})),
+            transaction_date=str(payload.get("transactionDate") or "") or None,
+            enqueue_mode=str(payload.get("enqueueMode") or "manual_review_queue"),
+        )
+
+    def review_posting_queue_entry(self, queue_id: str, action: str, reviewer_actor: str, review_note: str = "") -> dict:
+        from accounting_bridge import review_posting_queue_entry
+
+        return review_posting_queue_entry(
+            self.store.db_path,
+            queue_id=queue_id,
+            action=action,
+            reviewer_actor=reviewer_actor,
+            review_note=review_note or None,
+        )
+
+    def export_approved_posting_queue(self, limit: int = 200) -> dict:
+        from accounting_bridge import export_approved_posting_queue_csv
+
+        return export_approved_posting_queue_csv(self.store.db_path, limit=int(limit or 200))
+
+    def web_research(self, query: str, options_json: str = "{}") -> dict:
+        from web_research import research
+        import json as _json
+
+        try:
+            options = _json.loads(options_json) if options_json else {}
+        except _json.JSONDecodeError:
+            options = {}
+        if not isinstance(options, dict):
+            options = {}
+        max_results = int(options.get("maxResults") or 5)
+        enrich = options.get("enrich", True) is not False
+        return research(str(query or ""), max_results=max_results, enrich=enrich)
+
+    def list_hal_memories(self) -> dict:
+        from knowledge_memory_store import load_approved_memories
+
+        items = load_approved_memories()
+        return {"items": items, "count": len(items)}
+
+    def remember_hal_fact(self, text: str, source: str = "staff:remember", category: str = "") -> dict:
+        from knowledge_memory_store import remember_fact
+
+        return remember_fact(
+            str(text or ""),
+            source=str(source or "staff:remember"),
+            category=str(category or "").strip() or None,
+            actor="Staff",
+        )
+
+    def remember_hal_web_findings(self, query: str, findings_json: str) -> dict:
+        from knowledge_memory_store import remember_web_findings
+        import json as _json
+
+        try:
+            findings = _json.loads(findings_json) if findings_json else []
+        except _json.JSONDecodeError:
+            findings = []
+        if not isinstance(findings, list):
+            findings = []
+        return remember_web_findings(findings, query=str(query or ""), actor="Staff")
 
 
 def main() -> int:

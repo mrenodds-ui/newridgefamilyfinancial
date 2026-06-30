@@ -104,9 +104,17 @@ const HalPageWidgets = (function () {
 
   function widgetsForPage(pageId, feed) {
     const nav = widgetNavMap();
-    return Object.keys(nav)
+    const items = Object.keys(nav)
       .filter((key) => nav[key] === pageId)
       .map((key) => ({ key, widget: widgetFromFeed(feed, key) }));
+    if (pageId === "office-manager" && feed && feed.officeWidgets) {
+      Object.keys(feed.officeWidgets).forEach((key) => {
+        if (!items.some((item) => item.key === key)) {
+          items.push({ key, widget: feed.officeWidgets[key] });
+        }
+      });
+    }
+    return items;
   }
 
   function pageReadiness(pageId, feed) {
@@ -141,14 +149,19 @@ const HalPageWidgets = (function () {
     const mergedHead = [badge, headRight].filter(Boolean).join(" ");
     const note = widgetKey ? halNote(widget) : "";
     const statusClass = widgetKey ? ` pv-hal-widget pv-hal-widget--${tone}` : "";
-    const attrs = widgetKey ? ` data-hal-widget-key="${esc(widgetKey)}"` : "";
+    const cmdLabel = widget && widget.title ? widget.title : title;
+    const halCmd = widgetKey && cmdLabel ? `Explain ${cmdLabel}` : "";
+    const cmdAttr = halCmd ? ` data-hal-cmd="${esc(halCmd)}"` : "";
+    const attrs = widgetKey ? ` data-hal-widget-key="${esc(widgetKey)}"${cmdAttr}` : "";
     if (Card) {
       return Card({
         title,
         body: `${note}${body}`,
         className: `${className || ""}${statusClass}`.trim(),
         headRight: mergedHead || undefined,
-        attrs: widgetKey ? { "data-hal-widget-key": widgetKey } : undefined,
+        attrs: widgetKey
+          ? { "data-hal-widget-key": widgetKey, ...(halCmd ? { "data-hal-cmd": halCmd } : {}) }
+          : undefined,
       });
     }
     return `<section class="pv-card${statusClass}${className ? " " + esc(className) : ""}"${attrs}>
@@ -162,7 +175,10 @@ const HalPageWidgets = (function () {
     const tone = statusTone(widget ? widget.status : "FAILED");
     const badge = halBadge(widgetKey, widget);
     const note = halNote(widget);
-    return `<section class="pv-card pv-hal-widget pv-hal-widget--${tone}${className ? " " + esc(className) : ""}" data-hal-widget-key="${esc(widgetKey)}">
+    const cmdLabel = widget && widget.title ? widget.title : widgetKey;
+    const halCmd = cmdLabel ? `Explain ${cmdLabel}` : "";
+    const cmdAttr = halCmd ? ` data-hal-cmd="${esc(halCmd)}"` : "";
+    return `<section class="pv-card pv-hal-widget pv-hal-widget--${tone}${className ? " " + esc(className) : ""}" data-hal-widget-key="${esc(widgetKey)}"${cmdAttr}>
       <div class="pv-hal-widget__chrome">${badge}</div>
       ${note}
       ${innerHtml}

@@ -24,7 +24,7 @@ const WidgetContract = (function () {
         productionMtd: { dataset: "softdent.dashboard", dashboard: "financial", path: "productionMtd.value" },
         productionTrendLatest: { dataset: "softdent.dashboard", dashboard: "financial", path: "productionTrend.production", index: -1 },
         ytdProduction: { dataset: "softdent.dashboard", dashboard: "financial", path: "productionTrend.ytd", label: "YTD Production" },
-        ytdCollectionRate: { dataset: "softdent.dashboard", dashboard: "financial", path: "productionTrend.ytd", label: "YTD Collection Rate" },
+        ytdCollectionRate: { dataset: "softdent.dashboard", dashboard: "financial", path: "productionTrend.ytd", label: "Trailing Collection Rate" },
       },
     },
     payerMixAndCollections: {

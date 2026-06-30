@@ -37,7 +37,9 @@ node C:\NewRidgeFamilyFinancial\NewRidgeFinancial2\validate-pages.mjs
 
 - **Sync script:** `NewRidgeFinancial2/import-automation/Sync-HAL-Imports.ps1`
 - **Python authority:** `NewRidgeFinancial2/import_sync.py`
-- **Import cache:** `app/data/imports/` (gitignored)
+- **Import cache:** `app_data/nr2/document_inbox/` (gitignored under `app_data/`)
+
+Legacy `app/data/imports/` is migrated into the document-inbox cache on first sync.
 
 Sync copies and transforms export files only. It never writes to SoftDent or QuickBooks.
 

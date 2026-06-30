@@ -241,14 +241,15 @@
       "generatedBy": [],
       "freshnessMaxMinutes": 1440,
       "severity": "optional",
-      "automated": false,
+      "automated": true,
       "requiredFields": ["Count"],
       "optionalFields": ["Period", "NewPatients", "newPatients"],
       "fieldAliases": {
         "Count": ["Count", "count", "NewPatients", "newPatients", "Total"],
         "Period": ["Period", "period", "Month", "month"]
       },
-      "note": "New patient counts require a SoftDent export; not yet automated."
+      "generatedBy": ["softdent_practice_exports.py"],
+      "note": "Generated from softdent_financial_analytics when new_patient tables exist; manual CSV still accepted."
     },
     "softdent.treatmentPlans": {
       "system": "softdent",
@@ -262,7 +263,7 @@
       "generatedBy": [],
       "freshnessMaxMinutes": 1440,
       "severity": "optional",
-      "automated": false,
+      "automated": true,
       "requiredFields": [],
       "optionalFields": ["Presented", "Accepted", "Amount", "CaseCount"],
       "fieldAliases": {
@@ -271,7 +272,8 @@
         "Amount": ["Amount", "amount", "PresentedValue", "TotalAmount"],
         "CaseCount": ["CaseCount", "caseCount", "Count", "count"]
       },
-      "note": "Treatment plan summary export documented but not yet produced by an automated collector."
+      "generatedBy": ["softdent_practice_exports.py"],
+      "note": "Generated from analytics DB treatment plan tables when present; manual export still accepted."
     },
     "softdent.caseAcceptance": {
       "system": "softdent",
@@ -282,10 +284,10 @@
         "case_acceptance.json"
       ],
       "sourceOwner": null,
-      "generatedBy": [],
+      "generatedBy": ["softdent_practice_exports.py"],
       "freshnessMaxMinutes": 1440,
       "severity": "optional",
-      "automated": false,
+      "automated": true,
       "requiredFields": [],
       "optionalFields": ["AcceptanceRate", "Presented", "Accepted", "Rate"],
       "fieldAliases": {
@@ -293,7 +295,7 @@
         "Presented": ["Presented", "presented", "PlansPresented"],
         "Accepted": ["Accepted", "accepted", "PlansAccepted"]
       },
-      "note": "Case acceptance requires a dedicated export or derived treatment-plan summary; not yet automated."
+      "note": "Derived from treatment plan summary when case_acceptance.csv is not supplied manually."
     }
   },
   "widgets": {

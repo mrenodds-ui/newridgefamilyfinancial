@@ -278,12 +278,15 @@ const HalProactive = (function () {
         autoTaskTitle: `${TASK_PREFIX}Restore financial import data`,
       });
     }
-    if (fin && fin.importDepth === "partial") {
+    if (fin && (fin.importDepth === "partial" || fin.importDepth === "degraded")) {
       pushRecommendation(recommendations, seen, {
-        id: "financial-dashboard-partial",
-        severity: "info",
-        title: "Financial dashboard is partial",
-        rationale: "Trend, payer mix, or quality detail is incomplete. HAL will not fabricate missing metrics.",
+        id: fin.importDepth === "degraded" ? "financial-dashboard-degraded" : "financial-dashboard-partial",
+        severity: fin.importDepth === "degraded" ? "warning" : "info",
+        title: fin.importDepth === "degraded" ? "Financial dashboard is degraded" : "Financial dashboard is partial",
+        rationale:
+          fin.importDepth === "degraded"
+            ? "Collections, period alignment, or reconcile checks failed. HAL will not treat this month as complete."
+            : "Trend, payer mix, quality detail, or a single source is incomplete. HAL will not fabricate missing metrics.",
         action: { type: "navigate", target: "financial" },
         autoTaskTitle: null,
       });

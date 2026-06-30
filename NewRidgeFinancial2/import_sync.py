@@ -330,16 +330,18 @@ def _build_dashboard_from_bridge(path: Path) -> list[dict[str, Any]] | None:
     practice = payload.get("practice")
     if isinstance(practice, dict):
         practice_name = str(practice.get("name") or "Practice Total")
-    return [
-        {
-            "provider": practice_name or "Practice Total",
-            "period": period,
-            "production": float(production),
-            "collections": float(summary.get("collections") or 0),
-            "insurance": float(summary.get("insurance") or 0),
-            "patient": float(summary.get("patient") or 0),
-        }
-    ]
+    collections = float(summary.get("collections") or 0)
+    row = {
+        "provider": practice_name or "Practice Total",
+        "period": period,
+        "production": float(production),
+        "collections": collections,
+        "insurance": float(summary.get("insurance") or 0),
+        "patient": float(summary.get("patient") or 0),
+    }
+    if float(production) > 0 and collections <= 0:
+        row["collectionsReported"] = False
+    return [row]
 
 
 def _build_ar_rows_from_normalized(normalized: dict[str, Any]) -> list[dict[str, Any]]:
@@ -367,8 +369,10 @@ def _trim_rows_to_relevant_periods(rows: list[dict[str, Any]]) -> list[dict[str,
     return trimmed if trimmed else rows[:1]
 
 
-def _sync_softdent_pipeline_exports(destination: Path) -> list[str]:
+def _sync_softdent_pipeline_exports(destination: Path) -> dict[str, Any]:
     written: list[str] = []
+    collections_diagnostic: dict[str, Any] | None = None
+    practice_sync: dict[str, Any] | None = None
     bridge_path = destination / "softdent_bridge_latest.json"
     if not bridge_path.is_file():
         bridge_path = _find_newest(destination, ("softdent_bridge_latest.json",))
@@ -397,9 +401,21 @@ def _sync_softdent_pipeline_exports(destination: Path) -> list[str]:
         period_sync = sync_dashboard_period_rows()
         if period_sync.get("ok") and period_sync.get("path"):
             written.append("softdent_dashboard_data.json")
+        collections_diagnostic = period_sync.get("collectionsDiagnostic")
     except Exception:
         pass
-    return written
+    try:
+        from softdent_practice_exports import sync_practice_exports
+
+        practice_sync = sync_practice_exports()
+        written.extend(practice_sync.get("written") or [])
+    except Exception:
+        pass
+    return {
+        "written": written,
+        "collectionsDiagnostic": collections_diagnostic,
+        "practiceSync": practice_sync,
+    }
 
 
 def _sync_quickbooks_sdk_summary(destination: Path) -> list[str]:
@@ -430,13 +446,27 @@ def _sync_quickbooks_sdk_summary(destination: Path) -> list[str]:
     categories = payload.get("top_expense_categories")
     if isinstance(categories, list) and categories:
         category_rows = [
-            {"Category": str(item.get("category") or ""), "Amount": item.get("amount")}
+            {
+                "Category": str(item.get("category") or ""),
+                "Amount": item.get("amount"),
+                "Period": str(item.get("period") or payload.get("period") or ""),
+            }
             for item in categories
             if isinstance(item, dict) and item.get("amount") not in (None, "")
         ]
         if category_rows:
             categories_path = destination / "quickbooks_expense_categories.csv"
-            _write_csv(categories_path, category_rows, ["Category", "Amount"])
+            has_period = any(str(row.get("Period") or "").strip() for row in category_rows)
+            if not has_period:
+                category_rows = [{**row, "Scope": "YTD"} for row in category_rows]
+                headers = ["Category", "Amount", "Scope"]
+            else:
+                headers = ["Category", "Amount", "Period"]
+            _write_csv(
+                categories_path,
+                [{key: row.get(key, "") for key in headers} for row in category_rows],
+                headers,
+            )
             written.append(categories_path.name)
     return written
 
@@ -479,6 +509,8 @@ def _load_dataset_for_diag(directory: Path, names: tuple[str, ...]) -> dict[str,
     if path is None:
         return None
     try:
+        from import_cache_ttl import sha256_file
+
         rows: list[dict[str, Any]] = []
         if path.suffix.lower() == ".json":
             payload = _read_json(path)
@@ -493,6 +525,7 @@ def _load_dataset_for_diag(directory: Path, names: tuple[str, ...]) -> dict[str,
         return {
             "sourceFile": path.name,
             "modifiedAt": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+            "sha256": sha256_file(path),
             "rows": rows,
         }
     except Exception:
@@ -509,7 +542,9 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
     """Pull the newest real export files into HAL import folders."""
     full_pull = _full_pull_enabled(full_pull)
     from import_cache_ttl import (
+        collect_dataset_checksums,
         enforce_quickbooks_period_files,
+        load_manifest,
         purge_expired_ocr_files,
         purge_if_expired,
         relevant_period_labels,
@@ -517,6 +552,8 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
     )
     from quickbooks_monthly_sync import sync_quickbooks_monthly_exports
 
+    previous_manifest = load_manifest()
+    previous_checksums = dict((previous_manifest or {}).get("datasetChecksums") or {})
     purge_result = purge_if_expired()
     removed_ocr_files = purge_expired_ocr_files()
     if removed_ocr_files:
@@ -530,6 +567,7 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {
         "syncedAt": datetime.now(timezone.utc).isoformat(),
         "fullPull": full_pull,
+        "previousChecksums": previous_checksums,
         "softdent": {"copied": [], "generated": [], "removed": []},
         "quickbooks": {"copied": [], "generated": [], "monthly": {}},
         "sourceRoots": {"softdent": [], "quickbooks": []},
@@ -603,7 +641,17 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
     result["softdent"]["copied"].extend(_sync_named_exports(softdent_external, softdent_dest, SOFTDENT_NEW_PATIENTS_NAMES))
     result["softdent"]["copied"].extend(_sync_named_exports(softdent_external, softdent_dest, SOFTDENT_TREATMENT_PLANS_NAMES))
     result["softdent"]["copied"].extend(_sync_named_exports(softdent_external, softdent_dest, SOFTDENT_CASE_ACCEPTANCE_NAMES))
-    result["softdent"]["generated"].extend(_sync_softdent_pipeline_exports(softdent_dest))
+    pipeline = _sync_softdent_pipeline_exports(softdent_dest)
+    result["softdent"]["generated"].extend(pipeline.get("written") or [])
+    for issue in (pipeline.get("collectionsDiagnostic") or {}).get("issues") or []:
+        result["warnings"].append(f"Collections: {issue}")
+    if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):
+        db_hint = (pipeline["practiceSync"].get("collectionsDiagnostic") or {}).get("analyticsDb")
+        if db_hint:
+            result["warnings"].append(
+                "Practice widgets (new patients, treatment plans) — analytics DB present but no matching tables; "
+                "drop manual exports or extend softdent_financial_analytics schema."
+            )
 
     result["quickbooks"]["copied"].extend(_sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_REVENUE_NAMES))
     result["quickbooks"]["copied"].extend(_sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_EXPENSE_NAMES))
@@ -622,10 +670,17 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
 
     qb_periods = list(monthly_result.get("periods") or [])
     sd_periods = relevant_period_labels()
+
+    trimmed = enforce_quickbooks_period_files(quickbooks_dest)
+    if trimmed:
+        result["quickbooks"]["generated"].extend(trimmed)
+
+    dataset_checksums = collect_dataset_checksums(softdent_dest, quickbooks_dest)
     result["cache"] = write_manifest(
         synced_at=result["syncedAt"],
         periods={"quickbooks": qb_periods, "softdent": sd_periods},
         purge_result=purge_result,
+        dataset_checksums=dataset_checksums,
     )
     if purge_result.get("purged"):
         result["warnings"].append(
@@ -635,10 +690,6 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         result["warnings"].append(
             f"Removed {len(removed_ocr_files)} OCR archive file(s) older than retention window."
         )
-
-    trimmed = enforce_quickbooks_period_files(quickbooks_dest)
-    if trimmed:
-        result["quickbooks"]["generated"].extend(trimmed)
 
     try:
         from import_diagnostics import check_upstream_health, evaluate_bundle
@@ -663,8 +714,22 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 "ar": _load_dataset_for_diag(quickbooks_dest, QUICKBOOKS_AR_NAMES),
             },
         }
-        result["diagnostics"] = evaluate_bundle(bundle_for_diag, deep=True)
+        result["diagnostics"] = evaluate_bundle(
+            bundle_for_diag,
+            deep=True,
+            previous_checksums=previous_checksums,
+        )
         result["upstreamHealth"] = check_upstream_health()
+        dashboard_rows = (bundle_for_diag.get("softdent") or {}).get("dashboard")
+        if isinstance(dashboard_rows, dict):
+            rows = dashboard_rows.get("rows") or []
+            if isinstance(rows, list) and any(
+                isinstance(row, dict) and row.get("collectionsReported") is False for row in rows
+            ):
+                result["warnings"].append(
+                    "SoftDent collections not reported for current period (production without daysheet totals). "
+                    "Widgets will show collections as unavailable, not zero."
+                )
     except Exception as exc:
         result["warnings"].append(f"Import diagnostics unavailable: {exc}")
 

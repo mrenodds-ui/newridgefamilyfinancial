@@ -8,12 +8,40 @@ on:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: NewRidgeFinancial2
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: Python accounting and import tests
+        run: python -m unittest discover -s . -p "test_*.py"
+
+      - name: Import loader accounting tests
+        run: node test_import_loader_accounting.mjs
+
+      - name: Import diagnostics tests
+        run: node test_import_diagnostics_node.mjs
+
+      - name: Month-end close and posting tests
+        run: node test_month_end_close.mjs
+
+      - name: Accounting month-end smoke snapshot
+        run: node import-automation/_accounting_check_snapshot.mjs
+
+      - name: Python accounting bridge tests
+        run: python -m unittest test_accounting_bridge.py
+
       - name: Validate HAL
-        run: node NewRidgeFinancial2/validate-hal.mjs
+        run: node validate-hal.mjs
+
       - name: Validate pages
-        run: node NewRidgeFinancial2/validate-pages.mjs
+        run: node validate-pages.mjs

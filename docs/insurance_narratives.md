@@ -145,7 +145,9 @@ It does **not** use Carestream/Sensei E-Services, Gateway APIs, or direct SoftDe
 access. Configure with:
 
 ```bash
+# Legacy FastAPI app
 INSURANCE_NARRATIVE_SOFTDENT_EXPORT_DIR=app/data/imports/insurance_narratives/softdent
+# NR2 desktop: drop exports in app_data/nr2/document_inbox/softdent/ (see NewRidgeFinancial2/README)
 ```
 
 Supported first-pass exports:

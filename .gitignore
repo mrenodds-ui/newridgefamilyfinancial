@@ -135,6 +135,16 @@ run_235b_eval_resume.py
 run_235b_focused_eval.py
 run_235b_section1_only.py
 
+# Local HAL evaluator artifacts (repo root; dev-only)
+hal_*.md
+hal_*.txt
+hal_*_raw.json
+hal_diag_*
+hal_fix_*
+hal_lmstudio_*
+run_120b_program_eval.py
+run_*_eval.py
+
 # Editor / OS
 .vscode/
 .DS_Store

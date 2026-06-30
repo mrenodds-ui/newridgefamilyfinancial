@@ -89,11 +89,13 @@ PatientName,MRN,NoteDate,Provider,Procedure,ClinicalNote
 ```powershell
 # Example: Export QuickBooks report to CSV (replace with actual command if available)
 # Requires QuickBooks SDK or third-party automation tool
-# QBExport.exe --company "C:\Path\To\Company.qbw" --report "Profit and Loss" --output "C:\NewRidgeFamilyFinancial\app\data\imports\quickbooks\quickbooks_export.csv"
+# QBExport.exe --company "C:\Path\To\Company.qbw" --report "Profit and Loss" --output "C:\NewRidgeFamilyFinancial\app_data\nr2\document_inbox\quickbooks\quickbooks_export.csv"
 ```
 
 - If only manual export is possible, instruct users to export the required reports to:
-  - `app/data/imports/quickbooks/`
+  - `app_data/nr2/document_inbox/quickbooks/`
+
+  NR2 auto-pull copies from upstream folders configured in `.env` (`NR2_QUICKBOOKS_EXPORT_SOURCE` or `QUICKBOOKS_SOURCE_DIR`).
 
 - For the repo's recommended safety model, keep HAL read-only and use the Desktop architecture described in `docs/quickbooks_desktop_safe_architecture.md`.
 
