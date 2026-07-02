@@ -1,3 +1,4 @@
+import { HalChatWidget } from "../components/hal/HalChatWidget";
 import Sidebar from "./Sidebar";
 import "../theme.css";
 
@@ -8,10 +9,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <Sidebar />
       </aside>
       <main className="app-main">
-        <div className="page-content">
-          {children}
-        </div>
+        <div className="page-content">{children}</div>
       </main>
+      <HalChatWidget />
     </div>
   );
 }

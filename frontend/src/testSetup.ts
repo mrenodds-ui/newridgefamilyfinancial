@@ -8,3 +8,8 @@ if (typeof global.ResizeObserver === "undefined") {
     disconnect() {}
   };
 }
+
+// assistant-ui thread viewport auto-scroll uses scrollTo in jsdom tests.
+if (typeof HTMLElement !== "undefined" && !HTMLElement.prototype.scrollTo) {
+  HTMLElement.prototype.scrollTo = () => {};
+}
