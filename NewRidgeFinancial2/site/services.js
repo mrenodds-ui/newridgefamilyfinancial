@@ -251,7 +251,33 @@ const Services = (function () {
     }
     const apiResult = await fetchLoopbackJson("/api/posting-queue");
     if (apiResult && (apiResult.items || []).length) return apiResult;
+    if (isNode) {
+      const sqliteResult = readJournalPostingQueueFromSqlite();
+      if (sqliteResult && (sqliteResult.items || []).length) return sqliteResult;
+    }
     return { items: [], metrics: { pendingReview: 0, approved: 0, rejected: 0, total: 0 }, unavailable: true };
+  }
+
+  function readJournalPostingQueueFromSqlite() {
+    if (!isNode) return null;
+    try {
+      const { execFileSync } = require("node:child_process");
+      const pathMod = require("node:path");
+      const repoDir = pathMod.join(__dirname, "..");
+      const dbPath = pathMod.join(repoDir, "..", "app_data", "nr2", "nr2.sqlite3");
+      const code =
+        "import json, sys; from pathlib import Path; from accounting_bridge import list_posting_queue; " +
+        "print(json.dumps(list_posting_queue(Path(sys.argv[1]), limit=20)))";
+      const stdout = execFileSync("python", ["-c", code, dbPath], {
+        cwd: repoDir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      const payload = JSON.parse(String(stdout || "").trim() || "{}");
+      return payload && Array.isArray(payload.items) ? payload : null;
+    } catch {
+      return null;
+    }
   }
 
   async function load(key, emptyFn) {

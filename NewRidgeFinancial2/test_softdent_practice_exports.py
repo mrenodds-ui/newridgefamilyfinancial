@@ -9,7 +9,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from softdent_dashboard_period_sync import diagnose_collections_gap
-from softdent_practice_exports import _aggregate_new_patients, _aggregate_treatment_plans, sync_practice_exports
+from softdent_practice_exports import (
+    _aggregate_new_patients,
+    _aggregate_treatment_plans,
+    _aggregate_treatment_plans_from_production,
+    sync_practice_exports,
+)
 
 
 class SoftdentPracticeExportsTests(unittest.TestCase):
@@ -54,6 +59,38 @@ class SoftdentPracticeExportsTests(unittest.TestCase):
             self.assertIn("softdent_new_patients.csv", result["written"])
             self.assertIn("treatment_plan_summary.csv", result["written"])
             self.assertIn("case_acceptance.csv", result["written"])
+
+
+    def test_treatment_plans_fallback_from_production(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "analytics.sqlite3"
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                """
+                CREATE TABLE production_by_ada (
+                    year_month TEXT,
+                    ada_code TEXT,
+                    description TEXT,
+                    procedure_count INTEGER,
+                    net_production REAL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO production_by_ada VALUES ('2026-06', '111000', 'Prophylaxis - Adult', 12, 840.0)"
+            )
+            conn.execute(
+                "INSERT INTO production_by_ada VALUES ('2026-06', '1200', 'Visa Card Payment', 2, 171.0)"
+            )
+            conn.commit()
+            conn.close()
+            conn = sqlite3.connect(db_path)
+            try:
+                rows = _aggregate_treatment_plans_from_production(conn, ["2026-06"])
+                self.assertEqual(rows[0]["Presented"], 12.0)
+                self.assertEqual(rows[0]["Accepted"], 12.0)
+            finally:
+                conn.close()
 
 
 if __name__ == "__main__":

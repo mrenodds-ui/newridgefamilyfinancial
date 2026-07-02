@@ -88,6 +88,64 @@ def _aggregate_new_patients(conn: sqlite3.Connection, periods: list[str]) -> lis
     return _aggregate_new_patients_from_daysheet(periods) or _aggregate_new_patients_from_daysheet([])
 
 
+PAYMENT_PROCEDURE_PREFIXES = ("1200", "1400", "4000", "5000")
+
+
+def _is_payment_procedure(ada_code: str, description: str) -> bool:
+    code = str(ada_code or "").strip()
+    text = str(description or "").lower()
+    if any(code.startswith(prefix) for prefix in PAYMENT_PROCEDURE_PREFIXES):
+        return True
+    return any(token in text for token in ("payment", "visa", "mastercard", "adjustment", "write-off", "write off"))
+
+
+def _aggregate_treatment_plans_from_production(conn: sqlite3.Connection, periods: list[str]) -> list[dict[str, Any]]:
+    if not _table_exists(conn, "production_by_ada"):
+        return []
+    columns = _table_columns(conn, "production_by_ada")
+    period_col = "year_month" if "year_month" in columns else None
+    if not period_col or not periods:
+        return []
+    placeholders = ",".join("?" for _ in periods)
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT {period_col}, ada_code, description, procedure_count, net_production
+        FROM production_by_ada
+        WHERE {period_col} IN ({placeholders})
+        """,
+        periods,
+    )
+    by_period: dict[str, dict[str, float]] = {}
+    for period, ada_code, description, procedure_count, net_production in cur.fetchall():
+        if _is_payment_procedure(str(ada_code or ""), str(description or "")):
+            continue
+        period_key = str(period)
+        bucket = by_period.setdefault(period_key, {"presented": 0.0, "accepted": 0.0, "amount": 0.0})
+        count = float(procedure_count or 0)
+        amount = float(net_production or 0)
+        if count <= 0 and amount <= 0:
+            continue
+        bucket["presented"] += count if count > 0 else 1.0
+        if amount > 0:
+            bucket["accepted"] += count if count > 0 else 1.0
+            bucket["amount"] += amount
+    rows: list[dict[str, Any]] = []
+    for period in sorted(by_period.keys()):
+        payload = by_period[period]
+        if payload["presented"] <= 0:
+            continue
+        rows.append(
+            {
+                "Period": period,
+                "Presented": round(payload["presented"], 1),
+                "Accepted": round(payload["accepted"], 1),
+                "Amount": round(payload["amount"], 2),
+            }
+        )
+    return rows
+
+
 def _aggregate_treatment_plans(conn: sqlite3.Connection, periods: list[str]) -> list[dict[str, Any]]:
     for table in ("treatment_plan_summary", "treatment_plans", "tx_plan_summary"):
         if not _table_exists(conn, table):
@@ -101,11 +159,11 @@ def _aggregate_treatment_plans(conn: sqlite3.Connection, periods: list[str]) -> 
             (
                 name
                 for name in (
+                    "presented_count",
                     "presented",
                     "plans_presented",
                     "tx_presented",
-                    "presented_count",
-                    "presented_value",
+                    "tx_presented_count",
                 )
                 if name in columns
             ),
@@ -114,12 +172,21 @@ def _aggregate_treatment_plans(conn: sqlite3.Connection, periods: list[str]) -> 
         accepted_col = next(
             (
                 name
-                for name in ("accepted", "plans_accepted", "tx_accepted", "accepted_count", "accepted_value")
+                for name in (
+                    "accepted_count",
+                    "accepted",
+                    "plans_accepted",
+                    "tx_accepted",
+                    "tx_accepted_count",
+                )
                 if name in columns
             ),
             None,
         )
-        amount_col = next((name for name in ("amount", "presented_value", "total_amount") if name in columns), None)
+        amount_col = next(
+            (name for name in ("presented_value", "amount", "total_amount", "total_treatment_plan_value") if name in columns),
+            None,
+        )
         if not presented_col and not accepted_col:
             continue
         where = ""
@@ -175,7 +242,7 @@ def _aggregate_treatment_plans(conn: sqlite3.Connection, periods: list[str]) -> 
             rows.append(payload)
         if rows:
             return rows
-    return []
+    return _aggregate_treatment_plans_from_production(conn, periods)
 
 
 def _derive_case_acceptance(tp_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

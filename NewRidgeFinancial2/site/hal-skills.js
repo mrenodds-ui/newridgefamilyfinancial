@@ -1880,7 +1880,7 @@ const HalSkills = (function () {
       qbStatus === "SUCCESS" ||
       (expenseTotal != null && expenseTotal !== missingToken && expenseTotal !== "—") ||
       qbDocImportCount > 0;
-    const narrativeStatus = narrativeDraftCount > 0 ? "SUCCESS" : (claims.total > 0 ? "DEGRADED" : "FAILED");
+    const narrativeStatus = claims.total > 0 || narrativeDraftCount > 0 ? "SUCCESS" : "FAILED";
     const libraryStatus = libraryDocCount > 0 ? "SUCCESS" : docsQueueCount > 0 ? "DEGRADED" : "FAILED";
     const journalQueue = snap.journalPostingQueue || {};
     const journalItems = Array.isArray(journalQueue.items) ? journalQueue.items : [];

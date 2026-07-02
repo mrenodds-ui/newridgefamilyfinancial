@@ -188,8 +188,11 @@ const ImportLoader = (function () {
     if (pageId === "ar") {
       const hasTrend = Array.isArray(patch.collectionsTrend?.current) && patch.collectionsTrend.current.length > 0;
       const hasTopClaims = Array.isArray(patch.topClaims) && patch.topClaims.length > 0;
-      if (!hasTrend || !hasTopClaims) return "partial";
-      return "complete";
+      const hasKpis = Array.isArray(patch.kpis) && patch.kpis.some((row) => row && row.value && row.value !== "—");
+      if (hasTrend && hasTopClaims) return "complete";
+      if (hasTopClaims && hasKpis) return "complete";
+      if (!hasTrend && !hasTopClaims) return "partial";
+      return "partial";
     }
     return "complete";
   }
@@ -842,9 +845,10 @@ const ImportLoader = (function () {
     const latest = normalized[normalized.length - 1];
     const latestIncomplete = Boolean(
       latest &&
-        latest.collectionsReported !== false &&
-        latest.production > 0 &&
-        (latest.collections === null || latest.collections === 0),
+        (latest.collectionsPending ||
+          (latest.collectionsReported !== false &&
+            latest.production > 0 &&
+            (latest.collections === null || latest.collections === 0))),
     );
     const latestMonthRate =
       latest && latest.production > 0 && latest.collections !== null && latest.collectionsReported !== false
@@ -910,6 +914,12 @@ const ImportLoader = (function () {
     const maxProd = Math.max(...production, 0);
     const yStep = maxProd > 0 ? Math.ceil(maxProd / 2 / 1000) * 1000 : 50000;
     const rateMetrics = collectionRateMetrics || buildCollectionRateMetrics(rows, { evaluated: false, reported: true });
+    const rateEntry = {
+      label: "Trailing Collection Rate",
+      value: rateMetrics.trailingRate || rateMetrics.displayRate || "—",
+      trendDir: "flat",
+      note: rateMetrics.trailingPeriods ? `Imported months: ${rateMetrics.trailingPeriods}` : rateMetrics.displayLabel,
+    };
     return {
       yLabels: [`$${Math.round(yStep / 1000)}k`, `$${Math.round((yStep * 2) / 1000)}k`],
       labels: periods.map((row) => row.period),
@@ -917,12 +927,8 @@ const ImportLoader = (function () {
       average,
       ytd: [
         { label: "YTD Production", value: formatMoney(production.reduce((acc, value) => acc + value, 0)), trendDir: "flat" },
-        {
-          label: "Trailing Collection Rate",
-          value: rateMetrics.trailingRate || rateMetrics.displayRate || "—",
-          trendDir: "flat",
-          note: rateMetrics.trailingPeriods ? `Imported months: ${rateMetrics.trailingPeriods}` : rateMetrics.displayLabel,
-        },
+        rateEntry,
+        Object.assign({}, rateEntry, { label: "YTD Collection Rate" }),
       ],
     };
   }
@@ -1474,18 +1480,52 @@ const ImportLoader = (function () {
     return "Draft";
   }
 
+  function buildCollectionsTrendFromRows(rows) {
+    const periods = normalizeDashboardRows(rows || [])
+      .filter((row) => row.period && !row.collectionsPending && row.collectionsReported !== false)
+      .map((row) => ({
+        period: row.period,
+        collections: Number(row.collections) || 0,
+      }))
+      .filter((row) => row.collections > 0);
+    if (!periods.length) {
+      return { labels: [], current: [], prior: [] };
+    }
+    periods.sort((a, b) => a.period.localeCompare(b.period));
+    const current = periods.map((row) => row.collections);
+    return {
+      labels: periods.map((row) => row.period),
+      current,
+      prior: current.length > 1 ? current.slice(0, -1) : [],
+    };
+  }
+
+  function claimAgeDays(value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw === "—") return null;
+    const parsed = Date.parse(raw.length >= 10 ? raw.slice(0, 10) : raw);
+    if (!Number.isFinite(parsed)) return null;
+    return Math.max(0, Math.floor((Date.now() - parsed) / 86400000));
+  }
+
   function buildTopClaimsFromImport(rows) {
     return (rows || [])
-      .map((row) => ({
-        claim: String(pickField(row, ["ClaimId", "claimId", "id"]) || ""),
-        patient: String(pickField(row, ["PatientName", "patient"]) || "Unknown"),
-        insurance: String(pickField(row, ["Payer", "payer", "Insurance", "insurance"]) || "—"),
-        dos: String(pickField(row, ["ServiceDate", "serviceDate", "DOS", "dos"]) || "—"),
-        billed: formatMoney(pickField(row, ["ClaimAmount", "amount", "Billed", "billed"])),
-        outstanding: formatMoney(pickField(row, ["Outstanding", "outstanding", "Balance", "balance", "ClaimAmount", "amount"])),
-        days: String(pickField(row, ["Days", "days", "Age", "age"]) || "—"),
-        status: mapClaimStatus(pickField(row, ["ClaimStatus", "status"])),
-      }))
+      .map((row) => {
+        const dos = String(pickField(row, ["ServiceDate", "serviceDate", "DOS", "dos"]) || "—");
+        const ageDays = pickField(row, ["Days", "days", "Age", "age"]);
+        const parsedAge = coerceFloat(ageDays);
+        const days = parsedAge != null ? String(parsedAge) : claimAgeDays(dos) != null ? String(claimAgeDays(dos)) : "—";
+        return {
+          claim: String(pickField(row, ["ClaimId", "claimId", "id"]) || ""),
+          patient: String(pickField(row, ["PatientName", "patient"]) || "Unknown"),
+          insurance: String(pickField(row, ["Payer", "payer", "Insurance", "insurance"]) || "—"),
+          dos,
+          billed: formatMoney(pickField(row, ["ClaimAmount", "amount", "Billed", "billed"])),
+          outstanding: formatMoney(pickField(row, ["Outstanding", "outstanding", "Balance", "balance", "ClaimAmount", "amount"])),
+          days,
+          status: mapClaimStatus(pickField(row, ["ClaimStatus", "status"])),
+        };
+      })
       .filter((row) => row.claim)
       .slice(0, 10);
   }
@@ -1836,8 +1876,10 @@ const ImportLoader = (function () {
       if (softdent && softdent.hero && softdent.hero.value !== "—") {
         const aging = mapAgingForAr(softdent.aging || []);
         const claimRows = ((bundle.softdent && bundle.softdent.claims) || {}).rows || [];
+        const dashboardRows = ((bundle.softdent && bundle.softdent.dashboard) || {}).rows || [];
         const topClaims = buildTopClaimsFromImport(claimRows);
         const followUp = buildFollowUpFromImport(claimRows);
+        const collectionsTrend = buildCollectionsTrendFromRows(dashboardRows);
         const collectionsMtd = softdent.collections;
         const ninetyPlus = aging.find((a) => /^\s*(90\+|90\s*\+)/i.test(String(a.bucket || a.label || "")));
         const ninetyPlusPct = ninetyPlus && ninetyPlus.pct != null ? `${ninetyPlus.pct}%` : "—";
@@ -1850,8 +1892,10 @@ const ImportLoader = (function () {
           aging,
           topClaims,
           followUp,
-          collectionsTrend: { labels: [], current: [], prior: [] },
-          collectionsTrendEmpty: "Awaiting collections trend export.",
+          collectionsTrend,
+          collectionsTrendEmpty: collectionsTrend.current.length
+            ? null
+            : "Awaiting collections trend export.",
           topClaimsEmpty: topClaims.length
             ? null
             : "Awaiting SoftDent claims export for outstanding claim detail.",
