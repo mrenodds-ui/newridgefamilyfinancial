@@ -34,6 +34,34 @@ def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) ->
             writer.writerow({key: row.get(key, "") for key in fieldnames})
 
 
+NEW_PATIENT_PROCEDURE_CODES = frozenset({"140", "150", "0140", "0150", "180"})
+
+
+def _aggregate_new_patients_from_daysheet(periods: list[str]) -> list[dict[str, Any]]:
+    try:
+        from softdent_operational_pipeline import _load_daysheet_transactions, resolve_daysheet_jsonl_path
+    except Exception:
+        return []
+    path = resolve_daysheet_jsonl_path()
+    if not path or not path.is_file():
+        return []
+    allowed = {str(period)[:7] for period in periods if period}
+    by_period: dict[str, set[str]] = {}
+    for row in _load_daysheet_transactions(path):
+        patient_id = str(row.get("patientId") or "").strip()
+        report_date = str(row.get("reportDate") or "").strip()
+        if not patient_id or len(report_date) < 7:
+            continue
+        period_key = report_date[:7]
+        if allowed and period_key not in allowed:
+            continue
+        code = str(row.get("code") or "").strip()
+        description = str(row.get("description") or "").lower()
+        if code in NEW_PATIENT_PROCEDURE_CODES or "new patient" in description or "comprehensive oral evaluation - new" in description:
+            by_period.setdefault(period_key, set()).add(patient_id)
+    return [{"Period": period, "Count": len(patient_ids)} for period, patient_ids in sorted(by_period.items()) if patient_ids]
+
+
 def _aggregate_new_patients(conn: sqlite3.Connection, periods: list[str]) -> list[dict[str, Any]]:
     for table in ("new_patient_counts", "new_patients", "patient_new_counts"):
         if not _table_exists(conn, table):
@@ -57,7 +85,7 @@ def _aggregate_new_patients(conn: sqlite3.Connection, periods: list[str]) -> lis
         rows = [{"Period": str(period), "Count": int(float(count or 0))} for period, count in cur.fetchall()]
         if rows:
             return rows
-    return []
+    return _aggregate_new_patients_from_daysheet(periods) or _aggregate_new_patients_from_daysheet([])
 
 
 def _aggregate_treatment_plans(conn: sqlite3.Connection, periods: list[str]) -> list[dict[str, Any]]:

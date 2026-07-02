@@ -1879,11 +1879,11 @@ const HalSkills = (function () {
       qbStatus === "SUCCESS" ||
       (expenseTotal != null && expenseTotal !== missingToken && expenseTotal !== "—") ||
       qbDocImportCount > 0;
-    const narrativeStatus = narrativeDraftCount > 0 ? "SUCCESS" : "FAILED";
-    const libraryStatus = libraryDocCount > 0 ? "SUCCESS" : "FAILED";
+    const narrativeStatus = narrativeDraftCount > 0 ? "SUCCESS" : (claims.total > 0 ? "DEGRADED" : "FAILED");
+    const libraryStatus = libraryDocCount > 0 ? "SUCCESS" : docsQueueCount > 0 ? "DEGRADED" : "FAILED";
     const journalQueue = snap.journalPostingQueue || {};
     const journalItems = Array.isArray(journalQueue.items) ? journalQueue.items : [];
-    const journalStatus = journalItems.length > 0 ? "SUCCESS" : journalQueue.unavailable ? "DEGRADED" : "FAILED";
+    const journalStatus = journalItems.length > 0 ? "SUCCESS" : docsDataReady ? "DEGRADED" : journalQueue.unavailable ? "DEGRADED" : "FAILED";
 
     const widgets = {
       practiceFinancialOverview: overviewWidget || {
@@ -2228,6 +2228,17 @@ const HalSkills = (function () {
         },
       },
     };
+
+    if (widgets.newPatients && widgets.newPatients.status !== "FAILED") {
+      ["treatmentPlanSummary", "caseAcceptance"].forEach((key) => {
+        const widget = widgets[key];
+        if (!widget || widget.status !== "FAILED") return;
+        widgets[key] = Object.assign({}, widget, {
+          status: "DEGRADED",
+          summary: `${widget.summary} Treatment-plan analytics are not populated in softdent_financial_analytics.db yet — export or sync treatment plan summary from SoftDent.`,
+        });
+      });
+    }
 
     const feed = {
       meta: skillMeta("widgets.feed", "programSnapshot"),

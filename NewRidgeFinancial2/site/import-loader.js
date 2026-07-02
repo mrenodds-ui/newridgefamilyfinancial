@@ -1634,6 +1634,193 @@ const ImportLoader = (function () {
     });
   }
 
+  function documentImportSlug(value, limit) {
+    const cleaned = String(value || "")
+      .replace(/[^A-Za-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .toUpperCase();
+    return (cleaned || "ROW").slice(0, limit || 32);
+  }
+
+  function documentImportDate(period, fallback) {
+    const raw = String(period || "").trim();
+    if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    return fallback || new Date().toISOString().slice(0, 10);
+  }
+
+  function buildDocumentStateFromImportBundle(bundle) {
+    const qb = (bundle && bundle.quickbooks) || {};
+    const sd = (bundle && bundle.softdent) || {};
+    const today = new Date().toISOString().slice(0, 10);
+    const queue = [];
+    const previewById = {};
+    const counts = { quickbooks: 0, softdent: 0 };
+
+    function addEntry(doc, preview) {
+      queue.push(doc);
+      previewById[doc.id] = preview;
+    }
+
+    (((qb.expenses || {}).rows) || []).forEach((row) => {
+      const period = String(pickField(row, ["Period", "period", "Month", "month"]) || "unknown");
+      const amount = coerceFloat(pickField(row, ["TotalExpense", "Amount", "amount", "total"]));
+      const sourceFile = String((qb.expenses || {}).sourceFile || "quickbooks_expenses.csv");
+      const docId = `QB-EXP-${documentImportSlug(period)}`;
+      addEntry(
+        {
+          id: docId,
+          type: "Statement",
+          vendor: "QuickBooks Operating Expenses",
+          date: documentImportDate(period, today),
+          amount: formatMoney(amount),
+          status: "Ready to Post",
+          statusTone: "ok",
+          age: 0,
+          autoImported: true,
+          sourceSystem: "quickbooks",
+          sourceFile,
+          sourceKind: "monthlyExpenses",
+        },
+        {
+          vendor: "QUICKBOOKS OPERATING EXPENSES",
+          invoice: docId,
+          date: documentImportDate(period, today),
+          total: formatMoney(amount),
+          file: sourceFile,
+          pages: "Import row",
+          uploaded: today,
+          textPreview: `QuickBooks monthly expense total · period ${period}`,
+          sourceExpired: false,
+          fileUnavailable: "Source export row — no PDF attached.",
+          previewAvailable: false,
+        },
+      );
+      counts.quickbooks += 1;
+    });
+
+    (((qb.revenue || {}).rows) || []).forEach((row) => {
+      const period = String(pickField(row, ["Period", "period", "Month", "month"]) || "unknown");
+      const amount = coerceFloat(pickField(row, ["TotalIncome", "Revenue", "Amount", "amount", "total"]));
+      const sourceFile = String((qb.revenue || {}).sourceFile || "quickbooks_revenue.csv");
+      const docId = `QB-REV-${documentImportSlug(period)}`;
+      addEntry(
+        {
+          id: docId,
+          type: "Statement",
+          vendor: "QuickBooks Revenue",
+          date: documentImportDate(period, today),
+          amount: formatMoney(amount),
+          status: "Ready to Post",
+          statusTone: "ok",
+          age: 0,
+          autoImported: true,
+          sourceSystem: "quickbooks",
+          sourceFile,
+          sourceKind: "monthlyRevenue",
+        },
+        {
+          vendor: "QUICKBOOKS REVENUE",
+          invoice: docId,
+          date: documentImportDate(period, today),
+          total: formatMoney(amount),
+          file: sourceFile,
+          pages: "Import row",
+          uploaded: today,
+          textPreview: `QuickBooks monthly revenue total · period ${period}`,
+          sourceExpired: false,
+          fileUnavailable: "Source export row — no PDF attached.",
+          previewAvailable: false,
+        },
+      );
+      counts.quickbooks += 1;
+    });
+
+    (((sd.ar || {}).rows) || []).forEach((row) => {
+      const bucket = String(pickField(row, ["Bucket", "bucket", "AgingBucket", "Range"]) || "Total");
+      const amount = coerceFloat(pickField(row, ["Balance", "Amount", "amount", "total"]));
+      const sourceFile = String((sd.ar || {}).sourceFile || "softdent_ar_aging.csv");
+      const docId = `SD-AR-${documentImportSlug(bucket)}`;
+      addEntry(
+        {
+          id: docId,
+          type: "A/R Aging",
+          vendor: `SoftDent A/R · ${bucket}`,
+          date: today,
+          amount: formatMoney(amount),
+          status: "Ready to Post",
+          statusTone: "ok",
+          age: 0,
+          autoImported: true,
+          sourceSystem: "softdent",
+          sourceFile,
+          sourceKind: "arAging",
+        },
+        {
+          vendor: `SOFTDENT A/R · ${bucket}`.toUpperCase(),
+          invoice: docId,
+          date: today,
+          total: formatMoney(amount),
+          file: sourceFile,
+          pages: "Import row",
+          uploaded: today,
+          textPreview: `SoftDent A/R aging bucket · ${bucket}`,
+          sourceExpired: false,
+          fileUnavailable: "Source export row — no PDF attached.",
+          previewAvailable: false,
+        },
+      );
+      counts.softdent += 1;
+    });
+
+    (((sd.dashboard || {}).rows) || []).slice(0, 12).forEach((row) => {
+      const period = String(pickField(row, ["period", "Period", "Month", "month"]) || "current");
+      const production = coerceFloat(pickField(row, ["production", "Production"]));
+      const collections = coerceFloat(pickField(row, ["collections", "Collections"]));
+      const provider = String(pickField(row, ["provider", "Provider", "providerName"]) || "New Ridge Family Dental");
+      const sourceFile = String((sd.dashboard || {}).sourceFile || "softdent_dashboard_data.json");
+      const docId = `SD-DASH-${documentImportSlug(period)}`;
+      addEntry(
+        {
+          id: docId,
+          type: "Production Summary",
+          vendor: provider,
+          date: documentImportDate(period, today),
+          amount: formatMoney(production != null ? production : collections),
+          status: "Ready to Post",
+          statusTone: "ok",
+          age: 0,
+          autoImported: true,
+          sourceSystem: "softdent",
+          sourceFile,
+          sourceKind: "dashboard",
+        },
+        {
+          vendor: provider.toUpperCase(),
+          invoice: docId,
+          date: documentImportDate(period, today),
+          total: formatMoney(production != null ? production : collections),
+          file: sourceFile,
+          pages: "Import row",
+          uploaded: today,
+          textPreview: `SoftDent dashboard import · production ${formatMoney(production)} · collections ${formatMoney(collections)}`,
+          sourceExpired: false,
+          fileUnavailable: "Source export row — no PDF attached.",
+          previewAvailable: false,
+        },
+      );
+      counts.softdent += 1;
+    });
+
+    return {
+      importedAt: (bundle && bundle.loadedAt) || new Date().toISOString(),
+      queue,
+      previewById,
+      counts,
+      warnings: counts.quickbooks || counts.softdent ? [] : ["No SoftDent or QuickBooks rows found in the import cache for document intake."],
+    };
+  }
+
   function buildDashboard(pageId, bundle) {
     const empty = emptyDashboard(pageId);
     if (pageId === "practice") return buildPracticeDashboard(bundle || {});
@@ -1766,6 +1953,7 @@ const ImportLoader = (function () {
     hasSoftdentImport,
     hasQuickbooksImport,
     buildDashboard,
+    buildDocumentStateFromImportBundle,
     emptyDashboard,
     mergeClaimsState,
     formatImportStatus,

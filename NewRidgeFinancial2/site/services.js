@@ -184,6 +184,76 @@ const Services = (function () {
     return dashboards;
   }
 
+  function isLoopbackHost() {
+    if (isNode) return true;
+    if (typeof window === "undefined") return false;
+    const host = String(window.location.hostname || "").toLowerCase();
+    return host === "127.0.0.1" || host === "localhost";
+  }
+
+  async function fetchLoopbackJson(path) {
+    if (typeof fetch !== "function" || !isLoopbackHost()) return null;
+    try {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
+  async function hydrateDocumentsFromImportIfEmpty(state) {
+    if ((state.queue || []).length > 0) return state;
+    const loader = resolveImportLoader();
+    const bundle = await loadImportBundle(false);
+    if (!loader || !bundle || typeof loader.buildDocumentStateFromImportBundle !== "function") return state;
+    if (typeof loader.hasImportData === "function" && !loader.hasImportData(bundle)) return state;
+    const built = loader.buildDocumentStateFromImportBundle(bundle);
+    if (!built || !(built.queue || []).length) return state;
+    return {
+      entity: "New Ridge Family Financial",
+      queue: built.queue,
+      previewById: built.previewById || {},
+      postingAudit: [],
+      period: recomputeDocumentPeriod(built.queue),
+    };
+  }
+
+  function buildLibraryFromDocuments(documentsState) {
+    const queue = (documentsState && documentsState.queue) || [];
+    if (!queue.length) return null;
+    const docs = queue.map((doc) => ({
+      title: `${doc.vendor || "Import"} · ${doc.id || "row"}`,
+      type: doc.type || "Import",
+      size: doc.amount || "—",
+      updated: doc.date || new Date().toISOString().slice(0, 10),
+      by: doc.sourceSystem || "import",
+      tags: [doc.sourceSystem, doc.type].filter(Boolean),
+    }));
+    return {
+      results: docs.length,
+      storage: { indexed: docs.length, usedPct: null, capacity: "Import cache" },
+      filters: { types: [...new Set(docs.map((d) => d.type).filter(Boolean))] },
+      docs,
+      detailById: {},
+    };
+  }
+
+  async function readJournalPostingQueue() {
+    const br = bridge();
+    if (br && typeof br.listPostingQueue === "function") {
+      try {
+        const result = await br.listPostingQueue({ limit: 20 });
+        if (result && (result.items || []).length) return result;
+      } catch {
+        /* fall through */
+      }
+    }
+    const apiResult = await fetchLoopbackJson("/api/posting-queue");
+    if (apiResult && (apiResult.items || []).length) return apiResult;
+    return { items: [], metrics: { pendingReview: 0, approved: 0, rejected: 0, total: 0 }, unavailable: true };
+  }
+
   async function load(key, emptyFn) {
     if (mem[key]) return mem[key];
     const br = bridge();
@@ -198,11 +268,20 @@ const Services = (function () {
         /* fall through */
       }
       if (br.hasDesktopApi && br.hasDesktopApi()) {
-        // Desktop store may not be readable yet; do not cache an empty shell.
+        if (key === "documents") {
+          const apiState = await fetchLoopbackJson("/api/documents-state");
+          if (apiState && (apiState.queue || []).length) {
+            mem[key] = apiState;
+            return apiState;
+          }
+        }
         return emptyFn();
       }
     }
-    const initial = emptyFn();
+    let initial = emptyFn();
+    if (key === "documents") {
+      initial = await hydrateDocumentsFromImportIfEmpty(initial);
+    }
     mem[key] = initial;
     if (br) {
       try {
@@ -282,13 +361,19 @@ const Services = (function () {
     const loader = resolveImportLoader();
     const bundle = await loadImportBundle(false);
     const dashboards = buildDashboardsFromBundle(bundle);
-    const [claimsState, narrativesState, documentsState, libraryState, officeTasks] = await Promise.all([
+    const [claimsState, narrativesState, documentsStateRaw, libraryStateRaw, officeTasks, journalPostingQueue] = await Promise.all([
       safe(() => claims.list()),
       safe(() => narratives.getState()),
       safe(() => documents.list({})),
       safe(() => library.search("")),
       safe(() => readOfficeTasks()),
+      safe(() => readJournalPostingQueue()),
     ]);
+    const documentsState = documentsStateRaw;
+    const libraryState =
+      libraryStateRaw && libraryStateRaw.results
+        ? libraryStateRaw
+        : buildLibraryFromDocuments(documentsState) || libraryStateRaw;
     const claimsByStatus = {};
     (claimsState?.claims || []).forEach((claim) => {
       const key = claim.status || "Unknown";
@@ -367,6 +452,7 @@ const Services = (function () {
             docs: libraryState.docs || [],
           }
         : null,
+      journalPostingQueue: journalPostingQueue || { items: [], metrics: {}, unavailable: true },
       officeTasks: officeTasks || [],
       officeTasksState: officeTasksSourceAvailable ? (officeTasks && officeTasks.length ? "loaded" : "empty") : "not_configured",
       runtimeIssues,
@@ -779,40 +865,56 @@ const Services = (function () {
 
   async function ensureDocumentsSynced() {
     const br = bridge();
-    if (!br || typeof br.syncAccountingDocuments !== "function") {
-      documentsSyncState.status = "ready";
-      return { ok: true, skipped: true };
-    }
-    if (documentsSyncPromise) return documentsSyncPromise;
-    documentsSyncState.status = "loading";
-    documentsSyncState.error = null;
-    documentsSyncPromise = (async () => {
-      try {
-        const result = await br.syncAccountingDocuments();
-        if (result && result.state && typeof result.state === "object") {
-          applySyncedDocumentsState(result);
-          documentsSyncState.status = "ready";
-          documentsSyncState.syncedAt = result.syncedAt || new Date().toISOString();
+    if (br && typeof br.syncAccountingDocuments === "function") {
+      if (documentsSyncPromise) return documentsSyncPromise;
+      documentsSyncState.status = "loading";
+      documentsSyncState.error = null;
+      documentsSyncPromise = (async () => {
+        try {
+          const result = await br.syncAccountingDocuments();
+          if (result && result.state && typeof result.state === "object") {
+            applySyncedDocumentsState(result);
+            documentsSyncState.status = "ready";
+            documentsSyncState.syncedAt = result.syncedAt || new Date().toISOString();
+            return result;
+          }
+          documentsSyncState.status = result && result.ok === false ? "error" : "ready";
+          if (documentsSyncState.status === "error") {
+            documentsSyncState.error = (result && result.error) || "Document sync failed";
+          } else {
+            documentsSyncState.syncedAt = new Date().toISOString();
+          }
+          notifyDocumentsSynced(result);
           return result;
+        } catch (err) {
+          documentsSyncState.status = "error";
+          documentsSyncState.error = err.message || String(err);
+          if (typeof RuntimeIssues !== "undefined") RuntimeIssues.record("services.ensureDocumentsSynced", err);
+          throw err;
+        } finally {
+          documentsSyncPromise = null;
         }
-        documentsSyncState.status = result && result.ok === false ? "error" : "ready";
-        if (documentsSyncState.status === "error") {
-          documentsSyncState.error = (result && result.error) || "Document sync failed";
-        } else {
-          documentsSyncState.syncedAt = new Date().toISOString();
-        }
-        notifyDocumentsSynced(result);
-        return result;
-      } catch (err) {
-        documentsSyncState.status = "error";
-        documentsSyncState.error = err.message || String(err);
-        if (typeof RuntimeIssues !== "undefined") RuntimeIssues.record("services.ensureDocumentsSynced", err);
-        throw err;
-      } finally {
-        documentsSyncPromise = null;
-      }
-    })();
-    return documentsSyncPromise;
+      })();
+      return documentsSyncPromise;
+    }
+    const apiResult = await fetchLoopbackJson("/api/sync-documents");
+    if (apiResult && apiResult.state) {
+      applySyncedDocumentsState(apiResult);
+      documentsSyncState.status = "ready";
+      documentsSyncState.syncedAt = apiResult.syncedAt || new Date().toISOString();
+      notifyDocumentsSynced(apiResult);
+      return apiResult;
+    }
+    const hydrated = await hydrateDocumentsFromImportIfEmpty(emptyDocuments());
+    if ((hydrated.queue || []).length) {
+      mem.documents = hydrated;
+      documentsSyncState.status = "ready";
+      documentsSyncState.syncedAt = new Date().toISOString();
+      notifyDocumentsSynced({ state: hydrated, queueCount: hydrated.queue.length, syncedAt: documentsSyncState.syncedAt });
+      return { ok: true, state: hydrated, queueCount: hydrated.queue.length };
+    }
+    documentsSyncState.status = "ready";
+    return { ok: true, skipped: true };
   }
 
   const documents = {

@@ -7,10 +7,15 @@ import os
 import threading
 import uuid
 
+from pathlib import Path
+
 import bottle
 
 from webview.http import BottleServer, SSLWSGIRefServer, ThreadedAdapter, _get_random_port, logger
 from webview.util import abspath, is_app, is_local_url
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+NR2_DATA_DIR = REPO_ROOT / "app_data" / "nr2"
 
 
 class NR2BottleServer(BottleServer):
@@ -52,6 +57,50 @@ class NR2BottleServer(BottleServer):
                 from import_loader import load_import_bundle
 
                 return json.dumps(load_import_bundle(sync=False, deep=False))
+            except Exception as exc:
+                bottle.response.status = 500
+                return json.dumps({"error": str(exc)})
+
+        @app.get("/api/sync-documents")
+        def sync_documents_api():
+            bottle.response.content_type = "application/json"
+            bottle.response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            try:
+                from document_sync import sync_accounting_documents
+                from local_store import LocalStore
+
+                store = LocalStore(NR2_DATA_DIR)
+                return json.dumps(sync_accounting_documents(store))
+            except Exception as exc:
+                bottle.response.status = 500
+                return json.dumps({"error": str(exc)})
+
+        @app.get("/api/documents-state")
+        def documents_state_api():
+            bottle.response.content_type = "application/json"
+            bottle.response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            try:
+                from local_store import LocalStore
+
+                store = LocalStore(NR2_DATA_DIR)
+                raw = store.get("nr2:v2:documents")
+                if not raw:
+                    return json.dumps({"queue": [], "period": None})
+                return raw
+            except Exception as exc:
+                bottle.response.status = 500
+                return json.dumps({"error": str(exc)})
+
+        @app.get("/api/posting-queue")
+        def posting_queue_api():
+            bottle.response.content_type = "application/json"
+            bottle.response.set_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            try:
+                from accounting_bridge import list_posting_queue
+                from local_store import LocalStore
+
+                store = LocalStore(NR2_DATA_DIR)
+                return json.dumps(list_posting_queue(store.db_path, limit=20))
             except Exception as exc:
                 bottle.response.status = 500
                 return json.dumps({"error": str(exc)})

@@ -349,6 +349,62 @@ def _load_documents_state(store: Any) -> dict[str, Any]:
     return state
 
 
+def _parse_document_amount(value: Any) -> float:
+    raw = str(value or "").replace("$", "").replace(",", "").strip()
+    if not raw or raw in {"—", "-"}:
+        return 0.0
+    try:
+        return float(raw)
+    except ValueError:
+        return 0.0
+
+
+def _seed_posting_queue_from_documents(store: Any, state: dict[str, Any]) -> dict[str, Any]:
+    """Seed the journal posting queue from import-derived financial summary documents."""
+    db_path = getattr(store, "db_path", None)
+    if not db_path:
+        return {"seeded": 0, "skipped": "no_store"}
+    try:
+        from accounting_bridge import enqueue_journal_posting
+        from posting_queue_store import PostingQueueStore
+    except Exception as exc:
+        return {"seeded": 0, "skipped": str(exc)}
+
+    queue = PostingQueueStore(db_path)
+    if queue.list_entries(limit=1):
+        return {"seeded": 0, "skipped": "queue_exists"}
+
+    seeded = 0
+    for doc in state.get("queue") or []:
+        if not isinstance(doc, dict):
+            continue
+        if str(doc.get("status") or "") != "Ready to Post":
+            continue
+        amount = _parse_document_amount(doc.get("amount"))
+        if amount <= 0:
+            continue
+        period = str((state.get("period") or {}).get("label") or doc.get("date") or "")[:7]
+        if len(period) < 7:
+            period = datetime.now(timezone.utc).strftime("%Y-%m")
+        description = f"{doc.get('vendor') or 'Import summary'} · {doc.get('type') or 'Statement'} · {doc.get('id') or 'import'}"
+        try:
+            enqueue_journal_posting(
+                db_path,
+                description=description,
+                period=period,
+                amount=amount,
+                actor="NR2:document-sync",
+                context={"sourceDocumentId": doc.get("id"), "sourceSystem": doc.get("sourceSystem")},
+                transaction_date=str(doc.get("date") or datetime.now(timezone.utc).date().isoformat()),
+            )
+            seeded += 1
+        except Exception:
+            continue
+        if seeded >= 8:
+            break
+    return {"seeded": seeded}
+
+
 def _apply_source_import(store: Any, state: dict[str, Any]) -> dict[str, Any]:
     """Merge SoftDent/QuickBooks import rows into documents state."""
     source_import_result: dict[str, Any] = {"counts": {"quickbooks": 0, "softdent": 0}, "warnings": []}
@@ -372,6 +428,7 @@ def _apply_source_import(store: Any, state: dict[str, Any]) -> dict[str, Any]:
         state["entity"] = "New Ridge Family Financial"
     state["period"] = _recompute_period(state.get("queue") or [])
     store.set(DOCUMENTS_KEY, json.dumps(state))
+    source_import_result["postingQueueSeed"] = _seed_posting_queue_from_documents(store, state)
     return source_import_result
 
 
