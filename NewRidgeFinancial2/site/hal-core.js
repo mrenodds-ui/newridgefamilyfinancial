@@ -1268,7 +1268,10 @@ const HalCore = (function () {
     out = takeSpokenSentences(out, budget, maxSentences);
 
     const displayLen = String(displayText || "").trim().length;
-    if (displayLen > out.length + 80 && !/on screen/i.test(out)) {
+    const hm = meta.halModels || (typeof window !== "undefined" && window.halModels);
+    const independent =
+      typeof HalIndependentThought !== "undefined" && HalIndependentThought.isEnabled(hm);
+    if (!independent && displayLen > out.length + 80 && !/on screen/i.test(out)) {
       out = out.replace(/[.!?]\s*$/, "") + ". The rest is on screen if you can read.";
     }
     return out.trim();

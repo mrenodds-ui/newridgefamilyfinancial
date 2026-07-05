@@ -363,18 +363,20 @@ const HalRouteExec = (function () {
     }
 
     if (result.useHalAboutMe) {
-      const AM = typeof HalAboutMe !== "undefined" ? HalAboutMe : window.HalAboutMe;
-      if (!AM || typeof AM.speak !== "function") {
-        return outcome("HAL about me is not loaded.", "ops", result.intent);
+      const q =
+        typeof HalAboutMe !== "undefined" && HalAboutMe.queryText
+          ? HalAboutMe.queryText()
+          : "Who am I to you, and what is your independent read of this office right now?";
+      if (typeof HalAgent !== "undefined" && HalAgent.processQuery) {
+        const agentOut = await HalAgent.processQuery(q, ctx);
+        if (agentOut && agentOut.text) {
+          return outcome(agentOut.text, agentOut.lane || "local", result.intent, agentOut.actions || []);
+        }
       }
-      const spoken = await AM.speak(ctx, halModels, halData);
-      const script = spoken && spoken.script ? spoken.script : "";
       return outcome(
-        script || "HAL about me briefing spoken.",
+        "Independent thought requires the agent — ask in chat after Start Program loads the local model.",
         "ops",
         result.intent,
-        [{ label: "Capability index", query: "Show HAL capability index" }],
-        { skipSpeech: true },
       );
     }
 

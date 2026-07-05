@@ -683,6 +683,10 @@ const HalProactive = (function () {
     if (briefing && typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("nr2:scheduled-briefing", { detail: { kind, briefing } }));
       if (typeof HalVoice !== "undefined" && HalVoice.speakMirandaBriefing && !window.HAL_SKIP_SPEECH) {
+        const IT = typeof HalIndependentThought !== "undefined" ? HalIndependentThought : null;
+        if (IT && IT.isEnabled(ctx.halModels)) {
+          /* Independent thought: no scheduled briefing script read aloud. */
+        } else {
         const spoken = formatProactiveBriefing(briefing, { spoken: true });
         const auto = (ctx && ctx.halModels && ctx.halModels.config && ctx.halModels.config.autonomousOps) || {};
         const use9000 = auto.hal9000Voice !== false;
@@ -690,6 +694,7 @@ const HalProactive = (function () {
           HalVoice.speakHal9000Briefing(spoken, { kind }).catch(() => {});
         } else {
           HalVoice.speakMirandaBriefing(spoken, { kind }).catch(() => {});
+        }
         }
       }
     }

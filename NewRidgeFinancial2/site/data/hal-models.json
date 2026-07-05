@@ -118,6 +118,11 @@
       "alwaysAgentLoop": true,
       "policy": "Chat 10000 — director voice, executive summary first, agent loop always on when ascension active."
     },
+    "independentThought": {
+      "enabled": true,
+      "allowScriptSpeech": false,
+      "policy": "No canned scripts — text and voice come only from live agent reasoning and tool evidence."
+    },
     "agentCapabilities": {
       "gatherMode": "Cursor-style — parallel tool gather, auto-escalate to reasoning on weak answers",
       "tools": [

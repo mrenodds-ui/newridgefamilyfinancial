@@ -672,12 +672,30 @@
     return pool[Math.floor(Math.random() * pool.length)];
   }
 
+  function independentThoughtActive(options) {
+    const hm = options && options.halModels;
+    if (hm && typeof HalIndependentThought !== "undefined" && HalIndependentThought.isEnabled(hm)) return true;
+    if (typeof window !== "undefined" && window.halModels && typeof HalIndependentThought !== "undefined") {
+      return HalIndependentThought.isEnabled(window.halModels);
+    }
+    return false;
+  }
+
   function announceSidenote(sender, broadcast) {
-    return speak(formatTemplate(pickVariant(broadcast), sender), { interrupt: true, profile: HAL9000 });
+    const name = sender || "a station";
+    const line = broadcast
+      ? `Broadcast from ${name}. Check SideNotes when you can.`
+      : `Message from ${name}. Check SideNotes when you can.`;
+    return speak(line, { interrupt: true, profile: HAL9000 });
   }
 
   function resolveSpokenText(displayText, options) {
     options = options || {};
+    if (independentThoughtActive(options)) {
+      const IT = typeof HalIndependentThought !== "undefined" ? HalIndependentThought : null;
+      const excerpt = IT && IT.spokenExcerpt ? IT.spokenExcerpt(displayText, options.halModels || window.halModels) : null;
+      if (excerpt) return excerpt;
+    }
     let base;
     if (options.spokenText) {
       base = mirandaSpokenShape(options.spokenText);
@@ -691,6 +709,22 @@
       if (base.length > cap) base = base.slice(0, cap).replace(/\s+\S*$/, "") + "…";
     }
     return mirandaVoiceExcerpt(base, options);
+  }
+
+  function speakIndependentReply(text, options) {
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (!raw) return { started: false, durationMs: 0 };
+    const IT = typeof HalIndependentThought !== "undefined" ? HalIndependentThought : null;
+    const excerpt =
+      IT && IT.spokenExcerpt ? IT.spokenExcerpt(raw, options.halModels || (window && window.halModels)) : raw.slice(0, 420);
+    speak(excerpt, { interrupt: options.interrupt !== false, profile: HAL9000 });
+    return {
+      started: true,
+      durationMs: estimateDurationMs(excerpt, HAL9000),
+      spokenText: excerpt,
+      profile: "hal9000-independent",
+      engine: "browser-hal9000",
+    };
   }
 
   function speakHalReplyBrowser(text, options, raw, tuned, voice, segments) {
@@ -712,6 +746,9 @@
 
   function speakHalReply(text, options) {
     options = options || {};
+    if (independentThoughtActive(options)) {
+      return speakIndependentReply(text, options);
+    }
     const profile = MIRANDA;
     const displayText = String(text || "");
     if (!displayText) return { started: false, durationMs: 0 };
@@ -774,6 +811,12 @@
 
   async function speakMirandaBriefing(text, options) {
     options = options || {};
+    if (
+      typeof HalIndependentThought !== "undefined" &&
+      !HalIndependentThought.allowScriptSpeech(options.halModels || (window && window.halModels))
+    ) {
+      return { started: false, durationMs: 0, skipped: true, reason: "independent-thought" };
+    }
     const raw = String(text || "").trim();
     if (!raw || qaSkipSpeech() || options.skipSpeech) {
       return { started: false, durationMs: 0, skipped: true };
@@ -795,6 +838,12 @@
 
   async function speakHal9000Briefing(text, options) {
     options = options || {};
+    if (
+      typeof HalIndependentThought !== "undefined" &&
+      !HalIndependentThought.allowScriptSpeech(options.halModels || (window && window.halModels))
+    ) {
+      return { started: false, durationMs: 0, skipped: true, reason: "independent-thought" };
+    }
     const raw = String(text || "").trim();
     if (!raw || qaSkipSpeech() || options.skipSpeech) {
       return { started: false, durationMs: 0, skipped: true };

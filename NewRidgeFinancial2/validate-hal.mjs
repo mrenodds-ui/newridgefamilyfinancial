@@ -1746,6 +1746,7 @@ async function main() {
   const asc10000Url = pathToFileURL(join(siteDir, "hal-ascension-10000.js")).href;
   const dirUrl = pathToFileURL(join(siteDir, "hal-director.js")).href;
   const chat10000Url = pathToFileURL(join(siteDir, "hal-chat-10000.js")).href;
+  const indepUrl = pathToFileURL(join(siteDir, "hal-independent-thought.js")).href;
   await import(hciUrl);
   await import(orchUrl);
   await import(aoUrl);
@@ -1755,13 +1756,20 @@ async function main() {
   await import(asc10000Url);
   await import(dirUrl);
   await import(chat10000Url);
+  await import(indepUrl);
   const HCI = globalThis.HalCapabilityIndex;
   assert(HCI && HCI.MAX_SCORE === 10000, "capability index max must be 10000");
   assert(HCI.OFFICE_MAX === 250, "office core max must remain 250");
   assert(globalThis.HalEmployee && HalEmployee.MAX_LEVEL === 7, "employee max level must be 7");
   assert(halModels.config.employee && halModels.config.employee.targetLevel === 7, "employee target level must be 7");
   assert(halModels.config.ascension10000 && halModels.config.ascension10000.enabled === true, "ascension10000 must be enabled");
-  assert(halModels.config.chat10000 && halModels.config.chat10000.enabled === true, "chat10000 must be enabled");
+  assert(halModels.config.independentThought && halModels.config.independentThought.enabled === true, "independentThought must be enabled");
+  const indepHelpRoute = HalCore.routeHalCommand(halData, halModels, pages, "What can you do?");
+  const helpEnhanced =
+    typeof HalIndependentThought !== "undefined"
+      ? HalIndependentThought.enhanceRoute(indepHelpRoute, halModels)
+      : indepHelpRoute;
+  assert(helpEnhanced.useModel === true && !helpEnhanced.text, "help must route to model under independent thought");
   const ascRoute = HalCore.routeHalCommand(halData, halModels, pages, "HAL 10000 ascension");
   assert(ascRoute.useAscension10000 === true, "ascension 10000 route must resolve");
   const empRoute = HalCore.routeHalCommand(halData, halModels, pages, "HAL employee status");

@@ -18,10 +18,10 @@ const HalChat10000 = (function () {
     return base && ((m && Number(m[1]) >= 10000) || c.enabled === true);
   }
 
-  function personaLines() {
+  function personaLines(halModels) {
     const base =
       typeof HalChat9000 !== "undefined" && HalChat9000.personaLines
-        ? HalChat9000.personaLines()
+        ? HalChat9000.personaLines(halModels)
         : "HAL operational intelligence.";
     return (
       base +
@@ -30,7 +30,7 @@ const HalChat10000 = (function () {
   }
 
   function buildSystemPrompt(halData, halModels) {
-    const parts = [personaLines()];
+    const parts = [personaLines(halModels)];
     if (typeof HalChat9000 !== "undefined" && HalChat9000.buildSystemPrompt) {
       parts.unshift(HalChat9000.buildSystemPrompt(halData, halModels));
     }

@@ -2170,6 +2170,9 @@ const HalAgent = (function () {
       applyHigherReasoningRoute(HalCore.routeHalCommand(ctx.halData, ctx.halModels, ctx.pages, trimmed), trimmed, ctx),
       ctx,
     );
+    if (typeof HalIndependentThought !== "undefined" && HalIndependentThought.enhanceRoute) {
+      route = HalIndependentThought.enhanceRoute(route, ctx.halModels);
+    }
     const plan = buildPlan(trimmed, route, workingMemory, longTermMemory, ctx);
     const isModelLane = !!(route.useModel || route.useReasoning || route.useEscalation || route.useOss);
 
@@ -2190,10 +2193,10 @@ const HalAgent = (function () {
       }
     }
 
-    // Instant local-command path:
-    // model run straight through the executor so they answer with zero extra
-    // latency (template responses are inherently within the safety policy).
-    if (!isModelLane && !plan.useModelEnhancement && (!plan.tools || plan.tools.length === 0)) {
+    // Instant local-command path (disabled when independent thought — no canned script replies).
+    const skipFast =
+      typeof HalIndependentThought !== "undefined" && HalIndependentThought.shouldSkipFastExecutor(ctx.halModels);
+    if (!skipFast && !isModelLane && !plan.useModelEnhancement && (!plan.tools || plan.tools.length === 0)) {
       const fast = await ctx.executeRoute(route, trimmed, {});
       if (fast) {
         let checked = selfCheckResponse(trimmed, fast.text, plan, {}, route);

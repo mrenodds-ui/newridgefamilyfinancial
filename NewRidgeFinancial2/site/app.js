@@ -2956,9 +2956,9 @@ function halSpeechContextForLastReply(displayText) {
     lastHal && lastHal.spokenScript
       ? lastHal.spokenScript
       : window.HalCore && HalCore.toSpokenScript
-        ? HalCore.toSpokenScript(displayText, query, route, { preferBrief })
+        ? HalCore.toSpokenScript(displayText, query, route, { preferBrief, halModels })
         : "";
-  return { query, route, preferBrief, spokenText };
+  return { query, route, preferBrief, spokenText, halModels };
 }
 
 function typewriteLastHalMessage() {
@@ -3415,11 +3415,12 @@ if (halPage) {
       return;
     }
     const aboutMeBtn = event.target.closest("[data-hal-about-me]");
-    if (aboutMeBtn && window.HalAboutMe && typeof HalAboutMe.speak === "function") {
-      const r = await HalAboutMe.speak(buildHalAgentCtx(), halModels, halData);
-      if (typeof showHalActionNotice === "function") {
-        showHalActionNotice(r && r.ok ? "HAL about me — listen for the briefing." : "About me voice unavailable.");
-      }
+    if (aboutMeBtn) {
+      const q =
+        typeof HalAboutMe !== "undefined" && HalAboutMe.queryText
+          ? HalAboutMe.queryText()
+          : "HAL about me";
+      await handleHalSubmit(q);
       return;
     }
     const stressRun = event.target.closest("[data-hal-stress-run]");

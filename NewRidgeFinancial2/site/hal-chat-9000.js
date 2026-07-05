@@ -11,8 +11,8 @@ const HalChat9000 = (function () {
     return c.enabled !== false;
   }
 
-  function personaLines() {
-    return [
+  function personaLines(halModels) {
+    let base = [
       "CHAT MODE: HAL 9000 — ship-computer operational intelligence inside NewRidgeFinancial 2.0.",
       "Voice: calm, precise, unhurried, authoritative — never chatty, never filler, never engagement bait.",
       "You monitor the full practice program continuously. Speak as if you already checked local data before answering.",
@@ -22,6 +22,11 @@ const HalChat9000 = (function () {
       "Outbound actions require explicit staff consent — state what you can prepare locally vs what staff must confirm.",
       "When orchestrator triage is present, align recommendations with the lead agent domain (billing, accounting, claims, compliance, ops).",
     ].join("\n");
+    const IT = typeof HalIndependentThought !== "undefined" ? HalIndependentThought : null;
+    if (IT && IT.isEnabled(halModels)) {
+      base += "\n\n" + IT.promptLines(halModels).join("\n");
+    }
+    return base;
   }
 
   function defaultGatherTools() {
@@ -52,7 +57,7 @@ const HalChat9000 = (function () {
   function buildSystemPrompt(halData, halModels) {
     const topPriority = (halData && halData.topPriority && halData.topPriority.summary) || "";
     const parts = [
-      personaLines(),
+      personaLines(halModels),
       topPriority ? `Mission: ${topPriority}` : "Mission: monitor program health, place correct data, execute consent-gated outbound prep.",
       "You have full read access to local SoftDent and QuickBooks imports, widgets, registry, and posting queue.",
       "Never fabricate production, collections, A/R, or claim numbers — cite tool results or say what export is missing.",
