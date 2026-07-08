@@ -213,7 +213,11 @@ const PageCanvas = (function () {
     const cmdLabel = (widget && widget.title) || kpi.label || widgetKey;
     const halCmd = widgetKey && cmdLabel ? ` data-hal-cmd="Explain ${esc(cmdLabel)}"` : "";
     const halTone = widgetKey && HW ? ` hal-widget-status hal-widget-status--${HW.statusTone(widget ? widget.status : "FAILED")}` : "";
-    const attrs = widgetKey ? kpiRefHalAttrs(widgetKey, cmdLabel) : "";
+    const attrs = kpi.halSubpanel
+      ? ` data-hal-subpanel="${esc(kpi.halSubpanel)}"`
+      : widgetKey
+        ? kpiRefHalAttrs(widgetKey, cmdLabel)
+        : "";
     const trend = kpi.hint ? `<div class="trend-indicator"><span>↑</span> ${esc(kpi.hint)}</div>` : "";
     const sparkHtml = kpi.spark && kpi.spark.length ? barSparkline(kpi.spark, kpi.tone) : "";
     const col = colSpan || 3;
@@ -228,7 +232,7 @@ const PageCanvas = (function () {
   function heroKpiRow(kpis, max = 4) {
     const list = (kpis || []).slice(0, max);
     if (!list.length) return "";
-    if (list.length >= 5) {
+    if (list.length >= 4) {
       return `<div class="kpi-hero-row col-12">${list.map((kpi) => canvasHeroTile(kpi)).join("")}</div>`;
     }
     const span = list.length >= 4 ? 3 : list.length === 3 ? 4 : list.length === 2 ? 6 : 12;
@@ -241,7 +245,11 @@ const PageCanvas = (function () {
     const widget = HW && widgetKey && activeFeed ? HW.widgetFromFeed(activeFeed, widgetKey) : null;
     const cmdLabel = (widget && widget.title) || kpi.label || widgetKey;
     const halTone = widgetKey && HW ? ` hal-widget-status hal-widget-status--${HW.statusTone(widget ? widget.status : "FAILED")}` : "";
-    const attrs = widgetKey ? kpiRefHalAttrs(widgetKey, cmdLabel) : "";
+    const attrs = kpi.halSubpanel
+      ? ` data-hal-subpanel="${esc(kpi.halSubpanel)}"`
+      : widgetKey
+        ? kpiRefHalAttrs(widgetKey, cmdLabel)
+        : "";
     const trend = kpi.hint ? `<div class="kpi-hint">${esc(kpi.hint)}</div>` : "";
     const sparkHtml = kpi.spark && kpi.spark.length ? barSparkline(kpi.spark, kpi.tone) : "";
     return `<div class="kpi-hero-tile widget-glow-border${halTone}"${attrs}>
@@ -430,19 +438,36 @@ const PageCanvas = (function () {
     </div>`;
   }
 
+  function renderKanbanCard(item, widgetKey, pageId, options) {
+    if (options && options.narratives) {
+      if (typeof item === "string") {
+        return `<div class="narrative-card" role="button" tabindex="0"><strong>${esc(item)}</strong></div>`;
+      }
+      const title = item.patient || item.procedureCode || item.title || "Draft";
+      const meta = [item.procedureCode, item.payer, item.amount].filter(Boolean).join(" · ");
+      return `<div class="narrative-card" role="button" tabindex="0">
+        <div class="narrative-card__title">${esc(title)}</div>
+        ${meta ? `<div class="narrative-card__meta">${esc(meta)}</div>` : ""}
+      </div>`;
+    }
+    return renderClaimCard(item, widgetKey, pageId);
+  }
+
   function canvasKanbanLanes(lanes, widgetKey, options) {
     const pageId = activePageId || "ar";
     const claimsMode = (options && options.claims) || pageId === "claims";
+    const narrativeMode = (options && options.narratives) || pageId === "narratives";
     const laneHtml = lanes
       .map((lane) => {
-        const cards = (lane.items || []).map((item) => renderClaimCard(item, widgetKey, pageId)).join("");
+        const cards = (lane.items || []).map((item) => renderKanbanCard(item, widgetKey, pageId, options)).join("");
         return `<div class="kanban-column">
           <div class="column-header"><span>${esc(lane.lane)}</span><span class="column-count">${(lane.items || []).length}</span></div>
           <div class="column-content">${cards}</div>
         </div>`;
       })
       .join("");
-    return `<div class="kanban-board claims-pipeline${claimsMode ? " kanban-board--claims" : ""}" data-hal-subpanel="${esc(widgetKey || "kanban")}-board">${laneHtml}</div>`;
+    const boardClass = narrativeMode ? " kanban-board--narratives" : claimsMode ? " kanban-board--claims" : "";
+    return `<div class="kanban-board${boardClass}" data-hal-subpanel="${esc(widgetKey || "kanban")}-board">${laneHtml}</div>`;
   }
 
   function canvasTimeline(items) {

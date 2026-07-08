@@ -216,6 +216,170 @@ const PageCanvasData = (function () {
     ];
   }
 
+  function softdentHeroKpis() {
+    const care = metrics("careDeliveryPerformance");
+    const np = softdentNewPatientsMtdData();
+    const coll = softdentCollectionsDailySeries();
+    const co = softdentClaimsOutstandingData();
+    const collTotal =
+      coll.hasData && coll.values.length ? coll.values.reduce((s, v) => s + (Number(v) || 0), 0) : null;
+    return [
+      {
+        label: "Care Delivery Summary",
+        value: fmt(care.productionTotal || care.productionMtd || "—"),
+        hint: care.vsPrior || "MTD",
+        widgetKey: "careDeliveryPerformance",
+        tone: widgetTone("careDeliveryPerformance"),
+      },
+      {
+        label: "New Patients (MTD)",
+        value: np.hasData ? fmt(np.count) : "—",
+        hint: "MTD",
+        widgetKey: "softdentNewPatientsMTD",
+        tone: widgetTone("softdentNewPatientsMTD"),
+      },
+      {
+        label: "Collections Trend",
+        value: collTotal != null ? `$${Math.round(collTotal).toLocaleString()}` : "—",
+        hint: coll.hasData ? "Daily series" : "—",
+        widgetKey: "softdentCollectionsDaily",
+        tone: widgetTone("softdentCollectionsDaily"),
+      },
+      {
+        label: "Outstanding Claims",
+        value: co.claims && co.claims.length ? String(co.claims.length) : "—",
+        hint:
+          co.claims && co.claims.length
+            ? `$${Math.round(co.claims.reduce((s, c) => s + (parseAmount(c.balance || c.amount) || 0), 0)).toLocaleString()}`
+            : "—",
+        widgetKey: "softdentClaimsOutstanding",
+        tone: widgetTone("softdentClaimsOutstanding"),
+      },
+    ];
+  }
+
+  function softdentAppointmentStats() {
+    const appt = softdentAppointmentsSnapshotData();
+    if (!appt.hasData || !appt.appointments.length) {
+      return [
+        { value: "—", label: "Checked in" },
+        { value: "—", label: "In progress" },
+        { value: "—", label: "Completed" },
+        { value: "—", label: "No-shows" },
+      ];
+    }
+    const counts = { checkedIn: 0, inProgress: 0, completed: 0, noShows: 0 };
+    appt.appointments.forEach((a) => {
+      const st = String(a.status || "").toLowerCase();
+      if (st.includes("complete")) counts.completed += 1;
+      else if (st.includes("progress") || st.includes("seated")) counts.inProgress += 1;
+      else if (st.includes("no") && st.includes("show")) counts.noShows += 1;
+      else counts.checkedIn += 1;
+    });
+    return [
+      { value: fmt(counts.checkedIn), label: "Checked in" },
+      { value: fmt(counts.inProgress), label: "In progress" },
+      { value: fmt(counts.completed), label: "Completed" },
+      { value: fmt(counts.noShows), label: "No-shows" },
+    ];
+  }
+
+  function softdentArAgingHeatmap() {
+    const aging = softdentAgingBars();
+    if (!aging || !aging.labels || !aging.labels.length) return null;
+    return {
+      rowLabels: ["Practice"],
+      colLabels: aging.labels,
+      matrix: [aging.values.map((v) => Math.round(Number(v) || 0))],
+    };
+  }
+
+  function treatmentPlanFunnel() {
+    const practice = practiceStats();
+    const ca = metrics("caseAcceptance");
+    return [
+      { label: "Presented", value: fmt(ca.plansPresented || practice.treatmentPresented) },
+      { label: "Accepted", value: fmt(ca.plansAccepted || practice.caseAccepted) },
+      { label: "Scheduled", value: fmt(ca.plansScheduled || practice.treatmentScheduled) },
+      { label: "Completed", value: fmt(ca.plansCompleted || practice.treatmentCompleted) },
+    ];
+  }
+
+  function hygieneRecallGauge() {
+    const practice = practiceStats();
+    const hr = metrics("hygieneRecall");
+    return { rate: hr.recallRate || practice.recallRate || 72 };
+  }
+
+  function claimsPipelineSummary() {
+    const m = metrics("claimsPipeline");
+    const claims = allClaims();
+    const totalValue = claims.reduce((s, c) => s + (parseAmount(c.amount || c.balance) || 0), 0);
+    const denied = claims.filter((c) => String(c.status || "").toLowerCase().includes("denied")).length;
+    const denialRate = claims.length ? Math.round((denied / claims.length) * 1000) / 10 : 0;
+    const pendingAttachments = claims.filter((c) => String(c.status || "").toLowerCase().includes("attachment")).length;
+    const ages = claims.map((c) => parseAmount(c.ageDays || c.age)).filter((n) => typeof n === "number" && !Number.isNaN(n));
+    const avgAge = ages.length ? Math.round(ages.reduce((s, n) => s + n, 0) / ages.length) : "—";
+    return [
+      {
+        label: "Total Open Value",
+        value: totalValue ? `$${Math.round(totalValue).toLocaleString()}` : fmt(m.totalValue || "—"),
+        halSubpanel: "claimsKpiTotal",
+      },
+      {
+        label: "Average Age",
+        value: avgAge !== "—" ? `${avgAge}d` : "—",
+        halSubpanel: "claimsKpiAge",
+      },
+      {
+        label: "Denial Rate",
+        value: claims.length ? `${denialRate}%` : fmt(m.denialRate || "—"),
+        halSubpanel: "claimsKpiDenied",
+      },
+      {
+        label: "Pending Attachments",
+        value: fmt(pendingAttachments || m.pendingAttachments || "—"),
+        halSubpanel: "claimsKpiAttachments",
+      },
+    ];
+  }
+
+  function narrativeKanban() {
+    const nar = snapshot && snapshot.narratives;
+    const lanes = ["Draft", "Pending Review", "Approved", "Sent to Payer"];
+    const buckets = Object.fromEntries(lanes.map((lane) => [lane, []]));
+    const drafts = Array.isArray(nar?.drafts) ? nar.drafts : [];
+    if (drafts.length) {
+      drafts.forEach((d, i) => {
+        const lane = lanes[Math.min(i, lanes.length - 1)];
+        buckets[lane].push({
+          patient: d.patient || d.title || `Draft ${i + 1}`,
+          procedureCode: d.procedureCode || d.code || "—",
+          payer: d.payer || "—",
+          amount: d.amount || "",
+          title: d.title,
+        });
+      });
+    } else if (nar && nar.latest) {
+      buckets.Draft.push({
+        patient: nar.latest.patient || "Latest draft",
+        procedureCode: nar.latest.procedureCode || "—",
+        payer: nar.latest.payer || "—",
+        amount: "",
+      });
+    }
+    const claim = firstClaim();
+    if (claim && !drafts.length) {
+      buckets.Draft.push({
+        patient: claim.patient || "Claim source",
+        procedureCode: claim.procedure || "—",
+        payer: claim.payer || "—",
+        amount: claim.amount || "",
+      });
+    }
+    return lanes.map((lane) => ({ lane, tone: "muted", items: buckets[lane] }));
+  }
+
   function documentsKpis() {
     const period = metrics("periodCloseAndPosting");
     const ap = metrics("accountsPayableAutomation");
@@ -1907,6 +2071,13 @@ const PageCanvasData = (function () {
     periodSubtitle,
     financialKpis,
     softdentKpis,
+    softdentHeroKpis,
+    softdentAppointmentStats,
+    softdentArAgingHeatmap,
+    treatmentPlanFunnel,
+    hygieneRecallGauge,
+    claimsPipelineSummary,
+    narrativeKanban,
     documentsKpis,
     financialCompare,
     financialPriorCompare,

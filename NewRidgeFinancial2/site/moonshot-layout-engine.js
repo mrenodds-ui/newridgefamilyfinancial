@@ -64,9 +64,6 @@ const MoonshotLayoutEngine = (function () {
     if (pageId === "softdent" && H.renderSoftdentOdbcStrip && D && D.softdentOdbcStatus) {
       body += H.renderSoftdentOdbcStrip(D.softdentOdbcStatus());
     }
-    if (pageId === "narratives" && H.renderNarrativesComposerBody) {
-      return H.renderNarrativesComposerBody(D, H);
-    }
     return `${H.stackOpen(`${pageId}-moonshot`)}${body}</div>`;
   }
 
@@ -170,6 +167,14 @@ const MoonshotLayoutEngine = (function () {
       }
       return built;
     }
+    if (pageId === "softdent" && panel.kpis && panel.kpis.length) {
+      const built = D.softdentHeroKpis ? D.softdentHeroKpis() : D.softdentKpis ? D.softdentKpis() : [];
+      const byKey = Object.fromEntries(built.map((k) => [k.widgetKey, k]));
+      return panel.kpis.map((spec) => {
+        const base = byKey[spec.widgetKey] || { label: spec.label || spec.widgetKey, value: "—", widgetKey: spec.widgetKey };
+        return { ...base, label: spec.label || base.label, widgetKey: spec.widgetKey };
+      });
+    }
     if (pageId === "softdent" && panel.widgetKey) {
       const all = D.softdentKpis ? D.softdentKpis() : [];
       if (panel.widgetKey === "careDeliveryPerformance") {
@@ -189,6 +194,9 @@ const MoonshotLayoutEngine = (function () {
         return [{ label: panel.title || "Outstanding Claims", value: String((co.claims && co.claims.length) || 0), widgetKey: "softdentClaimsOutstanding" }];
       }
     }
+    if (pageId === "claims" && panel.kpis && panel.kpis.length) {
+      return D.claimsPipelineSummary ? D.claimsPipelineSummary() : D.claimsKpis ? D.claimsKpis() : [];
+    }
     if (pageId === "claims" && panel.halSubpanel) {
       const all = D.claimsKpis ? D.claimsKpis() : [];
       const idx = { claimsKpiTotal: 0, claimsKpiValue: 1, claimsKpiDenied: 2 }[panel.halSubpanel];
@@ -201,6 +209,7 @@ const MoonshotLayoutEngine = (function () {
 
   function renderPanelBody(panel, D, H, pageId, accent) {
     const wk = panel.widgetKey;
+    if (panel.type === "kanban" && wk && WIDGET_BODY[wk]) return WIDGET_BODY[wk](D, H, panel, pageId, accent);
     if (wk && WIDGET_BODY[wk]) return WIDGET_BODY[wk](D, H, panel, pageId, accent);
     if (panel.type === "hero-kpi") return "";
     if (panel.halSubpanel && SUBPANEL_BODY[panel.halSubpanel]) {
@@ -384,21 +393,59 @@ const MoonshotLayoutEngine = (function () {
           : H.canvasEmpty("Provider production appears when sd_procedures is loaded."),
       );
     },
-    softdentArAging(D, H) {
+    softdentArAging(D, H, panel) {
+      if (panel && panel.type === "heatmap") {
+        const heat = D && D.softdentArAgingHeatmap ? D.softdentArAgingHeatmap() : null;
+        if (heat && heat.matrix) return H.canvasHeatmap(heat.rowLabels, heat.colLabels, heat.matrix);
+        const aging = D && D.softdentAgingBars ? D.softdentAgingBars() : null;
+        const fallback = H.arHeatmapFromAging ? H.arHeatmapFromAging(aging) : null;
+        return fallback ? H.canvasHeatmap(fallback.rowLabels, fallback.colLabels, fallback.matrix) : H.canvasHeatmapPlaceholder();
+      }
       const aging = D && D.softdentAgingBars ? D.softdentAgingBars() : null;
       return H.chartContainer(
         aging ? H.vBarChart(aging.labels, aging.values, "#60a5fa") : H.canvasEmpty("A/R aging appears when SoftDent A/R export is loaded."),
       );
     },
+    caseAcceptance(D, H, panel) {
+      const ca = H.metricsFromWidget("caseAcceptance");
+      const practice = D && D.practiceStats ? D.practiceStats() : {};
+      const raw = ca.acceptanceRate || ca.rate || practice.caseRate || 0;
+      const pct = typeof raw === "number" ? raw : H.parsePct(raw);
+      return H.canvasGauge(Math.min(100, Math.max(0, pct)), "Acceptance", "var(--accent-cyan, #22d3ee)");
+    },
+    hygieneRecall(D, H, panel) {
+      if (panel && panel.type === "gauge") {
+        const practice = D && D.practiceStats ? D.practiceStats() : {};
+        const hr = H.metricsFromWidget("hygieneRecall");
+        const raw = hr.recallRate || hr.rate || practice.recallRate || 72;
+        const pct = typeof raw === "number" ? raw : H.parsePct(raw);
+        return H.canvasGauge(Math.min(100, Math.max(0, pct)), "Recall", "var(--accent-cyan, #22d3ee)");
+      }
+      const practice = D && D.practiceStats ? D.practiceStats() : {};
+      return `${H.canvasRecallCalendar(practice)}${H.canvasStat(practice.hygieneCompleted || "—", "Hygiene completed", undefined, "hygieneRecall")}`;
+    },
     softdentResponsibility(D, H) {
       const resp = D && D.softdentResponsibilityDonut ? D.softdentResponsibilityDonut() : null;
       return resp ? H.conicDonut(resp.slices, "") : H.canvasEmpty("Insurance vs patient split unavailable.");
     },
-    treatmentPlanSummary(D, H) {
+    treatmentPlanSummary(D, H, panel) {
       const practice = D && D.practiceStats ? D.practiceStats() : {};
+      const ca = H.metricsFromWidget("caseAcceptance");
+      if (panel && panel.type === "funnel") {
+        return H.canvasFunnel([
+          { label: "Presented", value: H.fmtClaim(ca.plansPresented || practice.treatmentPresented || "0") },
+          { label: "Accepted", value: H.fmtClaim(ca.plansAccepted || practice.caseAccepted || "0") },
+          { label: "Scheduled", value: H.fmtClaim(ca.plansScheduled || practice.treatmentScheduled || "0") },
+          { label: "Completed", value: H.fmtClaim(ca.plansCompleted || practice.treatmentCompleted || "0") },
+        ]);
+      }
       return H.canvasStat(practice.treatmentPresented || "—", "Treatment presented", undefined, "treatmentPlanSummary");
     },
-    softdentAppointmentsSnapshot(D, H) {
+    softdentAppointmentsSnapshot(D, H, panel) {
+      if (panel && panel.type === "stat-grid") {
+        const stats = D && D.softdentAppointmentStats ? D.softdentAppointmentStats() : [];
+        return stats.length ? H.canvasStatGrid(stats.map((s) => ({ ...s, widgetKey: "softdentAppointmentsSnapshot" }))) : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
+      }
       const appt = D && D.softdentAppointmentsSnapshotData ? D.softdentAppointmentsSnapshotData() : { appointments: [] };
       return appt.hasData
         ? H.canvasTable(
@@ -407,10 +454,6 @@ const MoonshotLayoutEngine = (function () {
             true,
           )
         : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
-    },
-    hygieneRecall(D, H) {
-      const practice = D && D.practiceStats ? D.practiceStats() : {};
-      return `${H.canvasRecallCalendar(practice)}${H.canvasStat(practice.hygieneCompleted || "—", "Hygiene completed", undefined, "hygieneRecall")}`;
     },
     softdentOperatoryGrid(D, H) {
       return H.canvasOperatoryGrid(D && D.softdentOperatoryGrid ? D.softdentOperatoryGrid() : null);
@@ -582,8 +625,12 @@ const MoonshotLayoutEngine = (function () {
           : [];
       return H.canvasNavPills(staffPages);
     },
-    narrativeWorkflow(D, H) {
-      return H.renderNarrativesComposerBody ? H.renderNarrativesComposerBody(D, H) : H.canvasEmpty("Narrative composer unavailable.");
+    narrativeWorkflow(D, H, panel) {
+      if (panel && panel.type === "kanban") {
+        const lanes = D && D.narrativeKanban ? D.narrativeKanban() : [];
+        return H.canvasKanbanLanes(lanes, "narrativeWorkflow", { narratives: true });
+      }
+      return H.canvasEmpty("Narrative drafts appear when local drafts or claim sources are loaded.");
     },
   };
 

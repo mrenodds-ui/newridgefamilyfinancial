@@ -291,210 +291,125 @@ const MOONSHOT_PAGE_LAYOUTS = {
       ]
     },
     "softdent": {
-      "title": "Clinical & Practice Performance",
+      "title": "Care Delivery & Practice Velocity",
       "shell": "widget-grid",
       "panels": [
         {
-          "id": "sd-kpi-care",
+          "id": "sd-hero-kpis",
           "type": "hero-kpi",
-          "widgetKey": "careDeliveryPerformance",
-          "colSpan": 3,
-          "title": "Care Delivery Summary",
-          "dataBind": "PageCanvasData.softdentKpis()[0]"
+          "colSpan": 12,
+          "dataBind": "PageCanvasData.softdentHeroKpis()",
+          "kpis": [
+            { "widgetKey": "careDeliveryPerformance", "label": "Care Delivery Summary" },
+            { "widgetKey": "softdentNewPatientsMTD", "label": "New Patients (MTD)" },
+            { "widgetKey": "softdentCollectionsDaily", "label": "Collections Trend" },
+            { "widgetKey": "softdentClaimsOutstanding", "label": "Outstanding Claims" }
+          ]
         },
         {
-          "id": "sd-kpi-np",
-          "type": "hero-kpi",
-          "widgetKey": "softdentNewPatientsMTD",
-          "colSpan": 3,
-          "title": "New Patients (MTD)",
-          "dataBind": "PageCanvasData.softdentNewPatientsMtdData()"
+          "id": "sd-op-grid",
+          "type": "custom",
+          "widgetKey": "softdentOperatoryGrid",
+          "colSpan": 8,
+          "title": "Operatory Schedule",
+          "dataBind": "PageCanvasData.softdentOperatoryGrid()"
         },
         {
-          "id": "sd-kpi-ca",
-          "type": "hero-kpi",
+          "id": "sd-appt-snapshot",
+          "type": "stat-grid",
+          "widgetKey": "softdentAppointmentsSnapshot",
+          "colSpan": 4,
+          "title": "Appointments Snapshot",
+          "dataBind": "PageCanvasData.softdentAppointmentStats()"
+        },
+        {
+          "id": "sd-ar-aging",
+          "type": "heatmap",
+          "widgetKey": "softdentArAging",
+          "colSpan": 6,
+          "title": "Accounts Receivable Aging",
+          "dataBind": "PageCanvasData.softdentArAgingHeatmap()"
+        },
+        {
+          "id": "sd-resp-donut",
+          "type": "donut",
+          "widgetKey": "softdentResponsibility",
+          "colSpan": 3,
+          "title": "Insurance vs Patient Balance",
+          "dataBind": "PageCanvasData.softdentResponsibilityDonut()"
+        },
+        {
+          "id": "sd-case-gauge",
+          "type": "gauge",
           "widgetKey": "caseAcceptance",
           "colSpan": 3,
-          "title": "Case Acceptance Rate",
-          "dataBind": "PageCanvasData.softdentKpis()[3]"
-        },
-        {
-          "id": "sd-kpi-claims",
-          "type": "hero-kpi",
-          "widgetKey": "softdentClaimsOutstanding",
-          "colSpan": 3,
-          "title": "Open Claims",
-          "dataBind": "PageCanvasData.claimsOutstandingKpi()"
-        },
-        {
-          "id": "sd-chart-collections",
-          "type": "chart",
-          "widgetKey": "softdentCollectionsDaily",
-          "chartType": "dual",
-          "colSpan": 8,
-          "title": "Collections Trend",
-          "dataBind": "PageCanvasData.collectionsTrendSeries()"
-        },
-        {
-          "id": "sd-chart-providers",
-          "type": "chart",
-          "widgetKey": "softdentProviderProduction",
-          "chartType": "bar",
-          "colSpan": 4,
-          "title": "Provider Production",
-          "dataBind": "PageCanvasData.providerPerformance()"
-        },
-        {
-          "id": "sd-chart-ar",
-          "type": "chart",
-          "widgetKey": "softdentArAging",
-          "chartType": "bar",
-          "colSpan": 6,
-          "title": "A/R Aging",
-          "dataBind": "PageCanvasData.arAgingSeries()"
-        },
-        {
-          "id": "sd-chart-responsibility",
-          "type": "chart",
-          "widgetKey": "softdentResponsibility",
-          "chartType": "donut",
-          "colSpan": 6,
-          "title": "Insurance vs Patient Balance",
-          "dataBind": "PageCanvasData.payerResponsibilitySplit()"
-        },
-        {
-          "id": "sd-funnel-ca",
-          "type": "funnel",
-          "halSubpanel": "caseAcceptanceFunnel",
-          "colSpan": 6,
           "title": "Case Acceptance Rate",
           "dataBind": "PageCanvasData.metrics('caseAcceptance')"
         },
         {
-          "id": "sd-table-tx",
-          "type": "table",
+          "id": "sd-tx-funnel",
+          "type": "funnel",
           "widgetKey": "treatmentPlanSummary",
           "colSpan": 6,
           "title": "Treatment Plans Presented",
-          "dataBind": "PageCanvasData.treatmentPlanSummary()"
+          "dataBind": "PageCanvasData.treatmentPlanFunnel()"
         },
         {
-          "id": "sd-table-appts",
-          "type": "table",
-          "widgetKey": "softdentAppointmentsSnapshot",
-          "colSpan": 6,
-          "title": "Appointments Snapshot",
-          "dataBind": "PageCanvasData.appointmentsSnapshot()"
-        },
-        {
-          "id": "sd-stats-hygiene",
-          "type": "stat-grid",
+          "id": "sd-hyg-gauge",
+          "type": "gauge",
           "widgetKey": "hygieneRecall",
-          "colSpan": 12,
+          "colSpan": 3,
           "title": "Hygiene & Recall",
-          "dataBind": "PageCanvasData.hygieneRecall()"
+          "dataBind": "PageCanvasData.hygieneRecallGauge()"
         },
         {
-          "id": "sd-grid-operatory",
-          "type": "table",
-          "widgetKey": "softdentOperatoryGrid",
-          "colSpan": 12,
-          "title": "Operatory Schedule",
-          "dataBind": "PageCanvasData.operatorySchedule()"
+          "id": "sd-prov-bar",
+          "type": "chart",
+          "widgetKey": "softdentProviderProduction",
+          "colSpan": 3,
+          "title": "Provider Production (Daily)",
+          "dataBind": "PageCanvasData.softdentProviderProductionData()",
+          "chartType": "bar"
         }
       ]
     },
     "narratives": {
-      "title": "Insurance Narratives",
+      "title": "Clinical Documentation & Justification Composer",
       "shell": "widget-grid",
       "panels": [
         {
           "id": "nar-composer",
-          "type": "custom",
+          "type": "kanban",
           "widgetKey": "narrativeWorkflow",
-          "colSpan": 8,
+          "colSpan": 12,
           "title": "Narrative Composer",
-          "dataBind": "PageCanvasData.narrativeWorkflow()"
-        },
-        {
-          "id": "nar-templates",
-          "type": "custom",
-          "halSubpanel": "narrativeTemplates",
-          "colSpan": 4,
-          "title": "Procedure Templates",
-          "dataBind": "PageCanvasData.narrativeTemplates()"
-        },
-        {
-          "id": "nar-history",
-          "type": "table",
-          "halSubpanel": "narrativeHistory",
-          "colSpan": 4,
-          "title": "Draft History",
-          "dataBind": "PageCanvasData.narrativeHistory()"
+          "dataBind": "PageCanvasData.narrativeKanban()"
         }
       ]
     },
     "claims": {
-      "title": "Claims Workbench",
+      "title": "Open Insurance Claims",
       "shell": "widget-grid",
       "panels": [
         {
-          "id": "clm-kpi-1",
+          "id": "clm-analytics",
           "type": "hero-kpi",
-          "halSubpanel": "claimsKpiTotal",
-          "colSpan": 4,
-          "title": "Open Claims",
-          "dataBind": "PageCanvasData.claimsKpis()[0]"
+          "colSpan": 12,
+          "dataBind": "PageCanvasData.claimsPipelineSummary()",
+          "kpis": [
+            { "halSubpanel": "claimsKpiTotal", "label": "Total Open Value" },
+            { "halSubpanel": "claimsKpiAge", "label": "Average Age" },
+            { "halSubpanel": "claimsKpiDenied", "label": "Denial Rate" },
+            { "halSubpanel": "claimsKpiAttachments", "label": "Pending Attachments" }
+          ]
         },
         {
-          "id": "clm-kpi-2",
-          "type": "hero-kpi",
-          "halSubpanel": "claimsKpiValue",
-          "colSpan": 4,
-          "title": "Outstanding Value",
-          "dataBind": "PageCanvasData.claimsKpis()[1]"
-        },
-        {
-          "id": "clm-kpi-3",
-          "type": "hero-kpi",
-          "halSubpanel": "claimsKpiDenied",
-          "colSpan": 4,
-          "title": "Denial Rate",
-          "dataBind": "PageCanvasData.claimsKpis()[2]"
-        },
-        {
-          "id": "clm-kanban",
+          "id": "clm-pipeline",
           "type": "kanban",
           "widgetKey": "claimsPipeline",
-          "colSpan": 8,
+          "colSpan": 12,
           "title": "Open Insurance Claims",
-          "dataBind": "PageCanvasData.claimsPipeline()"
-        },
-        {
-          "id": "clm-vol",
-          "type": "chart",
-          "halSubpanel": "claimsVolumeTrend",
-          "chartType": "bar",
-          "colSpan": 4,
-          "title": "Submission Volume",
-          "dataBind": "PageCanvasData.claimsVolumeTrend()"
-        },
-        {
-          "id": "clm-payers",
-          "type": "chart",
-          "halSubpanel": "claimsPayerBreakdown",
-          "chartType": "donut",
-          "colSpan": 4,
-          "title": "Payer Mix",
-          "dataBind": "PageCanvasData.claimsPayerBreakdown()"
-        },
-        {
-          "id": "clm-sidebar",
-          "type": "custom",
-          "halSubpanel": "claimsSidebar",
-          "colSpan": 4,
-          "title": "Claim detail sidebar",
-          "dataBind": "PageCanvasData.firstClaim()"
+          "dataBind": "PageCanvasData.claimsKanban()"
         }
       ]
     },

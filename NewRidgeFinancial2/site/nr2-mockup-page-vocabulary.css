@@ -1703,6 +1703,41 @@
   }
 }
 
+.app--moonshot-mockup .ms-page .softdent-moonshot .widget-card,
+.app--moonshot-mockup .ms-page .narratives-moonshot .widget-card,
+.app--moonshot-mockup .ms-page .claims-moonshot .widget-card {
+  backdrop-filter: blur(12px);
+}
+
+.app--moonshot-mockup .ms-page .kanban-board--narratives {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-height: 360px;
+}
+
+.app--moonshot-mockup .ms-page .narrative-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.app--moonshot-mockup .ms-page .narrative-card__title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app--moonshot-mockup .ms-page .narrative-card__meta {
+  color: var(--muted, #9ca3af);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.app--moonshot-mockup .ms-page .claims-moonshot .kanban-board {
+  min-height: 420px;
+}
+
 /* Boot / fatal errors — mockup vocabulary (replaces legacy pv-state) */
 .ms-boot-error {
   align-items: center;
