@@ -1547,3 +1547,177 @@
   padding: 1rem;
   min-height: 6rem;
 }
+
+/* Elite mission-control — financial / taxes (no legacy pv-* overlay) */
+.app--moonshot-mockup .ms-page .kpi-hero-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  grid-column: span 12;
+}
+
+.app--moonshot-mockup .ms-page .kpi-hero-tile {
+  background: rgba(20, 20, 24, 0.72);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 14px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.app--moonshot-mockup .ms-page .kpi-hero-tile:hover {
+  border-color: rgba(34, 211, 238, 0.25);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.app--moonshot-mockup .ms-page .kpi-hero-tile .kpi-label {
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.app--moonshot-mockup .ms-page .kpi-hero-tile .kpi-value {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.app--moonshot-mockup .ms-page .kpi-hero-tile .kpi-hint {
+  color: var(--accent-green, #78a86b);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.app--moonshot-mockup .ms-page .nr2-alert-ticker {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: var(--bg-surface);
+}
+
+.app--moonshot-mockup .ms-page .nr2-alert-ticker__track,
+.app--moonshot-mockup .ms-page .nr2-alert-ticker {
+  display: flex;
+  gap: 28px;
+  white-space: nowrap;
+}
+
+.app--moonshot-mockup .ms-page .nr2-alert-ticker__item {
+  animation: ms-elite-ticker 28s linear infinite;
+  font-size: 12px;
+}
+
+@keyframes ms-elite-ticker {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-gauge-svg .ms-elite-gauge-arc {
+  animation: ms-elite-dash-draw 1.2s ease-out forwards;
+}
+
+@keyframes ms-elite-dash-draw {
+  from { stroke-dashoffset: 157; }
+  to { stroke-dashoffset: var(--arc-offset, 40); }
+}
+
+.app--moonshot-mockup .ms-page .chart-container .bar-chart-fill,
+.app--moonshot-mockup .ms-page .vbar-fill {
+  animation: ms-elite-bar-grow 0.8s ease-out forwards;
+  transform-origin: bottom;
+  transform: scaleY(0);
+}
+
+@keyframes ms-elite-bar-grow {
+  to { transform: scaleY(1); }
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-row {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 90px 1fr 64px;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-bar-bg {
+  background: var(--bg-elevated);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-bar-fill {
+  animation: ms-elite-bar-grow-h 0.9s ease-out forwards;
+  border-radius: 999px;
+  height: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  width: var(--w, 50%);
+}
+
+@keyframes ms-elite-bar-grow-h {
+  to { transform: scaleX(1); }
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-num {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  text-align: right;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-stat-tile .kpi-value {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.app--moonshot-mockup .ms-page .ms-elite-dso-gauge .gauge-center {
+  left: 50%;
+  position: absolute;
+  text-align: center;
+  top: 55%;
+  transform: translate(-50%, -50%);
+}
+
+.app--moonshot-mockup .ms-page .financial-moonshot .widget-card,
+.app--moonshot-mockup .ms-page .taxes-moonshot .widget-card {
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 1100px) {
+  .app--moonshot-mockup .ms-page .kpi-hero-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Boot / fatal errors — mockup vocabulary (replaces legacy pv-state) */
+.ms-boot-error {
+  align-items: center;
+  border: 1px dashed rgba(224, 88, 79, 0.35);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  margin: 24px auto;
+  max-width: 560px;
+  padding: 28px 20px;
+  text-align: center;
+}
+.ms-boot-error__title { font-size: 15px; letter-spacing: 0.04em; }
+.ms-boot-error__msg { color: var(--muted, #9ca3af); font-size: 13px; margin: 0; max-width: 420px; }
+.ms-boot-error__list { color: var(--muted, #9ca3af); font-size: 12px; margin: 8px 0 0; max-width: 480px; text-align: left; }
+.nr2-boot-error { margin: 24px auto; max-width: 560px; }
+.sidebar__boot-error { color: var(--muted, #9ca3af); font-size: 12px; padding: 16px; }

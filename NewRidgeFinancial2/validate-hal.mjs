@@ -410,21 +410,21 @@ async function main() {
   execSync("node --check site/app.js", { cwd: __dirname, stdio: "pipe" });
   execSync("node --check site/hal-core.js", { cwd: __dirname, stdio: "pipe" });
   execSync("node --check site/hal-page.js", { cwd: __dirname, stdio: "pipe" });
-  execSync("node --check site/hal-page-schema.js", { cwd: __dirname, stdio: "pipe" });
+  execSync("node --check site/moonshot-page-registry.js", { cwd: __dirname, stdio: "pipe" });
   execSync("node --check site/hal-agent-loop.js", { cwd: __dirname, stdio: "pipe" });
   passed++;
 
   // HAL page surfaces required manager signals (no backend, local data only)
   require(join(siteDir, "icons.js"));
   globalThis.AppIcons = require(join(siteDir, "icons.js"));
-  require(join(siteDir, "page-schema.js"));
-  require(join(siteDir, "hal-page-schema.js"));
+  require(join(siteDir, "moonshot-page-layouts.js"));
+  require(join(siteDir, "moonshot-page-registry.js"));
   require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
   require(join(siteDir, "hal-page-canvas.js"));
   require(join(siteDir, "components.js"));
   require(join(siteDir, "hal-pilot-widgets.js"));
   require(join(siteDir, "hal-page-widgets.js"));
-  require(join(siteDir, "page-chrome.js"));
+  require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
   require(join(siteDir, "page-views.js"));
   const HalPageMod = require(join(siteDir, "hal-page.js"));
   let halHtml = "";
@@ -497,10 +497,10 @@ async function main() {
     },
     sidenotesHubPath: null,
   });
-  assert(halHtml.includes("STAFF NOTES"), "HAL page must render the staff notes card (not SideNotesIM on financial app)");
+  assert(!halHtml.includes("STAFF NOTES"), "HAL page must not render the staff notes card");
   assert(!halHtml.includes("SIDENOTESIM MONITOR"), "HAL financial app must not render SideNotesIM live monitor");
   assert(!halHtml.includes("SIDENOTES PROGRAM"), "HAL financial app must not render external SideNotes program card");
-  assert(halHtml.includes("data-hal-surf-nav=\"sidenotes\""), "HAL page must wire staff notes work surface navigation");
+  assert(!halHtml.includes('data-panel="sidenotes"'), "HAL page must not render sidenotes panel");
   assert(halHtml.includes("data-hal-surf-open="), "HAL page must wire work surface open chevrons");
   assert(
     halHtml.includes("widget-mosaic-tile") || halHtml.includes("widget-card span-1") || halHtml.includes('class="widget-card span-1"'),
@@ -549,7 +549,7 @@ async function main() {
   assert(halHtml.includes('id="hpAskInput"'), "HAL page must keep Ask HAL chat input");
   assert(halHtml.includes("IMPORT & SOURCE HEALTH"), "HAL page must render import health panel");
   assert(!halHtml.includes("Room 4"), "HAL financial app must not show SideNotesIM sender feed");
-  assert(halHtml.includes("LOCAL NOTES"), "HAL page must render the local notes section");
+  assert(!halHtml.includes("LOCAL NOTES"), "HAL page must not render the local notes section");
   assert(halHtml.includes("PROGRAM POSTURE"), "HAL page must surface program posture");
   assert(halHtml.includes("TRUST & CONSENT"), "HAL page must surface consent policy");
   assert(halHtml.includes("BLOCKED"), "HAL page must surface blocked actions");
@@ -584,16 +584,19 @@ async function main() {
   assert(halModels.readinessDisplay.configuredModels.helper.model === "hal-helper:14b", "helper model must use the GPU 14B helper lane");
   assert(halHtml.includes("hal-chat:8b"), "HAL page must show GPU 8B chat model inventory");
   assert(halHtml.includes("hal-helper:14b"), "HAL page must show GPU 14B helper model inventory");
-  assert(halHtml.includes("mistral-small3.1:24b-fast"), "HAL page must show on-demand 24B reasoning model inventory");
-  assert(halHtml.includes("qwen3:30b"), "HAL page must show escalation model inventory");
+  assert(
+    halHtml.includes(halModels.readinessDisplay.configuredModels.reasoning.model),
+    "HAL page must show on-demand reasoning model inventory",
+  );
+  assert(halHtml.includes("hal-escalate:30b"), "HAL page must show escalation model inventory");
   assert(halModels.readinessDisplay.gpu && halModels.readinessDisplay.gpu.verified === true, "GPU must be marked verified in readiness display");
-  assert(/Radeon RX 9060 XT|ROCm/i.test(halHtml), "HAL page must show the verified GPU device");
+  assert(/Radeon RX 9060 XT|R9700|ROCm/i.test(halHtml), "HAL page must show the verified GPU device");
   assert(/sensitive raw data|SoftDent|QuickBooks/i.test(halHtml), "HAL page must show sensitive-data no-egress policy");
   assert(HalCore.laneReady(halModels, "chat8b"), "chat lane must be execution-ready on loopback");
   const chatRuntime = HalCore.laneRuntime(halModels, "chat8b");
   assert(chatRuntime && chatRuntime.think === false, "chat lane must disable thinking tokens");
   assert(chatRuntime.options && chatRuntime.options.num_predict === 1536, "chat lane token cap must match hal-models.json localModel");
-  assert(chatRuntime.options.num_ctx === 4096, "chat lane context must match hal-models.json localModel");
+  assert(chatRuntime.options.num_ctx === 3072, "chat lane context must match hal-models.json localModel");
   assert(
     HalCore.buildFastChatSystemPrompt(halData, null).includes("PROGRAMMING:"),
     "fast chat prompt must include Auto agent programming contract",
@@ -627,15 +630,15 @@ async function main() {
   });
   assert(typeof halHtml === "string" && halHtml.length > 0, "HAL page must render with empty program context");
   assert(halHtml.includes("HAL STATUS"), "HAL page empty render must still show status toolbar");
-  const PageChromeMod = require(join(siteDir, "page-chrome.js"));
-  const emptyShell = PageChromeMod.canvasShell({ pageId: "financial", halData: {}, halWidgetFeed: null });
+  const MockupChrome = require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
+  const emptyShell = MockupChrome.canvasShell({ pageId: "financial", halData: {}, halWidgetFeed: null });
   assert(
     emptyShell.includes("ms-page-chrome") || emptyShell.includes("top-header"),
     "page chrome must render financial mockup shell with empty feed",
   );
-  const missingShell = PageChromeMod.canvasShell({ pageId: "not-a-real-page", halData: {} });
+  const missingShell = MockupChrome.canvasShell({ pageId: "not-a-real-page", halData: {} });
   assert(
-    missingShell.includes("ms-page-chrome--missing") || missingShell.includes("pv-canvas-shell--missing"),
+    missingShell.includes("ms-page-chrome--missing"),
     "page chrome must degrade when schema is missing",
   );
   passed++;
@@ -865,7 +868,7 @@ async function main() {
   const pendingFinancialKpis = PageCanvasData.financialKpis();
   const pendingSoftdentKpis = PageCanvasData.softdentKpis();
   assert(
-    pendingFinancialKpis.some((row) => row.label === "SoftDent collections" && row.value === "Pending export"),
+    pendingFinancialKpis.some((row) => row.label === "Collections MTD" && row.value === "Pending export"),
     "financial page KPIs must label pending collections as Pending export",
   );
   assert(

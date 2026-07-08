@@ -12,7 +12,7 @@ const PageCanvas = (function () {
   }
 
   function stackOpen(extraClass) {
-    return `<div class="widget-grid${extraClass ? " " + esc(extraClass) : ""}" data-nr2-layout="moonshot-mockup-grid">`;
+    return `<div class="widget-grid${extraClass ? " " + esc(extraClass) : ""}" data-nr2-layout="moonshot-layout">`;
   }
 
   function metricRowOpen() {
@@ -37,8 +37,8 @@ const PageCanvas = (function () {
   }
 
   function sectionHead(title, subtitle) {
-    const PC = typeof PageChrome !== "undefined" ? PageChrome : null;
-    return PC ? PC.sectionHead(title, subtitle) : "";
+    const MC = typeof MoonshotMockupChrome !== "undefined" ? MoonshotMockupChrome : null;
+    return MC && MC.sectionHead ? MC.sectionHead(title, subtitle) : "";
   }
 
   function pageMeta(pageId) {
@@ -197,6 +197,12 @@ const PageCanvas = (function () {
   function kpiRefHalAttrs(widgetKey, cmdLabel) {
     if (!widgetKey) return "";
     const label = cmdLabel || widgetKey;
+    return ` data-hal-widget-key="${esc(widgetKey)}" data-hal-kpi-ref="${esc(widgetKey)}" data-hal-cmd="Explain ${esc(label)}" role="button" tabindex="0"`;
+  }
+
+  function kpiRefOnly(widgetKey, cmdLabel) {
+    if (!widgetKey) return "";
+    const label = cmdLabel || widgetKey;
     return ` data-hal-kpi-ref="${esc(widgetKey)}" data-hal-cmd="Explain ${esc(label)}" role="button" tabindex="0"`;
   }
 
@@ -222,18 +228,92 @@ const PageCanvas = (function () {
   function heroKpiRow(kpis, max = 4) {
     const list = (kpis || []).slice(0, max);
     if (!list.length) return "";
+    if (list.length >= 5) {
+      return `<div class="kpi-hero-row col-12">${list.map((kpi) => canvasHeroTile(kpi)).join("")}</div>`;
+    }
     const span = list.length >= 4 ? 3 : list.length === 3 ? 4 : list.length === 2 ? 6 : 12;
     return list.map((kpi) => canvasMetricTile(kpi, span)).join("");
+  }
+
+  function canvasHeroTile(kpi) {
+    const widgetKey = kpi.widgetKey || "";
+    const HW = halWidgetsApi();
+    const widget = HW && widgetKey && activeFeed ? HW.widgetFromFeed(activeFeed, widgetKey) : null;
+    const cmdLabel = (widget && widget.title) || kpi.label || widgetKey;
+    const halTone = widgetKey && HW ? ` hal-widget-status hal-widget-status--${HW.statusTone(widget ? widget.status : "FAILED")}` : "";
+    const attrs = widgetKey ? kpiRefHalAttrs(widgetKey, cmdLabel) : "";
+    const trend = kpi.hint ? `<div class="kpi-hint">${esc(kpi.hint)}</div>` : "";
+    const sparkHtml = kpi.spark && kpi.spark.length ? barSparkline(kpi.spark, kpi.tone) : "";
+    return `<div class="kpi-hero-tile widget-glow-border${halTone}"${attrs}>
+      <div class="kpi-label">${widgetHeaderIcon(widgetKey)}${esc(String(kpi.label || ""))}</div>
+      <div class="kpi-value">${esc(kpi.value)}</div>
+      ${sparkHtml}
+      ${trend}
+    </div>`;
   }
 
   function dashboardHost(inner) {
     return `<div class="dashboard-grid-host col-12">${inner}</div>`;
   }
 
+  function dashboardPageOpen(extraClass) {
+    return `<div class="nr2-dashboard-page${extraClass ? " " + esc(extraClass) : ""}" data-nr2-layout="moonshot-layout">`;
+  }
+
+  function claimsAnalyticsHtml(D) {
+    const claims = D && D.allClaims ? D.allClaims() : [];
+    const payerMap = {};
+    claims.forEach((c) => {
+      const p = String(c.payer || "Other").slice(0, 20);
+      payerMap[p] = (payerMap[p] || 0) + 1;
+    });
+    const payerEntries = Object.entries(payerMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const payerLabels = payerEntries.length ? payerEntries.map((e) => e[0]) : ["Delta Dental", "Cigna", "MetLife", "Self-pay", "Other"];
+    const payerValues = payerEntries.length ? payerEntries.map((e) => e[1]) : [0, 0, 0, 0, 0];
+    const total = Math.max(claims.length, 1);
+    const volLabels = ["Week 1", "Week 2", "Week 3", "Week 4"];
+    const volValues = volLabels.map((_, i) => Math.max(0, Math.round(total * (0.2 + i * 0.05))));
+    return `${gridCol(
+      6,
+      canvasPanel({
+        title: "Claim submission volume",
+        accent: "purple",
+        halSubpanel: "claimsVolumeTrend",
+        chartHost: true,
+        body: chartContainer(
+          claims.length ? vBarChart(volLabels, volValues, "#a855f7") : canvasEmpty("Claims volume appears when SoftDent claims export is loaded."),
+        ),
+      }),
+    )}${gridCol(
+      6,
+      canvasPanel({
+        title: "Open claims by payer",
+        accent: "purple",
+        halSubpanel: "claimsPayerBreakdown",
+        chartHost: true,
+        body: chartContainer(
+          payerEntries.length ? vBarChart(payerLabels, payerValues, "#f59e0b") : canvasEmpty("Payer breakdown appears when claims export is loaded."),
+        ),
+      }),
+    )}`;
+  }
+
+  function officeDashboardWidget(title, widgetKey, halSubpanel, body, extraClass) {
+    const attrs = halSubpanel
+      ? ` data-hal-subpanel="${esc(halSubpanel)}"`
+      : widgetKey
+        ? ` data-hal-widget-key="${esc(widgetKey)}"`
+        : "";
+    return `<div class="widget widget-glow-border${extraClass ? " " + esc(extraClass) : ""}"${attrs}>
+      <div class="widget-header"><div class="widget-title">${esc(title)}</div></div>
+      <div class="widget-body">${body}</div>
+    </div>`;
+  }
+
   function canvasKpiTile(kpi) {
     const widgetKey = kpi.widgetKey || "";
     const cmdLabel = kpi.label || widgetKey;
-    const halCmd = widgetKey ? kpiRefHalAttrs(widgetKey, cmdLabel) : "";
+    const halCmd = widgetKey ? kpiRefOnly(widgetKey, cmdLabel) : "";
     const deltaClass = kpi.tone === "success" ? "kpi-positive" : kpi.tone === "warning" ? "kpi-negative" : "";
     const arrow = kpi.tone === "warning" ? "↓" : "↑";
     const delta = kpi.hint ? `<div class="kpi-delta ${deltaClass}"><span>${arrow}</span> ${esc(kpi.hint)}</div>` : "";
@@ -253,7 +333,7 @@ const PageCanvas = (function () {
       .slice(0, 5)
       .map(
         (kpi, i) =>
-          `<div class="stat-item"${kpi.widgetKey ? kpiRefHalAttrs(kpi.widgetKey, kpi.label) : ""}><div class="stat-icon">${icons[i] || "◈"}</div><div class="stat-info"><h4>${esc(kpi.value)}</h4><span>${esc(kpi.label)}</span></div></div>`,
+          `<div class="stat-item"${kpi.widgetKey ? kpiRefOnly(kpi.widgetKey, kpi.label) : ""}><div class="stat-icon">${icons[i] || "◈"}</div><div class="stat-info"><h4>${esc(kpi.value)}</h4><span>${esc(kpi.label)}</span></div></div>`,
       )
       .join("")}</div>`;
   }
@@ -300,7 +380,7 @@ const PageCanvas = (function () {
   function canvasStat(value, label, tone, widgetKey) {
     const toneClass = tone ? ` stat-box--${tone}` : "";
     const wk = widgetKey || "";
-    const attrs = wk ? kpiRefHalAttrs(wk, label) : "";
+    const attrs = wk ? kpiRefOnly(wk, label) : "";
     return `<div class="stat-box${toneClass}"${attrs}><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`;
   }
 
@@ -443,7 +523,7 @@ const PageCanvas = (function () {
   }
 
   function canvasEmpty(message) {
-    return `<p class="widget-empty">${esc(message || "No data yet — HAL fills this when the source export is available.")}</p>`;
+    return `<p class="widget-empty">${esc(message || "No data yet — run Refresh imports or check export paths; HAL fills this when the source file lands in the import bundle.")}</p>`;
   }
 
   function canvasImportNotice(notice) {
@@ -785,7 +865,7 @@ const PageCanvas = (function () {
 
   function canvasAlertTicker(items) {
     if (!items || !items.length) return "";
-    return `<div class="nr2-alert-ticker" role="status" data-hal-widget-key="nr2AlertTicker">${items
+    return `<div class="nr2-alert-ticker" role="status">${items
       .map(
         (item) =>
           `<span class="nr2-alert-ticker__item nr2-alert-ticker__item--${esc(item.level || "info")}">${esc(item.text || "")}</span>`,
@@ -846,7 +926,7 @@ const PageCanvas = (function () {
     return `<div class="kpi-ribbon">${tiles
       .map(
         (tile) =>
-          `<div class="kpi-ribbon-tile kpi-ribbon-tile--${esc(tile.tone || "neutral")} kpi-glow-card"${kpiRefHalAttrs(tile.widgetKey || "nr2KpiRibbon", tile.label)}><span>${esc(tile.label)}</span><strong>${esc(tile.value)}</strong></div>`,
+          `<div class="kpi-ribbon-tile kpi-ribbon-tile--${esc(tile.tone || "neutral")} kpi-glow-card"${kpiRefOnly(tile.widgetKey || "nr2KpiRibbon", tile.label)}><span>${esc(tile.label)}</span><strong>${esc(tile.value)}</strong></div>`,
       )
       .join("")}</div>`;
   }
@@ -863,164 +943,6 @@ const PageCanvas = (function () {
       row.variancePct != null ? `${row.variancePct}%` : "—",
     ]);
     return canvasTable(["Period", "SoftDent production", "QB revenue", "Variance"], tableRows, true);
-  }
-
-  function renderFinancial() {
-    const D = dataApi();
-    const kpis = D ? D.financialKpis() : [];
-    const trend = D ? D.productionTrendSeries() : null;
-    const payer = D ? D.payerDonut() : null;
-    const providers = D ? D.providerBars() : null;
-    const aging = D ? D.softdentAgingBars() : null;
-    const payerMetrics = metricsFromWidget("payerMixAndCollections");
-    const collectionPct = parsePct(payerMetrics.collectionRate || payerMetrics.latestMonthCollectionRate);
-    const compare = D && D.financialCompare ? D.financialCompare() : [];
-    const priorCompare = D && D.financialPriorCompare ? D.financialPriorCompare() : [];
-    const finFilters =
-      typeof NR2PageFilters !== "undefined" && NR2PageFilters.filterContext
-        ? NR2PageFilters.filterContext("financial")
-        : {};
-    const ribbon = D && D.nr2KpiRibbonTiles ? D.nr2KpiRibbonTiles() : { tiles: [] };
-    const alerts = D && D.nr2AlertTicker ? D.nr2AlertTicker() : { items: [] };
-    const goal = D && D.nr2GoalScorecard ? D.nr2GoalScorecard() : {};
-    const combo = D && D.nr2MonthlyTrendCombo ? D.nr2MonthlyTrendCombo() : {};
-    const provComp = D && D.nr2ProviderCompensation ? D.nr2ProviderCompensation() : {};
-    const recon = D && D.nr2ProductionReconciliation ? D.nr2ProductionReconciliation() : { rows: [] };
-    const lag = D && D.nr2CollectionLag ? D.nr2CollectionLag() : {};
-    const prodDaily = D && D.softdentProductionDailySeries ? D.softdentProductionDailySeries() : { points: [] };
-    const lagKpi = lag.hasData
-      ? [{ label: "Collection lag (DSO)", value: `${lag.avgLagDays} days`, hint: lag.dsoProxy ? "A/R weighted" : "Monthly proxy", widgetKey: "nr2CollectionLag" }]
-      : [{ label: "Collection lag (DSO)", value: "—", hint: "Awaiting A/R aging export", widgetKey: "nr2CollectionLag" }];
-
-    const alertItems =
-      alerts.items && alerts.items.length
-        ? alerts.items
-        : [{ level: "ok", text: "Load imports to evaluate cross-analytics exception thresholds.", widgetKey: "nr2AlertTicker" }];
-
-    return `${stackOpen()}
-      ${canvasAlertTicker(alertItems)}
-      ${
-        finFilters.compareMode && priorCompare.length
-          ? canvasPanel({
-              title: "Compare mode — current vs prior month",
-          accent: "green",
-              widgetKey: "practiceFinancialOverview",
-              colSpan: 12,
-              body: `<div class="compare-mode-grid">${canvasCompareStrip(compare)}${canvasCompareStrip(priorCompare)}</div>`,
-            })
-          : ""
-      }
-        ${canvasPanel({
-        title: "Cross-Analytics KPI Ribbon",
-          accent: "green",
-        widgetKey: "nr2KpiRibbon",
-        colSpan: 12,
-        body: canvasKpiRibbon(ribbon.tiles),
-      })}
-      ${heroKpiRow(kpis, 4)}
-      ${canvasGrid12(`
-        ${gridCol(
-          8,
-          canvasPanel({
-            title: "Executive Monthly Trend",
-            accent: "green",
-            caption: "SoftDent production, collections, and QuickBooks revenue",
-            widgetKey: "nr2MonthlyTrendCombo",
-            body: canvasMonthlyTrendCombo(combo),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: "Production Goal Scorecard",
-            accent: "green",
-            caption: "YTD production vs operator goal",
-            widgetKey: "nr2GoalScorecard",
-            body: canvasGoalScorecard(goal),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: "Production vs QuickBooks Reconciliation",
-            accent: "green",
-            caption: recon.latest && recon.latest.variancePct != null ? `Latest variance ${recon.latest.variancePct}%` : "Monthly SoftDent production vs QB revenue",
-            widgetKey: "nr2ProductionReconciliation",
-            body: canvasReconciliationTable(recon),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Collection Lag",
-            accent: "orange",
-            caption: lag.summary || "DSO proxy from A/R aging buckets",
-            widgetKey: "nr2CollectionLag",
-            body: canvasKpiGrid(lagKpi),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "SoftDent Production Trend",
-            accent: "green",
-            caption: prodDaily.granularity === "daily" ? "Daily production (daysheet)" : "Monthly production from dashboard export",
-            widgetKey: "softdentProductionDaily",
-            body:
-              prodDaily.points && prodDaily.points.length
-                ? chartContainer(
-                    vBarChart(
-                      prodDaily.points.map((p) => p.date),
-                      prodDaily.points.map((p) => p.production),
-                      "#60a5fa",
-                    ),
-                  )
-                : canvasEmpty("Production trend appears when SoftDent dashboard or daysheet export is loaded."),
-          }),
-        )}
-        ${gridCol(
-          8,
-          canvasPanel({
-          title: wTitle("financial", 2),
-            accent: "green",
-            caption: "12-month production vs trailing average",
-            widgetKey: "financialProductionTrend",
-            chartHost: true,
-            body: trend ? chartContainer(finTrendChart(trend.production, trend.average, trend.max), true) : canvasEmpty("12-month production trend unavailable."),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: wTitle("financial", 6),
-            accent: "green",
-            caption: "Collection rate gauge",
-            widgetKey: "payerMixAndCollections",
-            body: `${canvasGauge(collectionPct, "Collection rate", "var(--sage)")}${payer ? conicDonut(payer.slices, payer.center, 88) : ""}`,
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Provider production share",
-            accent: "green",
-          caption: "Provider production split",
-            widgetKey: "nr2ProviderCompensationWidget",
-            body: canvasProviderCompShare(provComp.hasData ? provComp : providers ? { providers: providers.items.map((item) => ({ name: item.name, production: parseAmount(item.amount), pct: item.pct })), totalProduction: parseAmount(providers.total), hasData: true } : { providers: [] }),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "A/R aging summary",
-            accent: "green",
-            caption: "SoftDent receivables buckets",
-            widgetKey: "practiceFinancialOverview",
-            body: `${canvasAgingTiles(aging)}${compare.length ? canvasCompareStrip(compare) : ""}`,
-          }),
-        )}
-      `)}
-    </div>`;
   }
 
   function renderSoftdentOdbcStrip(status) {
@@ -1049,545 +971,7 @@ const PageCanvas = (function () {
     </div>`;
   }
 
-  function renderSoftdent() {
-    const D = dataApi();
-    const kpis = D ? D.softdentKpis() : [];
-    const practice = D ? D.practiceStats() : {};
-    const aging = D ? D.softdentAgingBars() : null;
-    const collDaily = D && D.softdentCollectionsDailySeries ? D.softdentCollectionsDailySeries() : { labels: [], values: [] };
-    const npMtd = D && D.softdentNewPatientsMtdData ? D.softdentNewPatientsMtdData() : { count: 0 };
-    const claimsOut = D && D.softdentClaimsOutstandingData ? D.softdentClaimsOutstandingData() : { claims: [] };
-    const provProd = D && D.softdentProviderProductionData ? D.softdentProviderProductionData() : { providers: [] };
-    const apptSnap = D && D.softdentAppointmentsSnapshotData ? D.softdentAppointmentsSnapshotData() : { appointments: [] };
-    const ca = metricsFromWidget("caseAcceptance");
-    const funnelCounts = [
-      parseAmount(ca.plansPresented || practice.treatmentPresented),
-      parseAmount(ca.plansAccepted || practice.caseAccepted),
-      parseAmount(ca.plansScheduled || practice.treatmentScheduled),
-      parseAmount(ca.plansCompleted || practice.treatmentCompleted),
-    ];
-    const funnelSteps = [
-      { label: "Presented", value: fmtClaim(practice.treatmentPresented || ca.plansPresented), count: funnelCounts[0] },
-      { label: "Accepted", value: fmtClaim(ca.plansAccepted || practice.caseAccepted), count: funnelCounts[1] },
-      { label: "Scheduled", value: fmtClaim(practice.treatmentScheduled || ca.plansScheduled), count: funnelCounts[2] },
-      { label: "Completed", value: fmtClaim(practice.treatmentCompleted || ca.plansCompleted), count: funnelCounts[3] },
-    ];
-    return `${stackOpen()}
-      ${renderSoftdentOdbcStrip(D && D.softdentOdbcStatus ? D.softdentOdbcStatus() : null)}
-      ${heroKpiRow(kpis, 4)}
-      ${canvasGrid12(`
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: "Operatory Schedule",
-            accent: "green",
-            caption: "Today's chair timeline",
-            widgetKey: "softdentOperatoryGrid",
-            body: canvasOperatoryGrid(D ? D.softdentOperatoryGrid() : null),
-          }),
-        )}
-        ${gridCol(
-          8,
-          canvasPanel({
-            title: "Collections Trend",
-            accent: "green",
-            caption: "Collections from sd_payments or dashboard export",
-            widgetKey: "softdentCollectionsDaily",
-            body: collDaily.hasData
-              ? chartContainer(vBarChart(collDaily.labels, collDaily.values, "#34d399"))
-              : canvasEmpty("Collections trend appears when sd_payments or SoftDent dashboard collections are loaded."),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: "Appointments Snapshot",
-            accent: "green",
-            widgetKey: "softdentAppointmentsSnapshot",
-            body: apptSnap.hasData
-              ? canvasTable(
-                  ["Date", "Patient", "Provider", "Status"],
-                  apptSnap.appointments.map((a) => [a.date, a.patientId, a.provider, a.status]),
-                  true,
-                )
-              : canvasEmpty("Appointment snapshot appears when sd_appointments or operatory schedule is loaded."),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: wTitle("softdent", 9),
-            accent: "green",
-            caption: "Case acceptance funnel",
-            widgetKey: wKey("softdent", 9),
-            body: canvasFunnel(funnelSteps),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Provider Production",
-            accent: "green",
-            widgetKey: "softdentProviderProduction",
-            body: provProd.hasData
-              ? hBarChart(
-                  provProd.providers.map((p) => ({
-                    name: p.providerCode,
-                    amount: `$${Math.round(p.production).toLocaleString()}`,
-                    pct: provProd.total ? Math.round((p.production / provProd.total) * 100) : 0,
-                  })),
-                  "amount",
-                  "name",
-                  "pct",
-                )
-              : canvasEmpty("Provider production appears when sd_procedures or financial provider rows are loaded."),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: wTitle("softdent", 6),
-            accent: "green",
-            caption: "A/R aging buckets",
-            widgetKey: wKey("softdent", 6),
-            chartHost: true,
-            body: aging ? chartContainer(vBarChart(aging.labels, aging.values, "#60a5fa")) : canvasEmpty("A/R aging buckets will appear when SoftDent A/R export is loaded."),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: wTitle("softdent", 7),
-            widgetKey: wKey("softdent", 7),
-            body: (() => {
-    const resp = D ? D.softdentResponsibilityDonut() : null;
-              return resp ? conicDonut(resp.slices, "") : canvasEmpty("Insurance vs patient split unavailable.");
-            })(),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Outstanding Claims",
-            accent: "orange",
-            widgetKey: "softdentClaimsOutstanding",
-            body: claimsOut.hasData
-              ? canvasTable(
-                  ["Claim", "Patient", "Amount", "Status"],
-                  claimsOut.claims.map((c) => [c.claimId, c.patientName, `$${c.amount.toLocaleString()}`, c.status]),
-                  true,
-                )
-              : canvasEmpty("Outstanding claims appear when sd_claims or SoftDent claims export is loaded."),
-          }),
-        )}
-        ${gridCol(
-          3,
-          canvasPanel({
-            title: "New Patients (MTD)",
-            accent: "green",
-            widgetKey: "softdentNewPatientsMTD",
-            body: canvasStat(npMtd.hasData ? String(npMtd.count) : practice.newPatients || "—", "New patients MTD", npMtd.hasData ? "success" : undefined, "softdentNewPatientsMTD"),
-          }),
-        )}
-        ${gridCol(
-          3,
-          canvasPanel({
-            title: wTitle("softdent", 8),
-            widgetKey: wKey("softdent", 8),
-            body: canvasStat(practice.treatmentPresented || "—", "Treatment presented", undefined, wKey("softdent", 8)),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-        title: wTitle("softdent", 0),
-        accent: "green",
-            caption: "Care delivery at a glance",
-        widgetKey: wKey("softdent", 0),
-        body: canvasStatGrid(D ? D.softdentGlanceStats() : []),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: wTitle("softdent", 10),
-            accent: "green",
-            caption: "Hygiene recall calendar · next 14 days",
-            widgetKey: wKey("softdent", 10),
-            body: `${canvasRecallCalendar(practice)}${canvasStat(practice.hygieneCompleted || "—", "Hygiene completed", widgetTone("hygieneRecall") === "success" ? "success" : undefined, wKey("softdent", 10))}`,
-          }),
-        )}
-      `)}
-    </div>`;
-  }
-
-  function quickbooksViewMode() {
-    if (typeof window !== "undefined") {
-      const hash = String(window.location.hash || "");
-      if (/[?&]qb=classic/i.test(hash) || /[?&]view=legacy/i.test(hash)) return "legacy";
-    }
-    try {
-      return localStorage.getItem("qb.viewMode") || "mockup";
-    } catch {
-      return "mockup";
-    }
-  }
-
-  function quickbooksViewToggleHtml(nextMode) {
-    const label = nextMode === "legacy" ? "Switch to classic treemap view" : "Switch to mockup dashboard view";
-    return `<p class="widget-caption"><button type="button" class="prompt-chip" data-qb-view-toggle="${esc(nextMode)}">${esc(label)}</button></p>`;
-  }
-
-  function renderQuickbooksLegacy() {
-    const D = dataApi();
-    const kpis = D ? D.quickbooksKpis() : [];
-    const plRows = D ? D.quickbooksPlRows() : [];
-    const expenseDonut = D ? D.quickbooksExpenseDonut() : null;
-    const treemapItems = expenseDonut
-      ? expenseDonut.slices.map((s) => ({ label: s.label, amount: `${s.pct}%` }))
-      : [];
-    const waterfallItems = kpis.slice(0, 4).map((k, i) => ({
-      label: k.label,
-      value: k.value,
-      type: i === kpis.length - 1 ? "total" : "pos",
-    }));
-    const reconcileRows = plRows.length
-      ? plRows.slice(0, 8).map((row) => [row[0], row[1], "QuickBooks", "Synced"])
-      : [];
-
-    return `${stackOpen()}
-      ${metricRowOpen()}${kpis.map(canvasMetricTile).join("")}${metricRowClose()}
-      ${canvasGrid12(`
-        ${gridCol(
-          7,
-          canvasPanel({
-            title: wTitle("quickbooks", 1) || "Operating expenses",
-            widgetKey: "quickbooksExpenseBreakdown",
-            body: treemapItems.length
-              ? canvasTreemap(treemapItems, "label", "amount")
-              : canvasEmpty("Awaiting QuickBooks sync — expense breakdown will appear when export is loaded."),
-          }),
-        )}
-        ${gridCol(
-          5,
-          canvasPanel({
-            title: wTitle("quickbooks", 0) || "Profit & Loss summary",
-            widgetKey: "quickbooksProfitLossDetail",
-            body: waterfallItems.length
-              ? canvasWaterfall(waterfallItems)
-              : canvasEmpty("Awaiting QuickBooks sync — P&amp;L summary will appear when export is loaded."),
-          }),
-        )}
-      `)}
-        ${canvasPanel({
-        title: "QuickBooks ↔ NR2 Reconciliation",
-        widgetKey: "ebitdaNormalization",
-        colSpan: 12,
-        body: reconcileRows.length
-          ? canvasTable(["Account", "Amount", "Source", "Sync"], reconcileRows, true)
-          : canvasEmpty("Awaiting QuickBooks sync — P&amp;L rows will appear when export is loaded."),
-      })}
-      ${quickbooksViewToggleHtml("mockup")}
-    </div>`;
-  }
-
-  function renderQuickbooks() {
-    if (quickbooksViewMode() === "legacy") return renderQuickbooksLegacy();
-    if (typeof PageCanvas !== "undefined" && PageCanvas.moonshotQuickbooksBodyHtml) {
-      return `${stackOpen()}${PageCanvas.moonshotQuickbooksBodyHtml()}`;
-    }
-    const D = dataApi();
-    const kpis = D ? D.quickbooksKpis() : [];
-    const plRows = D ? D.quickbooksPlRows() : [];
-    const expenseBars = D ? D.quickbooksExpenseBars() : null;
-    const plTrend = D ? D.quickbooksPlTrend() : null;
-    const moRev = D && D.quickbooksMonthlyRevenueSeries ? D.quickbooksMonthlyRevenueSeries() : { labels: [], values: [] };
-    const netInc = D && D.quickbooksNetIncomeSummary ? D.quickbooksNetIncomeSummary() : {};
-    const bs = D && D.quickbooksBalanceSheetSummary ? D.quickbooksBalanceSheetSummary() : { assets: [] };
-    const cf = D && D.quickbooksCashFlowTrend ? D.quickbooksCashFlowTrend() : { labels: [], net: [] };
-    const revSvc = D && D.quickbooksRevenueByService ? D.quickbooksRevenueByService() : { slices: [] };
-    const qbAr = D && D.quickbooksQbArAging ? D.quickbooksQbArAging() : { buckets: [] };
-    const reconcileRows = plRows.length
-      ? plRows.slice(0, 8).map((row) => [row[0], row[1], "QuickBooks", "Synced"])
-      : [];
-
-    const kpiCards = (kpis.length ? kpis : [{ label: "Net income YTD", value: "—" }])
-      .slice(0, 4)
-      .map((k, i) => {
-        const widgetKey = k.widgetKey || (i === 3 ? "ebitdaNormalization" : "quickbooksProfitLossDetail");
-        const delta = k.delta ? `<span class="trend${String(k.delta).trim().startsWith("-") ? " negative" : ""}">${esc(k.delta)}</span>` : "";
-        const sparkHtml = k.spark && k.spark.length ? barSparkline(k.spark, k.tone) : "";
-        return `<div class="card kpi-card kpi-glow-card"${kpiRefHalAttrs(widgetKey, k.label || k.title || widgetKey)}>
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon(widgetKey)}${esc(k.label || k.title || "KPI")}</span></div>
-          <div class="card-value">${esc(k.value || "—")}</div>
-          ${sparkHtml}
-          ${delta}
-        </div>`;
-      })
-      .join("");
-
-    const plChartBody = plTrend
-      ? chartContainer(dualLineChart(plTrend.labels, plTrend.series), true)
-      : chartContainer(canvasEmpty("Awaiting QuickBooks sync — P&amp;L trend will appear when export is loaded."));
-
-    const expenseBody = expenseBars
-      ? chartContainer(vBarChart(expenseBars.labels, expenseBars.values, "#00d4aa"))
-      : chartContainer(canvasEmpty("Awaiting QuickBooks sync — expense breakdown will appear when export is loaded."));
-
-    return `${stackOpen()}
-      ${dashboardHost(`<div class="dashboard-grid">${kpiCards}</div>`)}
-      ${dashboardHost(`<div class="dashboard-grid">
-        <div class="card chart-large widget-glow-border" data-hal-widget-key="quickbooksProfitLossDetail" data-nr2-chart-host="quickbooksProfitLossDetail">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksProfitLossDetail")}Profit &amp; Loss Trend (YTD)</span></div>
-          ${plChartBody}
-      </div>
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksExpenseBreakdown">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksExpenseBreakdown")}Operating Expenses</span></div>
-          ${expenseBody}
-        </div>
-      </div>`)}
-      ${dashboardHost(`<div class="dashboard-grid">
-        <div class="card kpi-card kpi-glow-card" data-hal-widget-key="quickbooksNetIncomeSummary">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksNetIncomeSummary")}Net Income (YTD)</span></div>
-          <div class="card-value">${netInc.hasData && netInc.ytdNetIncome != null ? esc(`$${Math.round(netInc.ytdNetIncome).toLocaleString()}`) : "—"}</div>
-          ${netInc.latestMonth ? `<span class="trend">${esc(netInc.latestMonth)} latest</span>` : ""}
-        </div>
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksMonthlyRevenue">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksMonthlyRevenue")}Monthly Revenue Trend</span></div>
-          ${
-            moRev.hasData
-              ? chartContainer(vBarChart(moRev.labels, moRev.values, "#00d4ff"))
-              : canvasEmpty("Monthly revenue trend appears when QuickBooks P&amp;L monthly rows are in the import cache.")
-          }
-        </div>
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksCashFlowTrend">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksCashFlowTrend")}Cash Flow Trend</span></div>
-          ${
-            cf.hasData
-              ? chartContainer(dualLineChart(cf.labels, [{ label: "Net", tone: "success", data: cf.net }]), true)
-              : canvasEmpty("Cash flow trend appears when QuickBooks monthly P&amp;L rows are in the import cache.")
-          }
-        </div>
-      </div>`)}
-      ${dashboardHost(`<div class="dashboard-grid">
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksBalanceSheetSummary">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksBalanceSheetSummary")}Balance Sheet Summary</span></div>
-          ${
-            bs.hasData
-              ? canvasTable(
-                  ["Asset", "Amount"],
-                  (bs.assets || []).map((row) => [row.label, `$${Math.round(row.amount).toLocaleString()}`]),
-                  true,
-                )
-              : canvasEmpty("Balance sheet summary appears when QuickBooks A/R and P&amp;L imports are loaded.")
-          }
-        </div>
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksRevenueByService">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksRevenueByService")}Revenue by Service</span></div>
-          ${
-            revSvc.hasData
-              ? chartContainer(vBarChart(revSvc.slices.map((s) => s.label), revSvc.slices.map((s) => s.amount), "#00d4aa"))
-              : canvasEmpty("Revenue-by-service appears when QuickBooks category exports are loaded.")
-          }
-        </div>
-        <div class="card chart-medium widget-glow-border" data-hal-widget-key="quickbooksArAging">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("quickbooksArAging")}QuickBooks A/R Aging</span></div>
-          ${
-            qbAr.hasData
-              ? chartContainer(vBarChart(qbAr.buckets.map((b) => b.bucket), qbAr.buckets.map((b) => b.balance), "#f59e0b"))
-              : canvasEmpty("QuickBooks A/R aging appears when quickbooks_ar.csv or SDK probe is loaded.")
-          }
-        </div>
-      </div>`)}
-      ${dashboardHost(`<div class="dashboard-grid">
-        <div class="card chart-full widget-accent-orange widget-glow-border" data-hal-widget-key="ebitdaNormalization">
-          <div class="card-header"><span class="card-title">${widgetHeaderIcon("ebitdaNormalization")}QuickBooks ↔ NR2 Reconciliation</span></div>
-          ${reconcileRows.length ? canvasTable(["Account", "Amount", "Source", "Sync"], reconcileRows, true) : canvasEmpty("Awaiting QuickBooks sync — P&amp;L rows will appear when export is loaded.")}
-        </div>
-      </div>`)}
-      ${quickbooksViewToggleHtml("legacy")}
-    </div>`;
-  }
-
-  function renderAr() {
-    const D = dataApi();
-    const kpis = D ? D.arKpis() : [];
-    const chart = D ? D.arCollectionsChart() : null;
-    const claims = D ? D.arTopClaimsTable() : [];
-    const kanban = D ? D.arFollowUpKanban() : [];
-    const aging = D ? D.softdentAgingBars() : null;
-    const heat = arHeatmapFromAging(aging);
-    const payerDonut = D ? D.payerDonut() : null;
-    const kanbanLanes =
-      kanban.length > 0
-        ? kanban
-        : [
-            { lane: "Needs call", tone: "orange", items: [] },
-            { lane: "Awaiting payer", tone: "blue", items: [] },
-            { lane: "Ready to close", tone: "green", items: [] },
-          ];
-    const waterfallItems = chart
-      ? chart.labels.slice(-5).map((label, i) => ({
-          label,
-          value: String(chart.series[1] && chart.series[1].data[i] != null ? chart.series[1].data[i] : "—"),
-          type: "pos",
-        }))
-      : [];
-    return `${stackOpen()}
-      ${canvasKpiGrid(kpis)}
-      ${canvasGrid12(`
-        ${gridCol(
-          8,
-          canvasPanel({
-            title: wTitle("ar", 2),
-            accent: "orange",
-            caption: "Priority follow-up queue",
-            widgetKey: wKey("ar", 2),
-            body: canvasPriorityQueue(kanbanLanes, wKey("ar", 2)),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: "Payer mix",
-            accent: "orange",
-            caption: "Collections by payer",
-            widgetKey: wKey("ar", 0),
-            halSubpanel: "arPayerMix",
-            body: payerDonut ? conicDonut(payerDonut.slices, payerDonut.center, 96) : canvasEmpty("Payer mix will appear when collections data is loaded."),
-          }),
-        )}
-        ${gridCol(
-          8,
-          canvasPanel({
-        title: wTitle("ar", 0),
-        accent: "orange",
-            caption: "Payer × aging heatmap",
-        widgetKey: wKey("ar", 0),
-            chartHost: true,
-            body: heat ? canvasHeatmap(heat.rowLabels, heat.colLabels, heat.matrix) : canvasHeatmapPlaceholder(),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: "Collections waterfall",
-            accent: "orange",
-            caption: "Recent collections trend",
-            widgetKey: wKey("ar", 0),
-            halSubpanel: "arCollectionsWaterfall",
-            body: waterfallItems.length ? chartContainer(canvasWaterfall(waterfallItems)) : chart ? chartContainer(dualLineChart(chart.labels, chart.series)) : canvasEmpty("Collections trend will appear when A/R dashboard data is loaded."),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-        title: wTitle("ar", 1),
-        accent: "orange",
-        caption: "Top outstanding claims",
-        widgetKey: wKey("ar", 1),
-        body: claims.length
-          ? canvasTable(["Patient", "Procedure", "Payer", "Balance", "Age"], claims, true)
-          : canvasEmpty("Outstanding claim detail will appear when SoftDent claims export is loaded."),
-          }),
-        )}
-      `)}
-    </div>`;
-  }
-
-  function renderClaims() {
-    const D = dataApi();
-    const kpis = D ? D.claimsKpis() : [];
-    const lanes = D ? D.claimsKanban() : [];
-    const claim = D ? D.firstClaim() : null;
-    const composerOpts = D && D.narrativeComposerOptions ? D.narrativeComposerOptions() : {};
-    const draft = D ? D.narrativeDraft() : "";
-    const citationWidgets = D && D.narrativeCitationWidgets ? D.narrativeCitationWidgets() : [];
-    const kanbanLanes =
-      lanes.length > 0
-        ? lanes
-        : [
-            { lane: "Draft", tone: "muted", items: [] },
-            { lane: "Needs Review", tone: "orange", items: [] },
-            { lane: "Ready", tone: "green", items: [] },
-            { lane: "Denied", tone: "orange", items: [] },
-          ];
-    return `${stackOpen()}
-      ${heroKpiRow(kpis, 4)}
-      ${canvasGrid12(`
-        ${gridCol(
-          8,
-          canvasPanel({
-        title: wTitle("claims", 0),
-        accent: "purple",
-        caption: lanes.length ? "Claims pipeline from SoftDent import" : "Pipeline lanes · waiting on claims export",
-        widgetKey: wKey("claims", 0),
-            body: canvasKanbanLanes(kanbanLanes, wKey("claims", 0), { claims: true }),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-            title: "Pipeline analytics",
-            accent: "purple",
-            caption: "Denial risk · ERA · attachments",
-            halSubpanel: "claimsPipelineAnalytics",
-            body: canvasClaimSidebar(claim, wKey("claims", 0)),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-          title: "Claim detail",
-          accent: "purple",
-          caption: claim ? `${claim.patient || "Claim"} · ${claim.procedure || "—"}` : "Selected claim",
-            halSubpanel: "claimsClaimDetail",
-          body: claim
-              ? `<div class="claim-detail">
-            <strong>${esc(claim.procedure || claim.id || "Claim")}</strong>
-            <p>${esc(claim.patient || "—")} · ${esc(claim.payer || "—")}</p>
-            ${canvasStatGrid([
-              { value: fmtClaim(claim.amount), label: "Billed amount" },
-              { value: fmtClaim(claim.serviceDate), label: "Service date" },
-            ])}
-          </div>`
-            : canvasEmpty("Select a claim from the pipeline when claims import is loaded."),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-          title: "Claim status",
-          caption: claim ? claim.id || "First open claim" : "Claim history",
-            halSubpanel: "claimsClaimStatus",
-          body: claim
-            ? canvasTimeline([
-                { time: fmtClaim(claim.serviceDate), title: claim.status || "Open", detail: `${fmtClaim(claim.amount)} · ${claim.payer || "—"}`, active: true },
-                { time: "Import", title: "SoftDent claims export", detail: "Read-only workbench" },
-              ])
-            : canvasEmpty("Claim history will appear with SoftDent claims data."),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: "Narrative draft (HAL assist)",
-            accent: "purple",
-            caption: "Local review only · not submitted to payers",
-            widgetKey: "narrativeWorkflow",
-            body: `${canvasNarrativeSelectors(composerOpts, claim)}
-              <div class="composer-panel narrative-draft-panel" data-narrative-claim-id="${esc(claim && claim.id ? claim.id : "")}">
-                ${canvasTextArea(draft || "", 8, true)}
-                ${draft ? canvasNarrativeCitations(citationWidgets) : canvasEmpty("Select a claim and choose Draft with HAL, or generate from the controls above.")}
-              </div>`,
-          }),
-        )}
-      `)}
-    </div>`;
-  }
-
-  function renderNarratives() {
-    const D = dataApi();
+  function renderNarrativesComposerBody(D, H) {
     const draft = D ? D.narrativeDraft() : "";
     const history = D ? D.narrativeHistoryRows() : [];
     const kpis = D && D.narrativeKpis ? D.narrativeKpis() : [];
@@ -1596,8 +980,15 @@ const PageCanvas = (function () {
     const citationWidgets = D && D.narrativeCitationWidgets ? D.narrativeCitationWidgets() : [];
     const confidencePct = draft ? Math.min(95, 40 + Math.floor(draft.length / 20)) : 0;
     const cdtCodes = ["D2740 Crown", "D2950 Core buildup", "D4341 Perio scaling", "D7210 Extraction", "D6010 Implant"];
-    return `${stackOpen()}
-      ${kpis.length ? `${metricRowOpen()}${kpis.map(canvasMetricTile).join("")}${metricRowClose()}` : `${metricRowOpen()}${canvasMetricTile({ label: "Narrative Composer", value: "Ready", widgetKey: wKey("narratives", 0) })}${metricRowClose()}`}
+    const hero =
+      kpis.length > 0
+        ? H.heroKpiRow(
+            kpis.map((k) => ({ ...k, widgetKey: undefined })),
+            4,
+          )
+        : H.heroKpiRow([{ label: "Narrative Composer", value: "Ready" }], 1);
+    return `${H.stackOpen("narratives-moonshot")}
+      ${hero}
       ${canvasNarrativeSelectors(composerOpts, claim)}
       <div class="composer-grid">
         <div class="composer-panel panel" data-hal-subpanel="narrativeProcedureCodes">
@@ -1610,7 +1001,7 @@ const PageCanvas = (function () {
                   `<div class="cdt-item${i === 0 ? " active" : ""}" role="listitem"><div class="cdt-code">${esc(code.split(" ")[0])}</div><div class="cdt-desc">${esc(code.slice(code.indexOf(" ") + 1))}</div></div>`,
               )
               .join("")}</div>
-            </div>
+          </div>
         </div>
         <div class="composer-panel panel">
           <div class="composer-toolbar">
@@ -1642,6 +1033,13 @@ const PageCanvas = (function () {
         </div>
       </div>
     </div>`;
+  }
+
+  function renderTaxScenarioPanelHtml() {
+    if (typeof NR2PageFilters !== "undefined" && NR2PageFilters.renderTaxScenarioPanelHtml) {
+      return NR2PageFilters.renderTaxScenarioPanelHtml();
+    }
+    return "";
   }
 
   function renderJournalQueuePanel(items) {
@@ -1678,378 +1076,78 @@ const PageCanvas = (function () {
     </div>`;
   }
 
-  function renderDocuments() {
-    const D = dataApi();
-    const kpis = D ? D.documentsKpis() : [];
-    const queue = D ? D.documentsQueueRows() : [];
-    const doc = D ? D.firstDocument() : null;
-    const periodStats = D ? D.documentsPeriodStats() : [];
-    const journalItems = D ? D.journalQueueItems() : [];
-    const ap = metricsFromWidget("accountsPayableAutomation");
-    const postedPct = parsePct(periodStats[1] && periodStats[1].value);
-    const wizardSteps = ["Intake", "Review", "Approve", "Post", "Close"];
-    return `${stackOpen()}
-      ${heroKpiRow(kpis, 4)}
-      ${canvasGrid12(`
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: wTitle("documents", 2),
-            accent: "cyan",
-            caption: "Period close wizard",
-            widgetKey: wKey("documents", 2),
-            body: `${canvasWizardSteps(wizardSteps, postedPct > 0 ? 2 : 0)}${periodStats.length ? canvasStatGrid(periodStats) : canvasEmpty("Period close metrics will appear when documents are assigned to a period.")}`,
-          }),
-        )}
-        ${gridCol(
-          8,
-          canvasPanel({
-          title: wTitle("documents", 0),
-          accent: "cyan",
-            caption: "OCR intake queue",
-          widgetKey: wKey("documents", 0),
-          body: queue.length ? canvasTable(["Document", "Category", "Amount", "Date"], queue, true) : canvasEmpty("Accounting documents will appear when the local document queue is populated."),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-          title: wTitle("documents", 1),
-          accent: "cyan",
-          widgetKey: wKey("documents", 1),
-          body: `${canvasDocPreview(doc ? doc.vendor || doc.id || "Document" : "Document preview", doc && doc.pages ? doc.pages : 1)}${doc ? "" : canvasEmpty("Document preview will appear when a document is selected.")}`,
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-        title: wTitle("documents", 4),
-        caption: "Local journal queue",
-        widgetKey: wKey("documents", 4),
-            body: journalItems.length ? renderJournalQueuePanel(journalItems) : canvasEmpty("Journal posting queue requires the NR2 server. Run StartProgram.bat."),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: wTitle("documents", 3),
-            accent: "cyan",
-            widgetKey: wKey("documents", 3),
-            body: `${canvasRingChart(postedPct, "Posted")}${canvasStat(fmtClaim(ap.expenseTotal), "Expense total", "warning", wKey("documents", 3))}`,
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Source breakdown",
-            accent: "cyan",
-            widgetKey: wKey("documents", 0),
-            halSubpanel: "documentSourceBreakdown",
-            body: canvasStatGrid(D ? D.documentsSourceBreakdown() : []),
-          }),
-        )}
-      `)}
-    </div>`;
+  function buildMoonshotHelpers() {
+    return {
+      esc,
+      stackOpen,
+      dashboardPageOpen,
+      dashboardHost,
+      gridCol,
+      canvasGrid12,
+      heroKpiRow,
+      canvasMetricTile,
+      canvasPanel,
+      canvasEmpty,
+      chartContainer,
+      vBarChart,
+      dualLineChart,
+      conicDonut,
+      canvasTable,
+      canvasKanbanLanes,
+      canvasStatGrid,
+      canvasGauge,
+      canvasFunnel,
+      canvasHeatmap,
+      canvasKpiGrid,
+      canvasKpiRibbon,
+      canvasGoalScorecard,
+      canvasProviderCompShare,
+      canvasMonthlyTrendCombo,
+      canvasReconciliationTable,
+      canvasAlertTicker,
+      canvasFocusCards,
+      canvasScheduleTimeline,
+      canvasNavPills,
+      canvasStatsBar,
+      officeDashboardWidget,
+      canvasNarrativeSelectors,
+      canvasTextArea,
+      canvasNarrativeCitations,
+      canvasDocPreview,
+      canvasOperatoryGrid,
+      canvasRecallCalendar,
+      canvasTimeline,
+      canvasWizardSteps,
+      canvasRingChart,
+      canvasWaterfall,
+      canvasPriorityQueue,
+      hBarChart,
+      finTrendChart,
+      canvasCompareStrip,
+      canvasAgingTiles,
+      canvasClaimSidebar,
+      canvasClaimSidebar,
+      renderJournalQueuePanel,
+      renderNarrativesComposerBody,
+      renderSoftdentOdbcStrip,
+      renderTaxScenarioPanelHtml,
+      widgetHeaderIcon,
+      kpiRefHalAttrs,
+      kpiRefOnly,
+      fmtClaim,
+      parsePct,
+      parseAmount,
+      metricsFromWidget,
+      wTitle,
+      wKey,
+      pageImportNotice,
+      canvasImportNotice,
+      canvasStat,
+      canvasHeatmapPlaceholder,
+      arHeatmapFromAging,
+      dataApi,
+    };
   }
-
-  function renderLibrary() {
-    const D = dataApi();
-    const kpis = D ? D.libraryKpis() : [];
-    const rows = D ? D.libraryRows() : [];
-    const doc = D ? D.firstLibraryDoc() : null;
-    return `${stackOpen()}
-      ${heroKpiRow(kpis, 4)}
-      ${canvasSearch("Search contracts, compliance, vendors…", wKey("library", 0))}
-      ${canvasGrid12(`${splitRow(
-        canvasPanel({
-          title: wTitle("library", 0),
-          accent: "gray",
-          caption: "Document library grid",
-          widgetKey: wKey("library", 0),
-          body: canvasDocCards(rows, wKey("library", 0)),
-        }),
-        canvasPanel({
-          title: "Preview",
-          accent: "gray",
-          widgetKey: wKey("library", 0),
-          halSubpanel: "documentLibraryPreview",
-          body: `${canvasDocPreview(doc ? doc.title || doc.name || "Document" : "Library preview", doc && doc.pages ? doc.pages : 1)}
-            ${doc ? `<div class="side-panel-meta">
-              <article class="panel-card"><h4>Metadata</h4><p>${esc(doc.title || doc.name || "Document")} · ${esc(doc.category || "—")}</p></article>
-              <article class="panel-card"><h4>Contract alert</h4><p>${doc.expires ? `Expires ${esc(doc.expires)}` : "No expiry on file."}</p></article>
-            </div>` : canvasEmpty("Select a library document to preview.")}`,
-        }),
-      )}`)}
-    </div>`;
-  }
-
-  function taxUsageBar(segments, total, caption) {
-    const sum = segments.reduce((acc, s) => acc + (Number(s.amount) || 0), 0);
-    const denom = total || sum || 1;
-    const bars = segments
-      .map((s) => {
-        const pct = Math.max(4, Math.round((Number(s.amount) / denom) * 100));
-        const color = s.id === "federal" ? "#60a5fa" : s.id === "kansas" ? "#c084fc" : "#78a86b";
-        return `<div class="tax-split-seg" style="width:${pct}%;background:${color}" title="${esc(s.label)} ${esc(fmtTaxMoney(s.amount))}"></div>`;
-      })
-      .join("");
-    const legend = segments
-      .map((s) => `<span class="tax-split-key"><i style="background:${s.id === "federal" ? "#60a5fa" : "#c084fc"}"></i>${esc(s.label)} · ${esc(fmtTaxMoney(s.amount))}</span>`)
-      .join("");
-    return `<div class="tax-split-chart"><div class="tax-split-track">${bars}</div><div class="tax-split-legend">${legend}</div>${caption ? `<p class="tax-split-caption">${esc(caption)}</p>` : ""}</div>`;
-  }
-
-  function fmtTaxMoney(value) {
-    if (typeof TaxEngine !== "undefined" && TaxEngine.formatMoney) return TaxEngine.formatMoney(value);
-    return String(value == null ? "—" : value);
-  }
-
-  function renderTaxes() {
-    const D = dataApi();
-    const kpis = D ? D.taxKpis() : [];
-    const bridge = D ? D.taxBridgeRows() : [];
-    const scenarios = D ? D.taxCompScenarioRows() : [];
-    const quarterly = D ? D.taxQuarterlyRows() : [];
-    const split = D ? D.taxSplit() : [];
-    const citations = D ? D.taxMemoCitations() : [];
-    const federal = D ? D.taxFederalRows() : [];
-    const kansas = D ? D.taxKansasRows() : [];
-    const calendar = D ? D.taxCalendarRows() : [];
-    const bookIncome = D ? D.taxBookIncomeRows() : [];
-    const ebitda = D ? D.taxEbitdaRows() : [];
-    const disclaimer = D ? D.taxDisclaimer() : "";
-    const hasBook = D ? D.taxHasBookData() : false;
-    const plan = D && D.taxPlan ? D.taxPlan() : null;
-    const totalTax = plan ? plan.totalOwnerTaxEstimate : 0;
-    const memoList = citations.length
-      ? `<ul class="tax-memo-list">${citations
-          .map((id) => `<li><strong>${esc(id)}</strong><span>docs/hal_knowledge/memories.jsonl</span></li>`)
-          .join("")}</ul>`
-      : canvasEmpty("MemoAI tax citations appear when the tax engine runs.");
-    const compBars =
-      plan && plan.compScenarios
-        ? `<div class="bar-chart">${plan.compScenarios
-            .map((s) => {
-              const max = Math.max(...plan.compScenarios.map((x) => x.employerFica), 1);
-              return `<div class="bar-chart-column${s.selected ? " bar-chart-column--active" : ""}"><span class="bar-chart-fill" style="height:${Math.max(8, (s.employerFica / max) * 100)}%;background:#60a5fa"></span><span class="bar-chart-label">${esc(fmtTaxMoney(s.salary))}</span></div>`;
-            })
-            .join("")}</div>`
-        : canvasEmpty("Load QuickBooks P&amp;L to model compensation scenarios.");
-    return `${stackOpen()}
-      ${typeof NR2PageFilters !== "undefined" && NR2PageFilters.renderTaxScenarioPanelHtml ? NR2PageFilters.renderTaxScenarioPanelHtml() : ""}
-      <div class="taxes-kpi-section"><div class="kpi-grid">${(kpis.length ? kpis : [{ label: "Tax KPI", value: "—" }])
-        .slice(0, 4)
-        .map((k) => `<div class="kpi-card"><h4>${esc(k.label || k.title || "KPI")}</h4><div class="metric">${esc(k.value || "—")}</div></div>`)
-        .join("")}</div></div>
-      ${canvasGrid12(`
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: "Related surfaces",
-            halSubpanel: "taxRelatedSurfaces",
-            body: canvasNavPills(["financial", "quickbooks", "documents"]),
-          }),
-        )}
-        ${gridCol(
-          8,
-          canvasPanel({
-        title: "Book-to-tax bridge",
-        accent: "blue",
-        caption: plan ? `${plan.federalRateLabel} · ${plan.kansasRateLabel}` : "Planning rates",
-            widgetKey: "taxBookToTaxBridge",
-        body: bridge.length
-              ? `${canvasWaterfall(bridge.slice(0, 6).map((row, i) => ({ label: row[0], value: row[1], type: i === 0 ? "total" : "neg" })))}${canvasTable(["Line item", "Amount"], bridge, true)}`
-          : canvasEmpty("P&amp;L net income will drive the book-to-tax bridge when QuickBooks export is loaded."),
-          }),
-        )}
-        ${gridCol(
-          4,
-          canvasPanel({
-          title: "Estimated owner tax split",
-          accent: "blue",
-          caption: "Federal + Kansas on K-1 flow-through",
-            widgetKey: "taxFederalStateSplit",
-            chartHost: true,
-          body:
-            split.length && totalTax
-              ? taxUsageBar(split, totalTax, `Planning total ${fmtTaxMoney(totalTax)} · not a filed return`)
-                : taxUsageBar(
-                    [
-                      { id: "federal", label: "Federal", amount: 0 },
-                      { id: "kansas", label: "Kansas", amount: 0 },
-                    ],
-                    1,
-                    "Tax split appears when book income is available.",
-                  ),
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-            title: "Reasonable compensation scenarios",
-            accent: "blue",
-            caption: "Employer FICA by modeled W-2",
-            widgetKey: "taxReasonableComp",
-            body: `${canvasGauge(plan && plan.compScenarios && plan.compScenarios[0] ? parsePct(plan.compScenarios[0].employerFica) : 0, "Employer FICA", "#60a5fa")}${compBars}`,
-          }),
-        )}
-        ${gridCol(
-          6,
-          canvasPanel({
-          title: "Quarterly estimates",
-          accent: "blue",
-          caption: "1040-ES + Kansas vouchers",
-            widgetKey: "taxQuarterlyEstimates",
-          body: quarterly.length
-            ? canvasTable(["Period", "Federal", "Kansas", "Due", "Status"], quarterly, true)
-            : canvasEmpty("Quarterly plan appears when book income is available."),
-          }),
-        )}
-        ${splitRow(
-          canvasPanel({
-          title: wTitle("taxes", 0),
-          accent: "blue",
-            widgetKey: "quickbooksProfitLossDetail",
-          body: bookIncome.length
-            ? canvasTable(["Account", "Amount", "Notes"], bookIncome, true)
-            : canvasEmpty("P&amp;L rows will appear when QuickBooks export is loaded."),
-          }),
-          canvasPanel({
-          title: wTitle("taxes", 1),
-          accent: "blue",
-            widgetKey: "ebitdaNormalization",
-          body: ebitda.length
-            ? canvasTable(["Adjustment", "Amount", "Reviewer", "Notes"], ebitda, true)
-            : canvasEmpty("EBITDA add-backs will appear when expense categories are loaded."),
-          }),
-        )}
-        ${splitRow(
-          canvasPanel({
-            title: "Key deadlines",
-            accent: "blue",
-            caption: "Calendar-year S corp",
-            widgetKey: "taxQuarterlyEstimates",
-            halSubpanel: "taxKeyDeadlines",
-            body: calendar.length ? canvasTable(["Date", "Jurisdiction", "Action"], calendar, true) : canvasEmpty("—"),
-          }),
-          canvasPanel({
-            title: "MemoAI evidence",
-            accent: "green",
-            caption: "Memories cited for this plan",
-            widgetKey: "taxBookToTaxBridge",
-            halSubpanel: "taxMemoEvidence",
-            body: memoList,
-          }),
-        )}
-        ${gridCol(
-          12,
-          `<details class="widget-card col-12 details-panel"><summary>Federal &amp; Kansas obligations</summary>${splitRow(
-            canvasPanel({
-              title: "Federal obligations",
-              accent: "blue",
-              widgetKey: "taxFederalStateSplit",
-              halSubpanel: "taxFederalObligations",
-              body: federal.length ? canvasTable(["Item", "Purpose", "Timing", "Notes"], federal, true) : canvasEmpty("—"),
-            }),
-            canvasPanel({
-              title: "Kansas obligations",
-              accent: "blue",
-              widgetKey: "taxFederalStateSplit",
-              halSubpanel: "taxKansasObligations",
-              body: kansas.length ? canvasTable(["Item", "Purpose", "Timing", "Notes"], kansas, true) : canvasEmpty("—"),
-            }),
-          )}</details>`,
-        )}
-      `)}
-    </div>`;
-  }
-
-  function renderOfficeManager() {
-    const D = dataApi();
-    const kpis = D ? D.officeKpis() : [];
-    const kanban = D ? D.officeKanban() : [];
-    const tasks = D ? D.officeTaskRows() : [];
-    const timeline = D ? D.officeTimeline() : [];
-    const kanbanLanes =
-      kanban.length > 0
-        ? kanban
-        : [
-            { lane: "Billing", tone: "orange", items: [] },
-            { lane: "Scheduling", tone: "blue", items: [] },
-            { lane: "Owner review", tone: "green", items: [] },
-          ];
-    const staffPages =
-      typeof PageSchema !== "undefined" && PageSchema.NAV_GROUPS
-        ? PageSchema.NAV_GROUPS.flatMap((g) => g.pages).filter((id) => id !== "hal" && id !== "office-manager")
-        : ["financial", "softdent", "narratives", "claims", "ar", "quickbooks", "documents", "library"];
-    return `${stackOpen()}
-      ${D && D.opsDataPanelHtml ? D.opsDataPanelHtml() : ""}
-      ${canvasStatsBar(kpis)}
-      ${canvasGrid12(`
-        ${splitRow(
-          canvasPanel({
-        title: wTitle("office-manager", 0),
-        accent: "yellow",
-            caption: "Today's priorities",
-        widgetKey: wKey("office-manager", 0),
-            chartHost: true,
-            body: canvasFocusCards(kpis),
-          }),
-          canvasPanel({
-          title: "Office task queue",
-          accent: "yellow",
-          caption: D ? D.periodSubtitle() : "Local tasks",
-          widgetKey: wKey("office-manager", 0),
-            halSubpanel: "officeTaskQueue",
-          body: tasks.length ? canvasTable(["Due", "Category", "Task", "Status"], tasks, true) : canvasEmpty("Local office tasks will appear when HAL or staff create them."),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: "Operatory schedule",
-            accent: "yellow",
-            caption: "Today's timeline",
-          widgetKey: wKey("office-manager", 0),
-            halSubpanel: "officeOperatorySchedule",
-            body: canvasScheduleTimeline(timeline.length ? timeline : [{ time: "8:30", title: "Morning huddle", detail: "Review open tasks" }]),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-            title: wTitle("office-manager", 0),
-            accent: "yellow",
-            caption: "HAL office priorities kanban",
-            halSubpanel: "officePrioritiesKanban",
-            body: canvasKanbanLanes(kanbanLanes, wKey("office-manager", 0)),
-          }),
-        )}
-        ${gridCol(
-          12,
-          canvasPanel({
-        title: wTitle("office-manager", 1),
-        caption: "Jump to staff work surfaces",
-        widgetKey: wKey("office-manager", 1),
-        body: canvasNavPills(staffPages),
-          }),
-        )}
-      `)}
-    </div>`;
-  }
-
-  const RENDERERS = {
-    financial: renderFinancial,
-    taxes: renderTaxes,
-    softdent: renderSoftdent,
-    quickbooks: renderQuickbooks,
-    ar: renderAr,
-    claims: renderClaims,
-    narratives: renderNarratives,
-    documents: renderDocuments,
-    library: renderLibrary,
-    "office-manager": renderOfficeManager,
-  };
 
   function renderBody(pageId, feed, programSnapshot) {
     if (
@@ -2063,8 +1161,10 @@ const PageCanvas = (function () {
     activeSnapshot = programSnapshot || null;
     const D = dataApi();
     if (D) D.bind(activeFeed, activeSnapshot);
-    const fn = RENDERERS[pageId];
-    const html = fn ? fn() : "";
+    if (typeof MoonshotLayoutEngine === "undefined" || !MoonshotLayoutEngine.hasPage(pageId)) {
+      return canvasImportNotice(pageImportNotice(pageId));
+    }
+    const html = MoonshotLayoutEngine.render(pageId, buildMoonshotHelpers());
     const noticeHtml = canvasImportNotice(pageImportNotice(pageId));
     return noticeHtml + (html || "");
   }
@@ -2077,10 +1177,10 @@ const PageCanvas = (function () {
   }
 
   function hasPage(pageId) {
-    return Boolean(RENDERERS[pageId]);
+    return typeof MoonshotLayoutEngine !== "undefined" && MoonshotLayoutEngine.hasPage(pageId);
   }
 
-  return { renderBody, hasPage, setFeed };
+  return { renderBody, hasPage, setFeed, buildMoonshotHelpers };
 })();
 
 if (typeof module !== "undefined" && module.exports) {
@@ -2160,428 +1260,9 @@ PageCanvas.resolveData = function(pageId, passedData) {
   return out;
 };
 
-// 2. Example: patch renderSoftdent so it NEVER shows global empty placeholder
-//    when HAL has ANY softdent dataset (including the new ones).
-PageCanvas.renderSoftdent = function(pageId, data) {
-  const root = document.getElementById('appPage');
-  if (!root) return;
-
-  data = this.resolveData('softdent', data || {});
-
-  const hasAny = [
-    'softdent.dashboard','softdent.claims','softdent.clinicalNotes',
-    'softdent.ar','softdent.newPatients','softdent.treatmentPlans',
-    'softdent.caseAcceptance','softdent.hygieneRecall','softdent.operatory',
-    'softdent.procedures','softdent.claimStatus'
-  ].some(k => PageCanvas.hasRenderableData(k));
-
-  if (!hasAny) {
-    root.innerHTML = `<div class="empty-placeholder">No SoftDent data connected</div>`;
-    return;
-  }
-
-  root.innerHTML = `
-    <div class="softdent-page">
-      <div class="widget-grid" data-hal-widget-key="softdentOverview">
-        ${this.canvasMetricTile({ title: 'Production', value: data.dashboard?.production })}
-        ${this.canvasMetricTile({ title: 'Collections', value: data.dashboard?.collections })}
-      </div>
-
-      <div class="widget-grid" data-hal-widget-key="softdentFunnel">
-        ${this.canvasFunnel(data.funnel || {})}
-      </div>
-
-      <div class="widget-grid" data-hal-widget-key="softdentOperatory">
-        ${this.operatoryGrid?.(data.operatory) || '<div class="empty-state">Operatory timeline not configured</div>'}
-      </div>
-
-      <div class="widget-grid" data-hal-widget-key="softdentRecall">
-        ${this.recallTable?.(data.hygieneRecall) || ''}
-      </div>
-
-      <div class="chart-panel-grid">
-        <div class="chart-container" data-hal-widget-key="softdentProduction">
-          ${PageCanvas.hasRenderableData('softdent.procedures')
-            ? this.proceduresTable(PageCanvasData.softdentProcedures())
-            : '<div class="empty-state">Procedures loading…</div>'}
-        </div>
-        <div class="chart-container" data-hal-widget-key="softdentClaimStatus">
-          ${PageCanvas.hasRenderableData('softdent.claimStatus')
-            ? this.claimStatusPanel(PageCanvasData.softdentClaimStatus())
-            : '<div class="empty-state">Claim status loading…</div>'}
-        </div>
-        <div class="chart-container" data-hal-widget-key="softdentCollections"></div>
-        <div class="chart-container" data-hal-widget-key="softdentAging"></div>
-      </div>
-    </div>
-  `;
-};
-
-/**
- * page-canvas.js — replace renderQuickbooks to remove nested wrappers
- */
-
-PageCanvas.moonshotQuickbooksBodyHtml = function (data) {
-  data = data || {};
-  const D = typeof PageCanvasData !== "undefined" ? PageCanvasData : null;
-  const kpis = D && D.quickbooksKpis ? D.quickbooksKpis() : [];
-  const netInc = D && D.quickbooksNetIncomeSummary ? D.quickbooksNetIncomeSummary() : {};
-  const revenueKpi = (kpis.find((k) => /revenue/i.test(String(k.label || k.title || ""))) || kpis[0]) || {};
-  const expenseKpi = (kpis.find((k) => /expense/i.test(String(k.label || k.title || ""))) || kpis[1]) || {};
-  const qbExp = D && D.quickbooksExpenseCategories ? D.quickbooksExpenseCategories() : { stale: true };
-  const qbAr = D && D.quickbooksAr ? D.quickbooksAr() : { stale: true };
-  const isStale = qbExp.stale || qbAr.stale || data.qbStale;
-  const esc = (v) => String(v == null ? "—" : v);
-  const kpiCard = (label, value) =>
-    `<div class="card kpi-card">
-      <div class="card-header"><div class="card-title">${esc(label)}</div></div>
-      <div class="card-value">${esc(value)}</div>
-    </div>`;
-  return `
-    <div class="dashboard-grid" data-page="quickbooks" data-hal-widget-key="qbDashboard">
-      <div class="dashboard-grid__header">
-        <h2 class="dashboard-grid__title">QuickBooks Overview</h2>
-        <span class="sync-badge ${isStale ? "sync-badge--stale" : ""}" data-qb-sync-status>
-          ${isStale ? "Stale — refresh needed" : "Synced"}
-        </span>
-      </div>
-      ${kpiCard("Revenue YTD", data.revenueYtd || revenueKpi.value)}
-      ${kpiCard("Operating Expenses", data.expensesYtd || expenseKpi.value)}
-      ${kpiCard("Net Income", data.netIncome || (netInc.hasData ? netInc.ytdNetIncome : "—"))}
-      ${kpiCard("AR Outstanding", data.arOutstanding || "—")}
-    </div>
-    <div class="dashboard-grid">
-      <div class="card chart-large chart-container" data-hal-widget-key="quickbooksProfitLossDetail">
-        <div class="card-header"><div class="card-title">Profit &amp; Loss Trend (YTD)</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksExpenseBreakdown">
-        <div class="card-header"><div class="card-title">Operating Expenses</div></div>
-      </div>
-    </div>
-    <div class="dashboard-grid">
-      <div class="card chart-full chart-container" data-hal-widget-key="quickbooksBalanceSheetSummary">
-        <div class="card-header"><div class="card-title">Balance Sheet Summary</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksCashFlowTrend">
-        <div class="card-header"><div class="card-title">Cash Flow Trend</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksMonthlyRevenue">
-        <div class="card-header"><div class="card-title">Monthly Revenue Trend</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksNetIncomeSummary">
-        <div class="card-header"><div class="card-title">Net Income Summary</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksRevenueByService">
-        <div class="card-header"><div class="card-title">Revenue by Service</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="quickbooksArAging">
-        <div class="card-header"><div class="card-title">QuickBooks A/R Aging</div></div>
-      </div>
-      <div class="card chart-medium chart-container" data-hal-widget-key="ebitdaNormalization">
-        <div class="card-header"><div class="card-title">EBITDA Normalization</div></div>
-      </div>
-    </div>`;
-};
-
-PageCanvas.renderQuickbooks = function(pageId, data) {
-  const root = document.getElementById('appPage');
-  if (!root) return;
-
-  // Detect stale from HAL if not provided in data bag
-  const qbExp = PageCanvasData.quickbooksExpenseCategories?.();
-  const qbAr  = PageCanvasData.quickbooksAr?.();
-  const isStale = qbExp?.stale || qbAr?.stale || data?.qbStale;
-
-  root.innerHTML = PageCanvas.moonshotQuickbooksBodyHtml({ ...(data || {}), qbStale: isStale });
-};
-
-/**
- * page-canvas.js — Issue 4: Panel-count parity renderers
- * Covers: financial, softdent, ar, claims, office-manager, documents
- * Depends on Issue 2 helpers: PageCanvas.resolveData, PageCanvas.hasRenderableData
- */
-
-PageCanvas.renderFinancial = function(pageId, data) {
-  const root = document.getElementById('appPage');
-  if (!root) return;
-  data = this.resolveData('financial', data || {});
-  const hasAny = this.hasRenderableData('quickbooks.revenue')
-              || this.hasRenderableData('quickbooks.profitAndLoss')
-              || this.hasRenderableData('quickbooks.expenses');
-  if (!hasAny) {
-    root.innerHTML = `<div class="empty-placeholder">No financial data connected</div>`;
-    return;
-  }
-  root.innerHTML = `
-    <div class="financial-page">
-      <div class="kpi-grid">
-        ${this.canvasMetricTile({ title: 'Revenue', value: data.revenue })}
-        ${this.canvasMetricTile({ title: 'Expenses', value: data.expenses })}
-        ${this.canvasMetricTile({ title: 'Net Income', value: data.netIncome })}
-      </div>
-      <div class="chart-panel-grid">
-        <div class="chart-container" data-hal-widget-key="financialRevenueTrend"></div>
-        <div class="chart-container" data-hal-widget-key="financialExpenseBreakdown"></div>
-        <div class="chart-container" data-hal-widget-key="financialProfitLoss"></div>
-        <div class="chart-container" data-hal-widget-key="financialAging"></div>
-      </div>
-    </div>
-  `;
-};
-
-PageCanvas.renderSoftdent = function(pageId, data) {
-  const root = document.getElementById('appPage');
-  if (!root) return;
-  data = this.resolveData('softdent', data || {});
-  const hasAny = [
-    'softdent.dashboard','softdent.claims','softdent.clinicalNotes',
-    'softdent.ar','softdent.newPatients','softdent.treatmentPlans',
-    'softdent.caseAcceptance','softdent.hygieneRecall','softdent.operatory',
-    'softdent.procedures','softdent.claimStatus'
-  ].some(k => this.hasRenderableData(k));
-  if (!hasAny) {
-    root.innerHTML = `<div class="empty-placeholder">No SoftDent data connected</div>`;
-    return;
-  }
-  root.innerHTML = `
-    <div class="softdent-page">
-      <div class="widget-grid" data-hal-widget-key="softdentOverview">
-        ${this.canvasMetricTile({ title: 'Production', value: data.dashboard?.production })}
-        ${this.canvasMetricTile({ title: 'Collections', value: data.dashboard?.collections })}
-      </div>
-      <div class="widget-grid" data-hal-widget-key="softdentFunnel">
-        ${this.canvasFunnel?.(data.funnel) || '<div class="empty-state">Funnel data unavailable</div>'}
-      </div>
-      <div class="widget-grid" data-hal-widget-key="softdentOperatory">
-        ${this.operatoryGrid?.(data.operatory) || '<div class="empty-state">Operatory timeline not configured</div>'}
-      </div>
-      <div class="widget-grid" data-hal-widget-key="softdentRecall">
-        ${this.recallTable?.(data.hygieneRecall) || ''}
-      </div>
-      <div class="chart-panel-grid">
-        <div class="chart-container" data-hal-widget-key="softdentProduction">
-          ${this.hasRenderableData('softdent.procedures')
-            ? this.proceduresTable?.(PageCanvasData.softdentProcedures()) || ''
-            : '<div class="empty-state">Procedures loading…</div>'}
-        </div>
-        <div class="chart-container" data-hal-widget-key="softdentClaimStatus">
-          ${this.hasRenderableData('softdent.claimStatus')
-            ? this.claimStatusPanel?.(PageCanvasData.softdentClaimStatus()) || ''
-            : '<div class="empty-state">Claim status loading…</div>'}
-        </div>
-        <div class="chart-container" data-hal-widget-key="softdentCollections"></div>
-        <div class="chart-container" data-hal-widget-key="softdentAging"></div>
-      </div>
-    </div>
-  `;
-};
-
-// page-canvas.js — page renderers for mockup parity
-
-function renderARPage(container, data = {}) {
-  const kpi = (i) => `
-    <div class="kpi-card">
-      <h4>${['0-30 Days','31-60 Days','61-90 Days'][i]}</h4>
-      <div class="metric" data-widget="ar.age${i+1}">$0</div>
-    </div>`;
-  const chart = (i) => `
-    <div class="chart-container" data-chart-type="bar" data-widget="ar.chart${i+1}">
-      <canvas></canvas>
-    </div>`;
-
-  container.innerHTML = `
-    <section class="page-ar">
-      <header class="page-header"><h2>Accounts Receivable</h2></header>
-      <div class="kpi-grid">${[0,1,2].map(kpi).join('')}</div>
-      <div class="chart-row">${[0,1,2].map(chart).join('')}</div>
-    </section>`;
-}
-
-function renderClaimsPage(container, data = {}) {
-  const chart = (i) => `
-    <div class="chart-container" data-chart-type="doughnut" data-widget="claims.chart${i+1}">
-      <canvas></canvas>
-    </div>`;
-  const claim = (i) => `
-    <article class="claim-card" data-widget="claims.claim${i+1}">
-      <span class="claim-id">CLM-${1000+i}</span>
-      <span class="claim-status badge">Pending</span>
-    </article>`;
-
-  container.innerHTML = `
-    <section class="page-claims">
-      <header class="page-header"><h2>Claims</h2></header>
-      <div class="chart-row">${[0,1,2,3].map(chart).join('')}</div>
-      <div class="claims-grid">${Array.from({length:23},(_,i)=>claim(i)).join('')}</div>
-    </section>`;
-}
-
-function renderOfficeManagerPage(container, data = {}) {
-  const panel = (i) => `
-    <div class="dashboard-panel" data-widget="office.panel${i + 1}">
-      <h4>Office Panel ${i + 1}</h4>
-    </div>`;
-  const chart = (i) => `
-    <div class="chart-container" data-chart-type="line" data-widget="office.chart${i + 1}">
-      <canvas></canvas>
-    </div>`;
-
-  container.innerHTML = `
-    <section class="page-office-manager">
-      <header class="page-header"><h2>Office Manager</h2></header>
-      ${[0, 1, 2].map((i) => `<div class="dashboard-grid">${panel(i)}</div>`).join("")}
-      <div class="chart-row">${[0, 1].map(chart).join("")}</div>
-    </section>`;
-}
-
-function renderDocumentsPage(container, data = {}) {
-  const widget = (i) => `
-    <div class="widget-card" data-widget="docs.widget${i+1}">
-      <h4>Doc Set ${i+1}</h4>
-      <div class="doc-count">0</div>
-    </div>`;
-
-  container.innerHTML = `
-    <section class="page-documents">
-      <header class="page-header"><h2>Documents</h2></header>
-      <div class="widget-grid">${[0,1,2].map(widget).join('')}</div>
-    </section>`;
-}
-
-// Moonshot app.js renderPageView — page mount adapters (DOM + string fallbacks)
-
-function moonshotMountDomPage(mountFn, pageId, container, data) {
-  const el = container || (typeof document !== "undefined" ? document.getElementById("page-canvas") : null);
-  if (!el || typeof mountFn !== "function") return;
-
-  const getById = function (id) {
-    if (id === "appPage") return el;
-    if (typeof document !== "undefined" && typeof document.getElementById === "function") {
-      return document.getElementById.__orig ? document.getElementById.__orig(id) : null;
-    }
-    return null;
-  };
-
-  if (typeof document !== "undefined" && typeof document.getElementById === "function") {
-    const origGet = document.getElementById.bind(document);
-    document.getElementById = function (id) {
-      if (id === "appPage") return el;
-      return origGet(id);
-    };
-    try {
-      mountFn.call(typeof PageCanvas !== "undefined" ? PageCanvas : null, pageId, data || {});
-    } finally {
-      document.getElementById = origGet;
-    }
-    return;
-  }
-
-  const prevDoc = globalThis.document;
-  globalThis.document = { getElementById: getById };
-  try {
-    mountFn.call(typeof PageCanvas !== "undefined" ? PageCanvas : null, pageId, data || {});
-  } finally {
-    if (prevDoc === undefined) delete globalThis.document;
-    else globalThis.document = prevDoc;
-  }
-}
-
-function moonshotMountStringPage(pageId, container) {
-  const el = container || document.getElementById("page-canvas");
-  if (!el || typeof PageCanvas === "undefined" || typeof PageCanvas.renderBody !== "function") return;
-  el.innerHTML = PageCanvas.renderBody(pageId);
-}
-
-function renderFinancialPage(container, data) {
-  if (typeof PageCanvas !== "undefined" && typeof PageCanvas.renderFinancial === "function") {
-    moonshotMountDomPage(PageCanvas.renderFinancial, "financial", container, data);
-  } else {
-    moonshotMountStringPage("financial", container);
-  }
-}
-
-function renderSoftdentPage(container, data) {
-  if (typeof PageCanvas !== "undefined" && typeof PageCanvas.renderSoftdent === "function") {
-    moonshotMountDomPage(PageCanvas.renderSoftdent, "softdent", container, data);
-  } else {
-    moonshotMountStringPage("softdent", container);
-  }
-}
-
-function renderQuickbooksPage(container, data) {
-  if (typeof PageCanvas !== "undefined" && typeof PageCanvas.renderQuickbooks === "function") {
-    moonshotMountDomPage(PageCanvas.renderQuickbooks, "quickbooks", container, data);
-  } else {
-    moonshotMountStringPage("quickbooks", container);
-  }
-}
-
-function renderTaxesPage(container, data) {
-  moonshotMountStringPage("taxes", container);
-}
-
-function renderNarrativesPage(container, data) {
-  moonshotMountStringPage("narratives", container);
-}
-
-function renderLibraryPage(container, data) {
-  moonshotMountStringPage("library", container);
-}
-
-if (typeof globalThis !== "undefined") {
-  globalThis.renderFinancialPage = renderFinancialPage;
-  globalThis.renderSoftdentPage = renderSoftdentPage;
-  globalThis.renderQuickbooksPage = renderQuickbooksPage;
-  globalThis.renderTaxesPage = renderTaxesPage;
-  globalThis.renderNarrativesPage = renderNarrativesPage;
-  globalThis.renderLibraryPage = renderLibraryPage;
-  globalThis.renderARPage = renderARPage;
-  globalThis.renderClaimsPage = renderClaimsPage;
-  globalThis.renderOfficeManagerPage = renderOfficeManagerPage;
-  globalThis.renderDocumentsPage = renderDocumentsPage;
-}
-
 PageCanvas.moonshotPreviewHtml = function moonshotPreviewHtml(pageId, feed, snapshot) {
   if (typeof this.setFeed === "function") {
     this.setFeed(feed, snapshot);
-  }
-  const mount = {
-    _html: "",
-    set innerHTML(value) {
-      this._html = String(value == null ? "" : value);
-    },
-    get innerHTML() {
-      return this._html;
-    },
-  };
-  const part3 = {
-    ar: renderARPage,
-    claims: renderClaimsPage,
-    "office-manager": renderOfficeManagerPage,
-    documents: renderDocumentsPage,
-  };
-  if (typeof window === "undefined") {
-    if (pageId === "quickbooks" && this.moonshotQuickbooksBodyHtml) {
-      return this.moonshotQuickbooksBodyHtml();
-    }
-    return typeof this.renderBody === "function" ? this.renderBody(pageId, feed, snapshot) : "";
-  }
-  const renderers = {
-    financial: renderFinancialPage,
-    taxes: renderTaxesPage,
-    softdent: renderSoftdentPage,
-    narratives: renderNarrativesPage,
-    claims: renderClaimsPage,
-    ar: renderARPage,
-    "office-manager": renderOfficeManagerPage,
-    documents: renderDocumentsPage,
-    quickbooks: renderQuickbooksPage,
-    library: renderLibraryPage,
-  };
-  const fn = renderers[pageId];
-  if (typeof fn === "function") {
-    fn(mount, {});
-    return mount.innerHTML;
   }
   return typeof this.renderBody === "function" ? this.renderBody(pageId, feed, snapshot) : "";
 };

@@ -123,50 +123,54 @@ const PageCanvasData = (function () {
     const ov = metrics("practiceFinancialOverview");
     const trend = metrics("financialProductionTrend");
     const payer = metrics("payerMixAndCollections");
-    const ar = metrics("arAgingAndCollections");
+    const ribbon = nr2KpiRibbonTiles();
+    const goal = nr2GoalScorecard();
+    const lag = nr2CollectionLag();
     const prodSpark = sparkSeries(fin.productionTrend && fin.productionTrend.production);
     const collections = collectionsDisplay(
       fin,
       ov.collectionsTotal,
-      ar.aging90PlusPct ? `A/R 90+ ${ar.aging90PlusPct}` : null,
+      payer.collectionRate ? `Rate ${payer.collectionRate}` : null,
     );
+    const dsoTile = (ribbon.tiles || []).find((t) => /dso|days|ar/i.test(String(t.label || "")));
+    const dsoValue = lag.hasData && lag.avgLagDays != null ? String(lag.avgLagDays) : dsoTile ? dsoTile.value : "—";
+    const goalPct = goal.hasData && goal.pctOfGoal != null ? `${goal.pctOfGoal}%` : "—";
     return [
       {
         label: "Production MTD",
         value: fmt(ov.productionTotal || trend.productionMtd || (fin.productionMtd && fin.productionMtd.value)),
         hint: fin.productionMtd && fin.productionMtd.vs ? fin.productionMtd.vs : fmt(trend.trailingCollectionRate),
-        tone: widgetTone("financialProductionTrend"),
-        spark: prodSpark,
-        widgetKey: "financialProductionTrend",
-      },
-      {
-        label: "Collection rate",
-        value: fmt(payer.collectionRate || payer.latestMonthCollectionRate),
-        hint: fin.collectionsPending ? "Collections export pending" : fmt(payer.trailingCollectionPeriods),
-        tone: fin.collectionsPending ? "warning" : widgetTone("payerMixAndCollections"),
-        widgetKey: "payerMixAndCollections",
-      },
-      {
-        label: "QuickBooks net income",
-        value: fmt(ov.monthlyNetIncome),
-        hint: fmt(ov.monthlyRevenue ? `Revenue ${ov.monthlyRevenue}` : null),
         tone: widgetTone("practiceFinancialOverview"),
-        widgetKey: "quickbooksProfitLossDetail",
-      },
-      {
-        label: "SoftDent collections",
-        value: collections.value,
-        hint: collections.hint,
-        tone: collections.tone || widgetTone("practiceFinancialOverview"),
-        spark: sparkSeries(fin.productionTrend && fin.productionTrend.average),
+        spark: prodSpark,
         widgetKey: "practiceFinancialOverview",
       },
       {
-        label: "SoftDent A/R",
-        value: fmt(ar.totalOutstanding),
-        hint: fmt(ar.aging90PlusPct ? `90+ ${ar.aging90PlusPct}` : "Outstanding balance"),
-        tone: widgetTone("arAgingAndCollections") || "warning",
-        widgetKey: "arAgingAndCollections",
+        label: "Collections MTD",
+        value: collections.value,
+        hint: collections.hint,
+        tone: collections.tone || widgetTone("financialProductionTrend"),
+        widgetKey: "financialProductionTrend",
+      },
+      {
+        label: "Net Income YTD",
+        value: fmt(ov.monthlyNetIncome),
+        hint: fmt(ov.monthlyRevenue ? `Revenue ${ov.monthlyRevenue}` : null),
+        tone: widgetTone("payerMixAndCollections"),
+        widgetKey: "payerMixAndCollections",
+      },
+      {
+        label: "A/R Days",
+        value: dsoValue,
+        hint: lag.dsoProxy ? "Weighted DSO" : "Cross-analytics",
+        tone: widgetTone("nr2KpiRibbon"),
+        widgetKey: "nr2KpiRibbon",
+      },
+      {
+        label: "Goal Attainment",
+        value: goalPct,
+        hint: goal.hasData ? "YTD production vs goal" : "—",
+        tone: goal.tone || widgetTone("nr2GoalScorecard"),
+        widgetKey: "nr2GoalScorecard",
       },
     ];
   }
@@ -1379,7 +1383,7 @@ const PageCanvasData = (function () {
     const cards = rows
       .map((row) => {
         const icon = typeof AppIcons !== "undefined" ? AppIcons.widget(row.widgetKey) : "";
-        return `<article class="ms-ops-stat ms-ops-data__stat" data-hal-widget-key="${escHtml(row.widgetKey)}" data-hal-cmd="Explain ${escHtml(row.label)}" role="button" tabindex="0">
+        return `<article class="ms-ops-stat ms-ops-data__stat" data-hal-kpi-ref="${escHtml(row.widgetKey)}" data-hal-cmd="Explain ${escHtml(row.label)}" role="button" tabindex="0">
           <span class="ms-ops-stat__ico">${icon}</span>
           <strong>${escHtml(row.value)}</strong>
           <span>${escHtml(row.label)}</span>

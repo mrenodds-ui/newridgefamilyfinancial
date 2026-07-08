@@ -39,13 +39,15 @@ require(join(siteDir, "hal-widget-master-chart.js"));
 require(join(siteDir, "hal-page-widgets.js"));
 require(join(siteDir, "hal-live-widget-bridge.js"));
 const HalPilotWidgets = require(join(siteDir, "hal-pilot-widgets.js"));
-require(join(siteDir, "page-schema.js"));
+require(join(siteDir, "moonshot-page-layouts.js"));
+require(join(siteDir, "moonshot-page-registry.js"));
 require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
 require(join(siteDir, "tax-engine.js"));
-require(join(siteDir, "page-chrome.js"));
+require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
 require(join(siteDir, "month-end-close.js"));
 require(join(siteDir, "portal-ops.js"));
 require(join(siteDir, "page-canvas-data.js"));
+require(join(siteDir, "moonshot-layout-engine.js"));
 require(join(siteDir, "page-canvas.js"));
 require(join(siteDir, "components.js"));
 const ServicesMod = require(join(siteDir, "services.js"));
@@ -63,7 +65,7 @@ const MOCKUP_EPOCH = PageSchema.LAYOUT_EPOCH === "moonshot-mockup";
 
 const FUNCTIONAL_PAGES = [
   { id: "financial", checks: ["widget-grid", "widget-card", "Production MTD"] },
-  { id: "taxes", checks: ["widget-grid", "widget-card", "Book-to-tax bridge", "Reasonable compensation scenarios", "MemoAI evidence"] },
+  { id: "taxes", checks: ["widget-grid", "widget-card", "Book Income", "Net Income Summary", "Cash Flow Trend", "Operating Expenses"] },
   { id: "softdent", checks: ["widget-grid", "widget-card", "Care Delivery Summary", "Case Acceptance Rate", "Operatory Schedule", "funnel-label"] },
   { id: "quickbooks", checks: ["dashboard-grid", "kpi-card", "sync-badge", "Loss Trend", "Operating Expenses"] },
   { id: "ar", checks: ["widget-grid", "widget-card", "kpi-grid", "heatmap-grid", "queue-list", "Outstanding Claims"] },
@@ -76,7 +78,7 @@ const FUNCTIONAL_PAGES = [
 
 const HIGH_TECH_SURFACES = {
   financial: ["widget-card", "provider-list", "chart-container"],
-  taxes: ["widget-card", "tax-split-chart"],
+  taxes: ["widget-card", "chart-container", "ms-elite-stat-grid"],
   softdent: ["widget-card", "funnel-chart", "funnel-label", "operatory-grid"],
   quickbooks: ["dashboard-grid", "kpi-card"],
   ar: ["widget-card", "kpi-grid", "heatmap-grid", "queue-list"],
@@ -198,8 +200,11 @@ assert.equal(
   "PageSchema.LAYOUT_EPOCH must be moonshot-mockup",
 );
 assert.equal(buildManifest.REQUIRED_EPOCH, "moonshot-mockup", "nr2-build.json must require moonshot-mockup epoch");
-assert.ok(indexHtml.includes("page-schema.js"), "index must load PageSchema");
-assert.ok(indexHtml.includes("page-chrome.js"), "index must load PageChrome");
+assert.ok(indexHtml.includes("moonshot-page-layouts.js"), "index must load inlined layout manifest");
+assert.ok(!indexHtml.includes("moonshot-page-layouts.json"), "index must not load external layout JSON");
+assert.ok(indexHtml.includes("moonshot-page-registry.js"), "index must load Moonshot page registry");
+assert.ok(indexHtml.includes("nr2-moonshot-mockup-chrome.js"), "index must load Moonshot mockup chrome");
+assert.ok(!indexHtml.includes("page-chrome.js"), "index must not load legacy page-chrome.js");
 assert.ok(indexHtml.includes("desktop-boot.js"), "index must load desktop boot gate");
 const scriptVersions = [...indexHtml.matchAll(/\.js\?v=([^"&]+)/g)].map((match) => match[1]);
 assert.ok(scriptVersions.length >= 1, "index must load versioned scripts");
@@ -231,16 +236,21 @@ assert.ok(!indexHtml.includes('class="topbar"'), "index must not include legacy 
 assert.ok(appJs.includes("PageSchema.navPages") || appJs.includes("appPages"), "app must derive navigation from PageSchema");
 assert.ok(indexHtml.includes("tax-engine.js"), "index must load TaxEngine");
 assert.ok(indexHtml.includes("page-canvas-data.js"), "index must load PageCanvasData");
+assert.ok(indexHtml.includes("moonshot-layout-engine.js"), "index must load MoonshotLayoutEngine");
 assert.ok(indexHtml.includes("page-canvas.js"), "index must load PageCanvas");
 const pageViewsJs = readFileSync(join(siteDir, "page-views.js"), "utf8");
 const pageCanvasJs = readFileSync(join(siteDir, "page-canvas.js"), "utf8");
+const moonshotLayoutJs = readFileSync(join(siteDir, "moonshot-layout-engine.js"), "utf8");
 assert.ok(!pageViewsJs.includes("PAGE_OUTLINES"), "page-views must not use legacy PAGE_OUTLINES");
 assert.ok(!pageViewsJs.includes("MOCK_IMAGES"), "page-views must not use mock image routing");
 assert.ok(!pageViewsJs.includes("readDashboard"), "page-views must not fetch legacy dashboard renderers");
 assert.ok(pageViewsJs.includes("renderBody(pageId"), "page-views must delegate body HTML to PageCanvas");
 assert.ok(pageCanvasJs.includes("PageCanvasData") || pageCanvasJs.includes("dataApi"), "page-canvas must render from HAL program snapshot data");
-assert.ok(pageCanvasJs.includes("renderFinancial"), "page-canvas must implement financial body");
-assert.ok(pageCanvasJs.includes("renderTaxes"), "page-canvas must implement taxes body");
+assert.ok(pageCanvasJs.includes("MoonshotLayoutEngine"), "page-canvas must delegate to MoonshotLayoutEngine");
+assert.ok(moonshotLayoutJs.includes("moonshot-page-layouts.js"), "moonshot layout engine must load inlined manifest");
+assert.ok(!moonshotLayoutJs.includes("moonshot-page-layouts.json"), "layout engine must not fetch external layout JSON");
+assert.ok(!pageCanvasJs.includes("renderFinancial"), "page-canvas must not use legacy renderFinancial");
+assert.ok(!pageCanvasJs.includes("renderQuickbooksLegacy"), "page-canvas must not use legacy QuickBooks renderer");
 const pageCanvasDataJs = readFileSync(join(siteDir, "page-canvas-data.js"), "utf8");
 assert.ok(pageCanvasDataJs.includes("financialImportNotice"), "page canvas data must expose financial import notice");
 assert.ok(pageCanvasDataJs.includes("claimsImportNotice"), "page canvas data must expose claims import notice");
@@ -330,6 +340,5 @@ if (priorBridge === undefined) {
 }
 
 execSync("node scripts/rebuild-moonshot-site.mjs --dry-run", { cwd: __dirname, stdio: "pipe" });
-execSync("node scripts/audit-page-schema.mjs", { cwd: __dirname, stdio: "inherit" });
 
 console.log("page validation passed");
