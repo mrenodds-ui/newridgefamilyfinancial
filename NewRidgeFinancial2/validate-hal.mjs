@@ -1816,7 +1816,14 @@ async function main() {
   assert(readFileSync(join(siteDir, "nr2-moonshot-ui.js"), "utf8").includes("chartMountPolicy"), "unified chart mount policy must merge with NR2Charts");
   assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes('data-nr2-export="page-storyboard"'), "staff pages must expose storyboard export");
   assert(existsSync(join(__dirname, "page_storyboard_export.py")), "page_storyboard_export module must exist");
-  assert(completeDoc.includes("hal-10084") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist through hal-10084");
+  assert(existsSync(join(siteDir, "nr2-tier3.js")), "nr2-tier3.js must exist for Tier S3");
+  assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("semantic-zoom"), "Tier S3 semantic zoom must be wired");
+  assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("hal-presence-orb"), "Tier S3 HAL presence must be wired");
+  assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes("renderSemanticZoomToggle"), "mockup chrome must expose semantic zoom toggle");
+  assert(readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8").includes("hal-presence-orb"), "HAL chat must render presence orb");
+  assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes("nr2-hero-mirror"), "hero mirror CSS must exist");
+  assert(readFileSync(join(__dirname, "hal_hub.py"), "utf8").includes("heroMetrics"), "hub broadcast must store hero metrics");
+  assert(completeDoc.includes("hal-10085") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist through hal-10085");
 
   global.DesktopBridge = priorPlacementBridge;
   global.ImportCoordinator = priorPlacementCoordinator;

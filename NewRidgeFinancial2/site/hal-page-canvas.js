@@ -121,12 +121,19 @@ const HalPageCanvas = (function () {
                       .map((t) => `<div class="hal-agent-loop__step"><strong>Tool</strong>${H.esc(t)}</div>`)
                       .join("")}</div>`
                   : "";
+            const citations =
+              m.role === "hal" && ((m.tools && m.tools.length) || (m.citationWidgets && m.citationWidgets.length))
+                ? typeof NR2Tier3 !== "undefined" && NR2Tier3.renderCitationChipsHtml
+                  ? NR2Tier3.renderCitationChipsHtml(m.tools, m.citationWidgets)
+                  : ""
+                : "";
             const roleClass = m.role === "user" ? "message message-user" : "message message-hal";
             return `<div class="${roleClass}">
                 <div class="message-head">
                   <span>${m.role === "user" ? "You" : "HAL"}${m.lane ? ` · ${H.esc(m.lane)}` : ""}</span>
                   ${m.role === "hal" ? `<button type="button" class="message-copy" data-hal-copy-response title="Copy response">${H.uiIcon("copy")}</button>` : ""}
                 </div>
+                ${citations}
                 <p>${H.esc(m.text)}</p>
                 ${loop}
                 ${followups}
@@ -138,8 +145,8 @@ const HalPageCanvas = (function () {
       ctx.halModels && ctx.halModels.config && ctx.halModels.config.mode === "online" ? "Auto" : "Registry only";
     return `<div class="chat-rail-panel" data-panel="askHal">
       <div class="chat-header">
-        <div class="chat-title"><span class="chat-avatar" aria-hidden="true">AI</span> Ask HAL</div>
-        <div class="chat-status"><span class="status-dot" aria-hidden="true"></span>${H.esc(modeLabel)} · Local only</div>
+        <div class="chat-title"><span class="hal-presence-orb hal-presence-orb--idle" data-hal-presence-orb aria-hidden="true"></span><span class="chat-avatar" aria-hidden="true">AI</span> Ask HAL</div>
+        <div class="chat-status"><span class="status-dot" data-hal-presence-dot aria-hidden="true"></span>${H.esc(modeLabel)} · Local only</div>
       </div>
       <div class="chat-messages">${chatHtml || '<p class="chat-placeholder">Ask about imports, widgets, or today\'s plan…</p>'}</div>
       <form class="chat-form chat-input" id="hpAskForm">

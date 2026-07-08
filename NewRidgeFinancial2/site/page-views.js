@@ -298,6 +298,9 @@ const PageViews = (function () {
     if (typeof NR2PageFilters !== "undefined" && NR2PageFilters.mountPageFilters) {
       NR2PageFilters.mountPageFilters(container, pageId, { snapshot: programSnapshot });
     }
+    if (typeof NR2Tier3 !== "undefined" && NR2Tier3.mountPage) {
+      NR2Tier3.mountPage(container, pageId, { snapshot: programSnapshot });
+    }
     if (typeof NR2MoonshotUI !== "undefined" && NR2MoonshotUI.enhancePage) {
       NR2MoonshotUI.enhancePage(pageId, container).catch(() => {});
     }

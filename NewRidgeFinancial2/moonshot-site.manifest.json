@@ -78,6 +78,7 @@
     "page-canvas-data.js",
     "page-canvas.js",
     "nr2-page-filters.js",
+    "nr2-tier3.js",
     "components.js",
     "services.js",
     "page-views.js",

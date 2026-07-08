@@ -1233,3 +1233,130 @@
   gap: 16px;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
 }
+
+/* Tier S3 — semantic zoom, HAL presence, hero mirror, stream citations (hal-10085) */
+.app--moonshot-mockup .semantic-zoom-btn {
+  background: rgba(124, 184, 138, 0.1);
+  border: 1px solid rgba(124, 184, 138, 0.35);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  padding: 6px 12px;
+}
+
+.app--moonshot-mockup .ms-page-body[data-nr2-semantic-zoom="executive"] .widget-card.nr2-zoom-hidden {
+  display: none !important;
+}
+
+.app--moonshot-mockup .ms-page-body[data-nr2-semantic-zoom="executive"] .widget-card.nr2-zoom-hero {
+  grid-column: span 6;
+}
+
+.app--moonshot-mockup .hal-presence-orb {
+  border-radius: 50%;
+  display: inline-block;
+  height: 10px;
+  margin-right: 8px;
+  vertical-align: middle;
+  width: 10px;
+}
+
+.app--moonshot-mockup .hal-presence-orb--idle {
+  background: var(--accent-sage, #7cb88a);
+  box-shadow: 0 0 6px rgba(124, 184, 138, 0.5);
+}
+
+.app--moonshot-mockup .hal-presence-orb--thinking {
+  animation: nr2-presence-pulse 1.2s ease-in-out infinite;
+  background: var(--accent-cyan, #22d3ee);
+  box-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+
+.app--moonshot-mockup .hal-presence-orb--alert {
+  animation: nr2-presence-pulse 0.8s ease-in-out infinite;
+  background: var(--accent-amber, #ffb800);
+  box-shadow: 0 0 8px rgba(255, 184, 0, 0.6);
+}
+
+@keyframes nr2-presence-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app--moonshot-mockup .hal-presence-orb--thinking,
+  .app--moonshot-mockup .hal-presence-orb--alert {
+    animation: none;
+  }
+}
+
+.app--moonshot-mockup .hal-stream-citations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.app--moonshot-mockup .hal-citation-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 3px 10px;
+}
+
+.app--moonshot-mockup .hal-citation-chip--widget {
+  color: var(--accent-cyan);
+  cursor: pointer;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.08), rgba(124, 184, 138, 0.08));
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror__badge {
+  color: var(--accent-cyan);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror__tiles {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror__tile {
+  display: grid;
+  gap: 2px;
+  min-width: 100px;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror__value {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app--moonshot-mockup .nr2-hero-mirror__label {
+  color: var(--text-secondary);
+  font-size: 10px;
+}

@@ -263,6 +263,9 @@ const MoonshotMockupChrome = (function () {
     const parts = [];
     if (STAFF_HEADER_TOOL_PAGES.has(schema.id)) {
       parts.push(renderImportSyncBadge(o.importReadiness, schema.id));
+      if (typeof NR2Tier3 !== "undefined" && NR2Tier3.renderSemanticZoomToggle) {
+        parts.push(NR2Tier3.renderSemanticZoomToggle(schema.id));
+      }
       parts.push(renderPageStoryboardButton());
     }
     if (schema.id === "financial") parts.push(renderFinancialCpaExportButton());

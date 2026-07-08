@@ -964,6 +964,9 @@ function renderWorkstationScreen(options) {
     halProgramSnapshot,
     workstationSyncStatus,
   });
+  if (typeof NR2Tier3 !== "undefined" && NR2Tier3.pollHeroMirror) {
+    NR2Tier3.pollHeroMirror(root);
+  }
 }
 
 async function postOperatorAudit(action, detail) {
@@ -1263,6 +1266,9 @@ function scheduleHalWidgetRefresh(snapshot, options) {
         PageViews.renderPageView(appPage, halData, currentId, select, halWidgetFeed, halProgramSnapshot);
         if (typeof PageChrome !== "undefined" && PageChrome.refreshHalReadinessStrip) {
           PageChrome.refreshHalReadinessStrip(currentId, halWidgetFeed);
+        }
+        if (typeof NR2Tier3 !== "undefined" && NR2Tier3.publishHeroMetrics && currentId === "financial") {
+          NR2Tier3.publishHeroMetrics(currentId);
         }
       }
       refreshOpsHealthStatus().catch(() => {
@@ -3482,6 +3488,7 @@ async function executeHalConsentAction(consentText) {
 
 function refreshHalSubmitUi(wsSilent, opts) {
   const o = opts || {};
+  if (typeof NR2Tier3 !== "undefined" && NR2Tier3.refreshPresence) NR2Tier3.refreshPresence();
   if (wsSilent) {
     workstationAskLoading = !!halAskLoading;
     renderWorkstationScreen();
@@ -3760,6 +3767,10 @@ async function handleHalSubmit(query) {
     ? (partial) => {
         if (!partial) return;
         placeholder.text = partial;
+        if (typeof NR2Tier3 !== "undefined") {
+          NR2Tier3.syncPresence({ loading: true, alert: false });
+          NR2Tier3.updateStreamCitations(placeholder.tools, placeholder.citationWidgets);
+        }
         if (wsSilent) return;
         const now = Date.now();
         if (now - streamRenderAt < 40) return;
@@ -4887,7 +4898,7 @@ function renderSidebar(activeId) {
   if (!sidebar || typeof PageSchema === "undefined") return;
   if (PageSchema.LAYOUT_EPOCH !== "moonshot-mockup") {
     sidebar.innerHTML =
-      '<div class="sidebar__boot-error">Legacy schema blocked. Reload with ?v=hal-10084&__nr2_purge=1</div>';
+      '<div class="sidebar__boot-error">Legacy schema blocked. Reload with ?v=hal-10085&__nr2_purge=1</div>';
     return;
   }
   const MC =
@@ -5899,6 +5910,7 @@ async function boot() {
   }
   const initial = NR2_WORKSTATION_ONLY ? "workstation" : resolvePageId(window.location.hash);
   select(initial);
+  if (typeof NR2Tier3 !== "undefined" && NR2Tier3.install) NR2Tier3.install();
   if (!NR2_WORKSTATION_ONLY) startHalHubDispatcher();
   if (NR2_WORKSTATION_ONLY) {
     startWorkstationHubHeartbeat();

@@ -1404,14 +1404,7 @@ class NR2BottleServer(BottleServer):
             try:
                 body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
                 payload = json.loads(body or "{}")
-                record_hub_broadcast(
-                    {
-                        "at": payload.get("at"),
-                        "from": payload.get("from") or payload.get("sender") or "Workstation",
-                        "channel": payload.get("channel") or "office",
-                        "target": payload.get("target") or "all",
-                    }
-                )
+                record_hub_broadcast(payload if isinstance(payload, dict) else {})
                 return _json_response({"ok": True, **last_hub_broadcast()})
             except Exception as exc:
                 return _json_response({"ok": False, "error": str(exc)}, status=500)

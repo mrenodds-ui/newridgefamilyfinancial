@@ -223,11 +223,15 @@ def hub_notify_access_ok(origin: str | None = None, header: str | None = None) -
 
 def record_hub_broadcast(payload: dict) -> None:
     global _last_hub_broadcast
+    p = payload if isinstance(payload, dict) else {}
     _last_hub_broadcast = {
-        "at": str(payload.get("at") or _now_iso()),
-        "from": str(payload.get("from") or ""),
-        "channel": str(payload.get("channel") or "office"),
-        "target": str(payload.get("target") or "all"),
+        "at": str(p.get("at") or _now_iso()),
+        "from": str(p.get("from") or ""),
+        "channel": str(p.get("channel") or "office"),
+        "target": str(p.get("target") or "all"),
+        "kind": str(p.get("kind") or ""),
+        "pageId": str(p.get("pageId") or ""),
+        "heroMetrics": p.get("heroMetrics") if isinstance(p.get("heroMetrics"), list) else [],
     }
 
 
