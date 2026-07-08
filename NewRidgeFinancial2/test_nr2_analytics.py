@@ -11,6 +11,7 @@ from unittest.mock import patch
 from nr2_analytics import (
     alert_ticker,
     analytics_snapshot,
+    collection_deposit_variance,
     collection_lag,
     goal_scorecard,
     kpi_ribbon,
@@ -82,6 +83,14 @@ class Nr2AnalyticsTests(unittest.TestCase):
         self.assertTrue(result["hasData"])
         self.assertEqual(result["granularity"], "monthly")
 
+    def test_collection_deposit_variance(self) -> None:
+        bundle = _sample_bundle()
+        with patch("nr2_analytics._qb_deposits_for_period", return_value=(94000.0, "test.probe")):
+            result = collection_deposit_variance(bundle=bundle)
+        self.assertTrue(result["hasData"])
+        self.assertEqual(result["period"], "2026-06")
+        self.assertAlmostEqual(result["variancePct"], -1.1, places=1)
+
     def test_analytics_snapshot_keys(self) -> None:
         snap = analytics_snapshot(bundle=_sample_bundle())
         for key in (
@@ -90,6 +99,7 @@ class Nr2AnalyticsTests(unittest.TestCase):
             "quickbooksMonthlyRevenue",
             "softdentProductionDaily",
             "kpiRibbon",
+            "collectionDepositVariance",
             "goalScorecard",
             "alertTicker",
             "providerCompensation",

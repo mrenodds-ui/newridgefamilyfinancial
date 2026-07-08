@@ -1833,8 +1833,13 @@ async function main() {
   assert(readFileSync(join(siteDir, "page-canvas.js"), "utf8").includes("data-narrative-draft"), "claims kanban must expose Draft with HAL per row");
   assert(readFileSync(join(siteDir, "hal-agent-programming.js"), "utf8").includes("auto-agent-v14"), "agent programming must bump to v14 for Phase D");
   assert(JSON.parse(readFileSync(halModelsPath, "utf8")).config.agentCapabilities.tools.includes("draft_insurance_narrative"), "hal-models must list draft_insurance_narrative");
-  assert(readFileSync(join(__dirname, "docs", "MOONSHOT_PHASE5_HUB_PROTOCOL.md"), "utf8").includes("hal-10092"), "hub protocol doc must reflect hal-10092 sign-off");
-  assert(completeDoc.includes("hal-10092") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist through hal-10092");
+  assert(readFileSync(join(siteDir, "nr2-qb-reports.js"), "utf8").includes("Awaiting QuickBooks sync"), "QB reports must expose cold empty-state copy");
+  assert(readFileSync(join(siteDir, "nr2-analytics.js"), "utf8").includes("collectionDepositVariance"), "browser analytics must expose deposit variance");
+  assert(readFileSync(join(__dirname, "nr2_analytics.py"), "utf8").includes("collection_deposit_variance"), "Python analytics must expose collection_deposit_variance");
+  assert(readFileSync(join(__dirname, "import_sync.py"), "utf8").includes("quickbooks_deposits_summary.json"), "import sync must write deposit probe sidecar");
+  assert(readFileSync(join(siteDir, "hal-proactive.js"), "utf8").includes("analyzeCollectionDepositVariance"), "proactive HAL must alert on deposit variance");
+  assert(readFileSync(join(__dirname, "docs", "MOONSHOT_PHASE5_HUB_PROTOCOL.md"), "utf8").includes("hal-10093"), "hub protocol doc must reflect hal-10093 sign-off");
+  assert(completeDoc.includes("hal-10093") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist through hal-10093");
 
   global.DesktopBridge = priorPlacementBridge;
   global.ImportCoordinator = priorPlacementCoordinator;

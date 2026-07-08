@@ -168,6 +168,65 @@ const NR2Analytics = (function () {
     };
   }
 
+  function qbDepositsForPeriod(snapshot, period) {
+    const bundle = bundleFromSnapshot(snapshot);
+    const qb = (bundle && bundle.quickbooks) || {};
+    const summary = qb.depositsSummary || qb.deposits_summary;
+    if (summary) {
+      const dep = parseMoney(summary.totalDeposits || summary.total_deposits);
+      if (dep > 0) return { amount: dep, source: "quickbooks.depositsSummary" };
+    }
+    const probe =
+      (typeof NR2QbReports !== "undefined" && NR2QbReports.probeFromSnapshot
+        ? NR2QbReports.probeFromSnapshot(snapshot)
+        : null) || {};
+    const dep = parseMoney(probe.total_deposits || probe.deposits_total || probe.bank_deposits);
+    if (dep > 0) return { amount: dep, source: "quickbooksProbe" };
+    const byPeriod = probe.deposits_by_period || probe.monthly_deposits;
+    if (Array.isArray(byPeriod) && byPeriod.length) {
+      const match = byPeriod.find((row) => normalizePeriod(row.period || row.Period) === period) || byPeriod[byPeriod.length - 1];
+      const amount = parseMoney(match && (match.amount || match.total || match.Deposits));
+      if (amount > 0) return { amount, source: "quickbooksProbe.period" };
+    }
+    const payments = parseMoney(probe.payments_received || probe.total_payments_received);
+    if (payments > 0) return { amount: payments, source: "quickbooksProbe.payments" };
+    return { amount: 0, source: "" };
+  }
+
+  function collectionDepositVariance(snapshot) {
+    const sdRows = dashboardRows(snapshot);
+    if (!sdRows.length) {
+      return {
+        hasData: false,
+        variancePct: null,
+        summary: "Collection vs deposit variance populates when SoftDent dashboard and QuickBooks deposit exports share a period.",
+      };
+    }
+    const latest = sdRows[sdRows.length - 1];
+    const collections = latest.collections || 0;
+    const dep = qbDepositsForPeriod(snapshot, latest.period);
+    if (collections <= 0 || !dep.amount) {
+      return { hasData: false, period: latest.period, variancePct: null, summary: "" };
+    }
+    const variancePct = Math.round(((dep.amount - collections) / collections) * 1000) / 10;
+    const threshold =
+      typeof window !== "undefined" && window.NR2_DEPOSIT_VARIANCE_THRESHOLD_PCT
+        ? parseMoney(window.NR2_DEPOSIT_VARIANCE_THRESHOLD_PCT)
+        : 8;
+    const tone = Math.abs(variancePct) <= threshold ? "ok" : Math.abs(variancePct) <= threshold * 1.5 ? "warn" : "alert";
+    return {
+      hasData: true,
+      period: latest.period,
+      softdentCollections: collections,
+      quickbooksDeposits: dep.amount,
+      variancePct,
+      thresholdPct: threshold,
+      tone,
+      source: dep.source,
+      summary: `${latest.period}: QuickBooks deposits are ${variancePct > 0 ? "+" : ""}${variancePct}% vs SoftDent collections.`,
+    };
+  }
+
   function kpiRibbon(snapshot) {
     const recon = productionReconciliation(snapshot);
     const lag = collectionLag(snapshot);
@@ -223,6 +282,15 @@ const NR2Analytics = (function () {
         });
       }
     }
+    const depVar = collectionDepositVariance(snapshot);
+    if (depVar.hasData && depVar.variancePct != null) {
+      tiles.push({
+        label: "Collections vs deposits",
+        value: `${depVar.variancePct > 0 ? "+" : ""}${depVar.variancePct}%`,
+        tone: depVar.tone || "neutral",
+        widgetKey: "nr2ProductionReconciliation",
+      });
+    }
     return { tiles: tiles.slice(0, 6), hasData: tiles.length > 0 };
   }
 
@@ -256,6 +324,14 @@ const NR2Analytics = (function () {
         level: "warn",
         text: `Collection lag ${lag.avgLagDays} days exceeds 45-day review threshold`,
         widgetKey: "nr2CollectionLag",
+      });
+    }
+    const depVar = collectionDepositVariance(snapshot);
+    if (depVar.hasData && depVar.variancePct != null && Math.abs(depVar.variancePct) > (depVar.thresholdPct || 8)) {
+      alerts.push({
+        level: Math.abs(depVar.variancePct) > (depVar.thresholdPct || 8) * 1.5 ? "alert" : "warn",
+        text: `Collections vs QB deposits variance ${depVar.variancePct}% (${depVar.period || "latest"})`,
+        widgetKey: "nr2ProductionReconciliation",
       });
     }
     if (!alerts.length) {
@@ -316,6 +392,7 @@ const NR2Analytics = (function () {
     quickbooksMonthlyRevenue,
     softdentProductionDaily,
     kpiRibbon,
+    collectionDepositVariance,
     goalScorecard,
     alertTicker,
     providerCompensation,

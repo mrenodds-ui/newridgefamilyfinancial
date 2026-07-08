@@ -309,6 +309,28 @@ const HalProactive = (function () {
     }
   }
 
+  function analyzeCollectionDepositVariance(snapshot, recommendations, seen) {
+    const api =
+      typeof NR2Analytics !== "undefined"
+        ? NR2Analytics
+        : typeof window !== "undefined" && window.NR2Analytics
+          ? window.NR2Analytics
+          : null;
+    if (!api || typeof api.collectionDepositVariance !== "function") return;
+    const depVar = api.collectionDepositVariance(snapshot);
+    if (!depVar || !depVar.hasData || depVar.variancePct == null) return;
+    const threshold = depVar.thresholdPct != null ? Number(depVar.thresholdPct) : 8;
+    if (Math.abs(depVar.variancePct) <= threshold) return;
+    pushRecommendation(recommendations, seen, {
+      id: "collection-deposit-variance",
+      severity: Math.abs(depVar.variancePct) > threshold * 1.5 ? "critical" : "warning",
+      title: "Collections vs QuickBooks deposits variance",
+      rationale: depVar.summary || `Variance ${depVar.variancePct}% exceeds ${threshold}% review threshold.`,
+      action: { type: "navigate", target: "financial" },
+      autoTaskTitle: `${TASK_PREFIX}Review collections vs QB deposits (${depVar.period || "latest"})`,
+    });
+  }
+
   function analyzeCrossDomain(snapshot, recommendations, seen) {
     const cross =
       typeof HalSkills !== "undefined" && HalSkills.crossReconcileSkill
@@ -468,6 +490,7 @@ const HalProactive = (function () {
     const crossDomain = analyzeCrossDomain(snapshot, recommendations, seen);
     const diagnostics = analyzeImportDiagnostics(snapshot, recommendations, seen);
     analyzeDataQuality(snapshot, recommendations, seen);
+    analyzeCollectionDepositVariance(snapshot, recommendations, seen);
     analyzeWidgets(snapshot, recommendations, seen);
     analyzeAttention(snapshot, recommendations, seen);
     analyzeRuntimeIssues(snapshot, recommendations, seen);

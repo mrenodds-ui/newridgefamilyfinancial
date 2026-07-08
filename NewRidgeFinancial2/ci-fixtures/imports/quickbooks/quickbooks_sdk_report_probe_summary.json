@@ -12,5 +12,10 @@
   ],
   "top_expense_categories": [
     { "category": "Payroll", "amount": 42000.0, "period": "2025-06" }
+  ],
+  "total_deposits": 94500.0,
+  "payments_received": 93200.0,
+  "deposits_by_period": [
+    { "period": "2025-06", "amount": 94500.0 }
   ]
 }

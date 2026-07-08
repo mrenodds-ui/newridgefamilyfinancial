@@ -133,12 +133,57 @@ const NR2QbReports = (function () {
     return { hasData: buckets.length > 0, buckets, total: Math.round(total) };
   }
 
+  function isCacheCold(snapshot) {
+    const net = netIncomeSummary(snapshot);
+    const monthly = monthlyRows(snapshot);
+    const probe = probeFromSnapshot(snapshot);
+    const hasProbe = probe && (probe.total_income != null || probe.total_deposits != null);
+    return !net.hasData && !monthly.length && !hasProbe;
+  }
+
+  function emptyStateMessage() {
+    return "Awaiting QuickBooks sync";
+  }
+
+  function depositSummary(snapshot) {
+    const probe = probeFromSnapshot(snapshot) || {};
+    const bundle = bundleFromSnapshot(snapshot);
+    const qb = (bundle && bundle.quickbooks) || {};
+    const summary = qb.depositsSummary || qb.deposits_summary || null;
+    if (summary && (summary.totalDeposits != null || summary.total_deposits != null)) {
+      return {
+        hasData: true,
+        period: summary.period || probe.period || null,
+        totalDeposits: parseMoney(summary.totalDeposits || summary.total_deposits),
+        paymentsReceived: parseMoney(summary.paymentsReceived || summary.payments_received),
+        source: "import.depositsSummary",
+      };
+    }
+    const dep = parseMoney(probe.total_deposits || probe.deposits_total || probe.bank_deposits);
+    const payments = parseMoney(probe.payments_received || probe.total_payments_received);
+    if (dep > 0 || payments > 0) {
+      return {
+        hasData: true,
+        period: probe.period || null,
+        totalDeposits: dep || payments,
+        paymentsReceived: payments || null,
+        source: "quickbooksProbe",
+      };
+    }
+    return { hasData: false, totalDeposits: 0, paymentsReceived: 0, source: "none" };
+  }
+
   return {
     balanceSheetSummary,
     cashFlowTrend,
     netIncomeSummary,
     revenueByService,
     arAging,
+    isCacheCold,
+    emptyStateMessage,
+    depositSummary,
+    probeFromSnapshot,
+    monthlyRows,
   };
 })();
 

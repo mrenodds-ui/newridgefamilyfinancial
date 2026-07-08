@@ -1,8 +1,8 @@
 {
-  "BUILD_ID": "hal-10092",
-  "assetVersion": "hal-10092",
-  "schemaVersion": "hal-10092",
+  "BUILD_ID": "hal-10093",
+  "assetVersion": "hal-10093",
+  "schemaVersion": "hal-10093",
   "REQUIRED_EPOCH": "moonshot-mockup",
   "builtAt": "2026-07-08T12:00:00.000Z",
-  "notes": "Phase D claims narrative workflow: narrative-review.js, draft_insurance_narrative HAL tool, claims UI draft/save flow (hal-10092)."
+  "notes": "Phase E QuickBooks depth: deposit probe export, collection_deposit_variance, proactive briefing alerts (hal-10093)."
 }

@@ -216,6 +216,22 @@ const MoonshotMockupChrome = (function () {
 
   function renderQuickbooksSyncBadge(readiness) {
     const level = String((readiness && readiness.level) || "unknown").toLowerCase();
+    const cold =
+      typeof NR2QbReports !== "undefined" &&
+      NR2QbReports.isCacheCold &&
+      typeof window !== "undefined" &&
+      window.__nr2ProgramSnapshot &&
+      NR2QbReports.isCacheCold(window.__nr2ProgramSnapshot);
+    if (cold || level === "missing" || level === "unknown") {
+      const msg =
+        typeof NR2QbReports !== "undefined" && NR2QbReports.emptyStateMessage
+          ? NR2QbReports.emptyStateMessage()
+          : "Awaiting QuickBooks sync";
+      return `<div class="sync-badge sync-badge--cold" role="status">
+      <span class="sync-indicator" style="background:var(--accent-amber, #ffb800)"></span>
+      <span>${esc(msg)}</span>
+    </div>`;
+    }
     const fresh = level === "fresh";
     const color = fresh ? "var(--accent-green, #2ecc71)" : "var(--accent-amber, #ffb800)";
     const label = fresh ? "QuickBooks synced" : level === "syncing" ? "Sync in progress" : "Sync stale — review import";

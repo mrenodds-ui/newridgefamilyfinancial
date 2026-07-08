@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 from datetime import datetime, timezone
@@ -240,6 +241,105 @@ def _collections_vs_qb(*, bundle: dict[str, Any] | None = None) -> dict[str, Any
     }
 
 
+def _qb_deposits_for_period(bundle: dict[str, Any], period: str) -> tuple[float | None, str]:
+    qb = bundle.get("quickbooks") if isinstance(bundle, dict) else {}
+    if not isinstance(qb, dict):
+        qb = {}
+    summary = qb.get("depositsSummary") or qb.get("deposits_summary")
+    if isinstance(summary, dict):
+        dep = _parse_money(summary.get("totalDeposits") or summary.get("total_deposits"))
+        if dep > 0:
+            return dep, "quickbooks.depositsSummary"
+    dep_rows = (qb.get("deposits") or {}).get("rows") if isinstance(qb.get("deposits"), dict) else qb.get("deposits")
+    if isinstance(dep_rows, list):
+        for row in reversed(dep_rows):
+            if not isinstance(row, dict):
+                continue
+            row_period = _normalize_period(row.get("Period") or row.get("period"))
+            if row_period and row_period != period:
+                continue
+            dep = _parse_money(row.get("Deposits") or row.get("deposits") or row.get("amount"))
+            if dep > 0:
+                return dep, "quickbooks.deposits"
+    try:
+        from nr2_qb_reports import load_probe_summary
+
+        probe = load_probe_summary()
+    except Exception:
+        probe = {}
+    if isinstance(probe, dict) and probe:
+        for key in ("total_deposits", "deposits_total", "bank_deposits"):
+            dep = _parse_money(probe.get(key))
+            if dep > 0:
+                return dep, "quickbooks_sdk_probe"
+        by_period = probe.get("deposits_by_period") or probe.get("monthly_deposits")
+        if isinstance(by_period, list):
+            match = next(
+                (
+                    item
+                    for item in by_period
+                    if isinstance(item, dict) and _normalize_period(item.get("period") or item.get("Period")) == period
+                ),
+                None,
+            )
+            if match:
+                dep = _parse_money(match.get("amount") or match.get("total") or match.get("Deposits"))
+                if dep > 0:
+                    return dep, "quickbooks_sdk_probe.period"
+            if by_period:
+                last = by_period[-1]
+                if isinstance(last, dict):
+                    dep = _parse_money(last.get("amount") or last.get("total") or last.get("Deposits"))
+                    if dep > 0:
+                        return dep, "quickbooks_sdk_probe.latest"
+        payments = _parse_money(probe.get("payments_received") or probe.get("total_payments_received"))
+        if payments > 0:
+            return payments, "quickbooks_sdk_probe.payments_received"
+    return None, ""
+
+
+def collection_deposit_variance(*, bundle: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Compare SoftDent collections to QuickBooks bank deposits for the same period."""
+    bundle = bundle or load_import_bundle(sync=False)
+    sd_rows = _dashboard_rows(bundle)
+    if not sd_rows:
+        return {
+            "hasData": False,
+            "variancePct": None,
+            "summary": "Collection vs deposit variance populates when SoftDent dashboard and QuickBooks deposit exports share a period.",
+        }
+    latest_sd = sd_rows[-1]
+    period = latest_sd["period"]
+    collections = float(latest_sd.get("collections") or 0)
+    deposits, source = _qb_deposits_for_period(bundle, period)
+    if collections <= 0 or deposits is None or deposits <= 0:
+        return {
+            "hasData": False,
+            "period": period,
+            "softdentCollections": round(collections, 2) if collections else None,
+            "quickbooksDeposits": round(deposits, 2) if deposits else None,
+            "variancePct": None,
+            "summary": "",
+        }
+    variance_pct = round(((deposits - collections) / collections) * 100, 1)
+    threshold = float(os.environ.get("NR2_DEPOSIT_VARIANCE_THRESHOLD_PCT", "8"))
+    tone = "ok" if abs(variance_pct) <= threshold else ("warn" if abs(variance_pct) <= threshold * 1.5 else "alert")
+    return {
+        "hasData": True,
+        "period": period,
+        "softdentCollections": round(collections, 2),
+        "quickbooksDeposits": round(deposits, 2),
+        "variancePct": variance_pct,
+        "thresholdPct": threshold,
+        "tone": tone,
+        "source": source,
+        "summary": (
+            f"{period}: QuickBooks deposits are {variance_pct:+.1f}% vs SoftDent collections "
+            f"(${collections:,.0f} collected vs ${deposits:,.0f} deposited)."
+        ),
+    }
+
+
 def collection_lag(*, bundle: dict[str, Any] | None = None) -> dict[str, Any]:
     bundle = bundle or load_import_bundle(sync=False)
     ar_rows = (((bundle.get("softdent") or {}).get("ar") or {}).get("rows")) or []
@@ -366,6 +466,16 @@ def kpi_ribbon(*, bundle: dict[str, Any] | None = None) -> dict[str, Any]:
                 "widgetKey": "nr2CollectionLag",
             }
         )
+    dep_var = collection_deposit_variance(bundle=bundle)
+    if dep_var.get("hasData") and dep_var.get("variancePct") is not None:
+        tiles.append(
+            {
+                "label": "Collections vs deposits",
+                "value": f"{dep_var['variancePct']:+.1f}%",
+                "tone": dep_var.get("tone") or "neutral",
+                "widgetKey": "nr2ProductionReconciliation",
+            }
+        )
     return {"tiles": tiles[:6], "hasData": bool(tiles), "generatedAt": datetime.now(timezone.utc).isoformat()}
 
 
@@ -378,6 +488,7 @@ def analytics_snapshot(*, bundle: dict[str, Any] | None = None) -> dict[str, Any
         "softdentProductionDaily": softdent_production_daily(bundle=bundle),
         "kpiRibbon": kpi_ribbon(bundle=bundle),
         "collectionsVsQuickbooks": _collections_vs_qb(bundle=bundle),
+        "collectionDepositVariance": collection_deposit_variance(bundle=bundle),
         "goalScorecard": goal_scorecard(bundle=bundle),
         "alertTicker": alert_ticker(bundle=bundle),
         "providerCompensation": provider_compensation(bundle=bundle),
@@ -428,6 +539,17 @@ def alert_ticker(*, bundle: dict[str, Any] | None = None) -> dict[str, Any]:
                 "level": "warn",
                 "text": f"Collection lag {avg_lag} days exceeds 45-day review threshold",
                 "widgetKey": "nr2CollectionLag",
+            }
+        )
+    dep_var = collection_deposit_variance(bundle=bundle)
+    dep_variance = dep_var.get("variancePct")
+    dep_threshold = dep_var.get("thresholdPct") or 8.0
+    if dep_variance is not None and dep_var.get("hasData") and abs(float(dep_variance)) > float(dep_threshold):
+        alerts.append(
+            {
+                "level": "warn" if abs(float(dep_variance)) <= float(dep_threshold) * 1.5 else "alert",
+                "text": f"Collections vs QB deposits variance {dep_variance}% ({dep_var.get('period', 'latest')})",
+                "widgetKey": "nr2ProductionReconciliation",
             }
         )
     ar_rows = (((bundle.get("softdent") or {}).get("ar") or {}).get("rows")) or []

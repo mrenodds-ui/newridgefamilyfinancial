@@ -576,6 +576,46 @@ def _sync_quickbooks_sdk_summary(destination: Path) -> list[str]:
     _write_csv(revenue_path, [{"TotalIncome": revenue}], ["TotalIncome"])
     _write_csv(expense_path, [{"TotalExpense": expenses}], ["TotalExpense"])
     written.extend([revenue_path.name, expense_path.name])
+
+    def _probe_money(key: str) -> float | None:
+        raw = payload.get(key)
+        if raw in (None, ""):
+            return None
+        try:
+            return float(str(raw).replace("$", "").replace(",", "").strip())
+        except (TypeError, ValueError):
+            return None
+
+    deposits_total = _probe_money("total_deposits") or _probe_money("deposits_total") or _probe_money("bank_deposits")
+    payments_received = _probe_money("payments_received") or _probe_money("total_payments_received")
+    period_label = str(payload.get("period") or "").strip()
+    if deposits_total is not None or payments_received is not None:
+        deposit_summary = {
+            "period": period_label,
+            "totalDeposits": deposits_total,
+            "paymentsReceived": payments_received,
+            "source": "quickbooks_sdk_probe",
+            "updatedAt": payload.get("updatedAt") or payload.get("generatedAt"),
+        }
+        deposits_path = destination / "quickbooks_deposits_summary.json"
+        _write_json(deposits_path, deposit_summary)
+        written.append(deposits_path.name)
+    deposits_by_period = payload.get("deposits_by_period") or payload.get("monthly_deposits")
+    if isinstance(deposits_by_period, list) and deposits_by_period:
+        period_rows = [
+            {
+                "Period": str(item.get("period") or item.get("Period") or period_label),
+                "Deposits": item.get("amount") or item.get("total") or item.get("Deposits"),
+                "PaymentsReceived": item.get("payments_received") or item.get("paymentsReceived"),
+            }
+            for item in deposits_by_period
+            if isinstance(item, dict)
+        ]
+        if period_rows:
+            dep_csv = destination / "quickbooks_deposits.csv"
+            _write_csv(dep_csv, period_rows, ["Period", "Deposits", "PaymentsReceived"])
+            _write_csv_json_sidecar(dep_csv)
+            written.append(dep_csv.name)
     categories = payload.get("top_expense_categories")
     if isinstance(categories, list) and categories:
         category_rows = [

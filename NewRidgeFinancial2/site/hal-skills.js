@@ -1928,6 +1928,18 @@ const HalSkills = (function () {
       opportunity = `Collections vs QuickBooks within watch band (${collTile.value})`;
     }
 
+    const depVar = analytics.depositVariance || {};
+    const depThreshold = depVar.thresholdPct != null ? Number(depVar.thresholdPct) : 8;
+    if (depVar.hasData && depVar.variancePct != null && Math.abs(depVar.variancePct) > depThreshold) {
+      domains.push("collections");
+      risk =
+        risk ||
+        `SoftDent collections vs QuickBooks bank deposits diverged ${depVar.variancePct}% in ${depVar.period || "latest period"}`;
+      actuators.push({ label: "Review deposit reconciliation", actionId: "navigate", target: "financial" });
+    } else if (depVar.hasData && depVar.variancePct != null && !opportunity) {
+      opportunity = `Collections and QuickBooks deposits aligned within ${depThreshold}% for ${depVar.period || "latest period"}`;
+    }
+
     let sentence;
     if (risk && opportunity) {
       sentence = `${risk}; however, ${opportunity.charAt(0).toLowerCase()}${opportunity.slice(1)}.`;
@@ -1983,6 +1995,7 @@ const HalSkills = (function () {
       qbRev: api.quickbooksMonthlyRevenue(snapshot),
       prodDaily: api.softdentProductionDaily(snapshot),
       ribbon: api.kpiRibbon(snapshot),
+      depositVariance: api.collectionDepositVariance ? api.collectionDepositVariance(snapshot) : { hasData: false },
       goal: api.goalScorecard ? api.goalScorecard(snapshot) : { hasData: false },
       alerts: api.alertTicker ? api.alertTicker(snapshot) : { items: [], hasData: false },
       provComp: api.providerCompensation ? api.providerCompensation(snapshot) : { providers: [], hasData: false },
