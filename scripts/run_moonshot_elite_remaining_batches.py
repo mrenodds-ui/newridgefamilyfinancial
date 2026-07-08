@@ -28,6 +28,21 @@ sys.path.insert(0, str(OUT))
 from _run_moonshot_eval import resolve_api_and_endpoint  # noqa: E402
 
 
+def filter_batch_pages(
+    batches: list[tuple[str, list[str], str]],
+    page_filter: list[str] | None,
+) -> list[tuple[str, list[str], str]]:
+    if not page_filter:
+        return batches
+    wanted = {p.strip().lower() for p in page_filter}
+    out: list[tuple[str, list[str], str]] = []
+    for batch_id, page_ids, focus in batches:
+        pages = [p for p in page_ids if p in wanted]
+        if pages:
+            out.append((batch_id, pages, focus))
+    return out
+
+
 def select_batches(
     *,
     remaining_only: bool,
@@ -148,6 +163,11 @@ def main() -> int:
         action="store_true",
         help="Run all batches including overview",
     )
+    parser.add_argument(
+        "--pages",
+        nargs="+",
+        help="Run only these page ids (e.g. hal office-manager)",
+    )
     args = parser.parse_args()
 
     if args.all:
@@ -155,9 +175,14 @@ def main() -> int:
     elif args.hal_only:
         selected = select_batches(remaining_only=False, hal_only=True, batch_names=None)
     elif args.batches:
-        selected = select_batches(remaining_only=False, hal_only=False, batch_names=args.batches)
+        names: list[str] = []
+        for part in args.batches:
+            names.extend(p.strip() for p in part.split(",") if p.strip())
+        selected = select_batches(remaining_only=False, hal_only=False, batch_names=names)
     else:
         selected = select_batches(remaining_only=True, hal_only=False, batch_names=None)
+
+    selected = filter_batch_pages(selected, args.pages)
 
     if not selected:
         print("No batches selected.")
