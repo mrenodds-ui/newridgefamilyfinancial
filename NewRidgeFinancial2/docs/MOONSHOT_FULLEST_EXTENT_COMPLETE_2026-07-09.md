@@ -1,9 +1,9 @@
-# Moonshot Fullest Extent — Complete (hal-10074)
+# Moonshot Fullest Extent — Complete (hal-10082)
 
-**Verdict:** Practical ceiling reached for a solo dental practice (per `MOONSHOT_FULLEST_EXTENT_REPORT_2026-07-08.md`).
+**Verdict:** Practical ceiling reached for a solo dental practice (per `MOONSHOT_FULLEST_EXTENT_REPORT_2026-07-08.md`). Visual presentation integrity and HAL spectacular S1 complete through hal-10082 (per `MOONSHOT_AI_DEEP_VISUAL_HAL_2026-07-07.md`).
 
-**Build:** `hal-10074`  
-**Reload:** `https://127.0.0.1:8765/?v=hal-10074&__nr2_purge=1`
+**Build:** `hal-10082`  
+**Reload:** `https://127.0.0.1:8765/?v=hal-10082&__nr2_purge=1`
 
 ## Phase completion matrix
 
@@ -15,6 +15,12 @@
 | hal-10072 | 3 | HAL cross-domain synthesis, morning briefing, consent-gated actuators | Done |
 | hal-10073 | 5–6 | Workstation sync parity, backup rotation, health/audit/sidenotes API | Done |
 | hal-10074 | 4 | Print-safe CSS, CPA packet export, accessibility polish | Done |
+| hal-10077 | V0 | Executive widgets, header tools, canvas chart wiring | Done |
+| hal-10078 | V1 | Layout emergency — col spans, KPI math, mockup CSS vocabulary | Done |
+| hal-10079 | V1 | Chart unification — replace-not-stack overlays, QB cash flow fix | Done |
+| hal-10080 | V1 | Page flow reorder — SoftDent, Taxes, Claims, Financial hierarchy | Done |
+| hal-10081 | S0 | HAL span-2 mosaic, live spark bars, chat scrollback | Done |
+| hal-10082 | S1 | HAL situational hero, agent loop UI, mosaic deep links | Done |
 
 ## Engineering sign-off
 
@@ -28,8 +34,8 @@
 
 ## Operator features (daily use)
 
-- **Financial dashboard** — live reconciliation, collection lag, KPI ribbon
-- **HAL hub** — morning briefing card (18h cadence), cross-domain reconcile skill
+- **Financial dashboard** — live reconciliation, collection lag, KPI ribbon; full-width QuickBooks host; 12-column KPI discipline
+- **HAL hub** — situational hero on load, morning briefing, mosaic deep links to staff widgets, voice PTT, agent loop in chat
 - **Workstation 8766** — QB/SoftDent sync triggers, HAL hub link, sidenotes bridge
 - **Hardening** — nightly SQLite backup (7-day retention), `/api/health`, operator audit log
 - **CPA export** — Financial page **CPA export** → zip with P&L, reconciliation, A/R aging, net income
@@ -49,4 +55,6 @@
 2. Schedule monthly CPA export for your accountant.
 3. Confirm `backups/` receives daily copies after import sync.
 
-See also: `docs/MOONSHOT_DISASTER_RECOVERY.md`, `docs/OPERATOR_PILOT_RUNBOOK.md`.
+See also: `docs/MOONSHOT_AI_DEEP_VISUAL_HAL_2026-07-07.md`, `docs/MOONSHOT_DISASTER_RECOVERY.md`, `docs/OPERATOR_PILOT_RUNBOOK.md`.
+
+**Tier S2 (hal-10083+)** — filter chips, period scrubber, scenario sliders — deferred until operator daily-drives S1 for two weeks (per Moonshot deep consultation).

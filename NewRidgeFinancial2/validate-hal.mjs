@@ -1808,7 +1808,7 @@ async function main() {
   const halOverridesCss = readFileSync(join(siteDir, "hal-mockup-overrides.css"), "utf8");
   assert(halOverridesCss.includes("prefers-reduced-motion"), "hal mockup overrides must respect reduced motion");
   const completeDoc = readFileSync(join(__dirname, "docs", "MOONSHOT_FULLEST_EXTENT_COMPLETE_2026-07-09.md"), "utf8");
-  assert(completeDoc.includes("hal-10074") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist");
+  assert(completeDoc.includes("hal-10082") && completeDoc.includes("Practical ceiling"), "moonshot completion doc must exist through hal-10082");
 
   global.DesktopBridge = priorPlacementBridge;
   global.ImportCoordinator = priorPlacementCoordinator;

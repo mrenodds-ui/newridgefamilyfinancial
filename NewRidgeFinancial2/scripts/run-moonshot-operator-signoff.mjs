@@ -409,7 +409,7 @@ async function main() {
   const moonshotExtentSrc = readFileSync(join(root, "docs", "MOONSHOT_FULLEST_EXTENT_COMPLETE_2026-07-09.md"), "utf8");
   record(
     11,
-    "Moonshot hal-10069–10074 completion doc",
+    "Moonshot hal-10069–10082 completion doc",
     moonshotExtentSrc.includes("hal-10082") && moonshotExtentSrc.includes("Practical ceiling") ? "PASS" : "FAIL",
     "MOONSHOT_FULLEST_EXTENT_COMPLETE_2026-07-09.md",
   );
