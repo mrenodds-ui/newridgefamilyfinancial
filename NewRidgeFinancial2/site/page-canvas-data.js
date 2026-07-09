@@ -261,12 +261,7 @@ const PageCanvasData = (function () {
   function softdentAppointmentStats() {
     const appt = softdentAppointmentsSnapshotData();
     if (!appt.hasData || !appt.appointments.length) {
-      return [
-        { value: "—", label: "Checked in" },
-        { value: "—", label: "In progress" },
-        { value: "—", label: "Completed" },
-        { value: "—", label: "No-shows" },
-      ];
+      return [];
     }
     const counts = { checkedIn: 0, inProgress: 0, completed: 0, noShows: 0 };
     appt.appointments.forEach((a) => {

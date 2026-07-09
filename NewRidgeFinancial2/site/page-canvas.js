@@ -1073,7 +1073,7 @@ const PageCanvas = (function () {
 
   function renderJournalQueuePanel(items) {
     if (!items.length) {
-      return canvasEmpty("Journal posting queue requires the NR2 server. Run StartProgram.bat.");
+      return canvasEmpty("No journal entries in queue — reviewed accruals appear here when staff stages them for export.");
     }
     const body = items
       .map((entry) => {

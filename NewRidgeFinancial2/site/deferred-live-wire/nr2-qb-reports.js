@@ -102,15 +102,27 @@ const NR2QbReports = (function () {
     const qb = qbSection(snapshot);
     const slices = [];
     const categories = qb.expenseCategories;
-    if (categories && Array.isArray(categories.slices)) {
-      categories.slices.forEach((row) => {
-        const amount = parseMoney(row.amount || row.Amount || row.pct);
-        if (amount > 0) slices.push({ label: row.label || row.Category || "Category", amount });
-      });
-    }
-    const income = parseMoney(qb.revenue);
+    const categoryRows = Array.isArray(categories)
+      ? categories
+      : categories && Array.isArray(categories.rows)
+        ? categories.rows
+        : categories && Array.isArray(categories.slices)
+          ? categories.slices
+          : [];
+    categoryRows.forEach((row) => {
+      const amount = parseMoney(row.amount || row.Amount || row.pct);
+      if (amount > 0) slices.push({ label: row.label || row.Category || row.category || "Category", amount });
+    });
+    const income = parseMoney(qb.revenue || qb.totalIncome || qb.TotalIncome);
     if (!slices.length && income > 0) {
       slices.push({ label: "Clinical Production (proxy)", amount: income });
+    }
+    if (!slices.length) {
+      const monthly = monthlyRows(snapshot);
+      const latest = monthly.length ? monthly[monthly.length - 1] : null;
+      if (latest && latest.TotalIncome > 0) {
+        slices.push({ label: `Revenue ${latest.Period}`, amount: latest.TotalIncome });
+      }
     }
     const total = slices.reduce((acc, row) => acc + row.amount, 0);
     slices.forEach((row) => {

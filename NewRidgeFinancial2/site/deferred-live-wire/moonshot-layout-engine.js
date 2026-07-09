@@ -451,16 +451,19 @@ const MoonshotLayoutEngine = (function () {
     softdentAppointmentsSnapshot(D, H, panel) {
       if (panel && panel.type === "stat-grid") {
         const stats = D && D.softdentAppointmentStats ? D.softdentAppointmentStats() : [];
-        return stats.length ? H.canvasStatGrid(stats.map((s) => ({ ...s, widgetKey: "softdentAppointmentsSnapshot" }))) : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
+        if (stats.length) {
+          return H.canvasStatGrid(stats.map((s) => ({ ...s, widgetKey: "softdentAppointmentsSnapshot" })));
+        }
       }
       const appt = D && D.softdentAppointmentsSnapshotData ? D.softdentAppointmentsSnapshotData() : { appointments: [] };
-      return appt.hasData
-        ? H.canvasTable(
-            ["Date", "Patient", "Provider", "Status"],
-            appt.appointments.map((a) => [a.date, a.patientId, a.provider, a.status]),
-            true,
-          )
-        : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
+      if (appt.hasData && appt.appointments && appt.appointments.length) {
+        return H.canvasTable(
+          ["Time", "Patient", "Operatory", "Status"],
+          appt.appointments.map((a) => [a.date, a.patientId, a.provider, a.status]),
+          true,
+        );
+      }
+      return H.canvasEmpty("Appointment snapshot appears when operatory schedule or sd_appointments is loaded.");
     },
     softdentOperatoryGrid(D, H) {
       return H.canvasOperatoryGrid(D && D.softdentOperatoryGrid ? D.softdentOperatoryGrid() : null);
@@ -617,7 +620,12 @@ const MoonshotLayoutEngine = (function () {
     },
     journalPostingQueue(D, H) {
       const journalItems = D && D.journalQueueItems ? D.journalQueueItems() : [];
-      return journalItems.length ? H.renderJournalQueuePanel(journalItems) : H.canvasEmpty("Journal posting queue requires the NR2 server. Run StartProgram.bat.");
+      if (journalItems.length) return H.renderJournalQueuePanel(journalItems);
+      const rows = D && D.journalRows ? D.journalRows() : [];
+      if (rows.length) {
+        return H.canvasTable(["Entry", "Amount", "Category", "Source"], rows, true);
+      }
+      return H.canvasEmpty("No journal entries in queue — reviewed accruals appear here when staff stages them for export.");
     },
     documentLibrary(D, H) {
       const rows = D && D.libraryRows ? D.libraryRows() : [];
