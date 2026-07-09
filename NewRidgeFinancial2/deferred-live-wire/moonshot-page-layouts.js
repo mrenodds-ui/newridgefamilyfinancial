@@ -76,7 +76,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "table",
           "widgetKey": "softdentProviderProduction",
           "colSpan": 6,
-          "title": "Provider Production (Daily)",
+          "title": "Provider Production",
           "dataBind": "PageCanvasData.softdentProviderProductionData()"
         },
         {
@@ -101,7 +101,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "stat-grid",
           "widgetKey": "softdentNewPatientsMTD",
           "colSpan": 4,
-          "title": "New Patients (MTD)",
+          "title": "New Patients",
           "dataBind": "PageCanvasData.softdentNewPatientsMtdData()"
         },
         {
@@ -301,7 +301,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "dataBind": "PageCanvasData.softdentHeroKpis()",
           "kpis": [
             { "widgetKey": "careDeliveryPerformance", "label": "Production MTD" },
-            { "widgetKey": "softdentNewPatientsMTD", "label": "New Patients (MTD)" },
+            { "widgetKey": "softdentNewPatientsMTD", "label": "New Patients" },
             { "widgetKey": "softdentCollectionsDaily", "label": "Collections Trend" },
             { "widgetKey": "softdentClaimsOutstanding", "label": "Outstanding Claims" }
           ]
@@ -367,7 +367,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "chart",
           "widgetKey": "softdentProviderProduction",
           "colSpan": 3,
-          "title": "Provider Production (Daily)",
+          "title": "Provider Production",
           "dataBind": "PageCanvasData.softdentProviderProductionData()",
           "chartType": "bar"
         }

@@ -741,11 +741,7 @@ const PageCanvas = (function () {
   }
 
   function canvasHeatmapPlaceholder() {
-    return canvasHeatmap(
-      ["Awaiting import"],
-      ["0-30 Days", "31-60 Days", "61-90 Days", "91+ Days"],
-      [["—", "—", "—", "—"]],
-    );
+    return canvasEmpty("A/R aging heatmap appears when SoftDent A/R export (daysheet aging buckets) is loaded.");
   }
 
   function parseAmount(value) {

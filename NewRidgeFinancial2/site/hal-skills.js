@@ -3259,9 +3259,9 @@ const HalSkills = (function () {
       },
       softdentNewPatientsMTD: {
         key: "softdentNewPatientsMTD",
-        title: "New Patients (MTD)",
+        title: "New Patients",
         status: sdDailyPack.newPatients.hasData ? practiceStatus : "DEGRADED",
-        summary: "New patient count for the current month from sd_patients or practice export.",
+        summary: "New patient count for the latest SoftDent export period from sd_patients or practice export.",
         navTarget: WIDGET_NAV.softdentNewPatientsMTD,
         metrics: {
           count: metricValue(sdDailyPack.newPatients.count),
@@ -3285,7 +3285,7 @@ const HalSkills = (function () {
       },
       softdentProviderProduction: {
         key: "softdentProviderProduction",
-        title: "Provider Production (Daily)",
+        title: "Provider Production",
         status: sdDailyPack.providers.hasData ? softdentOpsStatus : "DEGRADED",
         summary: "Provider production totals from sd_procedures or financial dashboard provider split.",
         navTarget: WIDGET_NAV.softdentProviderProduction,

@@ -339,9 +339,9 @@ const PageCanvasData = (function () {
         tone: widgetTone("careDeliveryPerformance"),
       },
       {
-        label: "New Patients (MTD)",
+        label: np.period ? `New Patients (${np.period})` : "New Patients",
         value: np.hasData ? fmt(np.count) : "—",
-        hint: np.period ? String(np.period) : "MTD",
+        hint: np.period ? String(np.period) : "SoftDent export",
         widgetKey: "softdentNewPatientsMTD",
         tone: widgetTone("softdentNewPatientsMTD"),
       },

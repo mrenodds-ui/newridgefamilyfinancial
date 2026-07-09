@@ -237,7 +237,7 @@ const MoonshotLayoutEngine = (function () {
       }
       if (panel.widgetKey === "softdentNewPatientsMTD") {
         const np = D.softdentNewPatientsMtdData ? D.softdentNewPatientsMtdData() : { count: 0 };
-        return [{ label: panel.title || "New Patients (MTD)", value: String(np.count ?? "—"), widgetKey: "softdentNewPatientsMTD" }];
+        return [{ label: panel.title || "New Patients", value: String(np.count ?? "—"), widgetKey: "softdentNewPatientsMTD" }];
       }
       if (panel.widgetKey === "caseAcceptance") {
         const base = all.find((k) => k.widgetKey === "caseAcceptance") || { value: "—", widgetKey: "caseAcceptance" };
@@ -482,7 +482,9 @@ const MoonshotLayoutEngine = (function () {
         if (heat && heat.matrix) return H.canvasHeatmap(heat.rowLabels, heat.colLabels, heat.matrix);
         const aging = D && D.softdentAgingBars ? D.softdentAgingBars() : null;
         const fallback = H.arHeatmapFromAging ? H.arHeatmapFromAging(aging) : null;
-        return fallback ? H.canvasHeatmap(fallback.rowLabels, fallback.colLabels, fallback.matrix) : H.canvasHeatmapPlaceholder();
+        return fallback
+          ? H.canvasHeatmap(fallback.rowLabels, fallback.colLabels, fallback.matrix)
+          : H.canvasEmpty("A/R aging heatmap appears when SoftDent A/R export (daysheet aging buckets) is loaded.");
       }
       const aging = D && D.softdentAgingBars ? D.softdentAgingBars() : null;
       return H.chartContainer(
@@ -568,31 +570,27 @@ const MoonshotLayoutEngine = (function () {
     },
     claimsPipeline(D, H) {
       const lanes = D && D.claimsKanban ? D.claimsKanban() : [];
-      const kanbanLanes =
-        lanes.length > 0
-          ? lanes
-          : [
-              { lane: "Draft", tone: "muted", items: [] },
-              { lane: "Needs Review", tone: "orange", items: [] },
-              { lane: "Ready", tone: "green", items: [] },
-              { lane: "Denied", tone: "orange", items: [] },
-            ];
-      return H.canvasKanbanLanes(kanbanLanes, "claimsPipeline", { claims: true });
+      if (!lanes.length) {
+        return H.canvasEmpty("Claims pipeline lanes appear when SoftDent claims export is loaded.");
+      }
+      return H.canvasKanbanLanes(lanes, "claimsPipeline", { claims: true });
     },
     arAgingAndCollections(D, H, panel) {
       const aging = D && D.arAgingBars ? D.arAgingBars() : D && D.softdentAgingBars ? D.softdentAgingBars() : null;
       const heat = H.arHeatmapFromAging ? H.arHeatmapFromAging(aging) : null;
-      const waterfall =
-        aging && aging.labels && aging.values
-          ? `<div class="ms-elite-waterfall">${aging.labels
-              .map((label, i) => {
-                const max = Math.max(...aging.values, 1);
-                const pct = Math.round(((aging.values[i] || 0) / max) * 100);
-                return `<div class="ms-elite-waterfall-row"><span class="ms-elite-waterfall-label">${H.esc(label)}</span><div class="ms-elite-waterfall-track"><div class="ms-elite-waterfall-fill" style="--w:${pct}%"></div></div><span class="ms-elite-stat-num">$${Math.round(aging.values[i] || 0).toLocaleString()}</span></div>`;
-              })
-              .join("")}</div>`
-          : `<div class="ms-elite-waterfall"><div class="ms-elite-waterfall-row"><span class="ms-elite-waterfall-label">A/R buckets</span><div class="ms-elite-waterfall-track"><div class="ms-elite-waterfall-fill" style="--w:0%"></div></div><span class="ms-elite-stat-num">—</span></div></div>`;
-      const heatHtml = heat ? H.canvasHeatmap(heat.rowLabels, heat.colLabels, heat.matrix) : H.canvasHeatmapPlaceholder();
+      if (!aging || !aging.labels || !aging.values) {
+        return H.canvasEmpty("A/R aging appears when SoftDent A/R export (daysheet aging buckets) is loaded.");
+      }
+      const waterfall = `<div class="ms-elite-waterfall">${aging.labels
+        .map((label, i) => {
+          const max = Math.max(...aging.values, 1);
+          const pct = Math.round(((aging.values[i] || 0) / max) * 100);
+          return `<div class="ms-elite-waterfall-row"><span class="ms-elite-waterfall-label">${H.esc(label)}</span><div class="ms-elite-waterfall-track"><div class="ms-elite-waterfall-fill" style="--w:${pct}%"></div></div><span class="ms-elite-stat-num">$${Math.round(aging.values[i] || 0).toLocaleString()}</span></div>`;
+        })
+        .join("")}</div>`;
+      const heatHtml = heat
+        ? H.canvasHeatmap(heat.rowLabels, heat.colLabels, heat.matrix)
+        : H.canvasEmpty("A/R aging heatmap appears when SoftDent A/R export is loaded.");
       return `${waterfall}${heatHtml}`;
     },
     smartClaimsAndReceivables(D, H) {
@@ -740,15 +738,10 @@ const MoonshotLayoutEngine = (function () {
     },
     officeManagerPriorities(D, H) {
       const kanban = D && D.officeKanban ? D.officeKanban() : [];
-      const kanbanLanes =
-        kanban.length > 0
-          ? kanban
-          : [
-              { lane: "Billing", tone: "orange", items: [] },
-              { lane: "Scheduling", tone: "blue", items: [] },
-              { lane: "Owner review", tone: "green", items: [] },
-            ];
-      return H.canvasKanbanLanes(kanbanLanes, "officeManagerPriorities");
+      if (!kanban.length) {
+        return H.canvasEmpty("Office priorities appear when HAL office tasks or degraded widgets need staff attention.");
+      }
+      return H.canvasKanbanLanes(kanban, "officeManagerPriorities");
     },
     officeManagerSurfaces(D, H) {
       const staffPages =

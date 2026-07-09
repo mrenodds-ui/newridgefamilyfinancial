@@ -2,7 +2,7 @@
  * Moonshot page registry — nav metadata + panel layouts from moonshot-page-layouts.js.
  */
 const MoonshotPageRegistry = (function () {
-  const SCHEMA_VERSION = "hal-10158";
+  const SCHEMA_VERSION = "hal-10159";
   const LAYOUT_EPOCH = "moonshot-mockup";
 
   const PRACTICE = {
@@ -41,10 +41,10 @@ const MoonshotPageRegistry = (function () {
         { key: "nr2ProductionReconciliation", title: "Production vs QuickBooks Reconciliation" },
         { key: "softdentProductionDaily", title: "SoftDent Production Trend" },
         { key: "providerPerformance", title: "Provider Performance" },
-        { key: "softdentProviderProduction", title: "Provider Production (Daily)" },
+        { key: "softdentProviderProduction", title: "Provider Production" },
         { key: "nr2ProviderCompensationWidget", title: "Provider Production Share" },
         { key: "softdentCollectionsDaily", title: "Collections Trend" },
-        { key: "softdentNewPatientsMTD", title: "New Patients (MTD)" },
+        { key: "softdentNewPatientsMTD", title: "New Patients" },
         { key: "softdentClaimsOutstanding", title: "Outstanding Claims" },
         { key: "newPatients", title: "New Patient Flow" },
         { key: "softdentAppointmentsSnapshot", title: "Appointments Snapshot" },
@@ -87,9 +87,9 @@ const MoonshotPageRegistry = (function () {
       widgets: [
         { key: "careDeliveryPerformance", title: "Production MTD" },
         { key: "softdentCollectionsDaily", title: "Collections Trend" },
-        { key: "softdentNewPatientsMTD", title: "New Patients (MTD)" },
+        { key: "softdentNewPatientsMTD", title: "New Patients" },
         { key: "softdentClaimsOutstanding", title: "Outstanding Claims" },
-        { key: "softdentProviderProduction", title: "Provider Production (Daily)" },
+        { key: "softdentProviderProduction", title: "Provider Production" },
         { key: "softdentAppointmentsSnapshot", title: "Appointments Snapshot" },
         { key: "softdentArAging", title: "Accounts Receivable Aging" },
         { key: "softdentResponsibility", title: "Insurance vs Patient Balance" },

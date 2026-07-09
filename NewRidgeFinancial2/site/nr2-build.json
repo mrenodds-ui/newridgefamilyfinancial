@@ -1,7 +1,7 @@
 {
-  "BUILD_ID": "hal-10158",
-  "assetVersion": "hal-10158",
-  "schemaVersion": "hal-10158",
+  "BUILD_ID": "hal-10159",
+  "assetVersion": "hal-10159",
+  "schemaVersion": "hal-10159",
   "REQUIRED_EPOCH": "moonshot-mockup",
   "staffRenderMode": "live-wire-pilot",
   "liveWirePages": [
@@ -18,5 +18,5 @@
     "office-manager"
   ],
   "builtAt": "2026-07-09T17:55:00Z",
-  "notes": "hal-10158: Stop inventing narrative kanban progress, period-close 0% Posted, claims weekly bars, responsibility $0, and QB real-time chrome."
+  "notes": "hal-10159: Honest Provider Production / New Patients titles; empty A/R heatmap and empty claims/office kanban instead of fake boards."
 }

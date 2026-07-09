@@ -72,6 +72,10 @@
     "hal-capability-index.js",
     "program-strength.js",
     "tax-engine.js",
+    "deferred-live-wire/nr2-analytics.js",
+    "deferred-live-wire/nr2-softdent-daily.js",
+    "deferred-live-wire/nr2-qb-reports.js",
+    "deferred-live-wire/nr2-tier3.js",
     "deferred-live-wire/moonshot-page-layouts.js",
     "deferred-live-wire/moonshot-layout-engine.js",
     "page-canvas-data.js",
@@ -94,11 +98,7 @@
     "charts/import-timeline.js",
     "charts/ar-heatmap.js",
     "charts/practice-pulse.js",
-    "charts/posting-kanban.js",
-    "nr2-analytics.js",
-    "nr2-qb-reports.js",
-    "nr2-softdent-daily.js",
-    "nr2-tier3.js"
+    "charts/posting-kanban.js"
   ],
   "data": [
     "data/hal-manager.json",

@@ -132,6 +132,116 @@ class SchedulerTests(unittest.TestCase):
         status = scheduler_status(store)
         self.assertIn("ticksToday", status)
 
+    def test_morning_tick_upserts_work_ledger(self) -> None:
+        from unittest.mock import patch
+
+        from nr2_scheduler import list_autonomous_work, morning_routine_tick
+
+        store = _FakeStore()
+        month_end = {
+            "ok": True,
+            "period": "2026-07",
+            "tasks": [
+                {"id": "deposit-recon", "title": "Reconcile deposits", "priority": "high", "detail": "Variance"},
+            ],
+        }
+        with patch(
+            "hal_employee_workflows.generate_collections_queue",
+            return_value={"ok": True, "count": 2, "highPriorityCount": 1, "items": [{}, {}], "summary": "2 queued"},
+        ), patch(
+            "hal_employee_workflows.generate_month_end_tasks",
+            return_value=month_end,
+        ), patch(
+            "hal_employee_workflows.list_pending_era_matches",
+            return_value={"ok": True, "count": 3, "items": [{}, {}, {}]},
+        ), patch(
+            "hal_employee_workflows.stage_pending_appeal_packets",
+            return_value={
+                "ok": True,
+                "count": 1,
+                "items": [
+                    {
+                        "ok": True,
+                        "claimId": "CLM-AUTO-1",
+                        "path": "/tmp/CLM-AUTO-1_appeal.json",
+                        "denied": True,
+                        "summary": "staged",
+                    }
+                ],
+            },
+        ), patch(
+            "hal_employee_workflows._claims_ops_snapshot",
+            return_value={
+                "total": 5,
+                "denied": 1,
+                "genericPayer": 2,
+                "namedPayer": 3,
+                "agingOver60": 1,
+                "agingOver90": 0,
+                "topAging": [],
+            },
+        ), patch(
+            "hal_employee_workflows._softdent_named_payer_brief",
+            return_value={"summary": "gap", "namedPayer": 3, "genericPayer": 2},
+        ), patch(
+            "accounting_bridge.list_posting_queue",
+            return_value={"items": [{"queue_id": "q1"}], "metrics": {}},
+        ), patch("import_healing.heal_import_pipeline", return_value={"status": "ok"}):
+            result = morning_routine_tick(store, force=True)
+        self.assertTrue(result.get("ok"))
+        work = list_autonomous_work(store, open_only=True, limit=50)
+        kinds = {i["kind"] for i in work.get("items") or []}
+        self.assertIn("collections_seed", kinds)
+        self.assertIn("month_end_task", kinds)
+        self.assertIn("era_pending", kinds)
+        self.assertIn("posting_pending", kinds)
+        self.assertIn("appeal_staged", kinds)
+        self.assertIn("carrier_gap", kinds)
+        # No dial / outbound side effects in action log
+        action_names = [a.get("action") for a in (result.get("actions") or [])]
+        self.assertNotIn("click_to_dial", action_names)
+        self.assertNotIn("voip_dial", action_names)
+
+    def test_eod_handoff_tick_writes_handoff(self) -> None:
+        from unittest.mock import patch
+
+        from nr2_scheduler import eod_handoff_tick, list_autonomous_work
+
+        store = _FakeStore()
+        with patch(
+            "hal_employee_workflows.compile_shift_handoff",
+            return_value={"ok": True, "reportMarkdown": "# EOD\n- test", "openItemCount": 4},
+        ):
+            result = eod_handoff_tick(store, force=True)
+        self.assertTrue(result.get("ok"))
+        self.assertTrue(result.get("handoffId"))
+        self.assertEqual(result.get("openItemCount"), 4)
+        work = list_autonomous_work(store, open_only=True, kind="eod_handoff")
+        self.assertGreaterEqual(work.get("count") or 0, 1)
+        # Second run same day without force skips
+        again = eod_handoff_tick(store, force=False)
+        self.assertTrue(again.get("skipped"))
+
+    def test_ack_autonomous_work(self) -> None:
+        from nr2_scheduler import ack_autonomous_work, list_autonomous_work, upsert_autonomous_work
+
+        store = _FakeStore()
+        created = upsert_autonomous_work(
+            store,
+            {
+                "kind": "era_pending",
+                "sourceId": "era-pending-matches",
+                "title": "Review ERA",
+                "detail": "3 pending",
+                "priority": "high",
+            },
+        )
+        self.assertTrue(created.get("ok"))
+        acked = ack_autonomous_work(store, {"id": created["id"], "status": "acked"})
+        self.assertTrue(acked.get("ok"))
+        open_items = list_autonomous_work(store, open_only=True)
+        self.assertFalse(any(i["id"] == created["id"] for i in open_items.get("items") or []))
+
 
 class QbConnectorTests(unittest.TestCase):
     def test_variance_detection(self) -> None:
@@ -154,6 +264,26 @@ class Moonshot2ABCStubsTests(unittest.TestCase):
 
         result = predict_denial_risk(cdt_codes=["D2740"], payer_id="delta", has_narrative=False)
         self.assertTrue(result.get("ok"))
+        self.assertGreaterEqual(result.get("riskScore", 0), 0.5)
+
+    def test_denial_predict_generic_payer_from_claim(self) -> None:
+        from era_denial_trainer import predict_denial_risk
+
+        result = predict_denial_risk(
+            claim={
+                "id": "DS-20260709-1",
+                "payer": "Insurance",
+                "procedure": "D2740 Porcelain crown",
+                "narrative": "",
+                "status": "review",
+            },
+            has_narrative=False,
+        )
+        self.assertTrue(result.get("ok"))
+        self.assertTrue(result.get("genericPayer"))
+        self.assertIn("generic_payer", result.get("flags") or [])
+        self.assertIn("daysheet_derived", result.get("flags") or [])
+        self.assertIn("D2740", result.get("cdtCodes") or [])
         self.assertGreaterEqual(result.get("riskScore", 0), 0.5)
 
     def test_scheduler_undo_within_window(self) -> None:

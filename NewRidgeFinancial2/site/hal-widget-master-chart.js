@@ -293,10 +293,10 @@ const HalWidgetMasterChart = (function () {
       primarySystem: "SoftDent",
     },
     softdentNewPatientsMTD: {
-      title: "New Patients (MTD)",
-      purpose: "Count new patients for the current month.",
+      title: "New Patients",
+      purpose: "Count new patients for the latest SoftDent export period.",
       expectedData: ["sd_patients first_visit_date", "softdent_new_patients.csv"],
-      readyWhen: "New patient count is available for the current period.",
+      readyWhen: "New patient count is available for an exported SoftDent period.",
       primarySystem: "SoftDent",
     },
     softdentClaimsOutstanding: {
@@ -307,7 +307,7 @@ const HalWidgetMasterChart = (function () {
       primarySystem: "SoftDent",
     },
     softdentProviderProduction: {
-      title: "Provider Production (Daily)",
+      title: "Provider Production",
       purpose: "Provider-level production from sd_procedures or dashboard.",
       expectedData: ["sd_procedures by provider", "Financial dashboard provider rows"],
       readyWhen: "Provider production rows are present.",
