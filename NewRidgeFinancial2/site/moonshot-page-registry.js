@@ -2,7 +2,7 @@
  * Moonshot page registry — nav metadata + panel layouts from moonshot-page-layouts.js.
  */
 const MoonshotPageRegistry = (function () {
-  const SCHEMA_VERSION = "hal-10156";
+  const SCHEMA_VERSION = "hal-10157";
   const LAYOUT_EPOCH = "moonshot-mockup";
 
   const PRACTICE = {
@@ -204,7 +204,7 @@ const MoonshotPageRegistry = (function () {
         { key: "halAskHal", title: "Ask HAL" },
         { key: "halImportHealth", title: "Import & Source Health" },
         { key: "practiceFinancialOverview", title: "Practice Financial Overview" },
-        { key: "careDeliveryPerformance", title: "Care Delivery Summary" },
+        { key: "careDeliveryPerformance", title: "Care Delivery Performance" },
         { key: "quickbooksProfitLossDetail", title: "Profit & Loss Summary" },
         { key: "officeManagerSurfaces", title: "Staff Work Surfaces" },
       ],

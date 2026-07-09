@@ -1,7 +1,7 @@
 {
-  "BUILD_ID": "hal-10156",
-  "assetVersion": "hal-10156",
-  "schemaVersion": "hal-10156",
+  "BUILD_ID": "hal-10157",
+  "assetVersion": "hal-10157",
+  "schemaVersion": "hal-10157",
   "REQUIRED_EPOCH": "moonshot-mockup",
   "staffRenderMode": "live-wire-pilot",
   "liveWirePages": [
@@ -18,5 +18,5 @@
     "office-manager"
   ],
   "builtAt": "2026-07-09T17:55:00Z",
-  "notes": "hal-10156: Clear remaining fabricated gauges/goals/funnels/narratives/QB proxies; prefer live period-aware hero labels."
+  "notes": "hal-10157: Rename leftover Care Delivery Summary chrome to Care Delivery Performance / Production MTD."
 }

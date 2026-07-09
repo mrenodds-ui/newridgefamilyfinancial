@@ -269,7 +269,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "stat-grid",
           "widgetKey": "careDeliveryPerformance",
           "colSpan": 3,
-          "title": "Care Delivery Summary",
+          "title": "Care Delivery Performance",
           "dataBind": "PageCanvasData.metrics('careDeliveryPerformance')"
         },
         {

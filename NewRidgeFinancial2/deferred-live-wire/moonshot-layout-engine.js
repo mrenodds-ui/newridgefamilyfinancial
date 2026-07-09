@@ -233,7 +233,7 @@ const MoonshotLayoutEngine = (function () {
       const all = D.softdentKpis ? D.softdentKpis() : [];
       if (panel.widgetKey === "careDeliveryPerformance") {
         const base = all.find((k) => k.widgetKey === "careDeliveryPerformance") || { value: "—", widgetKey: "careDeliveryPerformance" };
-        return [{ ...base, label: panel.title || "Care Delivery Summary", widgetKey: "careDeliveryPerformance" }];
+        return [{ ...base, label: panel.title || "Production MTD", widgetKey: "careDeliveryPerformance" }];
       }
       if (panel.widgetKey === "softdentNewPatientsMTD") {
         const np = D.softdentNewPatientsMtdData ? D.softdentNewPatientsMtdData() : { count: 0 };
@@ -819,7 +819,7 @@ const MoonshotLayoutEngine = (function () {
     careDeliveryPerformance(D, H) {
       const pack = D && D.halCareDeliveryStats ? D.halCareDeliveryStats() : { hasData: false, stats: [] };
       if (!pack.hasData) {
-        return H.canvasEmpty("Care Delivery Summary data appears when imports are loaded.");
+        return H.canvasEmpty("Care Delivery Performance data appears when SoftDent imports are loaded.");
       }
       return H.canvasStatGrid(pack.stats || []);
     },
