@@ -1244,6 +1244,17 @@ const ImportLoader = (function () {
         value: collectionsPending ? "Pending export" : formatMoney(displayTotals.collections),
       },
     ];
+    const schedulePatients = new Set();
+    (operatoryChairs || []).forEach((room) => {
+      ((room && room.slots) || []).forEach((slot) => {
+        const name = slot && (slot.patient || slot.patientName);
+        if (name) schedulePatients.add(String(name).trim());
+      });
+    });
+    if (schedulePatients.size) {
+      glance.push({ label: "Patients Today", value: formatCount(schedulePatients.size) });
+      glance.push({ label: "Total Patients", value: formatCount(schedulePatients.size) });
+    }
 
     const patch = {
       dataSource: "import",

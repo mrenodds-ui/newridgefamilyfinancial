@@ -589,11 +589,16 @@ const PageCanvasData = (function () {
   function softdentGlanceStats() {
     const care = metrics("careDeliveryPerformance");
     const payer = metrics("payerMixAndCollections");
-    const sd = dash("softdent") || {};
+    const patients = activePatientCensus();
     return [
       { value: fmt(care.patientBalanceTotal), label: "Patient A/R", tone: widgetTone("careDeliveryPerformance") || "warning", widgetKey: "softdentArAging" },
       { value: fmt(payer.collectionRate), label: "Collection rate", tone: widgetTone("payerMixAndCollections"), widgetKey: "payerMixAndCollections" },
-      { value: fmt(care.patientCount || glanceValue(sd, "Total Patients")), label: "Active patients", widgetKey: "careDeliveryPerformance" },
+      {
+        value: fmt(patients.count),
+        label: patients.label,
+        hint: patients.hint,
+        widgetKey: "careDeliveryPerformance",
+      },
       { value: fmt(care.providerCount), label: "Providers loaded", widgetKey: "careDeliveryPerformance" },
     ];
   }
@@ -601,6 +606,46 @@ const PageCanvasData = (function () {
   function glanceValue(sd, label) {
     const row = ((sd && sd.glance) || []).find((g) => g.label === label);
     return row ? row.value : null;
+  }
+
+  function activePatientCensus() {
+    const care = metrics("careDeliveryPerformance");
+    const sd = dash("softdent") || {};
+    const fromCare = care.patientCount;
+    if (fromCare != null && fromCare !== "" && fromCare !== "—") {
+      return { count: fromCare, label: "Active patients", hint: "SoftDent dashboard", source: "care" };
+    }
+    const fromGlance =
+      glanceValue(sd, "Total Patients") ||
+      glanceValue(sd, "Active Patients") ||
+      glanceValue(sd, "Patients Today");
+    if (fromGlance != null && fromGlance !== "" && fromGlance !== "—") {
+      return { count: fromGlance, label: "Active patients", hint: "SoftDent glance", source: "glance" };
+    }
+    const names = new Set();
+    const rooms = softdentOperatoryGrid() || [];
+    rooms.forEach((room) => {
+      (room.slots || []).forEach((slot) => {
+        const name = slot.patient || slot.patientName;
+        if (name) names.add(String(name).trim());
+      });
+    });
+    if (!names.size) {
+      const appt = softdentAppointmentsSnapshotData();
+      (appt.appointments || []).forEach((row) => {
+        const name = row.patientId || row.patient || row.patientName;
+        if (name && name !== "—") names.add(String(name).trim());
+      });
+    }
+    if (names.size) {
+      return {
+        count: names.size,
+        label: "Patients today",
+        hint: "Unique patients on today's operatory schedule",
+        source: "schedule",
+      };
+    }
+    return { count: null, label: "Active patients", hint: null, source: null };
   }
 
   function softdentAgingBars() {
@@ -1813,13 +1858,12 @@ const PageCanvasData = (function () {
   function halCareDeliveryStats() {
     const care = metrics("careDeliveryPerformance");
     const practice = practiceStats();
-    const sd = dash("softdent") || {};
-    const patientCount = care.patientCount || glanceValue(sd, "Total Patients");
+    const patients = activePatientCensus();
     const production = care.productionTotal || metrics("financialProductionTrend").productionMtd;
     const newPatients = metrics("newPatients").newPatientCount || practice.newPatients;
     const hasData =
       (production != null && production !== "") ||
-      (patientCount != null && patientCount !== "") ||
+      (patients.count != null && patients.count !== "") ||
       (care.providerCount != null && care.providerCount !== "") ||
       (newPatients != null && newPatients !== "");
     return {
@@ -1832,8 +1876,9 @@ const PageCanvasData = (function () {
           widgetKey: "careDeliveryPerformance",
         },
         {
-          label: "Active patients",
-          value: fmt(patientCount),
+          label: patients.label,
+          value: fmt(patients.count),
+          hint: patients.hint,
           widgetKey: "careDeliveryPerformance",
         },
         {
@@ -2303,6 +2348,7 @@ const PageCanvasData = (function () {
     softdentAgingBars,
     softdentResponsibilityDonut,
     practiceStats,
+    activePatientCensus,
     importHealthCards,
     financialImportNotice,
     softdentImportNotice,
