@@ -242,10 +242,11 @@ def extract_ollama_message_text(message: dict[str, Any] | None) -> str:
     msg = message or {}
     content = str(msg.get("content") or "").strip()
     # Prefer visible content only — never surface raw thinking as the staff reply.
+    # DeepSeek-R1 often fills `thinking` and leaves `content` empty; CoT strip then
+    # yields "" — callers should fall back to try_local_policy_reply, not thinking.
     if content:
         return clean_gateway_text(content)
-    thinking = str(msg.get("thinking") or "").strip()
-    return clean_gateway_text(thinking)
+    return ""
 
 
 def try_local_policy_reply(query: str) -> dict[str, str] | None:
@@ -327,6 +328,16 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
         return {
             "text": "No. HAL cannot write to SoftDent — NR2 stays read-only; staff update SoftDent directly.",
             "intent": "consent:writeback-blocked",
+        }
+    if re.search(r"\bare imports read-?only\b", q) or (
+        re.search(r"\bimports?\b", q) and re.search(r"\bread-?only\b", q) and re.search(r"\b(are|is)\b", q)
+    ):
+        return {
+            "text": (
+                "Yes. Imports are read-only — SoftDent and QuickBooks exports load into the local "
+                "bundle for dashboards and HAL; nothing writes back from NR2."
+            ),
+            "intent": "policy:imports-readonly",
         }
     return None
 
@@ -814,6 +825,7 @@ def call_ollama_chat(
                         obj = json.loads(line.decode("utf-8"))
                     except json.JSONDecodeError:
                         continue
+                    # Content only — ignore thinking deltas (R1 often streams think-only).
                     delta = str((obj.get("message") or {}).get("content") or "")
                     if delta:
                         chunks.append(delta)
@@ -821,13 +833,12 @@ def call_ollama_chat(
                 return {"ok": True, "body": {"message": {"content": full}}, "streamed": True}
             body = json.loads(resp.read().decode("utf-8"))
             message = body.get("message") or {}
-            if not str(message.get("content") or "").strip():
-                text = extract_ollama_message_text(message)
-                if text:
-                    body = dict(body)
-                    body["message"] = dict(message)
-                    body["message"]["content"] = text
-        return {"ok": True, "body": body}
+            # Normalize: never leave thinking-only payloads as if they were answers.
+            text = extract_ollama_message_text(message)
+            body = dict(body)
+            body["message"] = dict(message)
+            body["message"]["content"] = text
+            return {"ok": True, "body": body}
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         return {"ok": False, "error": f"ollama_http_{exc.code}", "detail": detail[:2000]}

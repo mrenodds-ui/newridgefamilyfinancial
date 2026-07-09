@@ -72,6 +72,19 @@ class HalLocalPolicyTests(unittest.TestCase):
         )
         self.assertEqual(text, "Yes. Imports stay read-only.")
 
+    def test_extract_ignores_thinking_only(self) -> None:
+        text = extract_ollama_message_text(
+            {"content": "", "thinking": "Okay, the user is asking if I can post to QuickBooks."}
+        )
+        self.assertEqual(text, "")
+
+    def test_imports_read_only(self) -> None:
+        reply = try_local_policy_reply("Are imports read-only?")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertTrue(reply["text"].lower().startswith("yes"))
+        self.assertIn("read-only", reply["text"].lower())
+
 
 if __name__ == "__main__":
     unittest.main()
