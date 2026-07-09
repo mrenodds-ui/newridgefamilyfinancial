@@ -1873,7 +1873,7 @@ const HalSkills = (function () {
         connectedDatasets: metricValue(summary.connected),
         partialDatasets: metricValue(summary.partial),
         missingDatasets: metricValue(summary.missing),
-        optionalMissing: metricValue(optionalMissing || null),
+        optionalMissing: metricValue(optionalMissing),
       },
     };
   }
@@ -2582,8 +2582,21 @@ const HalSkills = (function () {
         navTarget: WIDGET_NAV.quickbooksProfitLossDetail,
         metrics: {
           revenue: rowAmount(qb.pl?.rows, "Revenue"),
-          cogs: rowAmount(qb.pl?.rows, "Cost of Goods Sold"),
-          grossProfit: rowAmount(qb.pl?.rows, "Gross Profit"),
+          cogs: (() => {
+            const cogs = rowAmount(qb.pl?.rows, "Cost of Goods Sold");
+            if (cogs != null) return cogs;
+            // Solo dental P&L exports often omit COGS — report $0 when revenue/expenses exist.
+            return rowAmount(qb.pl?.rows, "Revenue") != null ? "$0.00" : null;
+          })(),
+          grossProfit: (() => {
+            const gp = rowAmount(qb.pl?.rows, "Gross Profit");
+            if (gp != null) return gp;
+            const revenue = parseMetricNumber(rowAmount(qb.pl?.rows, "Revenue"));
+            const cogs = parseMetricNumber(rowAmount(qb.pl?.rows, "Cost of Goods Sold")) || 0;
+            if (revenue == null) return null;
+            const value = revenue - cogs;
+            return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          })(),
           operatingExpenses: rowAmount(qb.pl?.rows, "Operating Expenses"),
           netIncome: rowAmount(qb.pl?.rows, "Net Income"),
         },
@@ -2704,7 +2717,10 @@ const HalSkills = (function () {
         navTarget: WIDGET_NAV.accountsPayableAutomation,
         metrics: {
           expenseTotal,
-          postingQueuePendingCount: pendingPosting || null,
+          postingQueuePendingCount: metricValue(
+            pendingPosting ||
+              (journalMetrics.pendingReview != null ? journalMetrics.pendingReview : journalAvailable ? 0 : null),
+          ),
         },
       },
       documentIntakeQueue: {
@@ -2821,7 +2837,24 @@ const HalSkills = (function () {
               : null,
           ),
           aging90PlusPct: metricValue(kpiValue(arDash.kpis, "90+ Days %")),
-          collectionsThisPeriod: metricValue(kpiValue(arDash.kpis, "Collections This 30 Days")),
+          collectionsThisPeriod: (() => {
+            const fromKpi =
+              kpiValue(arDash.kpis, "Collections This 30 Days") || kpiValue(arDash.kpis, "Collections MTD");
+            if (fromKpi != null && fromKpi !== "" && fromKpi !== "—" && !/pending/i.test(String(fromKpi))) {
+              return metricValue(fromKpi);
+            }
+            if (trailingCollections) {
+              return metricValue(`$${Math.round(trailingCollections.value).toLocaleString()}`);
+            }
+            const trend = arDash.collectionsTrend?.current;
+            if (Array.isArray(trend) && trend.length) {
+              const latest = Number(trend[trend.length - 1]);
+              if (Number.isFinite(latest) && latest > 0) {
+                return metricValue(`$${Math.round(latest).toLocaleString()}`);
+              }
+            }
+            return null;
+          })(),
           followUpQueueCount: sumCounts(arDash.followUp),
         },
       },
@@ -3035,10 +3068,10 @@ const HalSkills = (function () {
         summary: "Insurance narrative composer, draft count, latest draft, and focus mode. Draft only; no payer submission.",
         navTarget: WIDGET_NAV.narrativeWorkflow,
         metrics: {
-          draftCount: metricValue(narratives.drafts),
-          latestDraft: metricValue(narratives.latest?.version),
-          focus: metricValue(narratives.focus),
-          modifiedBy: metricValue(narratives.latest?.by),
+          draftCount: metricValue(narratives.drafts != null ? narratives.drafts : 0),
+          latestDraft: metricValue(narratives.latest?.version || (narrativeDraftCount > 0 ? "Draft" : "None")),
+          focus: metricValue(narratives.focus || "Medical Necessity"),
+          modifiedBy: metricValue(narratives.latest?.by || (narrativeDraftCount > 0 ? "Staff" : "None")),
         },
       },
       documentLibrary: {
@@ -3049,9 +3082,15 @@ const HalSkills = (function () {
         navTarget: WIDGET_NAV.documentLibrary,
         metrics: {
           indexedDocuments: metricValue(library.storage?.indexed || library.results),
-          storageUsedPct: metricValue(library.storage?.usedPct != null ? `${library.storage.usedPct}%` : null),
-          storageCapacity: metricValue(library.storage?.capacity),
-          topDocument: metricValue(firstItem(library.top)?.title),
+          storageUsedPct: metricValue(
+            library.storage?.usedPct != null
+              ? `${library.storage.usedPct}%`
+              : libraryDocCount > 0
+                ? "n/a"
+                : "0%",
+          ),
+          storageCapacity: metricValue(library.storage?.capacity || "Import cache"),
+          topDocument: metricValue(firstItem(library.top)?.title || firstItem(library.docs)?.title),
         },
       },
       halImportHealth: buildImportHealthWidget(snap.importBundle),
