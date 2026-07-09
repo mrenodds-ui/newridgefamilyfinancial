@@ -66,13 +66,67 @@ const MoonshotLayoutEngine = (function () {
     return `${H.stackOpen(`${pageId}-moonshot`)}${body}</div>`;
   }
 
+  function monthNameFromPeriod(label) {
+    const raw = String(label || "").trim();
+    const match = raw.match(/^(\d{4})-(\d{2})/);
+    if (!match) return "";
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const idx = Number(match[2]) - 1;
+    return months[idx] || "";
+  }
+
+  function resolvePanelTitle(panel, D) {
+    const key = panel && panel.widgetKey;
+    const fallback = (panel && panel.title) || "";
+    if (key !== "periodCloseAndPosting" && key !== "journalPostingQueue") return fallback;
+    let periodLabel = "";
+    try {
+      if (D && typeof D.documentsPeriodLabel === "function") {
+        periodLabel = D.documentsPeriodLabel() || "";
+      }
+      if (!periodLabel && D && typeof D.metrics === "function") {
+        const metrics = D.metrics("periodCloseAndPosting") || {};
+        periodLabel = metrics.periodLabel || "";
+      }
+      if (!periodLabel && D && typeof D.documentsPeriodStats === "function") {
+        const stats = D.documentsPeriodStats() || [];
+        const periodStat = stats.find((row) => String(row.label || "").toLowerCase() === "period");
+        periodLabel = (periodStat && periodStat.value) || periodLabel;
+      }
+    } catch (_e) {
+      /* keep fallback */
+    }
+    const month = monthNameFromPeriod(periodLabel);
+    if (!month) {
+      if (/^june\s+/i.test(fallback)) {
+        return key === "journalPostingQueue" ? "Journal Entries" : "Period Close";
+      }
+      return fallback;
+    }
+    return key === "journalPostingQueue" ? `${month} Journal Entries` : `${month} Period Close`;
+  }
+
   function renderWidgetGridPanel(panel, D, H, pageId, accent) {
+    const panelTitle = resolvePanelTitle(panel, D);
     if (panel.type === "hero-kpi" && panel.colSpan && panel.colSpan < 12) {
       const kpis = resolveHeroKpis(panel, D, H, pageId);
       const kpi = Array.isArray(kpis) ? kpis[0] : kpis;
       if (panel.halSubpanel && H.canvasPanel) {
         return H.canvasPanel({
-          title: panel.title || (kpi && kpi.label) || "",
+          title: panelTitle || (kpi && kpi.label) || "",
           accent,
           halSubpanel: panel.halSubpanel,
           body: kpi
@@ -81,7 +135,7 @@ const MoonshotLayoutEngine = (function () {
         });
       }
       if (kpi && H.canvasMetricTile) {
-        const tile = { ...kpi, label: panel.title || kpi.label };
+        const tile = { ...kpi, label: panelTitle || kpi.label };
         return H.canvasMetricTile(tile, panel.colSpan);
       }
     }
@@ -94,7 +148,7 @@ const MoonshotLayoutEngine = (function () {
       return kpis && kpis.length ? H.heroKpiRow(kpis, maxKpis) : "";
     }
     return H.canvasPanel({
-      title: panel.title || "",
+      title: panelTitle || "",
       accent,
       widgetKey: panel.widgetKey,
       halSubpanel: panel.halSubpanel,

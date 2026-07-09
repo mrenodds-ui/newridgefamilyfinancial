@@ -1767,11 +1767,20 @@ const PageCanvasData = (function () {
     return rows[0] || null;
   }
 
+  function documentsPeriodLabel() {
+    const docs = snapshot && snapshot.documents;
+    const fromDocs = docs && docs.period && docs.period.label;
+    const fromMetrics = metrics("periodCloseAndPosting").periodLabel;
+    return String(fromDocs || fromMetrics || "").trim();
+  }
+
   function documentsPeriodStats() {
     const docs = snapshot && snapshot.documents;
     const period = metrics("periodCloseAndPosting");
     const ap = metrics("accountsPayableAutomation");
+    const label = documentsPeriodLabel();
     return [
+      ...(label ? [{ value: label, label: "Period", tone: "info", widgetKey: "periodCloseAndPosting" }] : []),
       { value: fmt(period.documentsInPeriod), label: "Documents in period", tone: widgetTone("periodCloseAndPosting"), widgetKey: "periodCloseAndPosting" },
       { value: fmt(period.postedPct), label: "Posted", tone: "success", widgetKey: "periodCloseAndPosting" },
       { value: fmt(period.pendingAmount || ap.postingQueuePendingCount), label: "Pending review", tone: "warning", widgetKey: "journalPostingQueue" },
@@ -2440,6 +2449,7 @@ const PageCanvasData = (function () {
     narrativeKpis,
     documentsQueueRows,
     firstDocument,
+    documentsPeriodLabel,
     documentsPeriodStats,
     journalRows,
     journalQueueItems,

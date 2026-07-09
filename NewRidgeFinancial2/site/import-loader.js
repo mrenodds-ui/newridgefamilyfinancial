@@ -1677,10 +1677,20 @@ const ImportLoader = (function () {
     });
   }
 
-  function mapClaimStatus(status) {
+  function mapClaimStatus(status, denialReason) {
     const normalized = String(status || "").toLowerCase();
-    if (normalized.includes("denied")) return "Denied";
-    if (normalized.includes("paid") || normalized.includes("closed")) return "Ready";
+    const reason = String(denialReason || "").toLowerCase();
+    if (normalized.includes("denied") || (reason.includes("denied") && !reason.includes("awaiting"))) {
+      return "Denied";
+    }
+    if (normalized.includes("paid") || normalized.includes("closed") || reason.includes("payment posted")) {
+      return "Ready";
+    }
+    // Daysheet-derived "Pending Review" + awaiting insurance = open with payer, not staff Needs Review.
+    if (reason.includes("awaiting insurance") || reason.includes("awaiting payer")) {
+      return "Ready";
+    }
+    if (normalized.includes("needs review") || normalized === "review") return "Needs Review";
     if (normalized.includes("review") || normalized.includes("pending")) return "Needs Review";
     return "Draft";
   }
@@ -1728,7 +1738,10 @@ const ImportLoader = (function () {
           billed: formatMoney(pickField(row, ["ClaimAmount", "amount", "Billed", "billed"])),
           outstanding: formatMoney(pickField(row, ["Outstanding", "outstanding", "Balance", "balance", "ClaimAmount", "amount"])),
           days,
-          status: mapClaimStatus(pickField(row, ["ClaimStatus", "status"])),
+          status: mapClaimStatus(
+            pickField(row, ["ClaimStatus", "status", "Status"]),
+            pickField(row, ["DenialReason", "denialReason", "Reason", "reason"]),
+          ),
         };
       })
       .filter((row) => row.claim)
@@ -1738,7 +1751,10 @@ const ImportLoader = (function () {
   function buildFollowUpFromImport(rows) {
     const lanes = { "Needs Review": [], Denied: [], Draft: [] };
     (rows || []).forEach((row) => {
-      const status = mapClaimStatus(pickField(row, ["ClaimStatus", "status"]));
+      const status = mapClaimStatus(
+        pickField(row, ["ClaimStatus", "status", "Status"]),
+        pickField(row, ["DenialReason", "denialReason", "Reason", "reason"]),
+      );
       if (!lanes[status]) return;
       lanes[status].push({
         label: `${String(pickField(row, ["PatientName", "patient"]) || "Unknown")} · ${String(pickField(row, ["ClaimId", "claimId", "id"]) || "")}`,
@@ -1769,7 +1785,10 @@ const ImportLoader = (function () {
     if (!rows.length) return state;
     const lanes = { Draft: { count: 0, cards: [], more: 0 }, "Needs Review": { count: 0, cards: [], more: 0 }, Ready: { count: 0, cards: [], more: 0 }, Denied: { count: 0, cards: [], more: 0 } };
     rows.forEach((row) => {
-      const lane = mapClaimStatus(pickField(row, ["ClaimStatus", "status"]));
+      const lane = mapClaimStatus(
+        pickField(row, ["ClaimStatus", "status", "Status"]),
+        pickField(row, ["DenialReason", "denialReason", "Reason", "reason"]),
+      );
       const card = {
         id: String(pickField(row, ["ClaimId", "claimId", "id"]) || ""),
         patient: String(pickField(row, ["PatientName", "patient"]) || "Unknown"),
@@ -1793,7 +1812,10 @@ const ImportLoader = (function () {
       claims: rows.map((row) => ({
         id: String(pickField(row, ["ClaimId", "claimId", "id"]) || ""),
         patient: String(pickField(row, ["PatientName", "patient"]) || "Unknown"),
-        status: mapClaimStatus(pickField(row, ["ClaimStatus", "status"])),
+        status: mapClaimStatus(
+          pickField(row, ["ClaimStatus", "status", "Status"]),
+          pickField(row, ["DenialReason", "denialReason", "Reason", "reason"]),
+        ),
         payer: String(pickField(row, ["Payer", "payer"]) || ""),
         amount: formatMoney(pickField(row, ["ClaimAmount", "amount"])),
         procedure: String(pickField(row, ["Procedure", "procedure"]) || ""),

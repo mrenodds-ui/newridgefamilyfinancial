@@ -28,7 +28,6 @@ const MoonshotLayoutEngine = (function () {
   }
 
   function hasPage(pageId) {
-    if (pageId === "hal") return false;
     return Boolean(pageSpec(pageId));
   }
 
@@ -67,13 +66,67 @@ const MoonshotLayoutEngine = (function () {
     return `${H.stackOpen(`${pageId}-moonshot`)}${body}</div>`;
   }
 
+  function monthNameFromPeriod(label) {
+    const raw = String(label || "").trim();
+    const match = raw.match(/^(\d{4})-(\d{2})/);
+    if (!match) return "";
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+    const idx = Number(match[2]) - 1;
+    return months[idx] || "";
+  }
+
+  function resolvePanelTitle(panel, D) {
+    const key = panel && panel.widgetKey;
+    const fallback = (panel && panel.title) || "";
+    if (key !== "periodCloseAndPosting" && key !== "journalPostingQueue") return fallback;
+    let periodLabel = "";
+    try {
+      if (D && typeof D.documentsPeriodLabel === "function") {
+        periodLabel = D.documentsPeriodLabel() || "";
+      }
+      if (!periodLabel && D && typeof D.metrics === "function") {
+        const metrics = D.metrics("periodCloseAndPosting") || {};
+        periodLabel = metrics.periodLabel || "";
+      }
+      if (!periodLabel && D && typeof D.documentsPeriodStats === "function") {
+        const stats = D.documentsPeriodStats() || [];
+        const periodStat = stats.find((row) => String(row.label || "").toLowerCase() === "period");
+        periodLabel = (periodStat && periodStat.value) || periodLabel;
+      }
+    } catch (_e) {
+      /* keep fallback */
+    }
+    const month = monthNameFromPeriod(periodLabel);
+    if (!month) {
+      if (/^june\s+/i.test(fallback)) {
+        return key === "journalPostingQueue" ? "Journal Entries" : "Period Close";
+      }
+      return fallback;
+    }
+    return key === "journalPostingQueue" ? `${month} Journal Entries` : `${month} Period Close`;
+  }
+
   function renderWidgetGridPanel(panel, D, H, pageId, accent) {
+    const panelTitle = resolvePanelTitle(panel, D);
     if (panel.type === "hero-kpi" && panel.colSpan && panel.colSpan < 12) {
       const kpis = resolveHeroKpis(panel, D, H, pageId);
       const kpi = Array.isArray(kpis) ? kpis[0] : kpis;
       if (panel.halSubpanel && H.canvasPanel) {
         return H.canvasPanel({
-          title: panel.title || (kpi && kpi.label) || "",
+          title: panelTitle || (kpi && kpi.label) || "",
           accent,
           halSubpanel: panel.halSubpanel,
           body: kpi
@@ -82,7 +135,7 @@ const MoonshotLayoutEngine = (function () {
         });
       }
       if (kpi && H.canvasMetricTile) {
-        const tile = { ...kpi, label: panel.title || kpi.label };
+        const tile = { ...kpi, label: panelTitle || kpi.label };
         return H.canvasMetricTile(tile, panel.colSpan);
       }
     }
@@ -95,7 +148,7 @@ const MoonshotLayoutEngine = (function () {
       return kpis && kpis.length ? H.heroKpiRow(kpis, maxKpis) : "";
     }
     return H.canvasPanel({
-      title: panel.title || "",
+      title: panelTitle || "",
       accent,
       widgetKey: panel.widgetKey,
       halSubpanel: panel.halSubpanel,
@@ -434,7 +487,9 @@ const MoonshotLayoutEngine = (function () {
     },
     softdentResponsibility(D, H) {
       const resp = D && D.softdentResponsibilityDonut ? D.softdentResponsibilityDonut() : null;
-      return resp ? H.conicDonut(resp.slices, "") : H.canvasEmpty("Insurance vs patient split unavailable.");
+      if (!resp) return H.canvasEmpty("Insurance vs patient split unavailable.");
+      const center = resp.hint ? `<span class="donut-hint">${H.esc(resp.hint)}</span>` : "";
+      return H.conicDonut(resp.slices, center);
     },
     treatmentPlanSummary(D, H, panel) {
       const practice = D && D.practiceStats ? D.practiceStats() : {};
@@ -452,16 +507,19 @@ const MoonshotLayoutEngine = (function () {
     softdentAppointmentsSnapshot(D, H, panel) {
       if (panel && panel.type === "stat-grid") {
         const stats = D && D.softdentAppointmentStats ? D.softdentAppointmentStats() : [];
-        return stats.length ? H.canvasStatGrid(stats.map((s) => ({ ...s, widgetKey: "softdentAppointmentsSnapshot" }))) : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
+        if (stats.length) {
+          return H.canvasStatGrid(stats.map((s) => ({ ...s, widgetKey: "softdentAppointmentsSnapshot" })));
+        }
       }
       const appt = D && D.softdentAppointmentsSnapshotData ? D.softdentAppointmentsSnapshotData() : { appointments: [] };
-      return appt.hasData
-        ? H.canvasTable(
-            ["Date", "Patient", "Provider", "Status"],
-            appt.appointments.map((a) => [a.date, a.patientId, a.provider, a.status]),
-            true,
-          )
-        : H.canvasEmpty("Appointment snapshot appears when sd_appointments is loaded.");
+      if (appt.hasData && appt.appointments && appt.appointments.length) {
+        return H.canvasTable(
+          ["Time", "Patient", "Operatory", "Status"],
+          appt.appointments.map((a) => [a.date, a.patientId, a.provider, a.status]),
+          true,
+        );
+      }
+      return H.canvasEmpty("Appointment snapshot appears when operatory schedule or sd_appointments is loaded.");
     },
     softdentOperatoryGrid(D, H) {
       return H.canvasOperatoryGrid(D && D.softdentOperatoryGrid ? D.softdentOperatoryGrid() : null);
@@ -618,7 +676,12 @@ const MoonshotLayoutEngine = (function () {
     },
     journalPostingQueue(D, H) {
       const journalItems = D && D.journalQueueItems ? D.journalQueueItems() : [];
-      return journalItems.length ? H.renderJournalQueuePanel(journalItems) : H.canvasEmpty("Journal posting queue requires the NR2 server. Run StartProgram.bat.");
+      if (journalItems.length) return H.renderJournalQueuePanel(journalItems);
+      const rows = D && D.journalRows ? D.journalRows() : [];
+      if (rows.length) {
+        return H.canvasTable(["Entry", "Amount", "Category", "Source"], rows, true);
+      }
+      return H.canvasEmpty("No journal entries in queue — reviewed accruals appear here when staff stages them for export.");
     },
     documentLibrary(D, H) {
       const rows = D && D.libraryRows ? D.libraryRows() : [];
@@ -643,6 +706,72 @@ const MoonshotLayoutEngine = (function () {
           ? PageSchema.NAV_GROUPS.flatMap((g) => g.pages).filter((id) => id !== "hal" && id !== "office-manager")
           : [];
       return H.canvasNavPills(staffPages);
+    },
+    halAskHal(D, H) {
+      const RT = typeof globalThis !== "undefined" ? globalThis : typeof window !== "undefined" ? window : {};
+      const history =
+        (typeof halChatHistory !== "undefined" && Array.isArray(halChatHistory) && halChatHistory) ||
+        RT.halChatHistory ||
+        [];
+      const loading =
+        (typeof halAskLoading !== "undefined" && !!halAskLoading) || !!RT.halAskLoading;
+      const draft =
+        (typeof halAskDraft !== "undefined" && halAskDraft) || RT.halAskDraft || "";
+      const messages = history.slice(-12);
+      const chatHtml = messages.length
+        ? `<div class="chat-history">${messages
+            .map((m) => {
+              const roleClass = m.role === "user" ? "message message-user" : "message message-hal";
+              const who = m.role === "user" ? "You" : "HAL";
+              return `<div class="${roleClass}"><div class="message-head"><span>${H.esc(who)}</span></div><p>${H.esc(m.text || "")}</p></div>`;
+            })
+            .join("")}</div>`
+        : `<p class="chat-placeholder">Ask about imports, widgets, or today's plan…</p>`;
+      const suggestions = D && D.halAskHalSuggestions ? D.halAskHalSuggestions() : [];
+      const chips = suggestions
+        .map(
+          (s) =>
+            `<button type="button" class="prompt-chip" data-hal-suggest="${H.esc(s)}">${H.esc(s)}</button>`,
+        )
+        .join("");
+      return `<div class="chat-rail-panel" data-panel="askHal" data-hal-widget-key="halAskHal">
+        <div class="chat-header">
+          <div class="chat-title"><span class="chat-avatar" aria-hidden="true">AI</span> Ask HAL</div>
+          <div class="chat-status">Local only</div>
+        </div>
+        <div class="chat-messages">${chatHtml}</div>
+        <form class="chat-form chat-input" id="hpAskForm">
+          <textarea class="chat-textarea" id="hpAskInput" rows="2" enterkeyhint="send" placeholder="Ask HAL anything…  (Enter to send)" aria-label="Ask HAL">${H.esc(draft)}</textarea>
+          <div class="chat-input-row">
+            <button class="chat-send" type="submit" ${loading ? "disabled" : ""}>${loading ? "…" : "SEND"}</button>
+          </div>
+        </form>
+        <div class="chat-suggestions prompt-chips prompt-chips--live">${chips}</div>
+      </div>`;
+    },
+    halImportHealth(D, H) {
+      const health = D && D.halImportHealthStats ? D.halImportHealthStats() : { hasData: false, stats: [] };
+      if (!health.hasData) {
+        return H.canvasEmpty("Import & Source Health data appears when imports are loaded.");
+      }
+      const mode = health.importMode
+        ? `<p class="widget-footer">Mode: ${H.esc(String(health.importMode))} · ${H.esc(String(health.status || ""))}</p>`
+        : "";
+      return `${H.canvasStatGrid(health.stats || [])}${mode}`;
+    },
+    practiceFinancialOverview(D, H) {
+      const pack = D && D.halPracticeOverviewStats ? D.halPracticeOverviewStats() : { hasData: false, stats: [] };
+      if (!pack.hasData) {
+        return H.canvasEmpty("Practice Financial Overview data appears when imports are loaded.");
+      }
+      return H.canvasStatGrid(pack.stats || []);
+    },
+    careDeliveryPerformance(D, H) {
+      const pack = D && D.halCareDeliveryStats ? D.halCareDeliveryStats() : { hasData: false, stats: [] };
+      if (!pack.hasData) {
+        return H.canvasEmpty("Care Delivery Summary data appears when imports are loaded.");
+      }
+      return H.canvasStatGrid(pack.stats || []);
     },
     narrativeWorkflow(D, H, panel) {
       if (panel && panel.type === "kanban") {

@@ -223,7 +223,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "stat-grid",
           "widgetKey": "periodCloseAndPosting",
           "colSpan": 6,
-          "title": "June Period Close",
+          "title": "Period Close",
           "dataBind": "PageCanvasData.documentsPeriodStats()"
         },
         {
@@ -231,7 +231,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "table",
           "widgetKey": "journalPostingQueue",
           "colSpan": 6,
-          "title": "June Journal Entries",
+          "title": "Journal Entries",
           "dataBind": "PageCanvasData.journalQueueItems()"
         }
       ]
@@ -562,7 +562,7 @@ const MOONSHOT_PAGE_LAYOUTS = {
           "type": "gauge",
           "widgetKey": "periodCloseAndPosting",
           "colSpan": 6,
-          "title": "June Period Close",
+          "title": "Period Close",
           "dataBind": "PageCanvasData.metrics('periodCloseAndPosting')"
         },
         {

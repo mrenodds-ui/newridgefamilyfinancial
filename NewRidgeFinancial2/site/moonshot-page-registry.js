@@ -2,7 +2,7 @@
  * Moonshot page registry — nav metadata + panel layouts from moonshot-page-layouts.js.
  */
 const MoonshotPageRegistry = (function () {
-  const SCHEMA_VERSION = "hal-10145";
+  const SCHEMA_VERSION = "hal-10147";
   const LAYOUT_EPOCH = "moonshot-mockup";
 
   const PRACTICE = {
@@ -73,8 +73,8 @@ const MoonshotPageRegistry = (function () {
         { key: "quickbooksArAging", title: "QuickBooks A/R Aging" },
         { key: "quickbooksExpenseBreakdown", title: "Operating Expenses" },
         { key: "accountsPayableAutomation", title: "Accounts Payable" },
-        { key: "periodCloseAndPosting", title: "June Period Close" },
-        { key: "journalPostingQueue", title: "June Journal Entries" },
+        { key: "periodCloseAndPosting", title: "Period Close" },
+        { key: "journalPostingQueue", title: "Journal Entries" },
       ],
     },
     softdent: {
@@ -159,9 +159,9 @@ const MoonshotPageRegistry = (function () {
       widgets: [
         { key: "documentIntakeQueue", title: "Recent Accounting Documents" },
         { key: "documentPreview", title: "Document Preview" },
-        { key: "periodCloseAndPosting", title: "June Period Close" },
+        { key: "periodCloseAndPosting", title: "Period Close" },
         { key: "accountsPayableAutomation", title: "Accounts Payable" },
-        { key: "journalPostingQueue", title: "June Journal Entries" },
+        { key: "journalPostingQueue", title: "Journal Entries" },
       ],
     },
     library: {
@@ -417,6 +417,7 @@ if (typeof window !== "undefined") {
   delete window.PageSchemaLegacy;
   delete window.HalPageSchema;
 }
+
 
 
 
