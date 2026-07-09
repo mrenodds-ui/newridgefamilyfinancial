@@ -13,6 +13,7 @@ sys.path.insert(0, str(NR2))
 
 LEARNED_PATH = ROOT / "app_data" / "nr2" / "learned_memories.jsonl"
 STAMP = "2026-07-08T21:00:00Z"
+FILL_STAMP = "2026-07-09T15:00:00Z"
 BASE = {
     "created_at": STAMP,
     "last_verified_at": STAMP,
@@ -32,8 +33,12 @@ def learned(
     scope: str,
     *,
     notes: str = "",
+    confidence: str = "high",
+    created_at: str | None = None,
+    last_verified_at: str | None = None,
 ) -> dict:
     row = dict(BASE)
+    stamp = created_at or STAMP
     row.update(
         {
             "id": memory_id,
@@ -42,6 +47,9 @@ def learned(
             "source": source,
             "scope": scope,
             "notes": notes,
+            "confidence": confidence,
+            "created_at": stamp,
+            "last_verified_at": last_verified_at or stamp,
         }
     )
     return row
@@ -605,6 +613,119 @@ PRACTICE_LEARNED: list[dict] = [
         "Extension via Form 7004 does not extend estimated tax due dates; CPA owns filing — HAL explains deadlines only.",
         "scorp-1120s-deadline + kansas-k120s-return",
         "taxes",
+    ),
+    # --- Operating rules scaffolds (fill worksheet; do not invent dollar amounts) ---
+    learned(
+        "nr2-ops-writeoff-approval-scaffold",
+        "operator_playbooks",
+        "New Ridge write-off process (safe without dollar amounts): SoftDent insurance write-off codes 51/52 and CO-45 "
+        "contractual adjustments are common; Steve coordinates; Dr. Michael Reno or designated approver signs large "
+        "courtesy/contractual write-offs before staff post. HAL may draft review notes and cite fee_schedule.json for "
+        "allowed vs billed underpayment checks. HAL must not invent a dual-approval dollar threshold or courtesy fee — "
+        "ask Steve until the operating-rules worksheet §1 is filled. Program RBAC env defaults are not New Ridge policy.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §1",
+        "hal",
+        notes="FILL-IN: dual-approval $ threshold, who signs, SoftDent adjustment codes.",
+        confidence="medium",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-broken-appt-fee-scaffold",
+        "operator_playbooks",
+        "Broken-appointment process at New Ridge (safe without fee $): front desk logs cancel/no-show in SoftDent, "
+        "offers reschedule within two weeks, and flags repeat no-shows to Steve. HAL must not recommend auto-charging "
+        "or quote a fee amount until worksheet §2 is filled. Collections language waits on Steve's current policy.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §2",
+        "hal",
+        notes="FILL-IN: fee $, grace period, hygiene vs doctor appt rules.",
+        confidence="medium",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-payment-plan-scaffold",
+        "operator_playbooks",
+        "Patient payment arrangements at New Ridge: front desk coordinates with Steve; SoftDent ledger is source of truth; "
+        "HAL never processes payments or invents min down / max months. Until worksheet §3 is filled, HAL describes the "
+        "process only and asks staff for current plan terms before advising patients.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §3",
+        "hal",
+        notes="FILL-IN: min down %, max months, approval role.",
+        confidence="medium",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-qb-coa-mapping-scaffold",
+        "quickbooks_readonly",
+        "NR2 planning chart of accounts (Cash 1010, Accrued Expenses 2200, etc.) is a draft template only — not the live "
+        "New Ridge QuickBooks chart. For journal drafts and month-end, HAL must prefer imported QuickBooks account names "
+        "from the latest export and ask Steve/CPA when mapping is unclear. Never invent account numbers that are not in the import.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §4 + accounting_tools.py",
+        "quickbooks",
+        notes="FILL-IN: paste real QB COA mapping for production, collections, lab, supplies, payroll.",
+        confidence="medium",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-fee-schedule-scaffold",
+        "insurance_narratives",
+        "For underpayment/CO-45 or 'what is allowed for D#### on carrier X', use HAL fee schedule lookup "
+        "(lookup_fee_schedule / NewRidgeFinancial2/data/fee_schedule.json from the office Fee Schedule Spreadsheet "
+        "Data - Main 2025). Cite the schedule name and exported amount. Do not invent allowed amounts from memory. "
+        "Escalate to Steve only when the CDT or carrier column is missing from the export.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §5 + fee_schedule_store.py",
+        "insurance_narratives",
+        notes="Live CDT lookup replaces prior ask-Steve-only scaffold.",
+        confidence="high",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-staff-roster-scaffold",
+        "operator_playbooks",
+        "Confirmed New Ridge roles: Steve = office manager; Dr. Michael Reno = sole dentist/owner. Billing coordinator, "
+        "hygiene lead, and front-desk leads should be named in learned memory when staff confirm. Until filled, route "
+        "billing queue and narrative clinical accuracy to Steve's billing coordination, and clinical sign-off to Dr. Reno.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §6",
+        "hal",
+        notes="FILL-IN: billing name(s), hygiene lead, front desk leads, lab contact.",
+        confidence="medium",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-goals-scaffold",
+        "operator_playbooks",
+        "Production, collections, hygiene, and case-acceptance goals for New Ridge are office-set targets. HAL must not invent "
+        "monthly production goals. When briefing the owner, say goals are not loaded unless staff remembered them, then use "
+        "import totals for actuals only.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §7",
+        "hal",
+        notes="FILL-IN: monthly production $, collection %, hygiene goal, case acceptance %.",
+        confidence="low",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-month-end-owner-checklist",
+        "operator_playbooks",
+        "New Ridge month-end owner checklist (Steve coordinates): (1) final SoftDent daysheet for period, (2) import sync both "
+        "SoftDent and QuickBooks, (3) EOB/adjustment sweep, (4) A/R 90+ review, (5) denied claims aging, (6) QuickBooks P&L "
+        "sanity check vs SoftDent production/collections, (7) flag CPA items on Taxes page. HAL prepares local checklists only — "
+        "no posts, no filings.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md §8 + month-end playbook",
+        "hal",
+        notes="Extend with office-specific close steps when Steve confirms.",
+        confidence="high",
+        created_at=FILL_STAMP,
+    ),
+    learned(
+        "nr2-ops-fill-worksheet-howto",
+        "operator_playbooks",
+        "To teach HAL New Ridge operating rules: fill docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md, then tell HAL "
+        "Remember this: … for each completed section, or re-run scripts/seed_practice_learned_memories.py after updating the seed. "
+        "Never store credentials, NPI/TIN secrets, or patient PHI in memories.",
+        "docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md",
+        "hal",
+        notes="Operator onboarding for knowledge fill-in.",
+        confidence="high",
+        created_at=FILL_STAMP,
     ),
 ]
 

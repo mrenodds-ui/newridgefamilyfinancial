@@ -28,6 +28,11 @@ only**. They never override:
 | `schema.json` | JSON Schema for one memory object (draft-07). |
 | `categories.json` | Category definitions, default staleness, retrieval priority. |
 | `memories.jsonl` | Canonical registry (one JSON object per line). |
+| `NEW_RIDGE_OPERATING_RULES_WORKSHEET.md` | Fill-in practice policies (write-offs, fees, COA, roster, goals). |
+| `NEW_RIDGE_SOFTDENT_INSURANCES.md` | SoftDent InsCo master from Sensei DataSync. |
+| `NEW_RIDGE_OFFICE_INSURANCE_CONTACTS.md` | Staff Insurance.xlsx contacts (eligibility/claim phones). |
+| `NEW_RIDGE_FEE_SCHEDULES.md` | Fee Schedule Spreadsheet index + schedule columns. |
+| `new_ridge_office_insurance_fee.json` | Machine-readable import of the two Desktop workbooks. |
 | `runtime_workflow.md` | Future SQLite proposal/approval workflow (design only). |
 | `app/hal/knowledge_memory.py` | Load, filter, sanitize, and chunk approved memories. |
 | `app/tests/test_hal_knowledge_memory_contract.py` | Contract/schema validation (no live API, no Ollama). |

@@ -1,0 +1,1783 @@
+{
+  "importedAt": "2026-07-09T16:08:06Z",
+  "sources": {
+    "insurance": "E:\\OneDrive\\Desktop\\Insurance.xlsx",
+    "feeSchedule": "E:\\OneDrive\\Desktop\\0) Fee Schedule Spreadsheet.xlsx"
+  },
+  "insuranceContacts": [
+    {
+      "vyneOrEclaimId": "60054",
+      "company": "Aetna (Commercial)",
+      "carrierSoftDent": "AETNA",
+      "eligibilityPhone": "(800) 451-7715",
+      "eligibilityWebsite": "https://www.aetna.com/provweb/",
+      "claimMailingAddress": "PO BOX 14094, LEXINGTON, KY 40512-4094",
+      "claimPhone": "(800) 451-7715",
+      "claimFax": "(859) 455-8650 / Attn. Dental Claims",
+      "claimWebsite": "https://www.aetna.com/provweb/",
+      "verificationBestSource": "Card"
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Aetna (Medicare Advantage)",
+      "carrierSoftDent": "AETNA MEDICARE ADVANTAGE",
+      "eligibilityPhone": "(800) 624-0756",
+      "eligibilityWebsite": "https://www.aetna.com/provweb/",
+      "claimMailingAddress": "PO BOX 981106, EL PASO, TX 79998-1106",
+      "claimPhone": "(800) 624-0756",
+      "claimFax": "(859) 455-8650 / Attn. Medicare Claims",
+      "claimWebsite": "https://www.aetna.com/provweb/",
+      "verificationBestSource": "Card"
+    },
+    {
+      "vyneOrEclaimId": "47009",
+      "company": "Ameritas Life Insurance Company",
+      "carrierSoftDent": "AMERITAS",
+      "eligibilityPhone": "(800) 487-5553",
+      "eligibilityWebsite": "https://www.ameritas.com/employee-benefits/providers",
+      "claimMailingAddress": "PO BOX 82520, LINCOLN, NE 68501-2520",
+      "claimPhone": "(800) 487-5553",
+      "claimFax": "(402) 467-7336 / Attn. Dental Claims",
+      "claimWebsite": "https://www.ameritas.com/employee-benefits/providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Blue Cross Blue Shield (Anthem)",
+      "carrierSoftDent": "ANTHEM - 1115",
+      "eligibilityPhone": "(877) 604-2158",
+      "eligibilityWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "claimMailingAddress": "PO BOX 1115, MINNEAPOLIS, MI 55440",
+      "claimPhone": "(877) 604-2158",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Blue Cross Blue Shield (Anthem)",
+      "carrierSoftDent": "ANTHEM - 188",
+      "eligibilityPhone": "(844) 729-1565",
+      "eligibilityWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "claimMailingAddress": "PO BOX 188, MINNEAPOLIS, MI 55440",
+      "claimPhone": "(844) 729-1565",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "47163",
+      "company": "Blue Cross Blue Shield of Kansas (Commercial)",
+      "carrierSoftDent": "BCBS OF KS",
+      "eligibilityPhone": "(800) 432-3990",
+      "eligibilityWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "claimMailingAddress": "1133 SW TOPEKA BLVD, TOPEKA, KS 66629-0001",
+      "claimPhone": "(800) 432-3990",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "47163",
+      "company": "Blue Cross Blue Shield of Kansas (Federal Program)",
+      "carrierSoftDent": "BCBS OF KS",
+      "eligibilityPhone": "(800) 432-0379",
+      "eligibilityWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "claimMailingAddress": "1133 SW TOPEKA BLVD, TOPEKA, KS 66629-0001",
+      "claimPhone": "(800) 432-0379",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "47171",
+      "company": "Blue Cross Blue Shield of Kansas City",
+      "carrierSoftDent": "BCBS OF KANSAS CITY",
+      "eligibilityPhone": "(816) 395-3929",
+      "eligibilityWebsite": "https://providers.bluekc.com/",
+      "claimMailingAddress": "PO BOX 419169 KANSAS CITY, MO 64141-6169",
+      "claimPhone": "(816) 395-3929",
+      "claimFax": "(816) 395-3959 / Attn. Dental Claims",
+      "claimWebsite": "https://providers.bluekc.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "38520",
+      "company": "Blue Cross Blue Shield of South Carolina",
+      "carrierSoftDent": "BCBS OF SC",
+      "eligibilityPhone": "(800) 222-7156",
+      "eligibilityWebsite": "https://www.southcarolinablues.com/web/public/brands/sc/providers",
+      "claimMailingAddress": "PO BOX 100300, COLUMBIA, SC 29202-3300",
+      "claimPhone": "(855) 404-6752",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.southcarolinablues.com/web/public/brands/sc/providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "84980",
+      "company": "Blue Cross Blue Shield of Texas",
+      "carrierSoftDent": "BCBS OF TX",
+      "eligibilityPhone": "(800) 451-0287",
+      "eligibilityWebsite": "https://apps.availity.com/availity/web/public.elegant.login",
+      "claimMailingAddress": "PO BOX 660247, DALLAS, TX 75266-0247",
+      "claimPhone": "(800) 451-0287",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://apps.availity.com/availity/web/public.elegant.login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "BEAM1",
+      "company": "Beam Dental",
+      "carrierSoftDent": "BEAM DENTAL",
+      "eligibilityPhone": "(800) 648-1179",
+      "eligibilityWebsite": "https://www.beambenefits.com/providers",
+      "claimMailingAddress": "PO BOX 75372, CINCINNATI, OH 45275-0372",
+      "claimPhone": "(800) 648-1179",
+      "claimFax": "844-688-4821",
+      "claimWebsite": "https://www.beambenefits.com/providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "95604",
+      "company": "Best Life and Health Insurance Company",
+      "carrierSoftDent": "BEST LIFE AND HEALTH INSURANCE COMPANY",
+      "eligibilityPhone": "(877) 205-8767",
+      "eligibilityWebsite": "Need to call for information",
+      "claimMailingAddress": "PO BOX 890, MERIDIAN, ID 83680-0890",
+      "claimPhone": "(877) 205-8767",
+      "claimFax": "(208) 893-5040",
+      "claimWebsite": "Need to call for information",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "TLY44",
+      "company": "Careington Corporation",
+      "carrierSoftDent": "CAREINGTON BENEFIT SOLUTIONS",
+      "eligibilityPhone": "(866) 636-9188",
+      "eligibilityWebsite": "https://www.careingtonbenefitsolutions.com",
+      "claimMailingAddress": "PO BOX 21681, EAGAN, MN 55121-0681",
+      "claimPhone": "(866) 636-9188",
+      "claimFax": "claimsteam@careington.com",
+      "claimWebsite": "https://www.careingtonbenefitsolutions.com",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "46278",
+      "company": "Centene Dental (Ambetter)",
+      "carrierSoftDent": "CENTENE ENVOLVE KS WA",
+      "eligibilityPhone": "(855) 434-9245",
+      "eligibilityWebsite": "https://pwp.envolvedental.com/PWP/Landing",
+      "claimMailingAddress": "PO BOX 23768, TAMPA, FL 33623-3768",
+      "claimPhone": "(855) 434-9245",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://pwp.envolvedental.com/PWP/Landing",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "CX014",
+      "company": "Centene Dental (Wellcare)",
+      "carrierSoftDent": "DENTAQUEST-GOVERNMENT",
+      "eligibilityPhone": "(833) 206-6291",
+      "eligibilityWebsite": "https://www.dentaquest.com",
+      "claimMailingAddress": "PO BOX 2906 MILWAUKEE, WI 53201-2906",
+      "claimPhone": "(833) 206-6291",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentaquest.com",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "36215",
+      "company": "Central States Health and Welfare Fund",
+      "carrierSoftDent": "CENTRAL STATES",
+      "eligibilityPhone": "(800) 323-2190",
+      "eligibilityWebsite": "https://myteamcare.org/#providers",
+      "claimMailingAddress": "PO BOX 5116, DES PLAINES, IL 60017-5116",
+      "claimPhone": "(800) 323-2190",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://myteamcare.org/#providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "62308",
+      "company": "Cigna PPO",
+      "carrierSoftDent": "CIGNA DENTAL",
+      "eligibilityPhone": "(800) 244-6224",
+      "eligibilityWebsite": "https://www.cigna.com/health-care-providers",
+      "claimMailingAddress": "PO BOX 188037, CHATTANOOGA, TN 37422",
+      "claimPhone": "(800)244-6224",
+      "claimFax": "(859) 550-2662 / Attn. Dental Claims",
+      "claimWebsite": "https://www.cigna.com/health-care-providers",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "62308",
+      "company": "Cigna Medical",
+      "carrierSoftDent": "CIGNA DENTAL - 182223",
+      "eligibilityPhone": "(800) 244-6224",
+      "eligibilityWebsite": "https://www.cigna.com/health-care-providers",
+      "claimMailingAddress": "PO BOX 182223, CHATTANOOGA, TN 37422",
+      "claimPhone": "(800)244-6224",
+      "claimFax": "(859) 550-2662 / Attn. Dental Claims",
+      "claimWebsite": "https://www.cigna.com/health-care-providers",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "62308",
+      "company": "Cigna DHMO",
+      "carrierSoftDent": "CIGNA DENTAL - HMO",
+      "eligibilityPhone": "(800) 288-4462",
+      "eligibilityWebsite": "https://www.cigna.com/health-care-providers",
+      "claimMailingAddress": "PO BOX 188046, CHATTANOOGA, TN 37422",
+      "claimPhone": "(800)288-4462",
+      "claimFax": "(859) 550-2662 / Attn. Dental Claims",
+      "claimWebsite": "https://www.cigna.com/health-care-providers",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "62308",
+      "company": "Cigna DHMO",
+      "carrierSoftDent": "CIGNA DENTAL - SPECIALTY",
+      "eligibilityPhone": "(800)288-4462",
+      "eligibilityWebsite": "https://www.cigna.com/health-care-providers",
+      "claimMailingAddress": "PO BOX 188045, CHATTANOOGA, TN 37422",
+      "claimPhone": "(800)288-4462",
+      "claimFax": "(859) 550-2662 / Attn. Dental Claims",
+      "claimWebsite": "https://www.cigna.com/health-care-providers",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "STR01",
+      "company": "Starmount Life Insurance Co",
+      "carrierSoftDent": "COLONIA LIFE",
+      "eligibilityPhone": "(588) 400-9330",
+      "eligibilityWebsite": "https://login.coloniallife.com/",
+      "claimMailingAddress": "PO BOX 80139, BATON ROUGE, LA 70898-0139",
+      "claimPhone": "(588) 400-9330",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://login.coloniallife.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "CX021",
+      "company": "CompBenefits",
+      "carrierSoftDent": "COMPBENEFITS - 14283",
+      "eligibilityPhone": "(800) 833-2223",
+      "eligibilityWebsite": "https://provider.humana.com/",
+      "claimMailingAddress": "PO BOX 14282, LEXINGTON, KY 40512-4282",
+      "claimPhone": "(800) 833-2023",
+      "claimFax": "(888) 891-0728 / Attn. Compbenefits (no xrays)",
+      "claimWebsite": "https://provider.humana.com/",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CDCA1",
+      "company": "Delta Dental CA FED Govt Prgm",
+      "carrierSoftDent": "DELTA DENTAL CA FED GOVT PRGM",
+      "eligibilityPhone": "(800) 521-2651",
+      "eligibilityWebsite": "https://www.tricare.mil/contactus/securelogin",
+      "claimMailingAddress": "PO BOX 537007, SACRAMENTO, CA 95853-7007",
+      "claimPhone": "(800) 538-9552",
+      "claimFax": "",
+      "claimWebsite": "https://www.tricare.mil/contactus/securelogin",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "DELAR",
+      "company": "Delta Dental of Arkansas",
+      "carrierSoftDent": "DELTA DENTAL OF AR",
+      "eligibilityPhone": "(800) 462-5410",
+      "eligibilityWebsite": "https://www.deltadentalar.com/login#accordion3",
+      "claimMailingAddress": "PO BOX 15965, LITTLE ROCK, AR 72231-5965",
+      "claimPhone": "(800) 462-5410",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalar.com/login#accordion3",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "77777",
+      "company": "Delta Dental of California (DDC)",
+      "carrierSoftDent": "DELTA DENTAL OF CA",
+      "eligibilityPhone": "(888) 335-8227",
+      "eligibilityWebsite": "https://www1.deltadentalins.com/login.html",
+      "claimMailingAddress": "PO BOX 997330, SACRAMENTO, CA 95899-7330",
+      "claimPhone": "(888) 335-8227",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www1.deltadentalins.com/login.html",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "84056",
+      "company": "Delta Dental of Colorado",
+      "carrierSoftDent": "DELTA DENTAL OF CO",
+      "eligibilityPhone": "(800) 610-0201",
+      "eligibilityWebsite": "https://www.deltadentalco.com/dentists.html",
+      "claimMailingAddress": "PO BOX 173803, DENVER, CO 80217-3803",
+      "claimPhone": "(800) 610-0201",
+      "claimFax": "(303) 741-9300 / Attn. Dental Claims",
+      "claimWebsite": "https://www.deltadentalco.com/dentists.html",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "94276",
+      "company": "Delta Dental of Georgia - DDIC",
+      "carrierSoftDent": "DELTA DENTAL OF GA",
+      "eligibilityPhone": "(800) 521-2651",
+      "eligibilityWebsite": "https://www1.deltadentalins.com/login.html",
+      "claimMailingAddress": "PO BOX 1809, ALPHARETTA, GA 30023-1809",
+      "claimPhone": "(800) 521-2651",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www1.deltadentalins.com/login.html",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "47598",
+      "company": "Delta Dental of Illinois",
+      "carrierSoftDent": "DELTA DENTAL OF IL - 5402",
+      "eligibilityPhone": "(800) 323-1743",
+      "eligibilityWebsite": "https://www.deltadentalil.com/dentists",
+      "claimMailingAddress": "PO BOX 5402, LISLE, IL 60532-5402",
+      "claimPhone": "(800) 323-1743",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalil.com/dentists",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "DELTI",
+      "company": "Delta Dental of Indiana",
+      "carrierSoftDent": "DELTA DENTAL OF IN",
+      "eligibilityPhone": "(800) 524-0149",
+      "eligibilityWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "claimMailingAddress": "PO BOX 9085, FARMINGTON HILLS, MI 48333-9085",
+      "claimPhone": "(800) 524-0149",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CDKS1",
+      "company": "Delta Dental of Kansas",
+      "carrierSoftDent": "DELTA DENTAL OF KS",
+      "eligibilityPhone": "(800) 234-3375",
+      "eligibilityWebsite": "https://deltadentalks.com/dentist",
+      "claimMailingAddress": "PO BOX 70201, LONDON, KY 40742-0201",
+      "claimPhone": "(800) 234-3375",
+      "claimFax": "(317) 462-3392 / Attn. Dental Claims",
+      "claimWebsite": "https://deltadentalks.com/dentist",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CDKY1",
+      "company": "Delta Dental of Kentucky",
+      "carrierSoftDent": "DELTA DENTAL OF KY",
+      "eligibilityPhone": "(800) 955-2030",
+      "eligibilityWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "claimMailingAddress": "PO BOX 242810, LOUISVILLE, KY 40224-2810",
+      "claimPhone": "(800) 955-2030",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CDMN1",
+      "company": "Delta Dental of Minnesota",
+      "carrierSoftDent": "DELTA DENTAL OF MN",
+      "eligibilityPhone": "(800) 448-3815",
+      "eligibilityWebsite": "https://www.deltadentalmn.org/providers",
+      "claimMailingAddress": "PO BOX 9120, FARMINGTON HILLS, MI 48333-9120",
+      "claimPhone": "(800) 448-3815",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalmn.org/providers",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "43090",
+      "company": "Delta Dental of Missouri",
+      "carrierSoftDent": "DELTA DENTAL OF MO",
+      "eligibilityPhone": "(800) 335-8266",
+      "eligibilityWebsite": "https://www.deltadentalmo.com/members/provider_search_landing",
+      "claimMailingAddress": "PO BOX 8690, SAINT LOUIS, MO 63126-0690",
+      "claimPhone": "(800) 335-8266",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalmo.com/members/provider_search_landing",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "56101",
+      "company": "Delta Dental of North Carolina",
+      "carrierSoftDent": "DELTA DENTAL OF NC",
+      "eligibilityPhone": "(800) 622-8856",
+      "eligibilityWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "claimMailingAddress": "PO BOX 9085, FARMINGTON HILLS, MI 48333-9085",
+      "claimPhone": "(800) 622-8856",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "11198",
+      "company": "Delta Dental of New York",
+      "carrierSoftDent": "DELTA DENTAL OF NY",
+      "eligibilityPhone": "(888) 335-8227",
+      "eligibilityWebsite": "https://www1.deltadentalins.com/login.html",
+      "claimMailingAddress": "PO BOX 2105, MECHANICSBURG, PA 17055-2105",
+      "claimPhone": "(888) 335-8227",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www1.deltadentalins.com/login.html",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "DELTO",
+      "company": "Delta Dental of Ohio",
+      "carrierSoftDent": "DELTA DENTAL OF OH",
+      "eligibilityPhone": "(800) 524-0149",
+      "eligibilityWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "claimMailingAddress": "PO BOX 9085, MINNEAPOLIS, MI 48333-9085",
+      "claimPhone": "(800) 524-0149",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalofficetoolkit.com/dot-ui/login",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "DELOK",
+      "company": "Delta Dental of Oklahoma",
+      "carrierSoftDent": "DELTA DENTAL OF OK",
+      "eligibilityPhone": "(800) 990-7337",
+      "eligibilityWebsite": "https://deltadentalok.org/for-dentists",
+      "claimMailingAddress": "PO BOX 548809, OKLAHOMA CITY, OK 73154-8809",
+      "claimPhone": "(800) 990-7337",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://deltadentalok.org/for-dentists",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "23166",
+      "company": "Delta Dental of Pennsylvania - DDP",
+      "carrierSoftDent": "DELTA DENTAL OF PA",
+      "eligibilityPhone": "(800) 932-0783",
+      "eligibilityWebsite": "https://www1.deltadentalins.com/login.html",
+      "claimMailingAddress": "PO BOX 2105, MECHANICSBURG, PA 17055-2105",
+      "claimPhone": "(800) 932-0783",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www1.deltadentalins.com/login.html",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "54097",
+      "company": "Delta Dental of South Dakota",
+      "carrierSoftDent": "DELTA DENTAL OF SD",
+      "eligibilityPhone": "(877) 841-1478",
+      "eligibilityWebsite": "https://southdakota.deltadental.com/dentist",
+      "claimMailingAddress": "PO BOX 1157, PIERRE, SD 57501-1157",
+      "claimPhone": "(877) 841-1478",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://southdakota.deltadental.com/dentist",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "DELTN",
+      "company": "Delta Dental of Tennessee",
+      "carrierSoftDent": "DELTA DENTAL OF TN",
+      "eligibilityPhone": "(800) 223-3104",
+      "eligibilityWebsite": "https://tennessee.deltadental.com/dentists",
+      "claimMailingAddress": "PO BOX 24810, NASHVILLE, TN 37202-4810",
+      "claimPhone": "(800) 223-3104",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://tennessee.deltadental.com/dentists",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CDVA1",
+      "company": "Delta Dental of Virginia",
+      "carrierSoftDent": "DELTA DENTAL OF VA",
+      "eligibilityPhone": "(800) 237-6060",
+      "eligibilityWebsite": "https://www.deltadentalva.com/dentists.html#",
+      "claimMailingAddress": "5415 AIRPORT RD, ROANOKE, VA 24012-1303",
+      "claimPhone": "(800) 237-6060",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalva.com/dentists.html#",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "91062",
+      "company": "Delta Dental of Washington",
+      "carrierSoftDent": "DELTA DENTAL OF WA",
+      "eligibilityPhone": "(800) 554-1907",
+      "eligibilityWebsite": "https://www.deltadentalwa.com/provider",
+      "claimMailingAddress": "PO BOX 75983, SEATTLE, WA 98175-0983",
+      "claimPhone": "(800) 554-1907",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalwa.com/provider",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "39069",
+      "company": "Delta Dental of Wisconsin",
+      "carrierSoftDent": "DELTA DENTAL OF WI",
+      "eligibilityPhone": "(800) 236-3712",
+      "eligibilityWebsite": "https://www.deltadentalwi.com",
+      "claimMailingAddress": "PO BOX 828, STEVENS POINT, WI 54481-0828",
+      "claimPhone": "(800) 236-3712",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.deltadentalwi.com",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "04356",
+      "company": "Dentaquest - Commercial",
+      "carrierSoftDent": "DENTAQUEST",
+      "eligibilityPhone": "(844) 870-3977",
+      "eligibilityWebsite": "https://dentaquest.com/dentists/",
+      "claimMailingAddress": "PO BOX 502, MILWAUKEE, WI 53201-0502",
+      "claimPhone": "(844) 870-3977",
+      "claimFax": "(262) 241-7379",
+      "claimWebsite": "https://dentaquest.com/dentists/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "DOM01 OR 0000W",
+      "company": "Dominion National",
+      "carrierSoftDent": "DOMINION NATIONAL",
+      "eligibilityPhone": "(888) 471-3631",
+      "eligibilityWebsite": "https://www.dominionprovider.com/",
+      "claimMailingAddress": "PO BOX 211424, EAGAN, MN 55121-3024",
+      "claimPhone": "(888) 471-3631",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dominionprovider.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "81039",
+      "company": "EBMS",
+      "carrierSoftDent": "EBMS",
+      "eligibilityPhone": "(406) 869-5555",
+      "eligibilityWebsite": "https://mibenefits.ebms.com/auth/login",
+      "claimMailingAddress": "PO BOX 21367, BILLINGS, MT 59104-1367",
+      "claimPhone": "(406) 869-5555",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://mibenefits.ebms.com/auth/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "BCAFD",
+      "company": "Blue Cross Blue Shield FEP Dental",
+      "carrierSoftDent": "FEP BLUE DENTAL",
+      "eligibilityPhone": "(855) 504-2583",
+      "eligibilityWebsite": "https://www.bcbsfepdental.com/",
+      "claimMailingAddress": "PO BOX 75, MINNEAPOLIS, MN 55440-0075",
+      "claimPhone": "(855) 504-2583",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.bcbsfepdental.com/",
+      "verificationBestSource": "Bank ETF"
+    },
+    {
+      "vyneOrEclaimId": "CX090",
+      "company": "First Continental Life and Accident",
+      "carrierSoftDent": "FIRST CONTINENTAL LIFE & ACCIDENT",
+      "eligibilityPhone": "(877) 493-6282",
+      "eligibilityWebsite": "https://fcldental.com/provider-portal",
+      "claimMailingAddress": "101 PARKLANE BLVD STE 301, SUGAR LAND, TX 77478-5522",
+      "claimPhone": "(877) 493-6282",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://fcldental.com/provider-portal",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "39026",
+      "company": "GEHA Employee Program",
+      "carrierSoftDent": "GEHA EMPLOYEE PROGRAM",
+      "eligibilityPhone": "(877) 434-2336",
+      "eligibilityWebsite": "https://www.geha.com/resource-center",
+      "claimMailingAddress": "PO BOX 21191, EAGAN, MN 55121",
+      "claimPhone": "(877) 434-2336",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.geha.com/resource-center",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "64246",
+      "company": "Guardian Life Insurance Co",
+      "carrierSoftDent": "GUARDIAN LIFE INSURANCE CO.",
+      "eligibilityPhone": "(800) 541-7846",
+      "eligibilityWebsite": "https://signin.guardianlife.com/signin",
+      "claimMailingAddress": "PO BOX 981572, EL PASO, TX 79998-1572",
+      "claimPhone": "(800) 541-7846",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://signin.guardianlife.com/signin",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "73288",
+      "company": "Humana",
+      "carrierSoftDent": "HUMANA DENTAL",
+      "eligibilityPhone": "(800) 833-2223",
+      "eligibilityWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "claimMailingAddress": "PO BOX 14611, LEXINGTON, KY 40512-4611",
+      "claimPhone": "(800) 833-2223",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://essentials.availity.com/static/public/onb/onboarding-ui-apps/availity-fr-ui/?_gl=1*14w7l25*_gcl_au*MTI1OTM3NTU1My4xNzM0NjQxODgx*_ga*NTAyMjIzNzAzLjE3MzQ2NDE4ODE.*_ga_E2R9S4EQP7*MTczNDY0MTg4MS4xLjAuMTczNDY0MTg4MS42MC4wLjA.#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "86253",
+      "company": "Manhattan Life Assurance Company of America",
+      "carrierSoftDent": "MANHATTAN LIFE ASSURANCE COMPANY OF AMERICA",
+      "eligibilityPhone": "(800) 669-9030",
+      "eligibilityWebsite": "https://www.manhattanlife.com/",
+      "claimMailingAddress": "PO BOX 924408, HOUSTON, TX 77292-4408",
+      "claimPhone": "(800) 669-9030",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.manhattanlife.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "23160",
+      "company": "Medico Insurance Company",
+      "carrierSoftDent": "MEDICO",
+      "eligibilityPhone": "(800) 228-6080",
+      "eligibilityWebsite": "https://quickclaim.smart-data-solutions.com:8443/quickclaim/servlet/quickclaim/template/clearinghouse%2cclearinghouseportal.vm/cc/chaei",
+      "claimMailingAddress": "PO BOX 21660, EAGAN, MN 55121",
+      "claimPhone": "(800) 228-6080",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://quickclaim.smart-data-solutions.com:8443/quickclaim/servlet/quickclaim/template/clearinghouse%2cclearinghouseportal.vm/cc/chaei",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "06126 Paper Submitter",
+      "company": "Meritain Health",
+      "carrierSoftDent": "MERITAIN HEALTH",
+      "eligibilityPhone": "(800) 566-9311",
+      "eligibilityWebsite": "https://www.meritain.com/resources-for-providers-meritain-health-provider-portal/",
+      "claimMailingAddress": "PO BOX 853921, RICHARDSON, TX 75085",
+      "claimPhone": "(800) 566-9311",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.meritain.com/resources-for-providers-meritain-health-provider-portal/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "65978 OR 0000E",
+      "company": "Metropolitan Life Insurance Company (MetLife)",
+      "carrierSoftDent": "METLIFE DENTAL",
+      "eligibilityPhone": "(800) 638-5433",
+      "eligibilityWebsite": "https://www.metlife.com",
+      "claimMailingAddress": "PO BOX 981282, EL PASO, TX 79998-1282",
+      "claimPhone": "(800) 638-5433",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.metlife.com",
+      "verificationBestSource": "Card"
+    },
+    {
+      "vyneOrEclaimId": "CX087",
+      "company": "Mutual of Omaha",
+      "carrierSoftDent": "MUTUAL OF OMAHA",
+      "eligibilityPhone": "(800) 927-9197",
+      "eligibilityWebsite": "https://www.dentalhub.com/",
+      "claimMailingAddress": "PO BOX 211472, EAGAN, MN 55121-3072",
+      "claimPhone": "(800) 927-9197",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalhub.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "06126 Paper Submitter",
+      "company": "Native Care Health",
+      "carrierSoftDent": "NATIVE CARE HEALTH",
+      "eligibilityPhone": "(620) 856-2268",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "PO BOX 50, QUAPAW, OK 74363",
+      "claimPhone": "(620) 856-2268",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "",
+      "verificationBestSource": "Mail"
+    },
+    {
+      "vyneOrEclaimId": "37121",
+      "company": "Pequot Plus Health Benefit Administrators",
+      "carrierSoftDent": "PEQUOT PLUS HEALTH - 3620",
+      "eligibilityPhone": "(888) 779-6872",
+      "eligibilityWebsite": "https://pequotplus.com",
+      "claimMailingAddress": "PO BOX 3620, MASHANTUCKET, CT 06338-3620",
+      "claimPhone": "(888) 779-6872",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://pequotplus.com",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "61271",
+      "company": "Principal Life Insurance Company",
+      "carrierSoftDent": "PRINCIPAL LIFE INSURANCE CO",
+      "eligibilityPhone": "(800) 274-4695",
+      "eligibilityWebsite": "https://www.principal.com/dental-providers",
+      "claimMailingAddress": "PO BOX 10357, DES MOINES, IA 50306-0357",
+      "claimPhone": "(800) 274-4695",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.principal.com/dental-providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "RLHA2",
+      "company": "Renaissance Life & Health",
+      "carrierSoftDent": "RENAISSANCE LIFE AND HEALTH",
+      "eligibilityPhone": "(888) 358-9484",
+      "eligibilityWebsite": "https://renaissancebenefits.com/providers/",
+      "claimMailingAddress": "PO BOX 17250, INDIANAPOLIS, IN 46217",
+      "claimPhone": "(888) 358-9484",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://renaissancebenefits.com/providers/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "69019",
+      "company": "Standard Insurance Company of New York",
+      "carrierSoftDent": "STANDARD INSURANCE COMPANY",
+      "eligibilityPhone": "(800) 547-9515",
+      "eligibilityWebsite": "https://login.standard.com",
+      "claimMailingAddress": "PO BOX 82622, LINCOLN, NE 68501-2622",
+      "claimPhone": "(800) 547-9515",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://login.standard.com",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "STR01",
+      "company": "Starmount Life Insurance Co",
+      "carrierSoftDent": "STARMOUNT",
+      "eligibilityPhone": "(888) 400-9304",
+      "eligibilityWebsite": "https://www.starmountlife.com/",
+      "claimMailingAddress": "PO BOX 80139, BATON ROUGE, LA 70898-0139",
+      "claimPhone": "(888) 400-9304",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.starmountlife.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "70408",
+      "company": "Sun Life Financial",
+      "carrierSoftDent": "SUN LIFE FINANCIAL",
+      "eligibilityPhone": "(800) 434-2638",
+      "eligibilityWebsite": "https://account.sunlifeconnect.com/commonlogin/#/login/10",
+      "claimMailingAddress": "PO BOX 311, MILWAUKEE, WI 53201-0311",
+      "claimPhone": "(800) 434-2638",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://account.sunlifeconnect.com/commonlogin/#/login/10",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "ILDTA",
+      "company": "Truassure Insurance Co",
+      "carrierSoftDent": "TRUASSURE",
+      "eligibilityPhone": "(888) 559-0779",
+      "eligibilityWebsite": "https://www.dentalhub.com/",
+      "claimMailingAddress": "PO BOX 4495, LISLE, IL 60532-9495",
+      "claimPhone": "(888) 559-0779",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.dentalhub.com/",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Healthcare Dental",
+      "carrierSoftDent": "UHC UNIVERSAL MEDICARE CLAIMS",
+      "eligibilityPhone": "(800) 822-5353",
+      "eligibilityWebsite": "https://www.uhcdental.com/dental/dental-contact-us.html",
+      "claimMailingAddress": "PO BOX 2176, MILWAUKEE, WI 53201",
+      "claimPhone": "(800) 822-5353",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.uhcdental.com/dental/dental-contact-us.html",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "79480",
+      "company": "UMR - Midwest",
+      "carrierSoftDent": "UMR",
+      "eligibilityPhone": "(800) 826-9781",
+      "eligibilityWebsite": "https://www.umr.com",
+      "claimMailingAddress": "PO BOX 30501, SALT LAKE CITY, UT 84130",
+      "claimPhone": "(800) 826-9781",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.umr.com",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Concordia",
+      "carrierSoftDent": "UNITED CONCORDIA - FEP VIP",
+      "eligibilityPhone": "(800) 332-0366",
+      "eligibilityWebsite": "https://www.unitedconcordia.com/contact/dental-providers",
+      "claimMailingAddress": "PO BOX 69416, HARRISBURG, PA 17106",
+      "claimPhone": "(800) 332-0366",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.unitedconcordia.com/contact/dental-providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Concordia",
+      "carrierSoftDent": "UNITED CONCORDIA - CX007",
+      "eligibilityPhone": "(800) 332-0366",
+      "eligibilityWebsite": "https://www.unitedconcordia.com/contact/dental-providers",
+      "claimMailingAddress": "PO BOX 67421, HARRISBURG, PA 17106",
+      "claimPhone": "(800) 332-0366",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://www.unitedconcordia.com/contact/dental-providers",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Healthcare Dental",
+      "carrierSoftDent": "UNITED HEALTHCARE",
+      "eligibilityPhone": "(800) 822-5353",
+      "eligibilityWebsite": "https://www.dbp.com/",
+      "claimMailingAddress": "PO BOX 30567, SALT LAKE CITY, UT 84130",
+      "claimPhone": "(800) 822-5353",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://identity.onehealthcareid.com/oneapp/index.html#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Healthcare Dental",
+      "carrierSoftDent": "UNITED HEALTHCARE - 30555",
+      "eligibilityPhone": "(800) 822-5353",
+      "eligibilityWebsite": "https://www.dbp.com/",
+      "claimMailingAddress": "PO BOX 30555, SALT LAKE CITY, UT 84130",
+      "claimPhone": "(800) 822-5353",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://identity.onehealthcareid.com/oneapp/index.html#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "United Healthcare Dental",
+      "carrierSoftDent": "UNITED HEALTHCARE COMMUNITY PLAN",
+      "eligibilityPhone": "(800) 822-5353",
+      "eligibilityWebsite": "https://www.dbp.com/",
+      "claimMailingAddress": "PO BOX 5280, KINGSTON, NY 12402",
+      "claimPhone": "(800) 822-5353",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://identity.onehealthcareid.com/oneapp/index.html#/login",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "TLW81",
+      "company": "Guarantee Trust Life",
+      "carrierSoftDent": "UNITED NATIONAL LIFE INSURANCE",
+      "eligibilityPhone": "(800) 338-7452",
+      "eligibilityWebsite": "https://myaccount.gtlic.com/providerportal/providerportalhome",
+      "claimMailingAddress": "PO BOX 1148 GLENVIEW, IL 60025-8148",
+      "claimPhone": "(800) 338-7452",
+      "claimFax": "Electronic Claims or Mail only",
+      "claimWebsite": "https://myaccount.gtlic.com/providerportal/providerportalhome",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "OFFICE #: 316-722-6060",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "FAX #: 316-721-3277",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "NPI#: 1568431971",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "TAX ID #: 481203068",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "LIC #: 6973",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Glidewell: (800) 854-7256",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Zelius: (877) 828-8770",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "V-pay: (888) 704-0096",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Optimun Pay: (877) 620-6194",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    },
+    {
+      "vyneOrEclaimId": "",
+      "company": "Echo: (888) 834-3511",
+      "carrierSoftDent": "",
+      "eligibilityPhone": "",
+      "eligibilityWebsite": "",
+      "claimMailingAddress": "",
+      "claimPhone": "",
+      "claimFax": "",
+      "claimWebsite": "",
+      "verificationBestSource": ""
+    }
+  ],
+  "feeScheduleIndex": [
+    {
+      "insuranceCompany": "AARP Medicare Advantage (United Healthcare Company)",
+      "insurancePolicy": "AARP Medicare Advantage",
+      "feeSchedule": "United Health Care PPO Fee Schedule",
+      "phone": "844-275-6750",
+      "address": "UNITED HEALTHCARE PO BOX 30567 SALT LAKE CITY, UT 84130"
+    },
+    {
+      "insuranceCompany": "Aflac",
+      "insurancePolicy": "",
+      "feeSchedule": "Argus Fee Schedule",
+      "phone": "800-992-3522",
+      "address": ""
+    },
+    {
+      "insuranceCompany": "AlwaysCare",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "888-400-9304",
+      "address": "ALWAYSCARE / PO BOX 80139 / Baton Rouge, LA 70898"
+    },
+    {
+      "insuranceCompany": "Benefit Management Inc",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "",
+      "address": "BENEFIT MANAGEMENT PO BOX 1090 GREAT BEND, KS 67530"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Alabama",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "877-231-7239",
+      "address": "BCBS of Alabama / P.O. Box 995 / Birmingham, AL 35298"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Alaska",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-261-9562",
+      "address": "Premera Blue Cross (WA/AK) / P. O. Box 91059 / Seattle, WA 98111-9159"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Anthem",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "844-729-1565",
+      "address": "FEP BLUE DENTAL / PO BOX 75 / Minneapolis, MN 55440"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Arkansas",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-677-6669",
+      "address": "Arkansas BCBS / PO Box 2181 / Little Rock AR 72203-2181"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - California",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-541-6652",
+      "address": "BC of California / PO Box 60007 / Los Angeles, CA 90060-0007"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - California",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-541-6652",
+      "address": "Blue Shield of California / P. O. Box 1505 / Red Bluff, CA 96080-1505"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Colorado",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-947-9398",
+      "address": "Anthem BCBS of Colorado & Nevada / P.O. Box 5747 / Denver, CO 80217-5747"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Connecticut",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-548-0642",
+      "address": "Anthem BCBS of CT / P. O. Box 533 / North Haven, CT 06473- 0533"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - D.C.",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "",
+      "address": "Carefirst BCBS / P.O. Box 14116 / Lexington, KY 40512-4116"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Delaware",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-346-6262",
+      "address": "BCBS of Delaware / PO Box 8830 / Wilmington, DE 19899"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Florida",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-727-2227",
+      "address": "BCBS of Florida / P.O. Box 1798 / Jacksonville Fl 32231"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Georgia",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "844-729-1567",
+      "address": "BCBS OF GA / PO BOX 75 / Minneapolis, MN 55440"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Georgia",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-284-2609/800-241-7475",
+      "address": "Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Idaho",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-526-5321",
+      "address": "Blue Cross of Idaho / P.O. Box 4708 / Boise, ID 83707"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Idaho",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-526-5321",
+      "address": "Regence BlueShield of Idaho / P. O. Box 31603 / Salt Lake City, UT 84131- 0603"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Illinois",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-972-8088",
+      "address": "BCBS of Illinois / P.O. Box 805107 / Chicago, IL 60680-4112"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Indiana",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-345-4344",
+      "address": "Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Iowa",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-800-1359",
+      "address": "Wellmark BCBS / 636 Grand Avenue, Station 39 / Des Moines, IA 50306-9291"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Kentucky",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-456-3967",
+      "address": "Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Louisiana",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-495-2583",
+      "address": "BCBS of Louisiana / P. O. Box 98029 / Baton Rouge, LA 70898- 9029"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Maine",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-722-0203",
+      "address": "Anthem BCBS / P. O. Box 533 / North Haven, CT 06473-0533"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Maryland",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-854-5256",
+      "address": "Carefirst BCBS / P O Box 14115 / Lexington, KY 40512-4116"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Massachusetts",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-882-1178",
+      "address": "BCBS OF MA / PO BOX 986005 / Boston, MA 02298"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Massachusetts",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-882-1178",
+      "address": "BCBS of Massachusetts / PO Box 986020 / Boston, MA 02298"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Massachusetts (CareFirst)",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-891-2804",
+      "address": "BCBS OF MD / CAREFIRST PO BOX 14115 LEXINGTON, KY 40512"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Michigan",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-344-8525",
+      "address": "BlueCard Claims Department - Mail Code B321 / 600 Lafayette East / Detroit, MI 48226-2998"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Minnesota",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-262-0820",
+      "address": "BCBS of Minnesota Route S201 P. O. Box 64560 / St. Paul, MN 55164- 0560"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Mississippi",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-932-7724",
+      "address": "BCBS of Mississippi / P. O. Box 1043 / Jackson, MS 39215- 1043"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Missouri",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-947-9398",
+      "address": "BCBS of Kansas City / P. O. Box 419016 / Kansas City, MO 64141- 6016"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Missouri",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-947-9398",
+      "address": "Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Montana",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-634-3569",
+      "address": "BCBS of Montana / PO BOX 5004 / Great Falls, MT 59403-5004"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Nebraska",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-223-5584",
+      "address": "BCBS of Nebraska / P.O. Box 3248 / Omaha, NE 68180"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Nevada",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-947-9398",
+      "address": "Anthem BCBS of Colorado & Nevada / P. O. Box 5747 / Denver, CO 80217-5747"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New Hampshire",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-852-3316",
+      "address": "Anthem BCBS of New Hampshire / P.O. Box 533 / North Haven, CT 06473"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New Jersey",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-624-1110",
+      "address": "Horizon BCBS of NJ / BlueCard Claims / P. O. Box 1301 / Neptune, NJ 07754- 1301"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New Mexico",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "877-774-8592",
+      "address": "BCBS of New Mexico / P. O. Box 27630 / Albuquerque, NM 87125"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New York",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-713-4173",
+      "address": "Empire BCBS / BlueCard Program / P. O. Box 3877 / Church Street Station / New York, NY 10008- 3877"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New York",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-713-4173",
+      "address": "All Excellus plans use this mailing address: / Excellus BCBS / Attn: Claims / P.O. Box 22999 Rochester, NY 14692"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New York",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-713-4173",
+      "address": "All Excellus plans use this mailing address: / Excellus BCBS / Attn: Claims / P.O. Box 22999 / Rochester, NY 14692"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New York",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-444-4552",
+      "address": "*The Buffalo office handles the receipt of / claims and correspondence for BS / Northeastern New York. / BCBS of Western New York / P.O. Box 80 / Buffalo, NY 14240-0080"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - New York",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-234-6008",
+      "address": "BCBS of Western New York / P. O. Box 80 / Buffalo, NY 14240- 0080"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - North Carolina",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-222-4739",
+      "address": "BCBS of North Carolina / ATTN: BlueCard / 1965 Ivy Creek Blvd / P.O. Box 35 / Durham, NC 27702"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - North Dakota",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-368-2312",
+      "address": "BCBS of North Dakota / 4510 13th Ave South / Fargo, ND 58121- 0001"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Ohio",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-451-7602/800-242-9635",
+      "address": "Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Oklahoma",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-381-9727",
+      "address": "BCBS of Oklahoma / Attn: Document Control / P. O. Box 3283 / Tulsa, OK 74102- 3283"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Oregon",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-448-0525",
+      "address": "Regence BCBS of Oregon / P. O. Box 30805 / Salt Lake City, UT 84130- 0805"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Pennsylvania",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-731-8080",
+      "address": "BCNEPA / P.O. Box 890179 / Camp Hill, PA 17089"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Pennsylvania",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-731-8080",
+      "address": "Capital Blue Cross (Facility services) / P. O. Box 779503 / Harrisburg, PA 17177- 9503"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Pennsylvania",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-731-8080",
+      "address": "Highmark Camp Hill (Professional services) / Attn: Document Preparation, Claims Scanning / P. O. Box 890062 / Camp Hill, PA 17089- 0062"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Pennsylvania",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "866-731-8080",
+      "address": "Host ITS Claims - S1 / Independence Blue Cross / 1901 Market Street / Philadelphia, PA 19103"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Premera",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-676-2583",
+      "address": "PREMERA BLUE CROSS PO BOX 91059 Seattle, WA 98111"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Rhode Island",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "844-420-3721",
+      "address": "BCBS of Rhode Island / 500 Exchange Street / Providence, RI 02903"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - South Carolina",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-868-2510",
+      "address": "BCBS of South Carolina / P. O. Box 100300 / Columbia, SC 29202"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - South Dakota",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "888-800-1359",
+      "address": "Wellmark BCBS / P.O. Box 5023 / Sioux Falls, SD 57117"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Tennessee",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-831-2583",
+      "address": "BCBS of Tennessee / 1 Cameron Hill Circle / Chattanooga, TN 37402"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Texas",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-8537-2747",
+      "address": "BCBS OF TX PO BOX 660247 DALLAS, TX 75266"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Utah",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-782-8211",
+      "address": "Regence BCBSU / P. O. Box 30272 / Salt Lake City, UT 84130- 0272"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Vermont",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-328-0365",
+      "address": "BCBSVT Attn: BlueCard Department / P. O. Box 186 / Montpelier, VT 05601- 0186"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Virginia",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "844-421-5662 /",
+      "address": "Anthem BCBS / P. O. Box 27401 / Richmond, VA 23279"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Washington",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-206-1244",
+      "address": "Premera Blue Cross (WA/AK) / P. O. Box 91059 / Seattle, WA 98111-9159"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Washington",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-206-1244",
+      "address": "Regence Blue Shield / P. O. Box 30271 / Salt Lake City, UT 84130-0271"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Washington",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-206-1244",
+      "address": "Regence Group Administrators / Attn: Claims / P. O. Box 52890 / Bellevue, WA 98015- 2890"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - West Virginia",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-543-7822",
+      "address": "Highmark BCBS of WV / P.O. Box 7026 / Wheeling, WV 26003"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Wisconsin",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-676-2583",
+      "address": "n Anthem Blue Cross Blue Shield / P.O. Box 105187 / Atlanta, GA 30348-5187"
+    },
+    {
+      "insuranceCompany": "Blue Cross Blue Shield - Wyoming",
+      "insurancePolicy": "",
+      "feeSchedule": "Blue Cross & Blue Shield Fee Schedule",
+      "phone": "800-442-2376",
+      "address": "BCBS of Wyoming / Attn: Sherry Fierro / P. O. Box 2266 / Cheyenne, WY 82003"
+    },
+    {
+      "insuranceCompany": "Colonial Life",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "888-400-9304",
+      "address": "COLONIAL LIFE / PO BOX 80139 / Baton Rouge, LA 70898"
+    },
+    {
+      "insuranceCompany": "Delta Dental - AARP Dental Insurance Plan",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "866-583-2085",
+      "address": "Delta Dental Insurance Company / P.O. Box 2059 / Mechanicsburg, PA 17055-2059"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Alabama",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Alaska",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "888-374-8905",
+      "address": "DELTA DENTAL OF Alaska / 601 SW 2ND AVE / PORTLAND, OR 97204"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Arizona",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-352-6132",
+      "address": "DELTA DENTAL OF Arizona / PO BOX 46026 / PHOENIX, AZ 85080"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Connecticut",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-452-9310",
+      "address": "Delta Dental of Connenticut / P.O. Box 222 / Parsippany, NJ 07054-0222"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Delaware",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-932-0783",
+      "address": "Delta Dental of Delaware / P.O. Box 2105 / Mechanicsburg, PA 17055-6999"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Delta Dental Insurance Company (DDIC)",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-422-4234",
+      "address": "Delta Dental Insurance Company (DDIC) P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - District of Columbia",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-932-0783",
+      "address": "Delta Dental of Disrict of Columbia / P.O. Box 2105 / Mechanicsburg, PA 17055-6999"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Florida",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Georgia",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Idaho",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-356-7586",
+      "address": "Delta Dental of Idaho / P.O. Box 2870 / Boise, ID 83701"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Illinois",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-323-1743",
+      "address": "Delta Dental of Illinois / P.O. Box 5402 / Lisle, IL 60532"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Louisiana",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Maryland",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-932-0783",
+      "address": "Delta Dental of Maryland / P.O. Box 2105 / Mechanicsburg, PA 17055-6999"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Massachusetts",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "617-886-1234",
+      "address": "Delta Dental of Massachusetts / P.O. Box 2907 / Milwaukee, WI 53201-2907 / PO BOX 2907 / MILWAUKEE, WI 53201"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Mississippi",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Montana",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Nebraska",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "866-827-3319",
+      "address": "Delta Dental of Nebraska / P.O. Box 59238 / Minneapolis, MN 55459-0238"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Nevada",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - New Hampshire",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-832-5700",
+      "address": "Northeast Delta Dental / P.O. Box 2002 / Concord, NH 03302-2002"
+    },
+    {
+      "insuranceCompany": "Delta Dental - New Jersey",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-452-9310",
+      "address": "Delta Dental of New Jersey / P.O. Box 222 / Parsippany, NJ 07054-0222"
+    },
+    {
+      "insuranceCompany": "Delta Dental - New Mexico",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "877-395-9420",
+      "address": "Delta Dental of New Mexico / 2500 Louisiana Blvd. N.E. Suite 600 / Albuquerque, NM 87110"
+    },
+    {
+      "insuranceCompany": "Delta Dental - North Carolina",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-662-8856",
+      "address": "Delta Dental of North Carolina / P.O. Box 9085 / Farmington Hills, MI 48333-9085"
+    },
+    {
+      "insuranceCompany": "Delta Dental - North Dakota",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-448-3815",
+      "address": "Delta Dental of North Dakota / P.O. Box 59238 / Minneapolis, MN 55459-0238"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Oregon",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "888-374-8905",
+      "address": "Delta Dental of Oregon / 601 SW 2nd Avenue / Portland, OR 97204-3154"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Rhode Island",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-843-3582",
+      "address": "Delta Dental of Rhode Island / P.O. Box 1517 / Providence, RI 02901-1517"
+    },
+    {
+      "insuranceCompany": "Delta Dental - South Carolina",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-529-3268",
+      "address": "Delta Dental of South Carolina / P.O. Box 8690 / St. Louis, MO 63126-0690"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Texas",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Utah",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-521-2651",
+      "address": "Delta Dental Insurance Company / P.O. Box 1809 / Alpharetta, GA 30023-1809"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Vermont",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-832-5700",
+      "address": "Northeast Delta Dental / P.O. Box 2002 / Concord, NH 03302-2002"
+    },
+    {
+      "insuranceCompany": "Delta Dental - West Virginia",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-932-0783",
+      "address": "Delta Dental of West Virginia / P.O. Box 2105 / Mechanicsburg, PA 17055-6999"
+    },
+    {
+      "insuranceCompany": "Delta Dental - Wyoming",
+      "insurancePolicy": "",
+      "feeSchedule": "Delta Dental PPO Fee Schedule",
+      "phone": "800-735-3379",
+      "address": "Delta Dental of Wyoming / P.O. Box 29 / Cheyenne, WY 82003-0029"
+    },
+    {
+      "insuranceCompany": "Golden Rule Insurance Co. (United Healthcare Company)",
+      "insurancePolicy": "",
+      "feeSchedule": "United Health Care PPO Fee Schedule",
+      "phone": "877-816-3596",
+      "address": "GOLDEN RULE INSURANCE COMPANAY PO BOX 30567 SALT LAKE CITY, UT 84130"
+    },
+    {
+      "insuranceCompany": "NovaNet Dental",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "800-422-7617",
+      "address": ""
+    },
+    {
+      "insuranceCompany": "Reliance Standard Life",
+      "insurancePolicy": "",
+      "feeSchedule": "Ameritas Fee Schedule",
+      "phone": "800-755-8844",
+      "address": ""
+    },
+    {
+      "insuranceCompany": "Trans America",
+      "insurancePolicy": "",
+      "feeSchedule": "Carrington Fee Schedule",
+      "phone": "800-797-2643",
+      "address": ""
+    },
+    {
+      "insuranceCompany": "United Concordia - Concordia Preferred",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "800-332-0366",
+      "address": "UNITED CONCORDIA / P.O. Box 69408 / Harrisburg, PA 17106"
+    },
+    {
+      "insuranceCompany": "United Healthcare of the Midwest, Inc (United Healthcare Company)",
+      "insurancePolicy": "United Healthcare of the Midwest, Inc",
+      "feeSchedule": "United Health Care PPO Fee Schedule",
+      "phone": "844-275-6750",
+      "address": "UNITED HEALTHCARE PO BOX 30567 SALT LAKE CITY, UT 84130"
+    },
+    {
+      "insuranceCompany": "Unum Dental",
+      "insurancePolicy": "",
+      "feeSchedule": "",
+      "phone": "888-400-9304",
+      "address": "UNUM / PO BOX 80139 / Baton Rouge, LA 70898"
+    }
+  ],
+  "feeScheduleColumnsMain2025": [
+    "2022 Practice Amount",
+    "2026 Aetna Dental",
+    "2026 Ameritas Dental",
+    "2026 BC&BS Based Price",
+    "2026 Careington Solutions PPO",
+    "2026 Careington Solutions POS",
+    "2026 Cigna Dental Health",
+    "2026 Delta Dental",
+    "2026 Dental Health Alliance",
+    "2026 DenteMAX Dental",
+    "2026 GEHA Connection Dental",
+    "2026 Guardian Direct",
+    "2026 Humana",
+    "2026 MetLife Dental",
+    "2026 United Concordia Region 32 TRICARE",
+    "2026 United Concordia Region 70 ParNet",
+    "2026 United HealthCare",
+    "2026 Unum/Colonial Life"
+  ],
+  "feeScheduleRuntime": {
+    "path": "C:\\NewRidgeFamilyFinancial\\NewRidgeFinancial2\\data\\fee_schedule.json",
+    "codeCount": 831,
+    "scheduleCount": 18
+  }
+}
