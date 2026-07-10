@@ -425,36 +425,261 @@ def build_status_columns(
 
 
 def kanban_widget(payload: dict[str, Any]) -> dict[str, Any]:
+    """Claims Workbench — table (default) + kanban toggle. Both views, one widget."""
     columns = payload.get("columns") if isinstance(payload.get("columns"), dict) else {}
     counts = payload.get("counts") if isinstance(payload.get("counts"), dict) else {}
     meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
     has = bool(payload.get("available")) and any(counts.get(k) for k in KANBAN_COLUMNS)
     missing = meta.get("missingFields") if isinstance(meta.get("missingFields"), list) else []
+    rows: list[dict[str, Any]] = []
+    for key in KANBAN_COLUMNS:
+        for card in columns.get(key) if isinstance(columns.get(key), list) else []:
+            if isinstance(card, dict):
+                row = dict(card)
+                row.setdefault("column", key)
+                rows.append(row)
+    rows.sort(
+        key=lambda t: (
+            -(t.get("ageDays") if isinstance(t.get("ageDays"), int) else -1),
+            str(t.get("claimId") or ""),
+        )
+    )
     hint_bits = [
-        "Import-backed SoftDent claims · read-only status columns (no drag write-back).",
-        "Click card for detail · HAL can focus the board.",
+        "Professional workbench: dense table default · kanban toggle · SoftDent read-only.",
+        "NR2 card/row actions only — no SoftDent write-back.",
     ]
     if missing:
         hint_bits.append("Hidden when missing on import: " + ", ".join(str(m) for m in missing[:6]))
     return {
         "id": "claims-kanban-board",
-        "type": "claims-kanban",
+        "type": "claims-workbench",
         "label": "Claims Workbench",
         "size": "full",
+        "defaultView": "table",
+        "views": ["table", "kanban"],
+        "rows": rows,
         "columns": {k: (columns.get(k) if isinstance(columns.get(k), list) else []) for k in KANBAN_COLUMNS},
         "columnLabels": dict(KANBAN_LABELS),
         "counts": {k: int(counts.get(k) or 0) for k in KANBAN_COLUMNS},
         "meta": meta,
         "filters": ["all", "high-risk", "unmatched", "missing-attachments"],
         "status": "ok" if has else "empty",
-        "emptyMessage": "Import SoftDent claims to populate the Claims Workbench kanban",
+        "emptyMessage": "Import SoftDent claims to populate the Claims Workbench",
         "hint": " ".join(hint_bits),
         "halChips": [
-            {"label": "Focus kanban", "query": "Focus claims workbench kanban"},
-            {"label": "High risk claims", "query": "Filter claims high risk"},
-            {"label": "Unmatched", "query": "Filter claims unmatched"},
+            {"label": "Table view", "query": "Show claims table view"},
+            {"label": "Kanban view", "query": "Show claims kanban view"},
+            {"label": "High risk", "query": "Filter claims high risk"},
             {"label": "Sync & refill", "query": "Sync imports and populate the widgets"},
         ],
+    }
+
+
+def claims_aging_exposure_widget(
+    aging: dict[str, Any],
+    *,
+    missing_age: bool = False,
+) -> dict[str, Any]:
+    """Single professional 30/60/90 exposure matrix — replaces three huge shelves."""
+    buckets = aging.get("buckets") if isinstance(aging.get("buckets"), dict) else {}
+    counts = aging.get("counts") if isinstance(aging.get("counts"), dict) else {}
+    cols = []
+    for bucket, label, tone in (
+        (BUCKET_30, "30-Day", "cyan"),
+        (BUCKET_60, "60-Day", "amber"),
+        (BUCKET_90, "90+ Day", "rose"),
+    ):
+        tiles = buckets.get(bucket) if isinstance(buckets.get(bucket), list) else []
+        dollars = 0.0
+        has_amt = False
+        for t in tiles:
+            if isinstance(t, dict) and isinstance(t.get("billedAmount"), (int, float)):
+                dollars += float(t["billedAmount"])
+                has_amt = True
+        count = int(counts.get(bucket) or len(tiles) or 0)
+        cols.append(
+            {
+                "bucket": bucket,
+                "label": label,
+                "count": count,
+                "dollars": round(dollars, 2) if has_amt else None,
+                "tone": tone,
+                "sampleIds": [str(t.get("claimId")) for t in tiles[:3] if isinstance(t, dict)],
+            }
+        )
+    total = sum(int(c["count"]) for c in cols)
+    if missing_age and total == 0:
+        status = "empty"
+        empty = "Import SoftDent claims with Age/Days (or ServiceDate) to populate aging exposure"
+    elif total == 0:
+        status = "empty"
+        empty = "No claims aged 30+ days in current SoftDent import"
+    else:
+        status = "ok"
+        empty = ""
+    return {
+        "id": "claims-aging-exposure",
+        "type": "claims-aging-exposure",
+        "label": "Claims Aging Exposure",
+        "size": "l",
+        "columns": cols,
+        "status": status,
+        "emptyMessage": empty,
+        "hint": "One matrix replaces three huge shelves · click a column to filter the workbench · $ only when on import.",
+        "halChips": [
+            {"label": "Focus 30-day", "query": "Focus 30-day claims"},
+            {"label": "Focus 90-day", "query": "Focus 90-day claims"},
+        ],
+        # HAL aliases for legacy focus rules
+        "aliasIds": ["claims-aging-30", "claims-aging-60", "claims-aging-90"],
+    }
+
+
+def claims_critical_actions_widget(kanban_payload: dict[str, Any]) -> dict[str, Any]:
+    columns = kanban_payload.get("columns") if isinstance(kanban_payload.get("columns"), dict) else {}
+    actions: list[dict[str, Any]] = []
+    denied = columns.get("denied") if isinstance(columns.get("denied"), list) else []
+    denied_aged = [
+        c
+        for c in denied
+        if isinstance(c, dict) and isinstance(c.get("ageDays"), int) and int(c["ageDays"]) >= 30
+    ]
+    if denied_aged or denied:
+        n = len(denied_aged) if denied_aged else len(denied)
+        actions.append(
+            {
+                "id": "denied",
+                "label": f"Denied needing appeal: {n}",
+                "filter": "high-risk",
+                "hint": "Filter workbench to high aging-risk / denied",
+            }
+        )
+    unmatched = 0
+    for col in ("submitted", "pendingReview"):
+        for c in columns.get(col) if isinstance(columns.get(col), list) else []:
+            if isinstance(c, dict) and not c.get("eraStatus"):
+                unmatched += 1
+    if unmatched:
+        actions.append(
+            {
+                "id": "unmatched",
+                "label": f"ERA unmatched / pending: {unmatched}",
+                "filter": "unmatched",
+                "hint": "Filter workbench to unmatched",
+            }
+        )
+    missing_att = 0
+    for col_cards in columns.values():
+        if not isinstance(col_cards, list):
+            continue
+        for c in col_cards:
+            if not isinstance(c, dict):
+                continue
+            att = c.get("attachments")
+            if isinstance(att, dict) and att.get("required") is not None:
+                if int(att.get("current") or 0) < int(att["required"]):
+                    missing_att += 1
+    if missing_att:
+        actions.append(
+            {
+                "id": "missing-att",
+                "label": f"Missing attachments: {missing_att}",
+                "filter": "missing-attachments",
+                "hint": "Filter workbench to missing attachments",
+            }
+        )
+    if not actions:
+        actions.append(
+            {
+                "id": "clear",
+                "label": "No critical queues flagged",
+                "filter": "all",
+                "hint": "Workbench clear of denied/unmatched/attachment gaps from import",
+            }
+        )
+    return {
+        "id": "claims-critical-actions",
+        "type": "claims-critical-actions",
+        "label": "Critical Actions",
+        "size": "m",
+        "actions": actions,
+        "status": "ok",
+        "hint": "Import-backed queues · click to filter the workbench (NR2 only).",
+    }
+
+
+def claims_executive_strip_widget(
+    summary: dict[str, Any],
+    meta: dict[str, Any],
+) -> dict[str, Any]:
+    """Compact command strip — replaces scattered KPI + header-stats widgets."""
+    pending = meta.get("pendingDollars") if isinstance(meta, dict) else None
+    at_risk = meta.get("atRiskCount") if isinstance(meta, dict) else None
+    era = meta.get("eraMatchRate") if isinstance(meta, dict) else None
+    pills = [
+        {
+            "id": "total",
+            "label": "Total",
+            "value": summary.get("totalClaims"),
+            "format": "count",
+            "tone": "",
+        },
+        {
+            "id": "open",
+            "label": "Open",
+            "value": summary.get("openCount"),
+            "format": "count",
+            "tone": "warning",
+        },
+        {
+            "id": "denied",
+            "label": "Denied",
+            "value": summary.get("deniedCount"),
+            "format": "count",
+            "tone": "danger",
+        },
+        {
+            "id": "aging30",
+            "label": "30+",
+            "value": summary.get("agingPast30"),
+            "format": "count",
+            "tone": "warning",
+        },
+        {
+            "id": "pending",
+            "label": "Pending $",
+            "value": pending,
+            "format": "money",
+            "tone": "warning",
+            "empty": pending is None,
+        },
+        {
+            "id": "atrisk",
+            "label": "At Risk",
+            "value": at_risk,
+            "format": "count",
+            "tone": "danger",
+            "empty": at_risk is None,
+        },
+        {
+            "id": "era",
+            "label": "ERA Match",
+            "value": era,
+            "format": "pct",
+            "tone": "success",
+            "empty": era is None,
+        },
+    ]
+    available = bool(summary.get("available") or summary.get("totalClaims"))
+    return {
+        "id": "claims-executive-strip",
+        "type": "claims-executive-strip",
+        "label": "Claims Command Strip",
+        "size": "full",
+        "pills": pills,
+        "status": "ok" if available else "empty",
+        "emptyMessage": "Import SoftDent claims for executive strip",
+        "hint": "Dense RCM strip · never invents dollars or ERA %.",
     }
 
 
@@ -1047,10 +1272,10 @@ def apply_aging_threshold_alerts(widgets: list[dict[str, Any]], aging: dict[str,
         if not isinstance(w, dict):
             continue
         wid = str(w.get("id") or "")
-        if wid == "claims-aging-60" and c60 >= int(cfg["threshold60"]):
+        if wid in {"claims-aging-60", "claims-aging-exposure"} and c60 >= int(cfg["threshold60"]):
             w["alert"] = True
             w["alertReason"] = f"{c60} claims aged 60–89 days (threshold {cfg['threshold60']})"
-        if wid == "claims-aging-90" and c90 >= int(cfg["threshold90"]):
+        if wid in {"claims-aging-90", "claims-aging-exposure"} and c90 >= int(cfg["threshold90"]):
             w["alert"] = True
             w["alertReason"] = f"{c90} claims aged 90+ days (threshold {cfg['threshold90']})"
 
