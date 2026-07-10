@@ -1,8 +1,8 @@
 {
-  "BUILD_ID": "hal-10390",
-  "assetVersion": "hal-10390",
-  "schemaVersion": "hal-10390",
+  "BUILD_ID": "hal-10400",
+  "assetVersion": "hal-10400",
+  "schemaVersion": "hal-10400",
   "epoch": "nr2-apex",
   "releasedAt": "2026-07-10",
-  "notes": "hal-10390: Program improve pack IMP-001..010 — claims actions, ERA ingest, import health, huddle, attachments, A/R forecast, EBITDA trend, batch narratives, HAL carry."
+  "notes": "hal-10400: SoftDent insurance payment lines + ADA crosswalk to PHI-safe treatment_planning_estimates for HAL."
 }
