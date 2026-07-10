@@ -1,8 +1,6 @@
 {
-  "BUILD_ID": "hal-10370",
-  "assetVersion": "hal-10370",
-  "schemaVersion": "hal-10370",
-  "epoch": "nr2-apex",
-  "releasedAt": "2026-07-10",
-  "notes": "hal-10370: SoftDent full extract — transactions/register/operatory JSONL→SQLite, payment code normalize, CSV report ingest, import_sync hook."
+  "BUILD_ID": "hal-10440",
+  "assetVersion": "hal-10440",
+  "schemaVersion": "hal-10440",
+  "notes": "hal-10440: Fix HAL focus overlay trapping clicks — dismiss on navigate, backdrop click, Escape, and auto-timeout."
 }

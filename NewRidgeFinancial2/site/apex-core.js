@@ -1707,6 +1707,17 @@
     document.body.appendChild(drawer);
     document.body.classList.add("apex-claim-drawer-open");
     drawer.querySelector("[data-close-drawer]")?.addEventListener("click", closeClaimDrawer);
+    // Click dimmed page (pseudo backdrop) to close — capture on body outside drawer.
+    const onBackdrop = (ev) => {
+      if (!document.body.classList.contains("apex-claim-drawer-open")) {
+        document.removeEventListener("mousedown", onBackdrop, true);
+        return;
+      }
+      if (drawer.contains(ev.target)) return;
+      closeClaimDrawer();
+      document.removeEventListener("mousedown", onBackdrop, true);
+    };
+    document.addEventListener("mousedown", onBackdrop, true);
     const esc = (ev) => {
       if (ev.key === "Escape") {
         closeClaimDrawer();
@@ -1818,21 +1829,58 @@
     }
   }
 
-  function toggleFocus(el) {
+  let focusEscHandler = null;
+  let focusAutoTimer = null;
+
+  function dismissFocusMode() {
+    document.querySelectorAll(".apex-widget.is-focused").forEach((node) => node.classList.remove("is-focused"));
+    document.body.classList.remove("apex-focus-open");
+    if (focusEscHandler) {
+      document.removeEventListener("keydown", focusEscHandler);
+      focusEscHandler = null;
+    }
+    if (focusAutoTimer) {
+      clearTimeout(focusAutoTimer);
+      focusAutoTimer = null;
+    }
+  }
+
+  function ensureFocusBackdrop() {
+    let backdrop = document.getElementById("apex-focus-backdrop");
+    if (backdrop) return backdrop;
+    backdrop = document.createElement("div");
+    backdrop.id = "apex-focus-backdrop";
+    backdrop.className = "apex-focus-backdrop";
+    backdrop.setAttribute("aria-hidden", "true");
+    backdrop.addEventListener("click", () => dismissFocusMode());
+    document.body.appendChild(backdrop);
+    return backdrop;
+  }
+
+  function toggleFocus(el, opts) {
     if (!el) return;
+    ensureFocusBackdrop();
     const open = document.querySelector(".apex-widget.is-focused");
     if (open && open !== el) open.classList.remove("is-focused");
     const on = el.classList.toggle("is-focused");
     document.body.classList.toggle("apex-focus-open", on);
+    if (focusEscHandler) {
+      document.removeEventListener("keydown", focusEscHandler);
+      focusEscHandler = null;
+    }
+    if (focusAutoTimer) {
+      clearTimeout(focusAutoTimer);
+      focusAutoTimer = null;
+    }
     if (on) {
-      const esc = (ev) => {
-        if (ev.key === "Escape") {
-          el.classList.remove("is-focused");
-          document.body.classList.remove("apex-focus-open");
-          document.removeEventListener("keydown", esc);
-        }
+      focusEscHandler = (ev) => {
+        if (ev.key === "Escape") dismissFocusMode();
       };
-      document.addEventListener("keydown", esc);
+      document.addEventListener("keydown", focusEscHandler);
+      const autoMs = opts && opts.autoMs != null ? Number(opts.autoMs) : 0;
+      if (autoMs > 0) {
+        focusAutoTimer = setTimeout(() => dismissFocusMode(), autoMs);
+      }
     }
   }
 
@@ -1915,7 +1963,8 @@
           const el = document.querySelector(`[data-widget-id="${id.replace(/\\/g, "").replace(/"/g, "")}"]`);
           if (el) {
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-            if (type === "focus_widget") toggleFocus(el);
+            // HAL-driven focus auto-dismisses so the dim overlay cannot trap navigation.
+            if (type === "focus_widget") toggleFocus(el, { autoMs: Number(action.ms) || 4500 });
             el.classList.add("apex-hal-highlight");
             const ms = Number(action.ms) || 3500;
             setTimeout(() => el.classList.remove("apex-hal-highlight"), ms);
@@ -2224,6 +2273,7 @@
   function renderWidgets(list) {
     const root = stage();
     if (!root) return;
+    dismissFocusMode();
     if (window.ApexHalBrain && typeof window.ApexHalBrain.destroy === "function") {
       window.ApexHalBrain.destroy();
     }
@@ -2313,6 +2363,12 @@
     setPageTitle(currentPage);
     const root = stage();
     if (!root) return;
+
+    // Never leave focus/drawer overlays stuck across page changes (blocks all clicks).
+    if (!silent) {
+      dismissFocusMode();
+      closeClaimDrawer();
+    }
 
     document.querySelectorAll(".apex-nav-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.page === currentPage);
