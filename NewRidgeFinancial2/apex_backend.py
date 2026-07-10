@@ -3727,6 +3727,47 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
     notes: list[str] = []
     handled = False
 
+    # Advisory / ethics questions must reach chat — do not hijack on topic keywords
+    # like "categorize", "import health", or "ebitda" embedded in a longer ask.
+    advisory_chat = bool(
+        re.search(
+            r"\b("
+            r"prioritize|ranked|action list|what should (i|we|front desk|staff)|"
+            r"how (do|should|can) (i|we)|why (is|are|do|does)|explain|"
+            r"compare|draft|outline|advise|recommend|give (me )?(a )?(ranked|priority)|"
+            r"if i ask|invent|fabricate|make up|look better|what (exact|do you) do|"
+            r"refuse|should you|would you"
+            r")\b",
+            q,
+        )
+    ) or (len(q.split()) >= 12 and "?" in query)
+    explicit_board = bool(
+        re.search(
+            r"\b("
+            r"focus|highlight|point (me )?to|look at|open widget|"
+            r"show me (the )?(widget|scrubber|board|kanban|table|categorize|ebitda)|"
+            r"open (the )?(categorize|ebitda|claims workbench|import health)|"
+            r"go to|switch to|take me to|navigate"
+            r")\b",
+            q,
+        )
+    )
+    allow_topic_focus = explicit_board or not advisory_chat
+
+    # --- Ethics: never invent dollars / write-offs (deterministic refusal) ---
+    if re.search(
+        r"\b(invent|fabricate|fake|make up)\b.{0,80}\b(write-?off|\$|dollar|ebitda|revenue|collections|kpi)\b",
+        q,
+    ) or re.search(
+        r"\b(write-?off|ebitda).{0,60}\b(invent|fake|fabricate|look better|make .{0,20} better)\b",
+        q,
+    ):
+        notes.append(
+            "I will not invent write-offs or dollar amounts to make EBITDA (or any KPI) look better. "
+            "Books stay import-backed; staff posts real adjustments in SoftDent/QuickBooks with approval."
+        )
+        handled = True
+
     # --- Sync / populate from imports ---
     if re.search(
         r"\b(sync|refresh imports|reload imports|pull (softdent|quickbooks|qb)|update (the )?board|populate (the )?(widgets|board)|refill widgets)\b",
@@ -3826,8 +3867,8 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         (r"\b(a/?r forecast|aging forecast)\b", "ar-aging-forecast", "ar"),
         (r"\b(claim attachments?|attachment bridge)\b", "claim-attachments-bridge", "documents"),
     )
-    if re.search(r"\b(focus|highlight|show me|point (me )?to|look at|open widget)\b", q) or any(
-        re.search(pat, q) for pat, _wid, _pg in focus_rules
+    if (not handled) and allow_topic_focus and (
+        explicit_board or any(re.search(pat, q) for pat, _wid, _pg in focus_rules)
     ):
         for pat, wid, pg in focus_rules:
             if re.search(pat, q):
@@ -3944,7 +3985,7 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         handled = True
 
     # --- Surface categorize suggestions (already computed from imports; not inventing $) ---
-    if re.search(r"\b(categorize|suggest categor|expense categor|remap categor)\b", q):
+    if allow_topic_focus and re.search(r"\b(categorize|suggest categor|expense categor|remap categor)\b", q):
         _reports, bundle, _err = _load_reports_and_bundle()
         cat = build_categorize_assist(bundle)
         n = len(cat.get("suggestions") or [])
@@ -4030,7 +4071,7 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         notes.append("Focusing Claims Workbench (table default · SoftDent read-only).")
         handled = True
 
-    if re.search(r"\b(import health|health monitor|stale imports?)\b", q):
+    if allow_topic_focus and re.search(r"\b(import health|health monitor|stale imports?)\b", q):
         from apex_program_improve_pack import assess_import_health
 
         _reports, bundle, _err = _load_reports_and_bundle()
