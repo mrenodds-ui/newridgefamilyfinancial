@@ -1,6 +1,6 @@
 {
-  "BUILD_ID": "hal-10420",
-  "assetVersion": "hal-10420",
-  "schemaVersion": "hal-10420",
-  "notes": "hal-10420: Claims Executive RCM Console primary design — compact strips, aging+critical pair, dense table, ERA gauge."
+  "BUILD_ID": "hal-10431",
+  "assetVersion": "hal-10431",
+  "schemaVersion": "hal-10431",
+  "notes": "hal-10431: Pin HAL ask box at bottom of chat rail; Enter submits (Shift+Enter newline)."
 }

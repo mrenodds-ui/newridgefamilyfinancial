@@ -76,6 +76,14 @@
 
   function instrumentSize(spec) {
     const type = String((spec && spec.type) || "kpi");
+    // FIN-002: empty large instruments collapse to strip
+    if (
+      spec &&
+      (spec.collapseWhenEmpty === true || spec.compact === true) &&
+      (spec.status === "empty" || spec.status === "awaiting-migration")
+    ) {
+      return "strip";
+    }
     if (spec && spec.size) return String(spec.size);
     if (type === "hal-chat") return "hal-chat";
     if (type === "chart" || type === "bar" || type === "line") return "l";
@@ -87,16 +95,20 @@
       type === "horizontal-bar" ||
       type === "donut" ||
       type === "stacked-bar" ||
-      type === "waterfall"
+      type === "waterfall" ||
+      type === "revenue-composition"
     )
       return "l";
+    if (type === "dual-axis-trend") return "m";
     if (type === "bullet" || type === "scrubber") return type === "scrubber" ? "full" : "s";
     if (type === "heatmap" || type === "calculator" || type === "categorize" || type === "tax-library")
       return "xl";
-    if (type === "ebitda-scrubber" || type === "filing-workflow" || type === "claim-shelf") return "full";
+    if (type === "ebitda-scrubber" || type === "ebitda-station" || type === "filing-workflow" || type === "claim-shelf")
+      return "full";
     if (type === "claims-kanban" || type === "claims-workbench" || type === "claims-header-stats" || type === "daily-huddle")
       return "full";
-    if (type === "claims-executive-strip") return "strip";
+    if (type === "claims-executive-strip" || type === "executive-strip" || type === "financial-command-strip")
+      return "strip";
     if (type === "claims-aging-exposure") return "xl";
     if (type === "claims-critical-actions") return "m";
     if (type === "claims-risk-bars" || type === "claims-era-gauge" || type === "claim-attachments")
@@ -227,7 +239,7 @@
             <div class="apex-hal-chat__messages" data-hal-messages aria-live="polite"></div>
             <div class="apex-hal-chat__chips" data-hal-chips></div>
             <form class="apex-hal-chat__form" data-hal-form>
-              <textarea class="apex-hal-chat__input" data-hal-input rows="2" placeholder="Ask HAL…" aria-label="Ask HAL"></textarea>
+              <textarea class="apex-hal-chat__input" data-hal-input rows="2" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL"></textarea>
               <button type="submit" class="apex-hal-chat__send" data-hal-send>Send</button>
             </form>
             <div class="apex-kpi-hint">${this.escape(this.spec.hint || "Local HAL command surface")}</div>
@@ -868,21 +880,25 @@
         `;
       }
 
-      if (this.type === "claims-executive-strip") {
+      if (this.type === "claims-executive-strip" || this.type === "executive-strip") {
         const pills = Array.isArray(this.spec.pills) ? this.spec.pills : [];
         const empty = this.spec.status === "empty" || !pills.length;
         const cells = pills
           .map((s) => {
             const tone = String((s && s.tone) || "");
             let display = "—";
-            if (s && s.value != null && s.empty !== true) {
+            if (s && s.pending) display = "Pending";
+            else if (s && s.value != null && s.empty !== true) {
               if (s.format === "money") display = formatMoney(s.value) || "—";
               else if (s.format === "pct") display = `${Math.round(Number(s.value) * 1000) / 10}%`;
+              else if (s.format === "pct_points") display = `${Number(s.value).toFixed(1)}%`;
               else display = formatCount(s.value) || String(s.value);
             }
-            return `<div class="apex-exec-pill ${s && s.empty ? "is-empty" : ""}">
+            const sub = s && s.sub ? `<div class="apex-exec-pill__sub">${this.escape(s.sub)}</div>` : "";
+            return `<div class="apex-exec-pill ${s && (s.empty || s.pending) ? "is-empty" : ""}">
               <div class="apex-exec-pill__value ${this.escape(tone)}">${this.escape(display)}</div>
               <div class="apex-exec-pill__label">${this.escape((s && s.label) || "")}</div>
+              ${sub}
             </div>`;
           })
           .join("");
@@ -895,6 +911,291 @@
                 : `<div class="apex-exec-strip">${cells}</div>`
             }
           </div>
+        `;
+      }
+
+      if (this.type === "financial-command-strip") {
+        const tone =
+          this.spec.importStatus === "empty" || this.spec.briefTone === "warn" ? "is-warn" : "is-ok";
+        const periods = Array.isArray(this.spec.periods) ? this.spec.periods : [];
+        const active = String(this.spec.activePeriod || "");
+        const chips = periods
+          .slice(-8)
+          .map((p) => {
+            const on = String(p) === active ? " is-active" : "";
+            return `<button type="button" class="apex-scrub-chip${on}" data-period="${this.escape(
+              String(p)
+            )}">${this.escape(String(p))}</button>`;
+          })
+          .join("");
+        const actions = Array.isArray(this.spec.briefActions) ? this.spec.briefActions : [];
+        const actionBtn = actions.length
+          ? `<button type="button" class="apex-btn apex-btn--small" data-fin-cmd-action="${this.escape(
+              actions[0].id || "refresh_softdent_period"
+            )}">${this.escape(actions[0].label || "Sync")}</button>`
+          : "";
+        return `
+          <div class="apex-fin-command ${tone}">
+            <div class="apex-fin-command__import">
+              <span class="apex-import-strip__label">${label}</span>
+              <span class="apex-import-strip__msg">${this.escape(this.spec.importMessage || "—")}</span>
+            </div>
+            <div class="apex-fin-command__periods" data-fin-periods>${chips || `<span class="apex-kpi-hint">No periods</span>`}</div>
+            <div class="apex-fin-command__brief">
+              <span class="apex-fin-command__brief-label">Brief</span>
+              <span class="apex-fin-command__brief-msg">${this.escape(this.spec.briefMessage || "")}</span>
+              ${actionBtn}
+            </div>
+          </div>
+        `;
+      }
+
+      if (this.type === "revenue-composition") {
+        const segs = Array.isArray(this.spec.segments) ? this.spec.segments : [];
+        const slices = Array.isArray(this.spec.slices) ? this.spec.slices : [];
+        const empty = this.spec.status === "empty" || (!segs.length && !slices.length);
+        if (empty) {
+          return `
+            <div class="apex-compact-action">
+              <div class="apex-compact-action__title">${label}</div>
+              <div class="apex-compact-action__msg">${this.escape(
+                this.spec.emptyMessage || "Awaiting Collections export"
+              )}</div>
+              <button type="button" class="apex-btn apex-btn--small" data-fin-cmd-action="${this.escape(
+                this.spec.halAction || "refresh_softdent_period"
+              )}">${this.escape(this.spec.halActionLabel || "Sync SoftDent Collections")}</button>
+              <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+            </div>
+          `;
+        }
+        const totalSeg = segs.reduce((a, s) => a + (Number(s.value) || 0), 0) || 1;
+        const stack = segs
+          .map((s) => {
+            const v = Number(s.value) || 0;
+            const pct = Math.max(4, Math.round((v / totalSeg) * 100));
+            return `<div class="apex-stack-seg" style="width:${pct}%"><span>${this.escape(s.label || "")}</span></div>`;
+          })
+          .join("");
+        const totalDonut = slices.reduce((a, s) => a + (Number(s.value) || 0), 0) || 1;
+        let acc = 0;
+        const colors = ["#00f0ff", "#ffb800", "#ff0066", "#7cffc4", "#a78bfa", "#38bdf8"];
+        const stops = slices
+          .map((s, i) => {
+            const v = Number(s.value) || 0;
+            const start = (acc / totalDonut) * 100;
+            acc += v;
+            const end = (acc / totalDonut) * 100;
+            return `${colors[i % colors.length]} ${start}% ${end}%`;
+          })
+          .join(", ");
+        const legend = slices
+          .map((s, i) => {
+            const v = Number(s.value) || 0;
+            const pct = Math.round((v / totalDonut) * 100);
+            const disp = this.spec.unit === "count" ? formatCount(v) : formatMoney(v) || String(v);
+            return `<div class="apex-donut-leg"><i style="background:${colors[i % colors.length]}"></i>
+              <span>${this.escape(s.label || "")}</span>
+              <strong>${this.escape(disp || "")} · ${pct}%</strong></div>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-revenue-comp">
+            ${
+              segs.length
+                ? `<div class="apex-revenue-comp__split">
+                    <div class="apex-mini-label">Insurance vs Patient</div>
+                    <div class="apex-stack-bar apex-stack-bar--tall">${stack}</div>
+                    <div class="apex-stack-meta">${segs
+                      .map(
+                        (s) =>
+                          `<span>${this.escape(s.label)}: ${this.escape(formatMoney(s.value) || "—")}</span>`
+                      )
+                      .join(" · ")}</div>
+                  </div>`
+                : ""
+            }
+            ${
+              slices.length
+                ? `<div class="apex-revenue-comp__donut">
+                    <div class="apex-mini-label">Payer Mix</div>
+                    <div class="apex-donut-wrap">
+                      <div class="apex-donut apex-donut--sm" style="background:conic-gradient(${stops})"></div>
+                      <div class="apex-donut-legend">${legend}</div>
+                    </div>
+                  </div>`
+                : ""
+            }
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "dual-axis-trend") {
+        const prod = Array.isArray(this.spec.production) ? this.spec.production : [];
+        const coll = Array.isArray(this.spec.collections) ? this.spec.collections : [];
+        const empty = this.spec.status === "empty" || (prod.length < 2 && coll.length < 2);
+        if (empty) {
+          return `
+            <div class="apex-compact-action">
+              <div class="apex-compact-action__title">${label}</div>
+              <div class="apex-compact-action__msg">${this.escape(
+                this.spec.emptyMessage || "Need ≥2 periods"
+              )}</div>
+              <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+            </div>
+          `;
+        }
+        const max = Math.max(
+          1,
+          ...prod.map((s) => Number(s.value) || 0),
+          ...coll.map((s) => Number(s.value) || 0)
+        );
+        const n = Math.max(prod.length, coll.length, 1);
+        const bars = [];
+        for (let i = 0; i < n; i++) {
+          const pv = Number((prod[i] && prod[i].value) || 0);
+          const cv = Number((coll[i] && coll[i].value) || 0);
+          const ph = Math.max(4, Math.round((pv / max) * 100));
+          const ch = cv ? Math.max(4, Math.round((cv / max) * 100)) : 0;
+          const lab = (prod[i] && prod[i].label) || (coll[i] && coll[i].label) || `P${i + 1}`;
+          bars.push(`<div class="apex-dual-col" title="${this.escape(lab)}">
+            <div class="apex-dual-bars">
+              <i class="apex-dual-prod" style="height:${ph}%"></i>
+              ${ch ? `<i class="apex-dual-coll" style="height:${ch}%"></i>` : ""}
+            </div>
+            <span>${this.escape(String(lab).slice(-5))}</span>
+          </div>`);
+        }
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-dual-legend"><span class="apex-dual-leg--prod">Production</span>
+            <span class="apex-dual-leg--coll">Collections</span></div>
+          <div class="apex-dual-track">${bars.join("")}</div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "ebitda-station") {
+        const empty = this.spec.status === "empty";
+        const locked = !!this.spec.locked;
+        const sc = this.spec.scrubber || {};
+        const bookE = this.spec.bookEbitda;
+        const planE = this.spec.planningEbitda;
+        const steps = Array.isArray(this.spec.steps) ? this.spec.steps : [];
+        const trend = Array.isArray(this.spec.trend) ? this.spec.trend : [];
+        const showCite = !!this.spec.showCitations;
+        const max = Math.max(...steps.map((s) => Math.abs(Number(s.value) || 0)), 1);
+        const rows = steps
+          .map((s) => {
+            const v = Number(s.value) || 0;
+            const pct = Math.max(6, Math.round((Math.abs(v) / max) * 100));
+            const kind = s.kind || "positive";
+            const citeKey = s.citeKey || "";
+            const cite =
+              showCite && s.citation
+                ? `<button type="button" class="apex-wf-cite" data-cite-key="${this.escape(
+                    citeKey
+                  )}" title="Open source rows">${this.escape(s.citation)}</button>`
+                : "";
+            return `<div class="apex-wf-row apex-wf-row--${this.escape(kind)}">
+              <span class="apex-wf-label">${this.escape(s.label || "")}${cite}</span>
+              <div class="apex-wf-track"><i style="width:${pct}%"></i></div>
+              <span class="apex-wf-val">${this.escape(formatMoney(v) || String(v))}</span>
+            </div>`;
+          })
+          .join("");
+        const tMax = Math.max(...trend.map((s) => Number(s.value) || 0), 1);
+        const spark = trend
+          .map((s) => {
+            const v = Number(s.value) || 0;
+            const h = Math.max(8, Math.round((v / tMax) * 100));
+            return `<div class="apex-spark-bar" style="height:${h}%" title="${this.escape(
+              s.label || ""
+            )}"></div>`;
+          })
+          .join("");
+        const slider = (key, cfg) => {
+          if (!cfg) return "";
+          const val = cfg.value != null ? cfg.value : cfg.default;
+          return `<label class="apex-scrub-slider">
+            <span>${this.escape(cfg.label || key)}</span>
+            <input type="range" data-scrub-key="${this.escape(key)}"
+              min="${Number(cfg.min) || 0}" max="${Number(cfg.max) || 1}" step="${Number(cfg.step) || 1}"
+              value="${Number(val) || 0}" ${locked ? "disabled" : ""} />
+            <output data-scrub-out="${this.escape(key)}">${this.escape(formatMoney(val) || String(val))}</output>
+          </label>`;
+        };
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            <div class="apex-widget-actions">
+              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
+              ${printBtn}
+            </div>
+          </header>
+          ${
+            trend.length
+              ? `<div class="apex-ebitda-station__trend"><span class="apex-mini-label">Trend</span>
+                  <div class="apex-sparkline" data-sparkline>${spark}</div></div>`
+              : ""
+          }
+          <div class="apex-ebitda-banner">${this.escape(
+            this.spec.disclaimer || "PLANNING ONLY — NOT BOOKED TO QUICKBOOKS"
+          )}${locked ? " · FILING LOCKED" : ""}</div>
+          ${
+            empty
+              ? `<div class="apex-compact-action">
+                  <div class="apex-compact-action__msg">${this.escape(
+                    this.spec.emptyMessage || "Need QB net income"
+                  )}</div>
+                  <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+                </div>`
+              : `<div class="apex-ebitda-station">
+                  <div class="apex-waterfall">${rows}</div>
+                  <div class="apex-ebitda-scrub" data-ebitda-scrub
+                    data-book-net="${this.spec.bookNetIncome != null ? this.spec.bookNetIncome : ""}"
+                    data-book-ebitda="${bookE != null ? bookE : ""}"
+                    data-locked="${locked ? "1" : "0"}">
+                    <div class="apex-ebitda-cols">
+                      <div class="apex-ebitda-col apex-ebitda-col--book">
+                        <div class="apex-ebitda-col-title">🔒 Book</div>
+                        <div class="apex-kpi-value" data-book-out>${this.escape(formatMoney(bookE) || "—")}</div>
+                      </div>
+                      <div class="apex-ebitda-col apex-ebitda-col--plan">
+                        <div class="apex-ebitda-col-title">✏️ Planning</div>
+                        <div class="apex-kpi-value" data-plan-out>${this.escape(formatMoney(planE) || "—")}</div>
+                        <div class="apex-kpi-delta" data-delta-out></div>
+                      </div>
+                    </div>
+                    <div class="apex-ebitda-sliders">
+                      ${slider("officerSalary", sc.officerSalary)}
+                      ${slider("depreciation", sc.depreciation)}
+                      ${slider("interest", sc.interest)}
+                      ${slider("oneTime", sc.oneTime)}
+                    </div>
+                    <div class="apex-ebitda-actions">
+                      <button type="button" class="apex-btn apex-btn--small" data-scrub-reset ${
+                        locked ? "disabled" : ""
+                      }>Restore from Imports</button>
+                      <button type="button" class="apex-btn apex-btn--small" data-scrub-save ${
+                        locked ? "disabled" : ""
+                      }>Save Scenario</button>
+                      <input type="text" data-scrub-name placeholder="Scenario name" maxlength="48" ${
+                        locked ? "disabled" : ""
+                      } />
+                      <select data-scrub-load><option value="">Load scenario…</option></select>
+                    </div>
+                  </div>
+                </div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
         `;
       }
 
@@ -1667,19 +1968,17 @@
       if (this.type === "tax-library") {
         wireTaxLibrary(this.element);
       }
-      if (this.type === "ebitda-scrubber") {
+      if (this.type === "ebitda-scrubber" || this.type === "ebitda-station") {
         wireEbitdaScrubber(this.element, this.spec);
       }
-      if (this.type === "scenario-manager") {
-        wireScenarioManager(this.element);
+      if (this.type === "ebitda-station") {
+        this.element.querySelectorAll("[data-cite-key]").forEach((btn) => {
+          btn.addEventListener("click", () =>
+            openCitationModal(btn.getAttribute("data-cite-key") || "", btn.textContent || "")
+          );
+        });
       }
-      if (this.type === "filing-workflow") {
-        wireFilingWorkflow(this.element);
-      }
-      if (this.type === "workpaper") {
-        wireWorkpaper(this.element);
-      }
-      if (this.type === "scrubber") {
+      if (this.type === "financial-command-strip" || this.type === "scrubber") {
         this.element.querySelectorAll("[data-period]").forEach((chip) => {
           chip.addEventListener("click", () => {
             this.element.querySelectorAll(".apex-scrub-chip").forEach((c) => c.classList.remove("is-active"));
@@ -1690,6 +1989,53 @@
             }
           });
         });
+      }
+      if (
+        this.type === "financial-command-strip" ||
+        this.type === "revenue-composition" ||
+        this.type === "dual-axis-trend"
+      ) {
+        this.element.querySelectorAll("[data-fin-cmd-action]").forEach((btn) => {
+          if (btn.dataset.wired === "1") return;
+          btn.dataset.wired = "1";
+          btn.addEventListener("click", async () => {
+            const act = btn.getAttribute("data-fin-cmd-action") || "refresh_softdent_period";
+            btn.disabled = true;
+            const prev = btn.textContent;
+            btn.textContent = "Working…";
+            try {
+              if (act === "sync_imports") {
+                await runHalBoardActions([{ type: "sync_imports", fullSync: true }, { type: "refresh_page" }]);
+              } else if (act === "focus_ebitda") {
+                const el = findWidgetEl("ebitda-station");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  el.classList.add("apex-hal-highlight");
+                  setTimeout(() => el.classList.remove("apex-hal-highlight"), 3500);
+                }
+              } else {
+                await runHalBoardActions([
+                  { type: "refresh_softdent_period" },
+                  { type: "refresh_page" },
+                ]);
+              }
+            } catch (err) {
+              window.alert(String((err && err.message) || err));
+            } finally {
+              btn.disabled = false;
+              btn.textContent = prev;
+            }
+          });
+        });
+      }
+      if (this.type === "scenario-manager") {
+        wireScenarioManager(this.element);
+      }
+      if (this.type === "filing-workflow") {
+        wireFilingWorkflow(this.element);
+      }
+      if (this.type === "workpaper") {
+        wireWorkpaper(this.element);
       }
       if (this.type === "claim-shelf") {
         wireClaimShelf(this.element, this.spec);
@@ -3039,12 +3385,30 @@
     const input = panel.querySelector("[data-hal-input]");
     const chips = panel.querySelector("[data-hal-chips]");
     loadHalSuggestionChips(chips, logEl);
+
+    const submitAsk = () => {
+      if (!input) return;
+      const q = input.value;
+      input.value = "";
+      askHal(q, logEl);
+      try {
+        input.focus();
+      } catch (_err) {
+        /* ignore */
+      }
+    };
+
     if (form && input) {
       form.addEventListener("submit", (ev) => {
         ev.preventDefault();
-        const q = input.value;
-        input.value = "";
-        askHal(q, logEl);
+        submitAsk();
+      });
+      // Enter sends; Shift+Enter inserts a newline
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return;
+        ev.preventDefault();
+        if (form.requestSubmit) form.requestSubmit();
+        else submitAsk();
       });
     }
   }
