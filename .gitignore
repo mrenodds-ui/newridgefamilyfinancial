@@ -184,6 +184,9 @@ NewRidgeFinancial2/data/*_validation.json
 # Local analysis and session logs
 .local_logs/
 
+# Moonshot cleanup archives (moved legacy/eval debris)
+_archive/
+
 # Editor / OS
 .vscode/
 .DS_Store
