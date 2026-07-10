@@ -1,8 +1,6 @@
 {
-  "BUILD_ID": "hal-10400",
-  "assetVersion": "hal-10400",
-  "schemaVersion": "hal-10400",
-  "epoch": "nr2-apex",
-  "releasedAt": "2026-07-10",
-  "notes": "hal-10400: SoftDent insurance payment lines + ADA crosswalk to PHI-safe treatment_planning_estimates for HAL."
+  "BUILD_ID": "hal-10410",
+  "assetVersion": "hal-10410",
+  "schemaVersion": "hal-10410",
+  "notes": "hal-10410: Claims pro presentation — aging exposure + critical actions + table/kanban dual workbench (Option A)."
 }
