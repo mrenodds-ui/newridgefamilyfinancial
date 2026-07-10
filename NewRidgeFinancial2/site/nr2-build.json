@@ -1,6 +1,6 @@
 {
-  "BUILD_ID": "hal-10420",
-  "assetVersion": "hal-10420",
-  "schemaVersion": "hal-10420",
-  "notes": "hal-10420: Claims Executive RCM Console primary design — compact strips, aging+critical pair, dense table, ERA gauge."
+  "BUILD_ID": "hal-10440",
+  "assetVersion": "hal-10440",
+  "schemaVersion": "hal-10440",
+  "notes": "hal-10440: Fix HAL focus overlay trapping clicks — dismiss on navigate, backdrop click, Escape, and auto-timeout."
 }
