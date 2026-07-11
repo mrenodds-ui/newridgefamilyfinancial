@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10460"
+BUILD_ID = "hal-10400"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · payer appeal templates · which widgets empty on all pages? · SoftDent sync"
@@ -3830,20 +3830,33 @@ def format_census_reply(page: str, census: dict[str, Any]) -> str:
 def format_learn_priorities_reply(*, empty_highlights: list[str] | None = None) -> str:
     """Staff-assistant answer: what to teach HAL (not a generic 'no preferences' disclaimer)."""
     lines = [
-        "I don't invent hobbies — I do have operational learning priorities for New Ridge.",
-        "Two memory layers: (1) governed `docs/hal_knowledge/memories.jsonl` (maintainer-approved durable rules); "
-        "(2) staff `app_data/nr2/learned_memories.jsonl` via Ask HAL: Remember this: … (no PHI/secrets).",
-        "Highest-value facts to teach next: write-off approval thresholds and SoftDent adjustment codes; "
-        "broken-appointment fee/policy; dual-insurance / COB order; payer quirks and denial themes "
-        "(e.g. alternate benefit, frequency limits); vendor/clearinghouse contacts and submission guidelines; "
-        "fee-schedule exceptions that differ from the imported fee file; appeal sequencing preferences.",
-        "How: say Remember this: <one non-PHI fact>, or fill docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md "
-        "and run scripts/seed_practice_learned_memories.py.",
-        "Separate from memory: empty widgets need SoftDent/QB exports + Sync — not a remember fact. "
-        "Ask: which widgets are empty on all pages?",
+        "Operational learning priorities for New Ridge (not hobbies) — two lanes:",
+        "A) STAFF MEMORY (Remember this: … → learned_memories.jsonl; no PHI/secrets): "
+        "payer-specific denial reason codes and appeal narratives (Sun Life composites, MetLife downgrades, etc.); "
+        "carrier workflow quirks (prior-auth steps, DentaQuest/Medicaid forms, surface notation); "
+        "clearinghouse/SoftDent error → rejection mappings; internal billing exceptions "
+        "(write-off thresholds, discount agreements, payment-plan rules); concise appeal templates that worked.",
+        "B) IMPORT DATA (not memory — dollars stay in analytics): SoftDent Insurance Payment Analysis CSV → "
+        r"C:\SoftDentFinancialExports\insurance_payments_YYYYMMDD.csv (+ optional procedure_codes_YYYYMMDD.csv), "
+        "then Sync so HAL can answer InsCo × ADA paid-after-write-off estimates for treatment planning "
+        "(e.g. How much will Delta Dental typically pay for D0274?).",
+        "Governed layer: docs/hal_knowledge/memories.jsonl (maintainer-approved). "
+        "Worksheet: docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md + scripts/seed_practice_learned_memories.py.",
+        "Ask: Treatment planning data status · which widgets are empty on all pages?",
     ]
+    try:
+        from softdent_treatment_planning import treatment_planning_status
+
+        st = treatment_planning_status()
+        lines.append(
+            f"Live tx-planning ingest: {st.get('paymentLines', 0)} payment lines, "
+            f"{st.get('estimatesWithMinSample', 0)} InsCo×ADA estimates with n>=10 "
+            f"(of {st.get('estimates', 0)} total)."
+        )
+    except Exception:  # noqa: BLE001
+        pass
     if empty_highlights:
-        lines.append("Current empty examples: " + " · ".join(str(h) for h in empty_highlights[:8]) + ".")
+        lines.append("Current empty widget examples: " + " · ".join(str(h) for h in empty_highlights[:8]) + ".")
     return " ".join(lines)
 
 
@@ -4738,75 +4751,20 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             notes.append(reply_txt)
             handled = True
 
-    # --- HAL-said: assign SoftDent denials → Steve (NR2 tasks only) ---
-    if (not handled) and re.search(
-        r"\b(assign (open )?denials?( to steve)?|denials? (to|for) steve|steve.?s? denial(s| queue)?)\b",
-        q,
-    ):
-        try:
-            from apex_hal_said_improve_pack import assign_softdent_denials_to_steve
-
-            _reports, bundle, _err = _load_reports_and_bundle()
-            rows = _section_rows(bundle, "softdent", "claims") or _section_rows(
-                bundle, "softdent", "claimStatus"
-            )
-            result = assign_softdent_denials_to_steve(rows if isinstance(rows, list) else [])
-            n = int(result.get("created") or 0)
-            notes.append(
-                f"Assigned {n} denial follow-up task(s) to Steve (NR2-local office_tasks; no SoftDent write-back). "
-                f"Skipped duplicates: {result.get('skipped', 0)}."
-            )
-            actions.append(
-                {
-                    "type": "set_status_banner",
-                    "message": f"Steve denial tasks · {n} created",
-                    "hint": "NR2-local assignee only.",
-                    "tone": "ok" if n else "warn",
-                }
-            )
-            if page != "office-manager" and not any(a.get("type") == "navigate" for a in actions):
-                actions.append({"type": "navigate", "page": "office-manager"})
-            actions.append({"type": "focus_widget", "widgetId": "om-daily-huddle"})
-            handled = True
-        except Exception as exc:  # noqa: BLE001
-            notes.append(f"Could not assign denials: {exc}")
-            handled = True
-
-    # --- HAL-said: request clinical sign-off ---
-    if (not handled) and re.search(
-        r"\b(request (dr\.?\s*)?reno sign-?off|clinical sign-?off for claim|sign-?off (this )?narrative)\b",
-        q,
-    ):
-        try:
-            from apex_hal_said_improve_pack import submit_clinical_signoff
-
-            m = re.search(r"claim\s+([A-Za-z0-9\-]+)", q, re.I)
-            cid = m.group(1) if m else ""
-            result = submit_clinical_signoff({"claimId": cid, "note": "Requested via HAL"})
-            if result.get("ok"):
-                notes.append(
-                    f"Queued clinical sign-off for Dr. Reno (claim `{cid or 'n/a'}`). "
-                    "HAL does not submit to payer."
-                )
-                actions.append({"type": "navigate", "page": "narratives"})
-                actions.append({"type": "focus_widget", "widgetId": "clinical-signoff-queue"})
-            else:
-                notes.append(result.get("error") or "Sign-off request failed — include a claim id.")
-            handled = True
-        except Exception as exc:  # noqa: BLE001
-            notes.append(f"Sign-off request error: {exc}")
-            handled = True
-
     # --- What should HAL learn / teach me (staff memory priorities) ---
     wants_learn = bool(
         re.search(
             r"\b("
-            r"what (would|do) you (like|want|prefer) to learn|"
+            r"what (would|do|should) you (like|want|prefer|prioritize) to learn|"
+            r"what (would|do|should) (you|hal) prioritize|"
+            r"prioritize learning|"
+            r"learning priorit|"
+            r"key areas .{0,40}learn|"
             r"what should (i|we) (teach|tell|remember|save)|"
             r"what (can|should) (you|hal) learn|"
-            r"learning priorities|"
+            r"what .{0,30}(governed|learned) memor|"
             r"teach (you|hal)|"
-            r"what.*(governed|learned) memor"
+            r"based on .{0,40}governed memor"
             r")\b",
             q,
         )
@@ -4830,6 +4788,59 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             }
         )
         handled = True
+
+    # --- Treatment planning estimate (InsCo × ADA from payment-line aggregates) ---
+    if not handled:
+        try:
+            from softdent_treatment_planning import (
+                format_treatment_estimate_reply,
+                lookup_treatment_estimate,
+                parse_treatment_estimate_query,
+                treatment_planning_status,
+            )
+
+            parsed = parse_treatment_estimate_query(query)
+            if parsed:
+                est = lookup_treatment_estimate(payer=parsed["payer"], ada_code=parsed["adaCode"])
+                reply_txt = format_treatment_estimate_reply(est)
+                notes.append(reply_txt)
+                tone = "ok" if est.get("sufficient") else "warn"
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": f"Tx plan estimate · {parsed['payer']} × {parsed['adaCode']}",
+                        "hint": "Historical SoftDent payment-line averages — not a benefits guarantee.",
+                        "tone": tone,
+                    }
+                )
+                handled = True
+            elif re.search(
+                r"\b(treatment plan(ning)? (data|status|ready|estimates?)|insurance payment (analysis|lines)|"
+                r"ada (payer|payment) (data|estimates?))\b",
+                q,
+            ):
+                st = treatment_planning_status()
+                notes.append(
+                    f"Treatment-planning data: {st.get('paymentLines', 0)} payment lines, "
+                    f"{st.get('procedureCodes', 0)} procedure crosswalk rows, "
+                    f"{st.get('estimates', 0)} InsCo×ADA estimates "
+                    f"({st.get('estimatesWithMinSample', 0)} with n>=10). "
+                    f"{st.get('hint') or ''}"
+                )
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": (
+                            f"Tx planning: {st.get('estimatesWithMinSample', 0)} ready estimates "
+                            f"/ {st.get('estimates', 0)} total"
+                        ),
+                        "hint": st.get("hint") or "",
+                        "tone": "ok" if int(st.get("estimatesWithMinSample") or 0) else "warn",
+                    }
+                )
+                handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Treatment-planning lookup unavailable: {exc}")
 
     # --- SoftDent / QuickBooks export playbook (when + how) ---
     export_sd = bool(
@@ -6372,7 +6383,37 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 
-    @app.get("/api/apex/export-playbook")
+@app.get("/api/apex/treatment-planning/status")
+    def apex_treatment_planning_status_api():
+        try:
+            from softdent_treatment_planning import treatment_planning_status
+
+            return json_response_fn({"ok": True, **treatment_planning_status(), "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.get("/api/apex/treatment-planning/estimate")
+    def apex_treatment_planning_estimate_api():
+        try:
+            import bottle
+
+            from softdent_treatment_planning import format_treatment_estimate_reply, lookup_treatment_estimate
+
+            payer = str(bottle.request.query.get("payer") or "").strip()
+            ada = str(bottle.request.query.get("ada") or bottle.request.query.get("adaCode") or "").strip()
+            est = lookup_treatment_estimate(payer=payer, ada_code=ada)
+            return json_response_fn(
+                {
+                    "ok": bool(est.get("ok")),
+                    "result": est,
+                    "reply": format_treatment_estimate_reply(est),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+        @app.get("/api/apex/export-playbook")
     def apex_export_playbook_api():
         try:
             return json_response_fn({"ok": True, "playbook": build_export_playbook(), "buildId": BUILD_ID})

@@ -1,6 +1,8 @@
 {
-  "BUILD_ID": "hal-10460",
-  "assetVersion": "hal-10460",
-  "schemaVersion": "hal-10460",
-  "notes": "hal-10460: Wave-5 remaining master-map ADD subpages (taxes/SD/QB/AR aging/narratives/docs/lib/OM/HAL)."
+  "BUILD_ID": "hal-10400",
+  "assetVersion": "hal-10400",
+  "schemaVersion": "hal-10400",
+  "epoch": "nr2-apex",
+  "releasedAt": "2026-07-10",
+  "notes": "hal-10400: SoftDent insurance payment lines + ADA crosswalk to PHI-safe treatment_planning_estimates for HAL."
 }
