@@ -30,18 +30,20 @@ def _open_db():
 
 
 def _conn_has_operational_data(conn: sqlite3.Connection) -> bool:
-    for table in ("sd_procedures", "sd_payments", "sd_patients", "sd_claims"):
-        if not _table_exists(conn, table):
+    sd_tables = ("sd_procedures", "sd_payments", "sd_patients", "sd_claims")
+    report_tables = (
+        "daysheet_totals",
+        "production_by_provider",
+        "transactions",
+        "writeoff_totals",
+        "production_by_ada",
+    )
+    allowed = frozenset(sd_tables + report_tables)
+    for table in sd_tables + report_tables:
+        if table not in allowed or not _table_exists(conn, table):
             continue
         cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM {table}")
-        if int(cur.fetchone()[0] or 0) > 0:
-            return True
-    for table in ("daysheet_totals", "production_by_provider", "transactions", "writeoff_totals", "production_by_ada"):
-        if not _table_exists(conn, table):
-            continue
-        cur = conn.cursor()
-        cur.execute(f"SELECT COUNT(*) FROM {table}")
+        cur.execute("SELECT COUNT(*) FROM {}".format(table))
         if int(cur.fetchone()[0] or 0) > 0:
             return True
     return False

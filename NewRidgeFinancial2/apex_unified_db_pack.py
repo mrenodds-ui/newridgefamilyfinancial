@@ -356,10 +356,17 @@ def _ensure_optional_columns(conn: sqlite3.Connection) -> None:
         ("softdent_patient_aging", "insurance_pending", "REAL"),
         ("softdent_scheduling", "scheduled_production", "REAL"),
     )
+    allowed_tables = frozenset(t for t, _, _ in specs)
+    allowed_cols = frozenset(c for _, c, _ in specs)
+    allowed_types = frozenset({"REAL", "TEXT", "INTEGER"})
     for table, col, typedef in specs:
+        if table not in allowed_tables or col not in allowed_cols or typedef not in allowed_types:
+            continue
         cols = {str(r[1]) for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if col not in cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+            conn.execute(
+                "ALTER TABLE {} ADD COLUMN {} {}".format(table, col, typedef)
+            )
 
 def _parse_money(value: Any) -> float | None:
     if value is None or value == "":

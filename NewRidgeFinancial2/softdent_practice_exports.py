@@ -667,15 +667,17 @@ def _aggregate_operatory_from_db(
     *,
     schedule_date: str | None = None,
 ) -> list[dict[str, Any]] | None:
+    allowed_tables = frozenset(("operatory_schedule", "operatory_chairs", "chair_schedule"))
+    allowed_json_cols = frozenset(("payload_json", "schedule_json", "operatory_json"))
     for table in ("operatory_schedule", "operatory_chairs", "chair_schedule"):
-        if not _table_exists(conn, table):
+        if table not in allowed_tables or not _table_exists(conn, table):
             continue
         columns = _table_columns(conn, table)
         json_col = next((name for name in ("payload_json", "schedule_json", "operatory_json") if name in columns), None)
-        if not json_col:
+        if not json_col or json_col not in allowed_json_cols:
             continue
         cur = conn.cursor()
-        cur.execute(f"SELECT {json_col} FROM {table} ORDER BY rowid DESC LIMIT 1")
+        cur.execute("SELECT {} FROM {} ORDER BY rowid DESC LIMIT 1".format(json_col, table))
         row = cur.fetchone()
         if not row or not row[0]:
             continue
@@ -859,14 +861,15 @@ def ingest_csv_reports_to_sqlite(
     counts: dict[str, int] = {}
     extracted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     conn = sqlite3.connect(str(db_path))
+    allowed_tables = frozenset(table for table, _ in mappings.values())
     try:
         for filename, (table, colmap) in mappings.items():
             path = _find(filename)
-            if not path:
+            if not path or table not in allowed_tables:
                 continue
             cols_sql = ", ".join([f"{k} TEXT" for k in colmap.keys()] + ["source_file TEXT", "extracted_at TEXT"])
-            conn.execute(f"CREATE TABLE IF NOT EXISTS {table} ({cols_sql})")
-            conn.execute(f"DELETE FROM {table}")
+            conn.execute("CREATE TABLE IF NOT EXISTS {} ({})".format(table, cols_sql))
+            conn.execute("DELETE FROM {}".format(table))
             rows: list[dict[str, Any]] = []
             with path.open("r", encoding="utf-8-sig", newline="") as handle:
                 reader = csv.DictReader(handle)
