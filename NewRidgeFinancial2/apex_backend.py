@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10431"
+BUILD_ID = "hal-10450"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -40,6 +40,10 @@ _NARRATIVE_PACKETS: dict[str, dict[str, Any]] = {}
 _WORKPAPER_PACKETS: dict[str, dict[str, Any]] = {}
 _TICKER_CACHE: dict[str, Any] = {"at": 0.0, "payload": None}
 _TICKER_CACHE_TTL_SEC = 10.0
+_WIDGETS_CACHE: dict[str, dict[str, Any]] = {}
+_WIDGETS_CACHE_TTL_SEC = 15.0
+_REPORTS_BUNDLE_CACHE: dict[str, Any] = {"at": 0.0, "reports": None, "bundle": None, "errors": None}
+_REPORTS_BUNDLE_CACHE_TTL_SEC = 20.0
 
 
 def _utc_now() -> str:
@@ -1470,17 +1474,25 @@ def save_tax_return_upload(*, year: str, jurisdiction: str, filename: str, data:
 
 
 def _load_reports_and_bundle() -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    import copy
+    import time
+
+    now = time.monotonic()
+    cached_at = float(_REPORTS_BUNDLE_CACHE.get("at") or 0.0)
+    if (
+        _REPORTS_BUNDLE_CACHE.get("reports") is not None
+        and _REPORTS_BUNDLE_CACHE.get("bundle") is not None
+        and (now - cached_at) < _REPORTS_BUNDLE_CACHE_TTL_SEC
+    ):
+        return (
+            copy.deepcopy(_REPORTS_BUNDLE_CACHE["reports"]),
+            copy.deepcopy(_REPORTS_BUNDLE_CACHE["bundle"]),
+            list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
+        )
+
     reports: dict[str, Any] = {}
     bundle: dict[str, Any] = {}
     errors: list[str] = []
-
-    try:
-        from financial_reports import build_financial_reports
-
-        reports = build_financial_reports(sync_exports=False)
-    except Exception as exc:  # noqa: BLE001 — surface honest empty state
-        errors.append(f"financial_reports: {exc}")
-        reports = {}
 
     try:
         from import_loader import load_import_bundle
@@ -1490,6 +1502,19 @@ def _load_reports_and_bundle() -> tuple[dict[str, Any], dict[str, Any], list[str
         errors.append(f"import_loader: {exc}")
         bundle = {}
 
+    try:
+        from financial_reports import build_financial_reports
+
+        # Reuse the same bundle — avoid a second cold import scan on every page.
+        reports = build_financial_reports(sync_exports=False, bundle=bundle or None)
+    except Exception as exc:  # noqa: BLE001 — surface honest empty state
+        errors.append(f"financial_reports: {exc}")
+        reports = {}
+
+    _REPORTS_BUNDLE_CACHE["at"] = time.monotonic()
+    _REPORTS_BUNDLE_CACHE["reports"] = copy.deepcopy(reports)
+    _REPORTS_BUNDLE_CACHE["bundle"] = copy.deepcopy(bundle)
+    _REPORTS_BUNDLE_CACHE["errors"] = list(errors)
     return reports, bundle, errors
 
 
@@ -1588,11 +1613,44 @@ def _financial_widgets_from_reports(
 ) -> list[dict[str, Any]]:
     """Financial Executive Console (hal-10430) — Moonshot Option A primary design.
 
-    Strip 1 command → Strip 2 vitals → dual-trend+provider → revenue composition →
-    A/R+claims KPIs → EBITDA station. Empty large instruments collapse to strips.
+    Packed top-down: command → vitals → chart row (trend/provider/A/R/revenue) →
+    KPI row → notes → EBITDA. Empty large instruments collapse to strips.
     """
     widgets: list[dict[str, Any]] = []
     ar = reports.get("arAging") if isinstance(reports.get("arAging"), dict) else {}
+
+    def _ar_aging_widget() -> dict[str, Any]:
+        buckets = (
+            reports.get("arAgingBuckets")
+            if isinstance(reports.get("arAgingBuckets"), list)
+            else []
+        )
+        series = []
+        for b in buckets:
+            if not isinstance(b, dict):
+                continue
+            amt = b.get("amount")
+            if isinstance(amt, (int, float)):
+                series.append({"label": str(b.get("bucket") or ""), "value": float(amt)})
+        if series and any(s["value"] for s in series):
+            return {
+                "id": "ar-aging-chart",
+                "type": "chart",
+                "chartType": "bar",
+                "label": "A/R Aging",
+                "size": "m",
+                "series": series,
+                "hint": "Buckets from SoftDent A/R import via financial_reports.",
+            }
+        empty_ar = _empty_chart(
+            "ar-aging-chart",
+            "A/R Aging",
+            hint="Import SoftDent A/R aging to populate this chart.",
+        )
+        empty_ar["size"] = "strip"
+        empty_ar["collapseWhenEmpty"] = True
+        empty_ar["compact"] = True
+        return empty_ar
 
     try:
         from apex_financial_console_pack import (
@@ -1613,18 +1671,20 @@ def _financial_widgets_from_reports(
             vitals["alert"] = True
             vitals["alertReason"] = f"90+ share {float(ninety_pct):.1f}% exceeds 20%"
         widgets.append(vitals)
-        # Level 3 — Velocity: dual-axis trend + provider bars
+        # Level 3 — Chart row: dual-trend + provider + A/R (all size m for tight pack)
         widgets.append(build_dual_axis_trend(bundle))
         provider = build_provider_horizontal_bars(bundle)
         if provider.get("status") == "empty":
             provider = collapse_empty_large(provider)
-        elif str(provider.get("hint") or "").lower().find("thin") >= 0:
-            provider["size"] = "m"
         else:
             provider["size"] = "m"
         widgets.append(provider)
-        # Level 4 — Revenue composition (conditional collapse when empty)
-        widgets.append(build_revenue_composition(bundle))
+        widgets.append(_ar_aging_widget())
+        # Level 4 — Revenue composition (m when populated so it packs with charts)
+        revenue = build_revenue_composition(bundle)
+        if revenue.get("status") == "ok" and revenue.get("size") == "l":
+            revenue["size"] = "m"
+        widgets.append(revenue)
     except Exception as exc:  # noqa: BLE001
         # Fallback: legacy mosaic if console pack fails
         widgets.append(
@@ -1642,52 +1702,22 @@ def _financial_widgets_from_reports(
         widgets.insert(1, build_period_scrubber(bundle, page="financial"))
         widgets[1]["size"] = "strip"
         widgets.extend(_visual_boost_financial(reports, bundle))
+        widgets.append(_ar_aging_widget())
 
-    # Level 5 — A/R aging + secondary KPIs (compact)
-    buckets = reports.get("arAgingBuckets") if isinstance(reports.get("arAgingBuckets"), list) else []
-    series = []
-    for b in buckets:
-        if not isinstance(b, dict):
-            continue
-        amt = b.get("amount")
-        if isinstance(amt, (int, float)):
-            series.append({"label": str(b.get("bucket") or ""), "value": float(amt)})
-    if series and any(s["value"] for s in series):
-        widgets.append(
-            {
-                "id": "ar-aging-chart",
-                "type": "chart",
-                "chartType": "bar",
-                "label": "A/R Aging",
-                "size": "m",
-                "series": series,
-                "hint": "Buckets from SoftDent A/R import via financial_reports.",
-            }
-        )
-    else:
-        empty_ar = _empty_chart(
-            "ar-aging-chart",
-            "A/R Aging",
-            hint="Import SoftDent A/R aging to populate this chart.",
-        )
-        empty_ar["size"] = "strip"
-        empty_ar["collapseWhenEmpty"] = True
-        empty_ar["compact"] = True
-        widgets.append(empty_ar)
-
+    # Level 5 — Secondary KPIs (compact size s, packed as one row)
     ct = reports.get("claimTracking") if isinstance(reports.get("claimTracking"), dict) else {}
     total_claims = ct.get("totalClaims")
-    widgets.append(
-        _count_kpi(
-            "claims-total",
-            "Claims (import)",
-            total_claims if isinstance(total_claims, int) else None,
-            hint=str(ct.get("followUpHint") or "From SoftDent claims import.")
-            if isinstance(total_claims, int)
-            else "Claims import not available.",
-            delta_label=f"Denied {ct.get('deniedCount', 0)}" if isinstance(total_claims, int) else None,
-        )
+    claims_kpi = _count_kpi(
+        "claims-total",
+        "Claims (import)",
+        total_claims if isinstance(total_claims, int) else None,
+        hint=str(ct.get("followUpHint") or "From SoftDent claims import.")
+        if isinstance(total_claims, int)
+        else "Claims import not available.",
+        delta_label=f"Denied {ct.get('deniedCount', 0)}" if isinstance(total_claims, int) else None,
     )
+    claims_kpi["size"] = "s"
+    widgets.append(claims_kpi)
     denied = ct.get("deniedCount")
     if isinstance(denied, int):
         widgets.append(
@@ -1697,6 +1727,7 @@ def _financial_widgets_from_reports(
                 "label": "Denied Claims",
                 "value": denied,
                 "unit": "count",
+                "size": "s",
                 "deltaLabel": f"Aging 30+ {ct.get('deniedAgingPast30Days', 0)}",
                 "hint": "Counts from SoftDent claims import — not invented.",
             }
@@ -1711,6 +1742,7 @@ def _financial_widgets_from_reports(
             "label": "Treatment Plans",
             "value": tp.get("rowCount") if tp.get("available") else None,
             "unit": "count",
+            "size": "s",
             "status": "empty" if not tp.get("available") else "ok",
             "emptyMessage": "No data",
             "hint": "Practice export treatment plans." if tp.get("available") else "Treatment plan export not loaded.",
@@ -1723,6 +1755,7 @@ def _financial_widgets_from_reports(
             "label": "Case Acceptance Rows",
             "value": ca.get("rowCount") if ca.get("available") else None,
             "unit": "count",
+            "size": "s",
             "status": "empty" if not ca.get("available") else "ok",
             "emptyMessage": "No data",
             "hint": "Practice export case acceptance." if ca.get("available") else "Case acceptance export not loaded.",
@@ -1744,7 +1777,7 @@ def _financial_widgets_from_reports(
             }
         )
 
-    # Level 6 — EBITDA Command Station
+    # Level 6 — EBITDA Command Station + variance bar (FIN-004)
     try:
         from apex_financial_console_pack import build_ebitda_station, collapse_empty_large
 
@@ -1755,6 +1788,16 @@ def _financial_widgets_from_reports(
     except Exception:
         widgets.append(build_ebitda_waterfall(bundle))
         widgets.append(build_ebitda_scrubber(bundle))
+    try:
+        from apex_bar_trend_page_org_pack import build_ebitda_variance_bar
+        from apex_financial_console_pack import collapse_empty_large
+
+        variance = build_ebitda_variance_bar(bundle)
+        if variance.get("status") == "empty":
+            variance = collapse_empty_large(variance)
+        widgets.append(variance)
+    except Exception:
+        pass
 
     _apply_threshold_alerts(widgets, reports)
     return widgets
@@ -1988,6 +2031,16 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
 
     widgets.extend(_visual_boost_taxes(plan))
     widgets.insert(0, build_period_scrubber(bundle, page="taxes"))
+    try:
+        from apex_bar_trend_page_org_pack import build_ebitda_variance_bar
+        from apex_financial_console_pack import collapse_empty_large
+
+        variance = build_ebitda_variance_bar(bundle)
+        if variance.get("status") == "empty":
+            variance = collapse_empty_large(variance)
+        widgets.append(variance)
+    except Exception:
+        pass
     return widgets
 
 
@@ -2127,6 +2180,26 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
             )
         )
 
+    try:
+        from apex_bar_trend_page_org_pack import (
+            build_import_health_timeline,
+            build_operatory_util_chart,
+            build_stale_import_alert_chip,
+        )
+        from apex_financial_console_pack import collapse_empty_large
+
+        widgets.insert(0, build_stale_import_alert_chip(bundle))
+        timeline = build_import_health_timeline(bundle)
+        if timeline.get("status") == "empty":
+            timeline = collapse_empty_large(timeline)
+        widgets.append(timeline)
+        util = build_operatory_util_chart(bundle)
+        if util.get("status") == "empty":
+            util = collapse_empty_large(util)
+        widgets.append(util)
+    except Exception:
+        pass
+
     procedures = _section_rows(bundle, "softdent", "procedures")
     widgets.append(
         _count_kpi(
@@ -2198,6 +2271,12 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
                 hint="Expense category rows appear after QuickBooks category import.",
             )
         )
+        try:
+            from apex_financial_console_pack import collapse_empty_large
+
+            widgets.append(collapse_empty_large(build_expense_horizontal_bars(bundle)))
+        except Exception:
+            widgets.append(build_expense_horizontal_bars(bundle))
         widgets.append(build_categorize_assist(bundle))
         return widgets
 
@@ -2275,6 +2354,19 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
         )
 
     widgets.append(build_expense_horizontal_bars(bundle))
+    try:
+        from apex_financial_console_pack import collapse_empty_large
+
+        # Phase 6 polish: empty expense hbar collapses to strip chip
+        for i, w in enumerate(widgets):
+            if isinstance(w, dict) and w.get("id") == "qb-expense-hbar" and w.get("status") == "empty":
+                widgets[i] = collapse_empty_large(w)
+                break
+            if isinstance(w, dict) and w.get("id") == "qb-expense-hbar":
+                w["size"] = "m"
+                break
+    except Exception:
+        pass
     widgets.append(build_categorize_assist(bundle))
     return widgets
 
@@ -2406,9 +2498,10 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
     widgets.append(build_ar_waterfall(reports, bundle))
     widgets.append(build_ar_aging_outlook(reports, bundle))
     try:
-        from apex_program_improve_pack import build_ar_forecast_widget
+        from apex_bar_trend_page_org_pack import build_ar_forecast_trend_blocked
 
-        widgets.append(build_ar_forecast_widget(reports, bundle))
+        # Phase 5: honest blocked dual-axis stub (no illustrative decay dollars)
+        widgets.append(build_ar_forecast_trend_blocked(reports, bundle))
     except Exception:
         pass
     widgets.append(build_collection_bullet(bundle))
@@ -2558,6 +2651,22 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
         health["compact"] = True
         widgets.append(health)
         widgets.append(claims_executive_strip_widget(summary, kmeta))
+        try:
+            from apex_bar_trend_page_org_pack import (
+                build_claims_aging_mini_trend,
+                build_claims_status_bar,
+            )
+
+            widgets.append(
+                build_claims_status_bar(summary, kanban_payload.get("counts") if isinstance(kanban_payload, dict) else None)
+            )
+            widgets.append(
+                build_claims_aging_mini_trend(
+                    summary.get("agingCounts") if isinstance(summary.get("agingCounts"), dict) else {}
+                )
+            )
+        except Exception:
+            pass
         widgets.append(
             claims_aging_exposure_widget(
                 {"buckets": buckets or {}, "counts": summary.get("agingCounts") or {}},
@@ -3009,10 +3118,16 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
     widgets.append(build_ins_patient_split(bundle))
     widgets.insert(0, build_import_freshness(bundle))
     try:
+        from apex_bar_trend_page_org_pack import build_operatory_util_chart
+        from apex_financial_console_pack import collapse_empty_large
         from apex_program_improve_pack import build_daily_huddle_widget, import_health_widget
 
         widgets.insert(0, import_health_widget(bundle))
         widgets.insert(0, build_daily_huddle_widget(reports, bundle))
+        util = build_operatory_util_chart(bundle)
+        if util.get("status") == "empty":
+            util = collapse_empty_large(util)
+        widgets.insert(1, util)
     except Exception:
         pass
     return widgets
@@ -3156,6 +3271,9 @@ _PAGE_BUILDERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], list[dict[s
 
 
 def build_apex_widgets(page_id: str) -> dict[str, Any]:
+    import copy
+    import time
+
     pid = re.sub(r"[^a-z0-9\-]", "", str(page_id or "").strip().lower())
     if pid not in APEX_PAGES:
         return {
@@ -3175,6 +3293,13 @@ def build_apex_widgets(page_id: str) -> dict[str, Any]:
             "sourceNote": "invalid page",
         }
 
+    now = time.monotonic()
+    hit = _WIDGETS_CACHE.get(pid)
+    if hit and (now - float(hit.get("at") or 0.0)) < _WIDGETS_CACHE_TTL_SEC:
+        cached = hit.get("payload")
+        if isinstance(cached, dict):
+            return copy.deepcopy(cached)
+
     reports, bundle, errors = _load_reports_and_bundle()
     builder = _PAGE_BUILDERS[pid]
     widgets = builder(reports, bundle)
@@ -3183,7 +3308,7 @@ def build_apex_widgets(page_id: str) -> dict[str, Any]:
     if errors:
         source_note += f" (partial: {'; '.join(errors)})"
 
-    return {
+    payload = {
         "page": pid,
         "refreshedAt": reports.get("generatedAt") or bundle.get("loadedAt") or _utc_now(),
         "buildId": BUILD_ID,
@@ -3191,7 +3316,10 @@ def build_apex_widgets(page_id: str) -> dict[str, Any]:
         "sourceNote": source_note,
         "errors": errors or None,
         "widgetCensus": summarize_widget_census(widgets),
+        "cachedForSec": _WIDGETS_CACHE_TTL_SEC,
     }
+    _WIDGETS_CACHE[pid] = {"at": time.monotonic(), "payload": copy.deepcopy(payload)}
+    return payload
 
 
 def _widget_has_data(w: dict[str, Any]) -> bool:
@@ -3864,6 +3992,13 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         (r"\b(import health|health monitor|stale imports?)\b", "import-health-monitor", None),
         (r"\b(daily huddle|morning huddle|morning briefing)\b", "om-daily-huddle", "office-manager"),
         (r"\b(ebitda trend|ebitda chart)\b", "ebitda-station", "financial"),
+        (r"\b(ebitda variance|net income variance)\b", "ebitda-variance-bar", "financial"),
+        (r"\b(claims status (bar|distribution|chart)|status distribution)\b", "claims-status-bar", "claims"),
+        (r"\b(claims (aging )?trend|90\+ aging trend)\b", "claims-aging-mini-trend", "claims"),
+        (r"\b(import health timeline|import timeline)\b", "import-health-timeline", "softdent"),
+        (r"\b(operatory (util|slot|load)|chair (load|slots))\b", "operatory-util-trend", "office-manager"),
+        (r"\b(ar forecast|a/?r forecast|era velocity)\b", "ar-forecast-trend", "ar"),
+        (r"\b(expense (hbar|bars|categories)|qb expense)\b", "qb-expense-hbar", "quickbooks"),
         (r"\b(a/?r forecast|aging forecast)\b", "ar-aging-forecast", "ar"),
         (r"\b(claim attachments?|attachment bridge)\b", "claim-attachments-bridge", "documents"),
     )
@@ -4474,6 +4609,14 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 
         sync = bool(body.get("fullSync", True))
         bundle = load_import_bundle(sync=sync, deep=False)
+        # Fresh imports must not serve stale page payloads.
+        _WIDGETS_CACHE.clear()
+        _REPORTS_BUNDLE_CACHE["at"] = 0.0
+        _REPORTS_BUNDLE_CACHE["reports"] = None
+        _REPORTS_BUNDLE_CACHE["bundle"] = None
+        _REPORTS_BUNDLE_CACHE["errors"] = None
+        _TICKER_CACHE["at"] = 0.0
+        _TICKER_CACHE["payload"] = None
         result["status"] = "ok"
         result["completedAt"] = _utc_now()
         result["importMode"] = bundle.get("importMode")

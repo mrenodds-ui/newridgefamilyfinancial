@@ -317,8 +317,13 @@ def build_revenue_composition(bundle: dict[str, Any]) -> dict[str, Any]:
         "segments": [],
         "slices": [],
         "status": "empty",
-        "emptyMessage": "Collections/Daysheet export needed for revenue split",
-        "hint": split.get("hint") or donut.get("hint") or "",
+        "emptyMessage": (
+            "Collections pending for current period — export SoftDent Collections/Daysheet "
+            "(Reports > Accounting) into C:\\SoftDent\\softdentexportreports or C:\\SoftDentReportExports"
+        ),
+        "hint": split.get("hint")
+        or donut.get("hint")
+        or "Production may be present; insurance/patient split waits on Collections/Daysheet totals.",
         "halAction": "refresh_softdent_period",
         "halActionLabel": "Sync SoftDent Collections",
         "collectionsPending": pending,

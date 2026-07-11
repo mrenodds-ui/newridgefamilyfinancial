@@ -1,6 +1,6 @@
 {
-  "BUILD_ID": "hal-10440",
-  "assetVersion": "hal-10440",
-  "schemaVersion": "hal-10440",
-  "notes": "hal-10440: Fix HAL focus overlay trapping clicks — dismiss on navigate, backdrop click, Escape, and auto-timeout."
+  "BUILD_ID": "hal-10441",
+  "assetVersion": "hal-10441",
+  "schemaVersion": "hal-10441",
+  "notes": "hal-10441: Fix HAL HTTP 403 — session refresh recovery + fast cache-only readiness so app-info/mutations are not wedged behind direct-first scans."
 }

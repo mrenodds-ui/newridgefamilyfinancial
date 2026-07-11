@@ -540,21 +540,35 @@ def build_daily_huddle_widget(reports: dict[str, Any], bundle: dict[str, Any]) -
     if isinstance(ninety, (int, float)) and float(ninety) >= 5000:
         priorities.append(f"A/R 90+ outstanding ${float(ninety):,.0f}")
 
-    # Operatory utilization signal
+    # Operatory utilization signal (chair-shaped import)
     op_count = 0
+    chair_n = 0
+    slot_n = 0
     try:
         softdent = bundle.get("softdent") if isinstance(bundle.get("softdent"), dict) else {}
-        for key in ("operatorySchedule", "operatory", "schedule"):
+        chairs: list[Any] = []
+        for key in ("operatory", "operatorySchedule", "schedule"):
             sec = softdent.get(key)
+            if isinstance(sec, dict) and isinstance(sec.get("operatoryChairs"), list):
+                chairs = sec["operatoryChairs"]
+                break
             if isinstance(sec, dict) and isinstance(sec.get("rows"), list):
                 op_count = len(sec["rows"])
                 break
             if isinstance(sec, list):
                 op_count = len(sec)
                 break
+        if chairs:
+            chair_n = len(chairs)
+            for chair in chairs:
+                if isinstance(chair, dict) and isinstance(chair.get("slots"), list):
+                    slot_n += len(chair["slots"])
+            op_count = slot_n
     except Exception:
         op_count = 0
-    if op_count:
+    if chair_n:
+        priorities.append(f"Operatory: {chair_n} chair(s), {slot_n} scheduled slot(s)")
+    elif op_count:
         priorities.append(f"Operatory schedule rows on import: {op_count}")
 
     if not priorities:
