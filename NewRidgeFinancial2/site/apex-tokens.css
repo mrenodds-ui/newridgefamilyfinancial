@@ -20,9 +20,29 @@
   --apex-widget-min: 140px;
   --apex-body-font-size: 12px;
   --apex-page-title-size: 16px;
+  /* Moonshot zero-scroll (hal-10561) hard height tiers */
+  --apex-widget-max-micro: 120px;
+  --apex-widget-max-secondary: 240px;
+  --apex-widget-max-primary: 320px;
+  --apex-stage-chrome: 100px;
 }
 
-/* Phase 5 density: Compact (default) vs Comfortable */
+/* Phase 5 + zero-scroll density: Compact (default) vs Comfortable (may scroll) */
+html[data-apex-density="compact"] {
+  --apex-grid-gap: 4px;
+  height: 100%;
+  overflow: hidden;
+}
+html[data-apex-density="compact"] body {
+  height: 100%;
+  overflow: hidden;
+}
+html[data-apex-density="compact"] #apex-stage.apex-mosaic {
+  max-height: calc(100vh - var(--apex-stage-chrome));
+  overflow: hidden;
+  align-content: start;
+}
+
 html[data-apex-density="comfortable"] {
   --apex-grid-gap: var(--apex-grid-gap-comfortable);
   --apex-body-font-size: 13px;
@@ -208,9 +228,12 @@ body {
 }
 
 .apex-hal-rail .apex-widget--hal-chat {
-  min-height: calc(100vh - 96px);
+  /* Zero-scroll: no sole-l / no viewport fill — capped primary tile */
+  min-height: 0;
+  max-height: var(--apex-widget-max-primary);
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   overflow: hidden;
 }
 
@@ -763,7 +786,8 @@ body {
   }
 
   .apex-hal-rail .apex-widget--hal-chat {
-    min-height: 360px;
+    min-height: 0;
+    max-height: var(--apex-widget-max-primary, 320px);
   }
 }
 

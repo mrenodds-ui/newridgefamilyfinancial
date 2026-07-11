@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10560 (Moonshot compact professional pages Phases 1–5)
+ * Build: hal-10561 (Moonshot zero-scroll + compact pages)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10560";
+  const ASSET_V = "hal-10561";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const DENSITY_KEY = "nr2-apex-density";
@@ -196,7 +196,16 @@
       return "strip";
     }
     if (spec && spec.size) return String(spec.size);
-    if (type === "hal-chat") return "hal-chat";
+    // Zero-scroll: tall defaults demoted unless size explicitly set
+    if (spec && spec.zeroScroll === true) {
+      if (type === "hal-chat") return "m";
+      if (type === "chart" || type === "bar" || type === "line") return "m";
+      if (type === "heatmap" || type === "calculator" || type === "categorize" || type === "tax-library")
+        return "m";
+      if (type === "claims-kanban" || type === "claims-workbench") return "m";
+      if (type === "ai-insight") return "m";
+    }
+    if (type === "hal-chat") return "m";
     if (type === "chart" || type === "bar" || type === "line") return "l";
     if (
       type === "pulse" ||
@@ -370,6 +379,15 @@
       }
       if (this.type === "hal-chat") {
         el.classList.add("apex-widget--hal-chat", "apex-inst--hal-chat");
+      }
+      // Moonshot zero-scroll: enforce server-emitted maxHeight (primary/secondary/micro)
+      const mh = Number(this.spec.maxHeight);
+      if (Number.isFinite(mh) && mh > 0) {
+        el.style.maxHeight = `${mh}px`;
+        el.style.overflowY = "auto";
+      }
+      if (this.spec.zeroScroll === true) {
+        el.dataset.zeroScroll = "1";
       }
       if (this.spec.alert) {
         el.classList.add("apex-alert-pulse");
@@ -2564,7 +2582,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         const order = ["submitted", "pendingReview", "eraMatched", "denied", "paid"];
         const empty = this.spec.status === "empty";
         const defaultView = preferredWorkbenchView(String(this.spec.defaultView || "table"));
-        const rowCap = Math.max(10, Number(this.spec.rowCap) || 50);
+        const rowCapRaw = Number(this.spec.rowCap);
+        // Zero-scroll: default 5, hard cap 7 on parent pages; subpage may pass higher
+        const rowCap =
+          Number.isFinite(rowCapRaw) && rowCapRaw > 0
+            ? this.spec.internalScroll === true
+              ? Math.max(rowCapRaw, 1)
+              : Math.min(rowCapRaw, 7)
+            : 5;
         const flatRows = rows.length
           ? rows
           : order.flatMap((key) =>
@@ -5906,11 +5931,21 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     const densityBtn = document.getElementById("btn-density");
     let savedDensity = "compact";
     try {
-      savedDensity = localStorage.getItem(DENSITY_KEY) || "compact";
+      // Moonshot zero-scroll: compact is forced default; comfortable is explicit opt-in
+      const stored = localStorage.getItem(DENSITY_KEY);
+      savedDensity = stored === "comfortable" ? "comfortable" : "compact";
     } catch (_err) {
       savedDensity = "compact";
     }
     applyDensity(savedDensity);
+    if (typeof window !== "undefined") {
+      window.__nr2AssertZeroScroll = function assertZeroScroll() {
+        const density = document.documentElement.getAttribute("data-apex-density") || "compact";
+        if (density !== "compact") return { ok: true, skipped: "comfortable" };
+        const delta = Math.abs(document.documentElement.scrollHeight - window.innerHeight);
+        return { ok: delta <= 5, delta, scrollHeight: document.documentElement.scrollHeight, innerHeight: window.innerHeight };
+      };
+    }
     if (densityBtn) {
       densityBtn.addEventListener("click", () => {
         const cur = document.documentElement.getAttribute("data-apex-density") || "compact";

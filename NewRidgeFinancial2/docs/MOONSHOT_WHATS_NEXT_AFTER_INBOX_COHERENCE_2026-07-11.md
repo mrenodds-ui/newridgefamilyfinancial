@@ -15,39 +15,41 @@
 ---
 
 # Verdict
-Open the pull request for branch `fix/main-validate-ci` and merge it into `main` immediately to land the inbox sync coherence and import hardening that are currently trapped in the branch.
+Open the pull request for branch `fix/main-validate-ci`, complete GitHub authentication, and merge commit `0dcf1d7` to `main` to release the stranded coherence and durability fixes.
 
 ## 0. Intent
-Shipped value is worthless until it is in `main`. The coherence fixes (content-hash no-ops, critical retention logic, bit-identical sync verification) are production protections currently isolated on a side branch; `main` is stale and exposed to the very data-drift risks the fixes mitigate. Do not start new features while the last delivery is still in limbo.
+Close the delivery gap. Unmerged code is inventory-at-risk: it blocks production deployment of verified fixes (inbox sync coherence, import 403 durability) and invites divergence or bit-rot. The only remaining blocker is administrative (`gh auth`), not technical.
 
 ## 1. Already Done (do not redo)
-- Expert SE REC-001..007 (gate split, threaded HTTPS, import health, ERA CAS/claims actions)
-- Compact professional pages Phases 1–5
-- Import gate hardening (softGaps warnings, stale-row detection, QB expenses=warning)
-- Inbox sync coherence (retention soft-skip, content-hash no-op writes, Period expense protection, direct-first mirror, bit-identical sync verification) committed as `0dcf1d7`
-- Documentation: `MOONSHOT_INBOX_SYNC_COHERENCE_APPLIED_2026-07-11.md`
+- Expert SE REC-001..007 (gate split, threaded HTTPS, import health, ERA actions)  
+- Compact professional pages Phases 1–5  
+- Import gate hardening (softGaps, stale-row detection, QB expense warnings)  
+- Inbox sync coherence implementation (retention soft-skip, content-hash no-ops, Period protection, direct-first mirror) at commit `0dcf1d7`  
+- Branch `fix/main-validate-ci` prepared and pushed ahead of `main`
 
 ## 2. Recommended NEXT (single package)
-**Goal:** Create PR `fix/main-validate-ci` → `main` and merge (fast-forward acceptable if policy allows).  
-**Why now:** The branch contains the hardened import gate and inbox coherence that prevent AR/dashboard/QB expense corruption. Every hour it sits unmerged increases the risk of a hotfix collision or an operator accidentally branching off stale `main`. The `gh auth login` blocker is a local environment issue; use the GitHub web UI or a token to open the PR if CLI remains blocked.  
-**Effort:** Administrative (low).  
-**Files:** None—repository operation only.  
+**Goal:** Land `fix/main-validate-ci` (`0dcf1d7`) into `main` via PR and clean the untracked artifact.  
+**Why now:** The branch contains production-critical fixes that are currently unreleased. Every hour it sits unmerged increases the risk of merge conflicts, environment drift, and failure to realize ROI on completed engineering.  
+**Effort:** Low (15–30 min administrative; zero code logic changes).  
+**Files:**  
+- Git operations only (no source edits).  
+- Optionally `.gitignore` (add `site/index.pre-apex.html` to prevent accidental commit of the untracked leftover).  
 **Validation gate:**  
-- CI passes on the PR.  
-- Post-merge, verify `main` HEAD is `0dcf1d7` (or descendant) and that `git log --oneline main..fix/main-validate-ci` returns empty.  
-- Run the two-consecutive-syncs smoke test to confirm bit-identical results still hold on `main`.
+1. `gh auth login` succeeds (web or token flow).  
+2. PR created: `fix/main-validate-ci` → `main` with description referencing hal-10560 coherence fixes.  
+3. CI pipeline passes (inbox sync coherence tests green).  
+4. PR merged; `main` HEAD descends from `0dcf1d7`.  
+5. `git status` shows `site/index.pre-apex.html` ignored (if `.gitignore` updated).
 
 ## 3. Runner-up options (max 3)
-1. **Git hygiene:** Add `site/index.pre-apex.html` to `.gitignore` and `git rm --cached` it to prevent accidental commit of the legacy untracked file.  
-2. **NICE REC-008 (batch narratives):** Only after `main` is current; low urgency, high UX polish.  
-3. **Credential fix:** Permanently resolve the `gh auth login` breakage (credential helper or token export) so future PRs are not blocked.
+1. **Repository hygiene** – Add `site/index.pre-apex.html` to `.gitignore` and `git rm --cached` if previously staged; cleans workspace before next feature cycle.  
+2. **REC-008 Batch narratives** – Implement Expert SE NICE-to-have for bulk narrative generation (park until `main` is current).  
+3. **REC-009 Voice context carry** – Implement voice-session context retention (park until `main` is current).
 
 ## 4. Approval checklist
-- [ ] PR opened: base=`main`, compare=`fix/main-validate-ci`
-- [ ] CI green (validate the coherence tests pass)
-- [ ] Merged to `main` (merge-commit or fast-forward)
-- [ ] Local `main` pulled and verified at commit `0dcf1d7` or later
-- [ ] Branch `fix/main-validate-ci` deleted (optional but recommended)
-- [ ] `site/index.pre-apex.html` added to `.gitignore` (optional hygiene)
-
-DO NOT APPLY CODE.
+- [ ] Operator confirms `gh` CLI installed and GitHub credentials available.  
+- [ ] Operator runs `gh auth login` and verifies authentication.  
+- [ ] Operator verifies local branch `fix/main-validate-ci` matches remote `origin/fix/main-validate-ci` at `0dcf1d7`.  
+- [ ] Operator creates PR, links to hal-10560 coherence docs, and awaits CI green.  
+- [ ] Operator merges PR; `git log main` shows `0dcf1d7`.  
+- [ ] (Optional) Operator commits `.gitignore` change excluding `site/index.pre-apex.html` if not included in the merge.

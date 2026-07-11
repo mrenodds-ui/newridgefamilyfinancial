@@ -1,12 +1,17 @@
-"""Tests for Moonshot compact professional pages pack."""
+"""Tests for Moonshot compact + zero-scroll professional pages pack."""
 
 from __future__ import annotations
 
 import unittest
 
 from apex_compact_pages_pack import (
+    MAX_PRIMARY_PX,
+    MAX_SECONDARY_PX,
+    TABLE_ROW_CAP,
     apply_collapse_empty_all,
+    apply_zero_scroll_contract,
     claims_pipeline_summary_widget,
+    claims_top_critical_widget,
     collapse_empty_large,
     normalize_first_viewport,
 )
@@ -46,21 +51,60 @@ class CollapseEmptyTests(unittest.TestCase):
 
 
 class FirstViewportTests(unittest.TestCase):
-    def test_hal_chat_stays_l(self) -> None:
+    def test_hal_chat_no_longer_sole_l(self) -> None:
+        """Zero-scroll: HAL sole-l exemption removed."""
         widgets = [
             {"id": "h", "type": "kpi", "size": "s", "status": "ok"},
-            {"id": "hal-ask", "type": "hal-chat", "size": "m", "status": "ok"},
+            {"id": "hal-ask", "type": "hal-chat", "size": "l", "status": "ok"},
             {"id": "x", "type": "chart", "size": "xl", "status": "ok"},
         ]
         out = normalize_first_viewport(widgets, page="hal")
-        self.assertEqual(out[1]["size"], "l")
-        self.assertEqual(out[2]["size"], "m")  # second large demoted after chat took the l slot
+        # Chat follows normal first-viewport rules (may stay l as first large)
+        self.assertIn(out[1]["size"], {"l", "m"})
+        zs = apply_zero_scroll_contract(out, page="hal")
+        chat = next(w for w in zs if w.get("id") == "hal-ask")
+        self.assertEqual(chat["size"], "m")
+        self.assertEqual(chat["maxHeight"], MAX_PRIMARY_PX)
+        self.assertTrue(any(w.get("id") == "hal-full-log" for w in zs))
 
     def test_xl_demoted_above_fold(self) -> None:
         widgets = [{"id": f"w{i}", "type": "chart", "size": "xl", "status": "ok"} for i in range(3)]
         out = normalize_first_viewport(widgets, page="financial")
         self.assertEqual(out[0]["size"], "l")
         self.assertEqual(out[1]["size"], "m")
+
+
+class ZeroScrollContractTests(unittest.TestCase):
+    def test_height_caps_and_row_cap(self) -> None:
+        widgets = [
+            {"id": "a", "type": "chart", "size": "xl", "status": "ok"},
+            {"id": "b", "type": "claims-workbench", "size": "full", "status": "ok", "rowCap": 50},
+            {"id": "c", "type": "kpi", "size": "s", "status": "ok"},
+        ]
+        out = apply_zero_scroll_contract(widgets, page="claims")
+        self.assertTrue(all(w.get("zeroScroll") for w in out if isinstance(w, dict)))
+        wb = next(w for w in out if w["id"] == "b")
+        self.assertEqual(wb["rowCap"], TABLE_ROW_CAP)
+        self.assertLessEqual(wb["maxHeight"], MAX_PRIMARY_PX)
+        kpi = next(w for w in out if w["id"] == "c")
+        self.assertEqual(kpi["maxHeight"], 120)
+
+    def test_kanban_subpage_keeps_internal_scroll(self) -> None:
+        widgets = [
+            {"id": "claims-kanban-board", "type": "claims-workbench", "size": "full", "status": "ok"},
+        ]
+        out = apply_zero_scroll_contract(widgets, page="claims", sub="kanban")
+        self.assertTrue(out[0].get("internalScroll"))
+        self.assertEqual(out[0].get("rowCap"), 50)
+
+    def test_widget_max_height_unit(self) -> None:
+        """Unit gate: widget renders ≤ cap after contract."""
+        w = apply_zero_scroll_contract(
+            [{"id": "x", "type": "waterfall", "size": "xl", "status": "ok"}],
+            page="taxes",
+        )[0]
+        self.assertLessEqual(int(w["maxHeight"]), MAX_PRIMARY_PX)
+        self.assertIn(w["size"], {"l", "m"})
 
 
 class ClaimsPipelineTests(unittest.TestCase):
@@ -73,6 +117,14 @@ class ClaimsPipelineTests(unittest.TestCase):
         self.assertEqual(w["size"], "s")
         self.assertEqual(w["navHash"], "claims/kanban")
         self.assertEqual(len(w["pills"]), 4)
+
+    def test_top_critical_five(self) -> None:
+        rows = [{"claimId": f"c{i}", "ageDays": i} for i in range(12)]
+        w = claims_top_critical_widget(rows, available=True)
+        self.assertEqual(w["id"], "claims-top-critical")
+        self.assertEqual(len(w["rows"]), TABLE_ROW_CAP)
+        self.assertEqual(w["maxHeight"], MAX_PRIMARY_PX)
+        self.assertEqual(w["rowCap"], TABLE_ROW_CAP)
 
 
 if __name__ == "__main__":

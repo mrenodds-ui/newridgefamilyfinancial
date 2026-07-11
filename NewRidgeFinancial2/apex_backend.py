@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10560"
+BUILD_ID = "hal-10561"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2841,10 +2841,30 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
             )
         )
         widgets.append(claims_critical_actions_widget(kanban_payload))
-        # Moonshot compact: pipeline summary on main page; full workbench → #claims/kanban
+        # Moonshot zero-scroll: pipeline + Top 5 on main; full workbench → #claims/kanban
         try:
-            from apex_compact_pages_pack import claims_pipeline_summary_widget
+            from apex_compact_pages_pack import (
+                claims_pipeline_summary_widget,
+                claims_top_critical_widget,
+            )
 
+            rows: list[Any] = []
+            if isinstance(kanban_payload, dict):
+                cols = kanban_payload.get("columns") if isinstance(kanban_payload.get("columns"), dict) else {}
+                for key in ("denied", "pendingReview", "pending", "submitted", "eraMatched"):
+                    for card in cols.get(key) if isinstance(cols.get(key), list) else []:
+                        if isinstance(card, dict):
+                            rows.append(card)
+                if not rows:
+                    for card in kanban_payload.get("rows") if isinstance(kanban_payload.get("rows"), list) else []:
+                        if isinstance(card, dict):
+                            rows.append(card)
+            widgets.append(
+                claims_top_critical_widget(
+                    rows,
+                    available=bool(kanban_payload.get("available")),
+                )
+            )
             widgets.append(
                 claims_pipeline_summary_widget(
                     kanban_payload.get("counts") if isinstance(kanban_payload, dict) else None,
@@ -2858,9 +2878,10 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
                     "label": "Claims Workbench",
                     "size": "strip",
                     "compact": True,
+                    "maxHeight": 120,
                     "status": "ok",
                     "message": "Open full Kanban / table workbench",
-                    "hint": "Hash #claims/kanban — Moonshot compact plan (pipeline summary above).",
+                    "hint": "Hash #claims/kanban — zero-scroll (pipeline + Top 5 above).",
                     "navHash": "claims/kanban",
                 }
             )
@@ -3387,15 +3408,17 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
             )
         )
 
-    # Moonshot HAL exemption: sole `l` chat after status strip
+    # Moonshot zero-scroll (hal-10561): HAL chat is a capped tile — no sole-l exemption
     widgets.append(
         {
             "id": "hal-ask",
             "type": "hal-chat",
             "label": "Ask HAL",
-            "size": "l",
+            "size": "m",
+            "compact": True,
+            "maxHeight": 320,
             "status": "ok",
-            "hint": "Local HAL command surface · sole large instrument (Moonshot HAL exemption).",
+            "hint": "Local HAL command tile · capped for zero-scroll (no sole-l).",
         }
     )
     if isinstance(connected, int) and isinstance(total, int) and total > 0 and missing == 0:
@@ -3687,14 +3710,19 @@ def build_apex_widgets(
         except Exception:
             pass
 
-    # Moonshot compact Phases 2–3: empty-collapse + first-viewport size discipline
+    # Moonshot compact + zero-scroll (hal-10561): collapse, viewport, hard height/row caps
     try:
-        from apex_compact_pages_pack import apply_collapse_empty_all, normalize_first_viewport
+        from apex_compact_pages_pack import (
+            apply_collapse_empty_all,
+            apply_zero_scroll_contract,
+            normalize_first_viewport,
+        )
 
         widgets = apply_collapse_empty_all(widgets if isinstance(widgets, list) else [])
         if not sub_key:
             widgets = normalize_first_viewport(widgets, page=pid)
-        source_note += " +compact"
+        widgets = apply_zero_scroll_contract(widgets, page=pid, sub=sub_key or "")
+        source_note += " +compact+zero-scroll"
     except Exception:
         pass
 
