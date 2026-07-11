@@ -626,13 +626,19 @@ body.apex-bridge {
   padding: 12px 20px;
   border-bottom: 1px solid var(--apex-border);
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
+  flex-direction: column;
+  gap: 8px;
   background: rgba(5, 5, 8, 0.55);
   position: sticky;
   top: var(--ticker-height);
   z-index: 50;
+}
+
+.apex-stage-header__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .apex-page-title {
@@ -648,6 +654,204 @@ body.apex-bridge {
 .apex-meta {
   font-size: 11px;
   color: var(--apex-text-secondary);
+}
+
+.apex-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.apex-subnav[hidden] {
+  display: none !important;
+}
+
+.apex-subnav.is-visible {
+  animation: apexSubnavIn 0.28s ease-out;
+}
+
+.apex-subnav-btn {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--apex-text-secondary);
+  background: transparent;
+  border: 1px solid var(--apex-border);
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.apex-subnav-btn:hover,
+.apex-subnav-btn.is-active {
+  color: var(--apex-cyan);
+  border-color: rgba(0, 240, 255, 0.45);
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.apex-workpaper-scrubber {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.apex-wp-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--apex-text-secondary);
+  cursor: pointer;
+}
+
+.apex-claim-detail-card {
+  margin: 0 0 12px;
+}
+
+.apex-claim-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.apex-col-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.apex-col-form input,
+.apex-col-form select {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--apex-border);
+  color: var(--apex-text);
+  padding: 4px 8px;
+  min-width: 110px;
+}
+
+.apex-subhead {
+  font-family: "Orbitron", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--apex-cyan);
+  margin: 14px 0 6px;
+}
+
+.apex-collection-bench,
+.apex-batch-selector,
+.apex-huddle-mosaic,
+.apex-dropzone,
+.apex-payer-lib {
+  max-height: 520px;
+  overflow: auto;
+}
+
+.apex-payer-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.apex-payer-card {
+  border: 1px solid var(--apex-border);
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.apex-payer-card h3 {
+  margin: 0 0 6px;
+  font-family: "Orbitron", sans-serif;
+  font-size: 12px;
+  color: var(--apex-cyan);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.apex-forecast-trend {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-height: 140px;
+  padding: 8px 0;
+}
+
+.apex-forecast-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--apex-text-secondary);
+}
+
+.apex-forecast-bar {
+  width: 100%;
+  max-width: 28px;
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.85), rgba(0, 240, 255, 0.25));
+  border: 1px solid rgba(0, 240, 255, 0.35);
+}
+
+.apex-period-variance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.apex-var-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 80px;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+}
+
+.apex-var-track {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--apex-border);
+}
+
+.apex-var-track i {
+  display: block;
+  height: 100%;
+  background: rgba(0, 240, 255, 0.65);
+}
+
+.apex-var-row.is-down .apex-var-track i {
+  background: rgba(255, 110, 110, 0.7);
+}
+
+.apex-var-val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.apex-data-table-wrap {
+  max-height: 480px;
+  overflow: auto;
+}
+
+.apex-huddle-task.is-done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+
+@keyframes apexSubnavIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ——— FIXED MOSAIC (no stretch) ——— */

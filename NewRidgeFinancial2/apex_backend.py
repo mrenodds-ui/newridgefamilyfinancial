@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10455"
+BUILD_ID = "hal-10460"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · payer appeal templates · which widgets empty on all pages? · SoftDent sync"
@@ -3378,14 +3378,22 @@ _PAGE_BUILDERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], list[dict[s
 }
 
 
-def build_apex_widgets(page_id: str) -> dict[str, Any]:
+def build_apex_widgets(
+    page_id: str,
+    *,
+    sub: str | None = None,
+    claim_id: str | None = None,
+) -> dict[str, Any]:
     import copy
     import time
 
     pid = re.sub(r"[^a-z0-9\-]", "", str(page_id or "").strip().lower())
+    sub_key = re.sub(r"[^a-z0-9\-]", "", str(sub or "").strip().lower()) or None
+    cid = str(claim_id or "").strip() or None
     if pid not in APEX_PAGES:
         return {
             "page": pid or "unknown",
+            "sub": sub_key,
             "refreshedAt": _utc_now(),
             "buildId": BUILD_ID,
             "widgets": [
@@ -3401,32 +3409,106 @@ def build_apex_widgets(page_id: str) -> dict[str, Any]:
             "sourceNote": "invalid page",
         }
 
+    cache_key = pid if not sub_key else f"{pid}:{sub_key}:{cid or ''}"
+    # Local-DB / attachment-backed subpages must not serve stale payloads.
+    skip_cache = sub_key in {
+        "collections",
+        "huddle",
+        "batch",
+        "claim-docs",
+        "payers",
+        "era",
+        "forecast",
+        "periods",
+        "calendar",
+        "tasks",
+        "attachments",
+        "history",
+        "audit",
+        "templates",
+        "system-logs",
+        "tax-docs",
+    }
     now = time.monotonic()
-    hit = _WIDGETS_CACHE.get(pid)
-    if hit and (now - float(hit.get("at") or 0.0)) < _WIDGETS_CACHE_TTL_SEC:
-        cached = hit.get("payload")
-        if isinstance(cached, dict):
-            return copy.deepcopy(cached)
+    if not skip_cache:
+        hit = _WIDGETS_CACHE.get(cache_key)
+        if hit and (now - float(hit.get("at") or 0.0)) < _WIDGETS_CACHE_TTL_SEC:
+            cached = hit.get("payload")
+            if isinstance(cached, dict):
+                return copy.deepcopy(cached)
 
     reports, bundle, errors = _load_reports_and_bundle()
-    builder = _PAGE_BUILDERS[pid]
-    widgets = builder(reports, bundle)
+    if sub_key:
+        try:
+            from apex_subpages_pack import resolve_subpage_builder
 
-    source_note = f"{pid}: financial_reports + import_loader"
+            sub_builder = resolve_subpage_builder(pid, sub_key)
+        except Exception:
+            sub_builder = None
+        if sub_builder is None:
+            widgets = [
+                {
+                    "id": "unknown-subpage",
+                    "type": "status",
+                    "status": "empty",
+                    "label": "Unknown subpage",
+                    "message": f"No subpage '{sub_key}' under {pid}",
+                    "hint": "Supported: financial/workpapers|providers|periods, claims/detail|batch|era, ar/collections|forecast, office-manager/huddle, documents/claim-docs, library/payers.",
+                }
+            ]
+            source_note = f"{pid}/{sub_key}: unknown subpage"
+        elif pid == "financial" and sub_key == "workpapers":
+            widgets = sub_builder(
+                reports,
+                bundle,
+                workpaper_widget=build_workpaper_widget,
+                variance_widget=build_variance_alert_widget,
+            )
+            source_note = f"{pid}/{sub_key}: subpage pack + CPA workpaper"
+        elif pid == "claims" and sub_key == "detail":
+            widgets = sub_builder(reports, bundle, claim_id=cid)
+            source_note = f"{pid}/{sub_key}: claim detail (id={cid or 'none'})"
+        elif pid == "documents" and sub_key == "claim-docs":
+            widgets = sub_builder(reports, bundle, claim_id=cid)
+            source_note = f"{pid}/{sub_key}: claim docs (id={cid or 'none'})"
+        elif pid == "claims" and sub_key == "attachments":
+            widgets = sub_builder(reports, bundle, claim_id=cid)
+            source_note = f"{pid}/{sub_key}: claim attachments (id={cid or 'none'})"
+        elif pid == "taxes" and sub_key == "workpapers":
+            widgets = sub_builder(
+                reports,
+                bundle,
+                workpaper_widget=build_workpaper_widget,
+                variance_widget=build_variance_alert_widget,
+            )
+            source_note = f"{pid}/{sub_key}: tax workpapers"
+        else:
+            widgets = sub_builder(reports, bundle)
+            source_note = f"{pid}/{sub_key}: subpage pack"
+    else:
+        builder = _PAGE_BUILDERS[pid]
+        widgets = builder(reports, bundle)
+        source_note = f"{pid}: financial_reports + import_loader"
+
     if errors:
         source_note += f" (partial: {'; '.join(errors)})"
 
+    page_label = f"{pid}/{sub_key}" if sub_key else pid
     payload = {
-        "page": pid,
+        "page": page_label,
+        "parent": pid,
+        "sub": sub_key,
+        "claimId": cid,
         "refreshedAt": reports.get("generatedAt") or bundle.get("loadedAt") or _utc_now(),
         "buildId": BUILD_ID,
         "widgets": widgets,
         "sourceNote": source_note,
         "errors": errors or None,
         "widgetCensus": summarize_widget_census(widgets),
-        "cachedForSec": _WIDGETS_CACHE_TTL_SEC,
+        "cachedForSec": 0 if skip_cache else _WIDGETS_CACHE_TTL_SEC,
     }
-    _WIDGETS_CACHE[pid] = {"at": time.monotonic(), "payload": copy.deepcopy(payload)}
+    if not skip_cache:
+        _WIDGETS_CACHE[cache_key] = {"at": time.monotonic(), "payload": copy.deepcopy(payload)}
     return payload
 
 
@@ -5190,7 +5272,11 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                     pass
             except Exception:
                 pass
-            return json_response_fn(build_apex_widgets(page_id))
+            import bottle
+
+            sub = bottle.request.query.get("sub") or None
+            claim_id = bottle.request.query.get("id") or None
+            return json_response_fn(build_apex_widgets(page_id, sub=sub, claim_id=claim_id))
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "widgets": []}, status=500)
 

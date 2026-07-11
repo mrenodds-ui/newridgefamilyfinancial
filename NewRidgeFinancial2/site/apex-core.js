@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10441 (HAL session 403 recovery via refresh token)
+ * Build: hal-10460 (wave-5 remaining master-map ADD subpages)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10441";
+  const ASSET_V = "hal-10460";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -209,6 +209,12 @@
       return "xl";
     if (type === "ebitda-scrubber" || type === "filing-workflow" || type === "claim-shelf") return "full";
     if (type === "scenario-manager" || type === "workpaper") return type === "scenario-manager" ? "xl" : "l";
+    if (type === "workpaper-scrubber" || type === "claim-detail-card") return "full";
+    if (type === "collection-task-list" || type === "huddle-mosaic" || type === "batch-selector") return "full";
+    if (type === "attachment-dropzone" || type === "payer-reference-card") return "full";
+    if (type === "era-matching-table" || type === "forecast-trend-line" || type === "period-variance-chart")
+      return "full";
+    if (type === "data-table" || type === "tax-calendar" || type === "task-board") return "full";
     if (type === "status") return "s";
     return "s";
   }
@@ -229,6 +235,8 @@
 
   let sessionToken = "";
   let currentPage = "financial";
+  let currentSub = null;
+  let currentQuery = {};
   let refreshTimer = null;
   const widgets = new Map();
   let lastHalStatus = null;
@@ -1204,13 +1212,12 @@
             </article>`
           )
           .join("");
-        const halSaidAttr = this.spec.halSaidAdmin ? ' data-hal-said-admin="1"' : "";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             ${printBtn}
           </header>
-          <div class="apex-payer-lib" data-payer-reference${halSaidAttr}>
+          <div class="apex-payer-lib" data-payer-reference>
             <form class="apex-col-form" data-payer-form>
               <input name="payerName" placeholder="Payer name" required />
               <input name="appealDeadlineDays" placeholder="Appeal days" />
@@ -3307,6 +3314,83 @@
           });
         });
       }
+      if (
+        this.type === "financial-command-strip" ||
+        this.type === "revenue-composition" ||
+        this.type === "dual-axis-trend"
+      ) {
+        this.element.querySelectorAll("[data-fin-cmd-action]").forEach((btn) => {
+          if (btn.dataset.wired === "1") return;
+          btn.dataset.wired = "1";
+          btn.addEventListener("click", async () => {
+            const act = btn.getAttribute("data-fin-cmd-action") || "refresh_softdent_period";
+            btn.disabled = true;
+            const prev = btn.textContent;
+            btn.textContent = "Working…";
+            try {
+              if (act === "sync_imports") {
+                await runHalBoardActions([{ type: "sync_imports", fullSync: true }, { type: "refresh_page" }]);
+              } else if (act === "focus_ebitda") {
+                const el = findWidgetEl("ebitda-station");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  el.classList.add("apex-hal-highlight");
+                  setTimeout(() => el.classList.remove("apex-hal-highlight"), 3500);
+                }
+              } else {
+                await runHalBoardActions([
+                  { type: "refresh_softdent_period" },
+                  { type: "refresh_page" },
+                ]);
+              }
+            } catch (err) {
+              window.alert(String((err && err.message) || err));
+            } finally {
+              btn.disabled = false;
+              btn.textContent = prev;
+            }
+          });
+        });
+      }
+      if (this.type === "scenario-manager") {
+        wireScenarioManager(this.element);
+      }
+      if (this.type === "filing-workflow") {
+        wireFilingWorkflow(this.element);
+      }
+      if (this.type === "workpaper") {
+        wireWorkpaper(this.element);
+      }
+      if (this.type === "workpaper-scrubber") {
+        wireWorkpaperScrubber(this.element);
+      }
+      if (this.type === "claim-detail-card") {
+        wireClaimDetailCard(this.element, this.spec);
+      }
+      if (this.type === "collection-task-list") {
+        wireCollectionTaskList(this.element, this.spec);
+      }
+      if (this.type === "huddle-mosaic") {
+        wireHuddleMosaic(this.element, this.spec);
+      }
+      if (this.type === "batch-selector") {
+        wireBatchSelector(this.element);
+      }
+      if (this.type === "attachment-dropzone") {
+        wireAttachmentDropzone(this.element);
+      }
+      if (this.type === "payer-reference-card") {
+        wirePayerReferenceCard(this.element);
+      }
+      if (this.type === "era-matching-table") {
+        wireEraMatchingTable(this.element);
+      }
+      if (this.type === "tax-calendar") {
+        wireTaxCalendar(this.element);
+      }
+      if (this.type === "task-board") {
+        wireTaskBoard(this.element);
+      }
       if (this.type === "claim-shelf") {
         wireClaimShelf(this.element, this.spec);
       }
@@ -4124,49 +4208,13 @@
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const fd = new FormData(form);
-      const payerName = String(fd.get("payerName") || "").trim();
-      const contact = String(fd.get("contact") || "").trim();
-      const guidelines = String(fd.get("guidelines") || "").trim();
-      // HAL-said admin on office-manager: update payer_reference.json eligibilityNotes
-      const isHalSaid = !!root.querySelector("[data-hal-said-admin]");
+      const body = {
+        payerName: String(fd.get("payerName") || "").trim(),
+        appealDeadlineDays: String(fd.get("appealDeadlineDays") || "").trim(),
+        contact: String(fd.get("contact") || "").trim(),
+        guidelines: String(fd.get("guidelines") || "").trim(),
+      };
       try {
-        if (isHalSaid) {
-          // Resolve payer id via normalize, then patch eligibilityNotes
-          const normRes = await apexFetch(
-            `${config.apiBase}/hal/normalize-carrier?label=${encodeURIComponent(payerName)}`
-          );
-          const norm = await normRes.json().catch(() => ({}));
-          const payerId = norm.canonical_id && norm.matched ? norm.canonical_id : payerName;
-          if (contact) {
-            const res = await apexFetch(`${config.apiBase}/hal/payer-field`, {
-              method: "POST",
-              body: JSON.stringify({
-                payerId,
-                field: "eligibilityNotes",
-                value: contact.startsWith("Eligibility") ? contact : `Eligibility phone ${contact}`,
-              }),
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok || data.ok === false) {
-              window.alert(data.error || `Payer field update failed (HTTP ${res.status})`);
-              return;
-            }
-          }
-          if (guidelines) {
-            await apexFetch(`${config.apiBase}/hal/payer-field`, {
-              method: "POST",
-              body: JSON.stringify({ payerId, field: "narrativeNotes", value: guidelines }),
-            });
-          }
-          await loadPage("office-manager");
-          return;
-        }
-        const body = {
-          payerName,
-          appealDeadlineDays: String(fd.get("appealDeadlineDays") || "").trim(),
-          contact,
-          guidelines,
-        };
         const res = await apexFetch(`${config.apiBase}/local/payers`, {
           method: "POST",
           body: JSON.stringify(body),
@@ -4284,91 +4332,7 @@
     const id = String(claimId || "").trim();
     if (!id) return;
     closeClaimDrawer();
-    const drawer = document.createElement("aside");
-    drawer.id = "apex-claim-drawer";
-    drawer.className = "apex-claim-drawer";
-    drawer.setAttribute("role", "dialog");
-    drawer.setAttribute("aria-label", "Claim detail");
-    drawer.innerHTML = `<header class="apex-claim-drawer__head">
-      <h2>Claim ${escapeHtml(id)}</h2>
-      <button type="button" class="apex-icon-btn" data-close-drawer aria-label="Close">×</button>
-    </header>
-    <div class="apex-claim-drawer__body">Loading import-backed claim…</div>
-    <footer class="apex-claim-drawer__foot">
-      <button type="button" class="apex-btn apex-btn--primary" data-draft-narrative disabled>Draft Narrative</button>
-    </footer>`;
-    document.body.appendChild(drawer);
-    document.body.classList.add("apex-claim-drawer-open");
-    drawer.querySelector("[data-close-drawer]")?.addEventListener("click", closeClaimDrawer);
-    // Click dimmed page (pseudo backdrop) to close — capture on body outside drawer.
-    const onBackdrop = (ev) => {
-      if (!document.body.classList.contains("apex-claim-drawer-open")) {
-        document.removeEventListener("mousedown", onBackdrop, true);
-        return;
-      }
-      if (drawer.contains(ev.target)) return;
-      closeClaimDrawer();
-      document.removeEventListener("mousedown", onBackdrop, true);
-    };
-    document.addEventListener("mousedown", onBackdrop, true);
-    const esc = (ev) => {
-      if (ev.key === "Escape") {
-        closeClaimDrawer();
-        document.removeEventListener("keydown", esc);
-      }
-    };
-    document.addEventListener("keydown", esc);
-    try {
-      const res = await apexFetch(`${config.apiBase}/claims/${encodeURIComponent(id)}`);
-      const data = await res.json().catch(() => ({}));
-      const body = drawer.querySelector(".apex-claim-drawer__body");
-      const draftBtn = drawer.querySelector("[data-draft-narrative]");
-      if (!res.ok || data.ok === false) {
-        if (body) body.textContent = data.error || "Claim not found in SoftDent import.";
-        return;
-      }
-      const procs = Array.isArray(data.procedures) ? data.procedures.join(", ") : "—";
-      const billed =
-        data.billedAmount != null && Number.isFinite(Number(data.billedAmount))
-          ? formatMoney(data.billedAmount)
-          : "— (not on import)";
-      if (body) {
-        body.innerHTML = `<dl class="apex-claim-dl">
-          <div><dt>Claim ID</dt><dd>${escapeHtml(data.claimId || id)}</dd></div>
-          <div><dt>Patient</dt><dd>${escapeHtml(data.patientName || "—")}</dd></div>
-          <div><dt>Date of service</dt><dd>${escapeHtml(data.date || "—")}</dd></div>
-          <div><dt>Age (days)</dt><dd>${escapeHtml(data.ageDays != null ? String(data.ageDays) : "—")}</dd></div>
-          <div><dt>Payer</dt><dd>${escapeHtml(data.payer || "—")}</dd></div>
-          <div><dt>Status</dt><dd>${escapeHtml(data.status || "—")}</dd></div>
-          <div><dt>Procedures</dt><dd>${escapeHtml(procs)}</dd></div>
-          <div><dt>Billed</dt><dd>${escapeHtml(billed)}</dd></div>
-        </dl>
-        <p class="apex-kpi-hint">Source: SoftDent import · never invented.</p>`;
-      }
-      if (draftBtn) {
-        draftBtn.disabled = false;
-        draftBtn.addEventListener("click", () => {
-          try {
-            sessionStorage.setItem(
-              "nr2-apex-narrative-seed",
-              JSON.stringify({
-                claimId: data.claimId || id,
-                patientName: data.patientName || "",
-                payer: data.payer || "",
-                date: data.date || "",
-              })
-            );
-          } catch (_err) {
-            /* ignore */
-          }
-          closeClaimDrawer();
-          loadPage("narratives");
-        });
-      }
-    } catch (err) {
-      const body = drawer.querySelector(".apex-claim-drawer__body");
-      if (body) body.textContent = String((err && err.message) || err);
-    }
+    await loadPage(`claims/detail?id=${encodeURIComponent(id)}`);
   }
 
   function wireClaimShelf(root, spec) {
@@ -5504,24 +5468,18 @@
         const p = btn.getAttribute("data-sub-parent") || parent;
         const s = btn.getAttribute("data-sub") || "";
         const q = s === "detail" && currentQuery.id ? { id: currentQuery.id } : {};
-        const target = formatApexHash(p, s || null, q);
-        // Re-clicking the active subnav must not wipe HAL chat / mosaic.
-        if (target === routeKey(currentPage, currentSub, currentQuery)) return;
-        loadPage(target);
+        loadPage(formatApexHash(p, s || null, q));
       });
     });
   }
 
-  function setPageTitle(pageId, sub, opts) {
-    const silent = Boolean(opts && opts.silent);
+  function setPageTitle(pageId, sub) {
     const el = document.getElementById("apex-page-title");
     if (el) {
       const base = PAGE_TITLES[pageId] || pageId || "Apex";
       const subLabel = sub ? SUBPAGE_TITLES[sub] || sub : "";
-      const next = subLabel ? `${base} · ${subLabel}` : base;
-      if (el.textContent !== next) el.textContent = next;
-      // Never glitch/flash on silent polls — that looked like a full page refresh.
-      if (!silent && window.ApexMotion && typeof window.ApexMotion.triggerGlitch === "function") {
+      el.textContent = subLabel ? `${base} · ${subLabel}` : base;
+      if (window.ApexMotion && typeof window.ApexMotion.triggerGlitch === "function") {
         window.ApexMotion.triggerGlitch(el);
       }
     }
@@ -5535,7 +5493,7 @@
     if (!el) return;
     const silent = Boolean(opts && opts.silent);
     const at = payload && payload.refreshedAt ? payload.refreshedAt : "—";
-    const page = payload && payload.page ? payload.page : currentPage;
+    const page = payload && payload.page ? payload.page : routeKey(currentPage, currentSub, currentQuery);
     const note = payload && payload.sourceNote ? payload.sourceNote : "";
     const next = `Page: ${page} · Refreshed: ${at}${note ? " · " + note : ""}`;
     if (el.textContent === next) return;
@@ -5545,22 +5503,24 @@
     setTimeout(() => el.classList.remove("is-live"), 1200);
   }
 
-  function setHash(pageId) {
-    const next = String(pageId || "").trim();
-    if (!next) return;
-    const desired = `#${next}`;
+  function setHash(parent, sub, query) {
+    const desired = `#${formatApexHash(parent, sub, query)}`;
     if (location.hash !== desired) {
       history.replaceState(null, "", desired);
     }
   }
 
-  async function loadPage(pageId, opts) {
+  async function loadPage(pageIdOrHash, opts) {
     let silent = Boolean(opts && opts.silent);
-    currentPage = pageId || currentPage || "financial";
+    const parsed = parseApexHash(pageIdOrHash || formatApexHash(currentPage, currentSub, currentQuery));
+    currentPage = parsed.parent || currentPage || "financial";
+    currentSub = parsed.sub;
+    currentQuery = parsed.query && typeof parsed.query === "object" ? parsed.query : {};
     // Never wipe HAL chat while a reply is in flight (auto-refresh / nav race).
     if (halChatBusy && currentPage === "hal") silent = true;
-    setHash(currentPage);
-    setPageTitle(currentPage);
+    setHash(currentPage, currentSub, currentQuery);
+    setPageTitle(currentPage, currentSub);
+    renderSubnav(currentPage, currentSub);
     const root = stage();
     if (!root) return;
 
@@ -5575,7 +5535,7 @@
     });
 
     // Interactive narratives workspace (not KPI mosaic)
-    if (currentPage === "narratives") {
+    if (currentPage === "narratives" && !currentSub) {
       if (refreshTimer) clearInterval(refreshTimer);
       if (window.ApexHalBrain && typeof window.ApexHalBrain.destroy === "function") {
         window.ApexHalBrain.destroy();
@@ -5599,11 +5559,16 @@
     }
 
     if (!silent) {
-      root.className = currentPage === "hal" ? "apex-stage apex-stage--hal" : "apex-stage apex-mosaic";
+      root.className =
+        currentPage === "hal" && !currentSub ? "apex-stage apex-stage--hal" : "apex-stage apex-mosaic";
       root.dataset.page = currentPage;
+      if (currentSub) root.dataset.sub = currentSub;
+      else delete root.dataset.sub;
       root.innerHTML = '<div class="apex-status-msg">Loading bridge instruments…</div>';
     } else {
       root.dataset.page = currentPage;
+      if (currentSub) root.dataset.sub = currentSub;
+      else delete root.dataset.sub;
       root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => {
         // Keep HAL chat interactive during silent refresh (it is not re-patched).
         if (el.classList.contains("apex-widget--hal-chat")) return;
@@ -5625,14 +5590,14 @@
       const list = payload.widgets || [];
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
-      } else if (silent && currentPage === "hal") {
+      } else if (silent && currentPage === "hal" && !currentSub) {
         // Never full-remount HAL on silent refresh — that wiped chat history on hover/timer races.
         if (!softRenderHalMain(list)) {
           root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => el.classList.remove("is-updating"));
         }
       } else {
         renderWidgets(list);
-        if (currentPage === "hal") {
+        if (currentPage === "hal" && !currentSub) {
           restoreHalTranscript(document.querySelector("[data-hal-messages]"));
         }
         if (!silent) {
@@ -5667,15 +5632,10 @@
   }
 
   function startAutoRefresh() {
-    if (refreshTimer) {
-      clearInterval(refreshTimer);
-      refreshTimer = null;
-    }
-    const ms = Number(config.refreshInterval) || 0;
-    if (ms <= 0) return;
+    if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(
       () => loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }),
-      ms
+      config.refreshInterval
     );
   }
 
@@ -5726,7 +5686,7 @@
     } catch (_err) {
       syncNote = "Sync request failed — refreshing anyway";
     }
-    await loadPage(currentPage, { silent: true });
+    await loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true });
     const meta = metaEl();
     if (meta && syncNote) {
       meta.textContent = `${meta.textContent} · ${syncNote}`;
@@ -5796,7 +5756,8 @@
     }
     window.addEventListener("hashchange", () => {
       const hash = (location.hash || "").replace(/^#/, "").trim();
-      if (hash && hash !== currentPage) loadPage(hash);
+      const next = routeKey(currentPage, currentSub, currentQuery);
+      if (hash && hash !== next) loadPage(hash);
     });
   }
 
@@ -5821,6 +5782,8 @@
     openClaimDrawer,
     closeClaimDrawer,
     focusClaimTile,
+    parseApexHash,
+    formatApexHash,
   };
 
   if (document.readyState === "loading") {
