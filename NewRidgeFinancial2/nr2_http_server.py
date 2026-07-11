@@ -310,6 +310,12 @@ def _require_import_readiness_level(required_level: str = "fresh", *, for_postin
 
     readiness = _get_import_readiness()
     level = str(readiness.get("level") or "unknown")
+    # Moonshot Phase 1: "connected" = system up — allow fresh/degraded/stale/syncing.
+    # Only block when readiness itself is unavailable (unknown with no payload).
+    if required_level == "connected":
+        if level == "unknown" and not readiness:
+            abort_import_read(readiness or {"ok": False, "level": "unknown"})
+        return None
     if required_level == "fresh" and level != "fresh":
         if for_posting:
             return _json_response({"ok": False, **readiness}, status=409)
@@ -606,14 +612,20 @@ class NR2BottleServer(BottleServer):
                     if reason in ("token_invalid", "binding_invalid")
                     else None,
                 )
-            if (
-                _browser_app()
-                and bottle.request.method == "GET"
-                and financial_read_path(bottle.request.path or "")
-            ):
-                gate = _require_import_readiness_level("fresh")
-                if gate is not None:
-                    return gate
+            if _browser_app() and bottle.request.method == "GET":
+                from nr2_browser_security import system_status_path
+
+                path = bottle.request.path or ""
+                if system_status_path(path):
+                    # Tier-2 telemetry: system up only (allow degraded imports).
+                    gate = _require_import_readiness_level("connected")
+                    if gate is not None:
+                        return gate
+                elif financial_read_path(path):
+                    # Tier-1 money/PHI: require fresh imports.
+                    gate = _require_import_readiness_level("fresh")
+                    if gate is not None:
+                        return gate
             return None
 
         @app.hook("after_request")

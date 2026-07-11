@@ -16,7 +16,11 @@ def _parse_money(value: Any) -> float:
 
 
 def parse_835_text(content: str) -> dict[str, Any]:
-    """Parse X12 835 or plain-text ERA extract into payment segments."""
+    """Parse X12 835 or plain-text ERA extract into payment segments.
+
+    Moonshot Expert SE Phase 3 REC-005: capture CAS adjustment codes (e.g. CO-45)
+    onto each CLP segment as ``casCodes`` / ``denialCode``.
+    """
     text = str(content or "")
     segments: list[dict[str, Any]] = []
     if "~" in text or text.startswith("ISA"):
@@ -34,7 +38,25 @@ def parse_835_text(content: str) -> dict[str, Any]:
                     "paid": _parse_money(fields[4] if len(fields) > 4 else 0),
                     "patientName": "",
                     "serviceDate": "",
+                    "casCodes": [],
+                    "denialCode": None,
                 }
+            elif part.startswith("CAS") and current:
+                # CAS*CO*45*12.34*1*... → group CO, reason 45 → CO-45
+                fields = part.split("*")
+                group = fields[1].strip().upper() if len(fields) > 1 else ""
+                # Reason codes are at odd indices after group: 2,4,6...
+                i = 2
+                while i < len(fields):
+                    reason = str(fields[i] or "").strip()
+                    if group and reason and reason.isdigit():
+                        code = f"{group}-{reason}"
+                        codes = current.setdefault("casCodes", [])
+                        if isinstance(codes, list) and code not in codes:
+                            codes.append(code)
+                        if not current.get("denialCode"):
+                            current["denialCode"] = code
+                    i += 2
             elif part.startswith("NM1") and current:
                 fields = part.split("*")
                 if len(fields) > 3 and fields[1] == "QC":
@@ -54,17 +76,23 @@ def parse_835_text(content: str) -> dict[str, Any]:
             m_clm = re.search(r"(?:claim|clm)[#:\s]+([A-Z0-9-]+)", line, re.I)
             m_pat = re.search(r"(?:patient|member)[:\s]+(.+?)(?:\||$)", line, re.I)
             m_dt = re.search(r"(\d{4}[-/]?\d{2}[-/]?\d{2})", line)
+            m_cas = re.search(r"\b([A-Z]{2})-(\d{1,3})\b", line)
             if m_amt or m_clm:
-                segments.append(
-                    {
-                        "claimId": m_clm.group(1) if m_clm else "",
-                        "paid": _parse_money(m_amt.group(1) if m_amt else 0),
-                        "patientName": m_pat.group(1).strip() if m_pat else "",
-                        "serviceDate": m_dt.group(1) if m_dt else "",
-                        "status": "paid",
-                        "charged": 0.0,
-                    }
-                )
+                seg = {
+                    "claimId": m_clm.group(1) if m_clm else "",
+                    "paid": _parse_money(m_amt.group(1) if m_amt else 0),
+                    "patientName": m_pat.group(1).strip() if m_pat else "",
+                    "serviceDate": m_dt.group(1) if m_dt else "",
+                    "status": "paid",
+                    "charged": 0.0,
+                    "casCodes": [],
+                    "denialCode": None,
+                }
+                if m_cas:
+                    code = f"{m_cas.group(1)}-{m_cas.group(2)}"
+                    seg["casCodes"] = [code]
+                    seg["denialCode"] = code
+                segments.append(seg)
     return {"ok": True, "segments": segments, "count": len(segments)}
 
 

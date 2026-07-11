@@ -126,6 +126,22 @@ body {
   animation-name: halPulseCyan;
 }
 
+.hal-orb.is-live.is-degraded {
+  background: #e8a838;
+  animation-name: halPulseAmber;
+}
+
+@keyframes halPulseAmber {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 8px #e8a838;
+  }
+}
+
 @keyframes halPulseCyan {
   0%,
   100% {

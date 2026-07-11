@@ -43,7 +43,10 @@ CSP_BROWSER = (
     "form-action 'self'"
 )
 
-FINANCIAL_READ_PREFIXES = (
+# Moonshot Expert SE Phase 1 (hal-10499): split money/PHI reads from system telemetry.
+# FINANCIAL_DATA_* require import readiness level "fresh".
+# SYSTEM_STATUS_* require only "connected" (system up — allow degraded/stale).
+FINANCIAL_DATA_PREFIXES = (
     "/api/import-bundle",
     "/api/financial-reports",
     "/api/apex/widgets",
@@ -53,7 +56,6 @@ FINANCIAL_READ_PREFIXES = (
     "/api/apex/claims",
     "/api/apex/claims-aging",
     "/api/apex/claims-kanban",
-    "/api/apex/import-health",
     "/api/apex/tax-returns",
     "/api/apex/scenarios",
     "/api/apex/filing",
@@ -67,6 +69,22 @@ FINANCIAL_READ_PREFIXES = (
     "/api/integration-health",
     "/api/documents-state",
 )
+
+# Exact telemetry / meta paths — no dollar amounts or PHI in handlers.
+SYSTEM_STATUS_PREFIXES = (
+    "/api/apex/hal/status",
+    "/api/apex/import-health",
+    "/api/apex/hal/sync-status",
+    "/api/apex/hal/ai-lane-health",
+    "/api/apex/hal/orchestrator",
+    "/api/apex/hal/insight-sse-status",
+    "/api/apex/hal/import-watcher-status",
+    "/api/apex/hal/import-cron-status",
+    "/api/apex/hal/import-dq-status",
+)
+
+# Backward-compatible alias (tests / callers).
+FINANCIAL_READ_PREFIXES = FINANCIAL_DATA_PREFIXES
 
 FINANCIAL_INTENT_PATTERNS = (
     "revenue",
@@ -331,11 +349,28 @@ FINANCIAL_READ_EXEMPT = frozenset(
 )
 
 
+def system_status_path(path: str) -> bool:
+    """True for HAL/system telemetry that must stay reachable when imports are degraded."""
+    p = path or ""
+    if not p:
+        return False
+    for prefix in SYSTEM_STATUS_PREFIXES:
+        if p == prefix or p.startswith(prefix + "/"):
+            return True
+    return False
+
+
 def financial_read_path(path: str) -> bool:
+    """True for money/PHI financial data reads that require fresh imports.
+
+    System-status telemetry paths are excluded (tier-2 connected gate).
+    """
     p = path or ""
     if p in FINANCIAL_READ_EXEMPT:
         return False
-    return any(p == prefix or p.startswith(prefix + "/") for prefix in FINANCIAL_READ_PREFIXES)
+    if system_status_path(p):
+        return False
+    return any(p == prefix or p.startswith(prefix + "/") for prefix in FINANCIAL_DATA_PREFIXES)
 
 
 def classify_financial_query(query: str) -> bool:

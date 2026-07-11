@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10498"
+BUILD_ID = "hal-10501"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -3478,8 +3478,11 @@ def build_apex_widgets(
     *,
     sub: str | None = None,
     claim_id: str | None = None,
+    _fill: bool = False,
 ) -> dict[str, Any]:
     import copy
+    import sys
+    import threading
     import time
 
     pid = re.sub(r"[^a-z0-9\-]", "", str(page_id or "").strip().lower())
@@ -3531,6 +3534,51 @@ def build_apex_widgets(
             cached = hit.get("payload")
             if isinstance(cached, dict):
                 return copy.deepcopy(cached)
+
+    # Moonshot Expert SE Phase 3 REC-007: stub fast-path on cold/expired miss; background fill.
+    stub_on = str(os.getenv("NR2_WIDGETS_STUB_FASTPATH") or "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+    warming_key = f"{cache_key}:warming"
+    if not skip_cache and not _fill and stub_on:
+        stub = {
+            "page": pid,
+            "sub": sub_key,
+            "refreshedAt": _utc_now(),
+            "buildId": BUILD_ID,
+            "warming": True,
+            "widgets": [
+                {
+                    "id": "warming-bridge",
+                    "type": "status",
+                    "status": "empty",
+                    "label": "Loading bridge instruments…",
+                    "message": "Warming import cache — KPIs appear when ready (empty ≠ $0).",
+                    "hint": "Direct-first pipeline assembling SoftDent/QuickBooks.",
+                }
+            ],
+            "sourceNote": "stub-fastpath",
+            "cachedForSec": 0,
+        }
+        already = _WIDGETS_CACHE.get(warming_key)
+        if not already:
+
+            def _fill_widgets_cache() -> None:
+                try:
+                    build_apex_widgets(pid, sub=sub_key, claim_id=cid, _fill=True)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"Widget cache fill failed for {cache_key}: {exc}", file=sys.stderr)
+                finally:
+                    _WIDGETS_CACHE.pop(warming_key, None)
+
+            _WIDGETS_CACHE[warming_key] = {"at": now}
+            threading.Thread(
+                target=_fill_widgets_cache, daemon=True, name=f"nr2-widgets-warm-{cache_key}"
+            ).start()
+        return stub
 
     reports, bundle, errors = _load_reports_and_bundle()
     if sub_key:
@@ -4056,12 +4104,28 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
 
 
 def _build_hal_status_payload() -> dict[str, Any]:
-    """HAL operational state + grounded suggestion (no invented dollars)."""
+    """HAL operational state + grounded suggestion (no invented dollars).
+
+    Moonshot Expert SE Phase 1: always report system/HAL availability separately from
+    import freshness. When imports are degraded, label is
+    ``HAL Ready · Import Degraded`` — never a false Standby from the import gate.
+    """
     suggestion = HAL_STATUS_SUGGESTION
-    status = "idle"
-    status_label = "HAL Standby"
+    status = "ready"
+    status_label = "HAL Ready"
     confidence = None
     extras: dict[str, Any] = {}
+    readiness: dict[str, Any] | None = None
+    try:
+        from import_diagnostics import assess_import_readiness
+
+        readiness = assess_import_readiness(sync_state=None)
+    except Exception as exc:  # noqa: BLE001
+        readiness = {"ok": False, "level": "unknown", "error": str(exc)}
+
+    import_level = str((readiness or {}).get("level") or "unknown")
+    import_degraded = import_level not in ("fresh",)
+
     try:
         reports, bundle, errors = _load_reports_and_bundle()
         diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
@@ -4100,8 +4164,6 @@ def _build_hal_status_payload() -> dict[str, Any]:
         if candidates:
             candidates.sort(key=lambda x: x[1], reverse=True)
             suggestion, confidence = candidates[0]
-            status = "ready" if (isinstance(missing, int) and missing == 0) else "degraded"
-            status_label = "HAL Live" if status == "ready" else "HAL Degraded"
 
         extras = {
             "importConnected": connected,
@@ -4114,9 +4176,32 @@ def _build_hal_status_payload() -> dict[str, Any]:
             extras["loadNotes"] = errors[:3]
     except Exception as exc:  # noqa: BLE001
         extras["error"] = str(exc)
-        status = "idle"
-        status_label = "HAL Standby"
         suggestion = HAL_STATUS_SUGGESTION
+
+    # System/HAL availability vs import honesty (Moonshot REC-001 / path B+C).
+    if import_degraded:
+        status = "degraded"
+        status_label = "HAL Ready · Import Degraded"
+        if not suggestion or suggestion == HAL_STATUS_SUGGESTION:
+            suggestion = (
+                "HAL is online. Import data is not fresh — refresh SoftDent/QuickBooks "
+                "before trusting financial KPIs or posting."
+            )
+    else:
+        status = "ready"
+        status_label = "HAL Ready"
+
+    # Compact readiness for UI (no PHI / no invented dollars).
+    readiness_public: dict[str, Any] | None = None
+    if isinstance(readiness, dict):
+        readiness_public = {
+            "ok": bool(readiness.get("ok")),
+            "level": import_level,
+            "codes": readiness.get("codes"),
+            "error": readiness.get("error"),
+            "completeness": readiness.get("completeness"),
+            "summary": readiness.get("summary"),
+        }
 
     return {
         "status": status,
@@ -4126,6 +4211,8 @@ def _build_hal_status_payload() -> dict[str, Any]:
         "buildId": BUILD_ID,
         "refreshedAt": _utc_now(),
         "metrics": extras or None,
+        "readiness": readiness_public,
+        "importDegraded": import_degraded,
         "orchestrator": _orchestrator_status_safe(),
     }
 
@@ -6425,6 +6512,66 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             result = set_aging_alert_config(payload)
             result["buildId"] = BUILD_ID
             return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.get("/api/apex/claims/actions")
+    def apex_claim_actions_list():
+        """Moonshot Expert SE Phase 3 REC-006 — list NR2-local claim card actions."""
+        try:
+            import bottle
+            from apex_program_improve_pack import list_claim_actions
+
+            cid = str(bottle.request.query.get("claimId") or "").strip() or None
+            return json_response_fn(
+                {"ok": True, "entries": list_claim_actions(cid), "buildId": BUILD_ID}
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "entries": []}, status=500)
+
+    @app.post("/api/apex/claims/actions")
+    def apex_claim_actions_post():
+        """Moonshot Expert SE Phase 3 REC-006 — audit-log only (no SoftDent write-back)."""
+        try:
+            import bottle
+            from apex_program_improve_pack import record_claim_action
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            result = record_claim_action(payload)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=200 if result.get("ok") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.post("/api/apex/claims/era-ingest")
+    def apex_era_ingest_api():
+        """Moonshot Expert SE Phase 3 REC-005 — ERA 835 upload → match → ERA Matched."""
+        try:
+            import bottle
+            from apex_program_improve_pack import ingest_era_835
+
+            upload = bottle.request.files.get("file") if bottle.request.files else None
+            text = ""
+            filename = None
+            if upload is not None:
+                filename = str(getattr(upload, "filename", None) or "era.835")
+                text = upload.file.read().decode("utf-8", errors="replace")
+            else:
+                raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+                try:
+                    payload = json.loads(raw or "{}")
+                except Exception:
+                    payload = {"text": raw}
+                text = str(payload.get("text") or payload.get("content") or "")
+                filename = payload.get("filename")
+            _reports, bundle, _err = _load_reports_and_bundle()
+            rows = _section_rows(bundle, "softdent", "claims") or _section_rows(
+                bundle, "softdent", "claimStatus"
+            )
+            result = ingest_era_835(text, rows if isinstance(rows, list) else [], filename=filename)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=200 if result.get("ok") else 400)
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 

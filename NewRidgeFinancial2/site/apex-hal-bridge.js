@@ -74,8 +74,13 @@
     if (o) {
       o.classList.toggle(
         "is-live",
-        lastStatus === "busy" || lastStatus === "syncing" || lastStatus === "live" || lastStatus === "ready"
+        lastStatus === "busy" ||
+          lastStatus === "syncing" ||
+          lastStatus === "live" ||
+          lastStatus === "ready" ||
+          lastStatus === "degraded"
       );
+      o.classList.toggle("is-degraded", lastStatus === "degraded");
     }
     if (span) {
       span.textContent = label || statusLabelText(lastStatus);
@@ -84,8 +89,8 @@
 
   function statusLabelText(status) {
     if (status === "busy" || status === "syncing") return "HAL Busy";
-    if (status === "live" || status === "ready") return "HAL Live";
-    if (status === "degraded") return "HAL Degraded";
+    if (status === "live" || status === "ready") return "HAL Ready";
+    if (status === "degraded") return "HAL Ready · Import Degraded";
     return "HAL Standby";
   }
 
@@ -123,8 +128,31 @@
     }
     try {
       const res = await window.Apex.apexFetch("/api/apex/hal/status");
-      if (!res.ok) return null;
-      return await res.json();
+      if (res.ok) return await res.json();
+      // Moonshot path C: honest UX if gate still rejects (should be rare after Phase 1).
+      if (res.status === 403) {
+        let body = null;
+        try {
+          body = await res.json();
+        } catch (_e) {
+          body = null;
+        }
+        const level =
+          (body && body.readiness && body.readiness.level) ||
+          res.headers.get("X-NR2-Import-Status") ||
+          "degraded";
+        if (body && body.error === "import_read_forbidden") {
+          return {
+            status: "degraded",
+            statusLabel: "HAL Ready · Import Degraded",
+            suggestion:
+              "HAL is online. Import data is not fresh — refresh SoftDent/QuickBooks before trusting financial KPIs.",
+            importDegraded: true,
+            readiness: (body && body.readiness) || { level: level, ok: false },
+          };
+        }
+      }
+      return null;
     } catch (_err) {
       return null;
     }
@@ -134,7 +162,10 @@
     const data = await fetchStatus();
     if (!data) return;
     const status = String(data.status || "idle");
-    const label = data.statusLabel || statusLabelText(status);
+    let label = data.statusLabel || statusLabelText(status);
+    if (data.importDegraded && status !== "busy" && status !== "syncing") {
+      label = data.statusLabel || "HAL Ready · Import Degraded";
+    }
     setHeaderStatus(status, label);
     const suggestion = String(data.suggestion || "").trim();
     if (suggestion) {

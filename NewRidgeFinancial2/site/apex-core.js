@@ -2530,7 +2530,198 @@
             .join("")}</div>`
         : "";
 
-      return `
+if (this.type === "claims-kanban" || this.type === "claims-workbench") {
+        const columns = this.spec.columns && typeof this.spec.columns === "object" ? this.spec.columns : {};
+        const labels = this.spec.columnLabels && typeof this.spec.columnLabels === "object" ? this.spec.columnLabels : {};
+        const counts = this.spec.counts && typeof this.spec.counts === "object" ? this.spec.counts : {};
+        const rows = Array.isArray(this.spec.rows) ? this.spec.rows : [];
+        const order = ["submitted", "pendingReview", "eraMatched", "denied", "paid"];
+        const empty = this.spec.status === "empty";
+        const defaultView = preferredWorkbenchView(String(this.spec.defaultView || "table"));
+        const rowCap = Math.max(10, Number(this.spec.rowCap) || 50);
+        const flatRows = rows.length
+          ? rows
+          : order.flatMap((key) =>
+              Array.isArray(columns[key]) ? columns[key].map((c) => Object.assign({ column: key }, c || {})) : []
+            );
+        const visibleRows = flatRows.slice(0, rowCap);
+        const moreCount = Math.max(0, flatRows.length - visibleRows.length);
+        const tableRows = visibleRows
+          .map((c) => {
+            const id = String((c && c.claimId) || "");
+            const risk = c && c.risk ? String(c.risk) : "";
+            const amount =
+              c && c.billedAmount != null && Number.isFinite(Number(c.billedAmount))
+                ? formatMoney(c.billedAmount)
+                : "—";
+            const age = c && typeof c.ageDays === "number" ? `${c.ageDays}d` : "—";
+            const patient = formatPatientDisplay((c && c.patientName) || "");
+            const attHtml = attachmentDotHtml(c && c.attachments);
+            return `<tr class="apex-wb-row" data-claim-id="${this.escape(id)}" data-claim-row data-risk="${this.escape(
+              risk
+            )}" data-column="${this.escape(String((c && c.column) || ""))}" data-bucket="${this.escape(
+              String((c && c.bucket) || "")
+            )}" data-has-era="${c && c.eraStatus ? "1" : "0"}" data-has-att="${
+              c && c.attachments ? "1" : "0"
+            }" data-patient="${this.escape(String((c && c.patientName) || ""))}">
+              <td><input type="checkbox" data-batch-claim value="${this.escape(id)}" /></td>
+              <td class="apex-wb-id">${this.escape(id)}</td>
+              <td>${this.escape(patient)}</td>
+              <td>${this.escape(String((c && c.payer) || "—"))}</td>
+              <td>${this.escape(age)}</td>
+              <td><span class="apex-wb-status">${this.escape(String((c && c.status) || "—"))}</span></td>
+              <td class="apex-wb-amt">${this.escape(amount)}</td>
+              <td class="apex-wb-att-cell">${attHtml}</td>
+              <td class="apex-wb-acts">
+                <button type="button" class="apex-claim-act" data-claim-act="open" title="Open detail">›</button>
+              </td>
+            </tr>`;
+          })
+          .join("");
+        const colHtml = order
+          .map((key) => {
+            const cards = Array.isArray(columns[key]) ? columns[key] : [];
+            const count = typeof counts[key] === "number" ? counts[key] : cards.length;
+            const cardHtml = cards
+              .map((c) => {
+                const id = String((c && c.claimId) || "");
+                const risk = c && c.risk ? String(c.risk) : "";
+                const procs = Array.isArray(c && c.procedures) ? c.procedures.join(", ") : "";
+                const procLine = procs
+                  ? procs + (c && c.procedureDesc ? " · " + c.procedureDesc : "")
+                  : c && c.procedureDesc
+                    ? String(c.procedureDesc)
+                    : "";
+                const amount =
+                  c && c.billedAmount != null && Number.isFinite(Number(c.billedAmount))
+                    ? formatMoney(c.billedAmount)
+                    : "";
+                const payer = String((c && c.payer) || "");
+                let att = "";
+                if (c && c.attachments && typeof c.attachments === "object") {
+                  const cur = c.attachments.current;
+                  const req = c.attachments.required;
+                  if (req != null) {
+                    const complete = Number(cur) >= Number(req);
+                    att = `<span class="apex-claim-card__att ${complete ? "is-complete" : "is-missing"}">📎 ${this.escape(
+                      String(cur)
+                    )}/${this.escape(String(req))}</span>`;
+                  } else if (cur != null) {
+                    att = `<span class="apex-claim-card__att">📎 ${this.escape(String(cur))}</span>`;
+                  }
+                }
+                let era = "";
+                if (c && c.denialCode) {
+                  era = `<span class="apex-claim-card__era is-denied">${this.escape(String(c.denialCode))}</span>`;
+                } else if (c && c.eraStatus) {
+                  era = `<span class="apex-claim-card__era">${this.escape(String(c.eraStatus))}</span>`;
+                } else if (key === "eraMatched") {
+                  era = `<span class="apex-claim-card__era is-matched">ERA Match</span>`;
+                } else if (key === "paid") {
+                  era = `<span class="apex-claim-card__era is-matched">Paid</span>`;
+                }
+                const riskClass = risk
+                  ? ` risk-${this.escape(risk)}`
+                  : key === "eraMatched" || key === "paid"
+                    ? " matched"
+                    : "";
+                const riskBadge = risk
+                  ? `<span class="apex-claim-card__risk risk-${this.escape(risk)}">${this.escape(
+                      risk === "high" ? "High" : risk === "medium" ? "Med" : "Low"
+                    )}</span>`
+                  : "";
+                return `<div class="apex-claim-card${riskClass}" data-claim-id="${this.escape(
+                  id
+                )}" data-claim-card data-risk="${this.escape(risk)}" data-column="${this.escape(key)}" data-bucket="${this.escape(
+                  String((c && c.bucket) || "")
+                )}" data-has-era="${c && c.eraStatus ? "1" : "0"}" data-has-att="${
+                  c && c.attachments ? "1" : "0"
+                }" data-patient="${this.escape(String((c && c.patientName) || ""))}">
+                  <div class="apex-claim-card__head">
+                    <span class="apex-claim-card__id">${this.escape(id)}</span>
+                    ${riskBadge}
+                  </div>
+                  <div class="apex-claim-card__patient">${this.escape(formatPatientDisplay((c && c.patientName) || ""))}</div>
+                  ${
+                    procLine
+                      ? `<div class="apex-claim-card__proc">${this.escape(procLine)}</div>`
+                      : `<div class="apex-claim-card__proc is-muted">Procedure not on import</div>`
+                  }
+                  <div class="apex-claim-card__meta">
+                    <span>${this.escape(payer || "Payer —")}</span>
+                    <span class="apex-claim-card__amt">${this.escape(amount || "—")}</span>
+                  </div>
+                  <div class="apex-claim-card__foot">${att}${era}</div>
+                  <div class="apex-claim-card__actions" data-claim-actions>
+                    <button type="button" class="apex-claim-act" data-claim-act="generate-narrative">Narrative</button>
+                    <button type="button" class="apex-claim-act" data-claim-act="follow-up-note">Note</button>
+                    <button type="button" class="apex-claim-act" data-claim-act="schedule-callback">Callback</button>
+                    <label class="apex-claim-act apex-claim-act--check"><input type="checkbox" data-batch-claim value="${this.escape(
+                      id
+                    )}" /> Batch</label>
+                  </div>
+                </div>`;
+              })
+              .join("");
+            return `<div class="apex-claims-kanban__col" data-kanban-col="${this.escape(key)}">
+              <div class="apex-claims-kanban__col-head">
+                <span>${this.escape(labels[key] || key)}</span>
+                <span class="apex-claims-kanban__count">${this.escape(String(count))}</span>
+              </div>
+              <div class="apex-claims-kanban__col-body">${
+                cardHtml || `<div class="apex-claims-kanban__empty">No claims</div>`
+              }</div>
+            </div>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            <div class="apex-widget-actions">
+              <div class="apex-wb-views" data-wb-views>
+                <button type="button" class="apex-filter-btn${defaultView === "table" ? " is-active" : ""}" data-wb-view="table">Table</button>
+                <button type="button" class="apex-filter-btn${defaultView === "kanban" ? " is-active" : ""}" data-wb-view="kanban">Kanban</button>
+              </div>
+              <div class="apex-claims-kanban__filters" data-kanban-filters>
+                <button type="button" class="apex-filter-btn is-active" data-kanban-filter="all">All</button>
+                <button type="button" class="apex-filter-btn" data-kanban-filter="high-risk">High Risk</button>
+                <button type="button" class="apex-filter-btn" data-kanban-filter="unmatched">Unmatched</button>
+                <button type="button" class="apex-filter-btn" data-kanban-filter="missing-attachments">Missing Att</button>
+              </div>
+              <button type="button" class="apex-btn apex-btn--small" data-action="batch-narratives">Batch narratives</button>
+              ${printBtn}
+            </div>
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No claims for workbench"
+                )}</div>`
+              : `<div class="apex-claims-workbench" data-claims-workbench data-view="${this.escape(defaultView)}">
+                  <div class="apex-claims-kanban__note">Table + Kanban · SoftDent read-only · NR2 actions only</div>
+                  <div class="apex-wb-table-wrap" data-wb-panel="table">
+                    <table class="apex-wb-table apex-wb-table--dense">
+                      <thead><tr>
+                        <th></th><th>Claim</th><th>Patient</th><th>Payer</th><th>Age</th><th>Status</th><th>Amount</th><th>Att</th><th></th>
+                      </tr></thead>
+                      <tbody>${tableRows || `<tr><td colspan="9">No rows</td></tr>`}</tbody>
+                    </table>
+                    ${
+                      moreCount
+                        ? `<div class="apex-wb-more">Showing ${this.escape(String(visibleRows.length))} of ${this.escape(
+                            String(flatRows.length)
+                          )} · use filters to focus</div>`
+                        : ""
+                    }
+                  </div>
+                  <div class="apex-claims-kanban__board" data-wb-panel="kanban">${colHtml}</div>
+                </div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+            return `
         <header class="apex-widget-header">
           <span class="apex-widget-label">${label}</span>
           ${printBtn}
@@ -5481,11 +5672,22 @@
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
       applyWidgetPayload(payload, { fromCache: false });
-      if (idb && idb.cacheWidgets) {
+      if (idb && idb.cacheWidgets && !payload.warming) {
         idb.cacheWidgets(currentPage, currentSub, currentQuery, payload).catch(() => {});
       }
       setMeta(payload);
-      startAutoRefresh();
+      // Moonshot REC-007: stub fast-path — re-poll until cache fill completes.
+      if (payload && payload.warming && !silent) {
+        setTimeout(() => {
+          if (currentPage === pageIdOrHash || String(pageIdOrHash || "").startsWith(currentPage)) {
+            loadPage(pageIdOrHash, { silent: true });
+          } else {
+            loadPage(currentPage, { silent: true });
+          }
+        }, 750);
+      } else {
+        startAutoRefresh();
+      }
     } catch (err) {
       if (!silent) {
         root.className = "apex-stage apex-mosaic";
@@ -5568,7 +5770,12 @@
     if (window.ApexHal && typeof window.ApexHal.pollOnce === "function") {
       window.ApexHal.pollOnce({ showSuggest: true, forceSuggest: true });
     } else if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
-      window.ApexHal.setHeaderStatus("idle", "HAL Standby");
+      // Moonshot: do not force false Standby after sync — restore last known HAL status.
+      const st = (lastHalStatus && lastHalStatus.status) || "degraded";
+      const label =
+        (lastHalStatus && lastHalStatus.statusLabel) ||
+        (st === "degraded" ? "HAL Ready · Import Degraded" : "HAL Ready");
+      window.ApexHal.setHeaderStatus(st, label);
     }
   }
 

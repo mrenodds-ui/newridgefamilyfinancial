@@ -311,7 +311,22 @@ def ingest_era_835(
             "patientName": m.get("patientName"),
             "confidence": m.get("confidence"),
             "paidAmount": m.get("paidAmount"),
-            "denialCode": (m.get("segment") or {}).get("status") if isinstance(m.get("segment"), dict) else None,
+            # Prefer CAS denial (e.g. CO-45); never store bare CLP status digits as denialCode.
+            "denialCode": (
+                (m.get("segment") or {}).get("denialCode")
+                if isinstance(m.get("segment"), dict)
+                else None
+            )
+            or (
+                ((m.get("segment") or {}).get("casCodes") or [None])[0]
+                if isinstance(m.get("segment"), dict)
+                else None
+            ),
+            "casCodes": (
+                list((m.get("segment") or {}).get("casCodes") or [])
+                if isinstance(m.get("segment"), dict)
+                else []
+            ),
             "matchedAt": _utc_now(),
             "sourceFile": filename or None,
             "source": "era-835",
@@ -385,13 +400,19 @@ def apply_era_to_kanban_columns(columns: dict[str, list[dict[str, Any]]]) -> dic
                 enriched = dict(card)
                 m = matches[cid]
                 enriched["eraStatus"] = "ERA Matched"
-                if m.get("denialCode") and str(m.get("denialCode")) not in {"1", "2", "3", "4", "19", "20", "21", "22"}:
-                    # Keep SoftDent denial column if already denied; else mark matched
-                    pass
+                denial = str(m.get("denialCode") or "").strip()
+                # Moonshot REC-005: copy real CAS codes (CO-45) onto the card — not CLP status digits.
+                if denial and denial not in {"1", "2", "3", "4", "19", "20", "21", "22"}:
+                    enriched["denialCode"] = denial
+                if m.get("casCodes"):
+                    enriched["casCodes"] = list(m.get("casCodes") or [])
                 if col != "denied":
                     enriched["column"] = "eraMatched"
                     moved.append(enriched)
                     continue
+                # Already denied: keep in denied column but stamp ERA match + denial code.
+                keep.append(enriched)
+                continue
             keep.append(card)
         out[col] = keep
     # Don't duplicate if already in eraMatched/paid

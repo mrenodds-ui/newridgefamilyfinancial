@@ -143,13 +143,29 @@ def main() -> int:
                 except Exception as exc:
                     print(f"EOD handoff tick failed: {exc}", file=sys.stderr)
 
+            def _health_monitor_tick() -> None:
+                """Moonshot Expert SE Phase 2 REC-004 — proactive import/health audit (no PHI)."""
+                try:
+                    from apex_health_monitor_pack import run_scheduled_health_audit
+
+                    # classify_only avoids long Ollama holds on the scheduler thread.
+                    result = run_scheduled_health_audit(classify_only=True)
+                    print(
+                        f"Health monitor tick: ok={result.get('ok')} reason={result.get('reason') or result.get('lane')}",
+                        file=sys.stderr,
+                    )
+                except Exception as exc:
+                    print(f"Health monitor tick failed: {exc}", file=sys.stderr)
+
             sched = BackgroundScheduler(daemon=True)
             sched.add_job(_alert_tick, IntervalTrigger(minutes=15), id="nr2-alerts")
             sched.add_job(_morning_tick, CronTrigger(hour=6, minute=30), id="nr2-morning")
             sched.add_job(_eod_tick, CronTrigger(hour=22, minute=0), id="nr2-eod")
+            # Proactive health every 6 hours (Moonshot REC-004).
+            sched.add_job(_health_monitor_tick, IntervalTrigger(hours=6), id="nr2-health-monitor")
             sched.start()
             print(
-                "NR2 background scheduler: alerts every 15m, morning 06:30 UTC, EOD handoff 22:00 UTC",
+                "NR2 background scheduler: alerts every 15m, health every 6h, morning 06:30 UTC, EOD handoff 22:00 UTC",
                 file=sys.stderr,
             )
         except ImportError:

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10498",
-  "BUILD_ID": "hal-10498",
-  "assetVersion": "hal-10498",
-  "builtAt": "2026-07-11T22:30:00Z",
-  "notes": "hal-10498: SoftDent sd_patient_insurance extract for dossier Availity auto-eligibility.",
+  "schemaVersion": "hal-10501",
+  "BUILD_ID": "hal-10501",
+  "assetVersion": "hal-10501",
+  "builtAt": "2026-07-11T22:10:46Z",
+  "notes": "hal-10501: Moonshot Expert SE Phase 3 — ERA CAS denial codes, claims card actions+era-ingest routes, workbench template restore, widget stub fast-path.",
   "staffRenderMode": "apex"
 }
