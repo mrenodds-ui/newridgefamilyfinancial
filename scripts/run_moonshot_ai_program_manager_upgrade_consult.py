@@ -50,39 +50,43 @@ NewRidge Family Financial (Kansas dental S-corp; SoftDent + QuickBooks imports;
 local HTTPS starship-bridge; Ollama GPU lanes chat8b + escalate30b).
 
 CRITICAL CONSTRAINTS:
-1. Answer the OPERATOR REQUEST VERBATIM again (RE-AUDIT #5). The operator message was CUT OFF
+1. Answer the OPERATOR REQUEST VERBATIM again (RE-AUDIT #6). The operator message was CUT OFF
    mid-sentence at "unified local database/state management system (e.g.," — note truncation,
    assume SQLite/NR2 app_data as unified store. Deliver a complete consult for sections 1–2
-   against the LIVE codebase NOW (build hal-10489), not earlier states.
+   against the LIVE codebase NOW (build hal-10492), not earlier states.
 2. ALREADY SHIPPED — do NOT rebuild:
-   - MUST I0–I4, SHOULD S0–S3, NICE N0, T0–T5, U0–U3/U2b (through hal-10486)
-   - REAUDIT4 V0 (hal-10487): AI lane telemetry, scheduled audit cron, data freshness chips
-     (NR2_AI_TELEMETRY / NR2_AUDIT_CRON / NR2_DATA_FRESHNESS — default OFF until burn-in)
-   - REAUDIT4 V1 (hal-10488): synthetic SoftDent/QB/ERA fixtures + reconciliation fixture tests
-   - REAUDIT4 V2 (hal-10489): 30B explain_variance LRU cache (NR2_EXPLAIN_CACHE default OFF;
-     invalidate on import) + apex-mobile-polish.css (mosaic ≤768px)
+   - MUST I0–I4, SHOULD S0–S3, NICE N0, T0–T5, U0–U3/U2b, V0–V2 (through hal-10489)
+   - REAUDIT5 W0 (hal-10490): SoftDent extended metrics views
+     (v_case_acceptance, v_patient_aging, v_scheduling_efficiency; NR2_EXTENDED_METRICS)
+   - REAUDIT5 W1 (hal-10491): import cron (NR2_IMPORT_CRON default OFF) + DQ reject-only gates
+     (NR2_IMPORT_DQ default ON) before ingest_from_bundle
+   - REAUDIT5 W2 (hal-10492): quarantine review UI panel (retry/purge; NR2_QUARANTINE_UI)
 3. CONSULT ONLY — DO NOT APPLY code. Paste-ready sketches labeled CONSULT ONLY. Wait for approve.
 4. Ground EVERY recommendation in LIVE FACTS + attached excerpts. Evolve NR2 packs; no rewrite;
    no SoftDent write-back; never invent dollars; PHI local; empty ≠ $0.
-5. Map CURRENT (post V0–V2) vs TARGET. Rank ONLY remaining gaps MUST/SHOULD/NICE with S/M/L
-   effort and next-wave phases (W0..Wn). If the original operator ask is substantially met /
-   production-ready pending burn-in flags ON, say so clearly. Prefer ops runbooks, burn-in
-   flip checklist, and vendor-gated Future items over inventing new features.
+5. Map CURRENT (post W0–W2) vs TARGET. Rank ONLY remaining gaps MUST/SHOULD/NICE with S/M/L
+   effort and next-wave phases (X0..Xn). If the original operator ask is substantially met /
+   production-ready pending burn-in flags ON, say so clearly. Prefer:
+   - burn-in flag flip runbook
+   - ops Task Scheduler checklist
+   - residual polish only if grounded
+   - vendor-gated Future (QB Online API / SoftDent live API / ERA posting write-back)
+   Do NOT invent large new feature waves when sections 1–2 are met.
 6. End with APPROVAL CHECKLIST for next work only.
 
 OUTPUT FORMAT (strict markdown):
-# Verdict — AI Program Manager re-audit #5 (post V0–V2 / hal-10489)
+# Verdict — AI Program Manager re-audit #6 (post W0–W2 / hal-10492)
 ## 0. Operator Intent (quote; note truncation; consult-only re-run)
-## 1. Current Architecture Audit (what exists at hal-10489)
-### 1A Orchestrator + telemetry + deep audit (V0/U0)
-### 1B SoftDent + ERA + synthetic fixtures (U1/V1)
-### 1C QuickBooks + reconciliation + explain cache (U2/V2)
-### 1D Unified DB + import poll/quarantine + freshness (T3/U2b/V0)
-### 1E Insights SSE + dashboard layout + mobile polish (N0/U3/V2)
+## 1. Current Architecture Audit (what exists at hal-10492)
+### 1A Orchestrator + telemetry + deep audit
+### 1B SoftDent extended metrics + ERA + fixtures (W0/U1/V1)
+### 1C QuickBooks + reconciliation + explain cache
+### 1D Unified DB + import cron/DQ/quarantine UI (W1/W2)
+### 1E Insights SSE + layout + mobile polish
 ## 2. Gap Map — REMAINING only
 Table: Area | Status | Gap | Effort | Depends on
 ## 3. Target Architecture (next wave only)
-## 4. Coding Plan — Phase W0..Wn (CONSULT ONLY sketches for remaining work)
+## 4. Coding Plan — Phase X0..Xn (CONSULT ONLY sketches for remaining work)
 ## 5. MUST / SHOULD / NICE ranked table (remaining)
 ## 6. Risks, PHI, SoftDent honesty, Rollback
 ## 7. Approval Checklist (next wave only)
@@ -99,10 +103,10 @@ def _truncate(text: str, max_lines: int) -> str:
 
 CONTEXT_FILES: list[tuple[str, int]] = [
     ("NewRidgeFinancial2/nr2-build.json", 12),
-    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_V2_APPLIED_2026-07-11.md", 50),
-    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_V1_APPLIED_2026-07-11.md", 40),
-    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_V0_APPLIED_2026-07-11.md", 40),
-    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT4_2026-07-11.md", 50),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_W2_APPLIED_2026-07-11.md", 50),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_W1_APPLIED_2026-07-11.md", 40),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_W0_APPLIED_2026-07-11.md", 40),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT5_2026-07-11.md", 50),
     ("NewRidgeFinancial2/site/data/hal-models.json", 40),
 ]
 
@@ -119,17 +123,18 @@ def build_context() -> str:
         parts.append(f"### FILE: {rel}\n```{ext}\n{body}\n```")
 
     for rel, max_lines in (
-        ("NewRidgeFinancial2/apex_orchestrator_pack.py", 40),
-        ("NewRidgeFinancial2/apex_ai_telemetry_pack.py", 40),
-        ("NewRidgeFinancial2/apex_sync_status_pack.py", 40),
-        ("NewRidgeFinancial2/apex_reconciliation_pack.py", 50),
-        ("NewRidgeFinancial2/apex_deep_audit_pack.py", 30),
-        ("NewRidgeFinancial2/site/apex-mobile-polish.css", 40),
-        ("NewRidgeFinancial2/scripts/run_nr2_scheduled_audit.py", 40),
+        ("NewRidgeFinancial2/apex_softdent_extended_pack.py", 40),
+        ("NewRidgeFinancial2/apex_import_dq_pack.py", 40),
+        ("NewRidgeFinancial2/apex_import_scheduler_pack.py", 40),
+        ("NewRidgeFinancial2/apex_import_quarantine_pack.py", 50),
+        ("NewRidgeFinancial2/site/apex-quarantine-panel.js", 40),
+        ("scripts/run_nr2_import_cron.py", 40),
     ):
         path = REPO / rel
+        if not path.is_file() and rel.startswith("scripts/"):
+            path = REPO / rel  # already at repo root
         if path.is_file():
-            lang = "css" if rel.endswith(".css") else "python"
+            lang = "javascript" if rel.endswith(".js") else "python"
             parts.append(
                 f"### FILE: {rel}\n```{lang}\n"
                 + _truncate(path.read_text(encoding="utf-8", errors="replace"), max_lines)
@@ -137,14 +142,14 @@ def build_context() -> str:
             )
 
     parts.append(
-        """### LIVE FACTS (hal-10489 — RE-AUDIT #5 after V0–V2)
-- Program Manager upgrade waves shipped: I0–I4, S0–S3, N0, T0–T5, U0–U3/U2b, V0–V2.
+        """### LIVE FACTS (hal-10492 — RE-AUDIT #6 after W0–W2)
+- Program Manager waves shipped: I0–I4, S0–S3, N0, T0–T5, U0–U3/U2b, V0–V2, W0–W2.
 - Burn-in flags still default OFF: NR2_AI_TELEMETRY, NR2_AUDIT_CRON, NR2_DATA_FRESHNESS,
-  NR2_EXPLAIN_CACHE. Orchestrator defaults ON (disable with NR2_AI_ORCHESTRATOR=0).
-- Honesty rules enforced: empty ≠ $0; gap codes; no SoftDent write-back; PHI stripped on ERA.
+  NR2_EXPLAIN_CACHE, NR2_IMPORT_CRON. DQ / extended metrics / quarantine UI default ON.
+- Orchestrator defaults ON (disable with NR2_AI_ORCHESTRATOR=0).
+- Honesty: empty ≠ $0; gap codes; no SoftDent write-back; PHI stripped on ERA; DQ reject-only.
 - Operator request (verbatim) re-submitted. CONSULT ONLY — remaining gaps only.
-- If operator sections 1–2 are substantially met, declare that and rank only residual
-  burn-in/ops/vendor Future items.
+- If sections 1–2 are substantially met, declare that; prefer burn-in/ops + Future vendor items.
 """
     )
     return "\n\n".join(parts)
@@ -165,11 +170,10 @@ def main() -> int:
 
     print(f"Using {key_name} @ {base_url} model={model}")
     user = (
-        "OPERATOR REQUEST (VERBATIM — do not rewrite) — RE-RUN #5 after V0–V2 / hal-10489:\n\n"
+        "OPERATOR REQUEST (VERBATIM — do not rewrite) — RE-RUN #6 after W0–W2 / hal-10492:\n\n"
         f"{OPERATOR_REQUEST_VERBATIM}\n\n"
-        "NOTE: Same truncated operator message. I0–I4, S0–S3, N0, T0–T5, U0–U3/U2b, and "
-        "V0–V2 are shipped on hal-10489. Re-audit ONLY remaining gaps. "
-        "CONSULT ONLY — do not apply. Wait for approval.\n\n"
+        "NOTE: Same truncated operator message. I0–I4 through W0–W2 are shipped on hal-10492. "
+        "Re-audit ONLY remaining gaps. CONSULT ONLY — do not apply. Wait for approval.\n\n"
         "## Codebase context\n\n"
         + build_context()
     )
@@ -211,14 +215,14 @@ def main() -> int:
         status = "error"
 
     header = (
-        f"# Moonshot AI — AI Program Manager Upgrade RE-AUDIT #5 (CONSULT ONLY)\n\n"
+        f"# Moonshot AI — AI Program Manager Upgrade RE-AUDIT #6 (CONSULT ONLY)\n\n"
         f"**Date:** {DATE}  \n"
         f"**Model:** {model}  \n"
         f"**Key:** {key_name}  \n"
         f"**Endpoint:** {base_url}  \n"
         f"**Status:** {status}  \n"
-        f"**Build reviewed:** hal-10489 (post V0–V2)  \n"
-        f"**Prior:** `MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT4_2026-07-11.md`  \n"
+        f"**Build reviewed:** hal-10492 (post W0–W2)  \n"
+        f"**Prior:** `MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT5_2026-07-11.md`  \n"
         f"**Script:** `scripts/run_moonshot_ai_program_manager_upgrade_consult.py`  \n"
         f"**Apply:** DO NOT APPLY / DO NOT CODE until operator approves.\n\n"
         f"## Operator request (verbatim)\n\n"
@@ -226,8 +230,8 @@ def main() -> int:
         f"---\n\n"
     )
     full = header + (content or "(empty)")
-    out_file = OUT / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT5_{DATE}.md"
-    doc_file = DOCS / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT5_{DATE}.md"
+    out_file = OUT / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT6_{DATE}.md"
+    doc_file = DOCS / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT6_{DATE}.md"
     out_file.write_text(full, encoding="utf-8")
     doc_file.write_text(full, encoding="utf-8")
     print(out_file)
