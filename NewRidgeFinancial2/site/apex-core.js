@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10461 (kill periodic page flicker)
+ * Build: hal-10463 (Apex HAL Console chat box v2)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10461";
+  const ASSET_V = "hal-10463";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -379,15 +379,30 @@
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
+            <span class="apex-hal-chat__live-indicator" data-hal-live aria-hidden="true"></span>
           </header>
           <div class="apex-hal-chat" data-hal-chat>
-            <div class="apex-hal-chat__messages" data-hal-messages aria-live="polite"></div>
-            <div class="apex-hal-chat__chips" data-hal-chips></div>
-            <form class="apex-hal-chat__form" data-hal-form>
-              <textarea class="apex-hal-chat__input" data-hal-input rows="2" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL"></textarea>
-              <button type="submit" class="apex-hal-chat__send" data-hal-send>Send</button>
+            <div class="apex-hal-chat__messages" data-hal-messages role="log" aria-live="polite" aria-label="HAL conversation history"></div>
+            <div class="apex-hal-chat__chips-wrap">
+              <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
+            </div>
+            <form class="apex-hal-chat__composer" data-hal-form>
+              <div class="apex-hal-chat__input-sizer" data-input-sizer>
+                <textarea class="apex-hal-chat__input" data-hal-input rows="1" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL" maxlength="2000"></textarea>
+              </div>
+              <button type="submit" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
             </form>
-            <div class="apex-kpi-hint">${this.escape(this.spec.hint || "Local HAL command surface")}</div>
+            <div class="apex-hal-chat__meta">
+              <span class="apex-hal-chat__hint">${this.escape(this.spec.hint || "Local HAL command surface")}</span>
+              <span class="apex-hal-chat__indicator" data-hal-indicator hidden>
+                <span class="apex-hal-chat__dot"></span> Thinking…
+              </span>
+            </div>
           </div>
         `;
       }
@@ -4707,9 +4722,45 @@
   function appendHalMessage(logEl, role, text, opts) {
     if (!logEl) return;
     const persist = !(opts && opts.skipPersist);
+    const empty = logEl.querySelector("[data-hal-empty]");
+    if (empty) empty.remove();
+
     const row = document.createElement("div");
     row.className = `apex-hal-chat__msg apex-hal-chat__msg--${role}`;
-    row.textContent = text;
+
+    const content = document.createElement("div");
+    content.className = "apex-hal-chat__msg-text";
+    content.textContent = text == null ? "" : String(text);
+    row.appendChild(content);
+
+    if (role === "hal" || role === "system") {
+      const meta = document.createElement("div");
+      meta.className = "apex-hal-chat__meta-row";
+      const time = document.createElement("time");
+      time.dateTime = new Date().toISOString();
+      time.textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      meta.appendChild(time);
+      if (role === "hal") {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "apex-hal-chat__copy";
+        copyBtn.textContent = "Copy";
+        copyBtn.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(String(text == null ? "" : text));
+            copyBtn.textContent = "Copied";
+            setTimeout(() => {
+              copyBtn.textContent = "Copy";
+            }, 2000);
+          } catch (_err) {
+            /* ignore */
+          }
+        });
+        meta.appendChild(copyBtn);
+      }
+      row.appendChild(meta);
+    }
+
     logEl.appendChild(row);
     logEl.scrollTop = logEl.scrollHeight;
     if (persist) {
@@ -4721,16 +4772,62 @@
   }
 
   function restoreHalTranscript(logEl) {
-    if (!logEl || !halTranscript.length) return;
-    if (logEl.childElementCount) return;
+    if (!logEl) return;
+    logEl.innerHTML = "";
+    if (!halTranscript.length) {
+      const empty = document.createElement("div");
+      empty.className = "apex-hal-chat__empty";
+      empty.dataset.halEmpty = "1";
+      const title = document.createElement("div");
+      title.className = "apex-hal-chat__empty-title";
+      title.textContent = "Command surface ready";
+      const hint = document.createElement("div");
+      hint.className = "apex-hal-chat__empty-hint";
+      hint.textContent = 'Try: "Sync imports", "Focus claims", or "Explain EBITDA"';
+      empty.appendChild(title);
+      empty.appendChild(hint);
+      logEl.appendChild(empty);
+      return;
+    }
     halTranscript.forEach((entry) => {
       appendHalMessage(logEl, entry.role, entry.text, { skipPersist: true });
     });
   }
 
+  function setHalChatBusyUi(root, busy) {
+    const panel = root && root.querySelector ? root : document;
+    const live = panel.querySelector && panel.querySelector("[data-hal-live]");
+    const indicator = panel.querySelector && panel.querySelector("[data-hal-indicator]");
+    if (live) live.classList.toggle("is-busy", !!busy);
+    if (indicator) {
+      if (busy) indicator.removeAttribute("hidden");
+      else indicator.setAttribute("hidden", "");
+    }
+  }
+
   function finalizeHalPending(pending, reply) {
     const text = String(reply == null ? "" : reply);
-    if (pending) pending.textContent = text;
+    if (pending) {
+      const textEl = pending.querySelector(".apex-hal-chat__msg-text");
+      if (textEl) textEl.textContent = text;
+      else pending.textContent = text;
+      // Refresh copy button target if present
+      const copyBtn = pending.querySelector(".apex-hal-chat__copy");
+      if (copyBtn) {
+        copyBtn.onclick = null;
+        copyBtn.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = "Copied";
+            setTimeout(() => {
+              copyBtn.textContent = "Copy";
+            }, 2000);
+          } catch (_err) {
+            /* ignore */
+          }
+        });
+      }
+    }
     // Replace the trailing "Thinking…" transcript entry with the real reply.
     for (let i = halTranscript.length - 1; i >= 0; i -= 1) {
       if (halTranscript[i].role === "hal" && halTranscript[i].text === "Thinking…") {
@@ -4740,8 +4837,23 @@
     }
     halTranscript.push({ role: "hal", text });
     if (halTranscript.length > HAL_TRANSCRIPT_MAX) {
-      halTranscript.splice(0,halTranscript.length - HAL_TRANSCRIPT_MAX);
+      halTranscript.splice(0, halTranscript.length - HAL_TRANSCRIPT_MAX);
     }
+  }
+
+  function appendHalReceipt(logEl, actions, results) {
+    if (!logEl) return;
+    const list = Array.isArray(actions) ? actions : [];
+    if (!list.length) return;
+    const res = Array.isArray(results) ? results : [];
+    const summary = list
+      .map((a, i) => {
+        const r = String(res[i] || "");
+        const ok = r && !r.startsWith("fail");
+        return `${ok ? "✓" : "⚠"} ${a && a.type ? a.type : "action"}`;
+      })
+      .join(" · ");
+    appendHalMessage(logEl, "system", `HAL executed: ${summary}`, { skipPersist: true });
   }
 
   async function runHalBoardActions(actions) {
@@ -4933,9 +5045,11 @@
       if (chat) askHal(q, chat);
       return;
     }
+    const chatRoot = logEl.closest(".apex-widget--hal-chat") || logEl.closest("[data-hal-chat]") || document;
     appendHalMessage(logEl, "user", q);
     appendHalMessage(logEl, "hal", "Thinking…");
     const pending = logEl.lastElementChild;
+    setHalChatBusyUi(chatRoot, true);
     if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
       window.ApexHal.setHeaderStatus("busy", "HAL Busy");
     }
@@ -4959,13 +5073,15 @@
 
       // Deterministic board reply wins over LLM — including widget census (not governed memory).
       if (board && board.handled) {
+        let boardResults = null;
         if (Array.isArray(board.actions) && board.actions.length) {
-          await runHalBoardActions(board.actions);
+          boardResults = await runHalBoardActions(board.actions);
         }
         const reply = String(board.reply || "Board updated from imports.");
         if (pending) {
           finalizeHalPending(pending, reply);
         } else appendHalMessage(logEl, "hal", reply);
+        if (boardResults) appendHalReceipt(logEl, board.actions, boardResults);
         if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
           window.ApexHalBrain.setState("reply");
         }
@@ -5004,6 +5120,8 @@
         reply = "HAL returned no text for that query.";
       }
       // Optional trailing action marker from model (ignored if invents dollars — we only allow known types)
+      let markerResults = null;
+      let markerActions = null;
       const marker = reply.match(/<!--HAL_ACTIONS:(\[[\s\S]*?\])-->/);
       if (marker) {
         try {
@@ -5030,7 +5148,10 @@
               "narrative_from_focused_claim",
             ].includes(a.type)
           );
-          if (safe.length) await runHalBoardActions(safe);
+          if (safe.length) {
+            markerActions = safe;
+            markerResults = await runHalBoardActions(safe);
+          }
         } catch (_err) {
           /* ignore bad marker */
         }
@@ -5039,6 +5160,7 @@
       if (pending) {
         finalizeHalPending(pending, reply);
       } else appendHalMessage(logEl, "hal", reply);
+      if (markerActions && markerResults) appendHalReceipt(logEl, markerActions, markerResults);
       if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
         window.ApexHalBrain.setState("reply");
       }
@@ -5051,6 +5173,7 @@
       }
     } finally {
       halChatBusy = false;
+      setHalChatBusyUi(chatRoot, false);
       if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
         const st = (lastHalStatus && lastHalStatus.status) || "idle";
         window.ApexHal.setHeaderStatus(st, (lastHalStatus && lastHalStatus.statusLabel) || undefined);
@@ -5130,6 +5253,16 @@
       .replace(/</g, "&lt;");
   }
 
+  function wireHalChatAutoResize(input) {
+    if (!input) return;
+    const resize = () => {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    };
+    input.addEventListener("input", resize);
+    resize();
+  }
+
   function wireHalChat(root) {
     const panel = root.querySelector("[data-hal-chat]");
     if (!panel || panel.dataset.wired === "1") return;
@@ -5140,11 +5273,13 @@
     const chips = panel.querySelector("[data-hal-chips]");
     restoreHalTranscript(logEl);
     loadHalSuggestionChips(chips, logEl);
+    wireHalChatAutoResize(input);
 
     const submitAsk = () => {
       if (!input) return;
       const q = input.value;
       input.value = "";
+      wireHalChatAutoResize(input);
       askHal(q, logEl);
       try {
         input.focus();
@@ -5158,9 +5293,16 @@
         ev.preventDefault();
         submitAsk();
       });
-      // Enter sends; Shift+Enter inserts a newline
+      // Enter sends; Shift+Enter inserts a newline; Ctrl/Cmd+Enter also sends
       input.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return;
+        if (ev.key !== "Enter" || ev.isComposing) return;
+        if (ev.metaKey || ev.ctrlKey) {
+          ev.preventDefault();
+          if (form.requestSubmit) form.requestSubmit();
+          else submitAsk();
+          return;
+        }
+        if (ev.shiftKey) return;
         ev.preventDefault();
         if (form.requestSubmit) form.requestSubmit();
         else submitAsk();
@@ -5362,7 +5504,10 @@
         const p = btn.getAttribute("data-sub-parent") || parent;
         const s = btn.getAttribute("data-sub") || "";
         const q = s === "detail" && currentQuery.id ? { id: currentQuery.id } : {};
-        loadPage(formatApexHash(p, s || null, q));
+        const target = formatApexHash(p, s || null, q);
+        // Re-clicking the active subnav must not wipe HAL chat / mosaic.
+        if (target === routeKey(currentPage, currentSub, currentQuery)) return;
+        loadPage(target);
       });
     });
   }
@@ -5602,8 +5747,20 @@
   }
 
   function wireUi() {
-    document.querySelectorAll("[data-page]").forEach((btn) => {
-      btn.addEventListener("click", () => loadPage(btn.dataset.page));
+    // Only sidebar nav buttons — never #apex-stage[data-page], or clicks inside the mosaic
+    // (including HAL chat typing) bubble up and remount the whole page.
+    document.querySelectorAll(".apex-nav-btn[data-page]").forEach((btn) => {
+      btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        const page = btn.dataset.page;
+        if (!page) return;
+        const already =
+          currentPage === page && !currentSub && (!currentQuery || !currentQuery.id);
+        if (already && stage() && stage().children.length && !stage().querySelector(".apex-status-msg")) {
+          return;
+        }
+        loadPage(page);
+      });
     });
     const printBtn = document.getElementById("btn-print");
     const refreshBtn = document.getElementById("btn-refresh");
