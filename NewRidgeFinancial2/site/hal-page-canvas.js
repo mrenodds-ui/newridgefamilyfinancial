@@ -403,7 +403,8 @@ const HalPageCanvas = (function () {
         <div class="prompt-chips prompt-chips--live hal-situational-hero__actions">
           <button type="button" class="prompt-chip prompt-chip--action" data-hal-cmd="Summarize MTD production">Variance</button>
           <button type="button" class="prompt-chip prompt-chip--action" data-hal-cmd="Show import health">Imports</button>
-          <button type="button" class="prompt-chip prompt-chip--action" data-hal-voice-ptt="1">Voice</button>
+          <button type="button" class="prompt-chip prompt-chip--action" data-hal-voice-ptt="hold" title="Hold to talk">Voice</button>
+          <button type="button" class="prompt-chip prompt-chip--action" data-hal-read-last-report="1" title="Re-speak last report summary">Read Summary</button>
         </div>
         ${actuatorHtml}
       </div>
