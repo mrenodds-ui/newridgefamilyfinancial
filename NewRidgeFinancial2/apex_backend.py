@@ -5152,6 +5152,210 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         except Exception as exc:  # noqa: BLE001
             notes.append(f"Treatment-planning lookup unavailable: {exc}")
 
+    # --- DEF-001 / Phase I2: why collections empty ---
+    if (not handled) and re.search(
+        r"\b(why .{0,40}collections|collections (empty|pending|missing|gap)|def-?001|daysheet (gap|missing))\b",
+        q,
+    ):
+        try:
+            from apex_softdent_hardening_pack import assess_collections_gap, format_collections_gap_reply
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            gap = assess_collections_gap(bundle)
+            notes.append(format_collections_gap_reply(gap))
+            if not gap.get("healthy"):
+                append_collections_pending_board_actions(actions)
+            if gap.get("healthy"):
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": f"Collections reported · {gap.get('period') or 'latest'}",
+                        "hint": "gapCode=OK",
+                        "tone": "ok",
+                    }
+                )
+            if page != "softdent" and not any(a.get("type") == "navigate" for a in actions):
+                actions.append({"type": "navigate", "page": "softdent"})
+            actions.append({"type": "focus_widget", "widgetId": "softdent-collections-gap"})
+            actions.append({"type": "highlight_widget", "widgetId": "softdent-collections-gap", "ms": 4500})
+            handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Collections gap check failed: {exc}")
+            handled = True
+
+    # --- S0: QB payroll / AP honesty ---
+    if (not handled) and re.search(
+        r"\b(payroll (gap|pending|import)|why .{0,20}payroll|ap aging|accounts payable|unpaid bills)\b",
+        q,
+    ):
+        try:
+            from apex_qb_payroll_pack import assess_payroll_ap_gap, format_payroll_ap_reply
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            gap = assess_payroll_ap_gap(bundle)
+            notes.append(format_payroll_ap_reply(gap))
+            if page != "quickbooks" and not any(a.get("type") == "navigate" for a in actions):
+                actions.append({"type": "navigate", "page": "quickbooks"})
+            wid = "qb-payroll-gap" if gap.get("payrollPending") else "qb-ap-aging"
+            if re.search(r"\b(ap|payable|unpaid)\b", q):
+                wid = "qb-ap-aging"
+            actions.append({"type": "focus_widget", "widgetId": wid})
+            actions.append({"type": "highlight_widget", "widgetId": wid, "ms": 4500})
+            handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Payroll/AP gap check failed: {exc}")
+            handled = True
+
+    # --- HAL-said: assign SoftDent denials → Steve (NR2 tasks only) ---
+    if (not handled) and re.search(
+        r"\b(assign (open )?denials?( to steve)?|denials? (to|for) steve|steve.?s? denial(s| queue)?)\b",
+        q,
+    ):
+        try:
+            from apex_hal_said_improve_pack import assign_softdent_denials_to_steve
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            rows = _section_rows(bundle, "softdent", "claims") or _section_rows(
+                bundle, "softdent", "claimStatus"
+            )
+            result = assign_softdent_denials_to_steve(rows if isinstance(rows, list) else [])
+            n = int(result.get("created") or 0)
+            notes.append(
+                f"Assigned {n} denial follow-up task(s) to Steve (NR2-local office_tasks; no SoftDent write-back). "
+                f"Skipped duplicates: {result.get('skipped', 0)}."
+            )
+            actions.append(
+                {
+                    "type": "set_status_banner",
+                    "message": f"Steve denial tasks · {n} created",
+                    "hint": "NR2-local assignee only.",
+                    "tone": "ok" if n else "warn",
+                }
+            )
+            if page != "office-manager" and not any(a.get("type") == "navigate" for a in actions):
+                actions.append({"type": "navigate", "page": "office-manager"})
+            actions.append({"type": "focus_widget", "widgetId": "om-daily-huddle"})
+            handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Could not assign denials: {exc}")
+            handled = True
+
+    # --- HAL-said: request clinical sign-off ---
+    if (not handled) and re.search(
+        r"\b(request (dr\.?\s*)?reno sign-?off|clinical sign-?off for claim|sign-?off (this )?narrative)\b",
+        q,
+    ):
+        try:
+            from apex_hal_said_improve_pack import submit_clinical_signoff
+
+            m = re.search(r"claim\s+([A-Za-z0-9\-]+)", q, re.I)
+            cid = m.group(1) if m else ""
+            result = submit_clinical_signoff({"claimId": cid, "note": "Requested via HAL"})
+            if result.get("ok"):
+                notes.append(
+                    f"Queued clinical sign-off for Dr. Reno (claim `{cid or 'n/a'}`). "
+                    "HAL does not submit to payer."
+                )
+                actions.append({"type": "navigate", "page": "narratives"})
+                actions.append({"type": "focus_widget", "widgetId": "clinical-signoff-queue"})
+            else:
+                notes.append(result.get("error") or "Sign-off request failed — include a claim id.")
+            handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Sign-off request error: {exc}")
+            handled = True
+
+    # --- What should HAL learn / teach me (staff memory priorities) ---
+    wants_learn = bool(
+        re.search(
+            r"\b("
+            r"what (would|do|should) you (like|want|prefer|prioritize) to learn|"
+            r"what (would|do|should) (you|hal) prioritize|"
+            r"prioritize learning|"
+            r"learning priorit|"
+            r"key areas .{0,40}learn|"
+            r"what should (i|we) (teach|tell|remember|save)|"
+            r"what (can|should) (you|hal) learn|"
+            r"what .{0,30}(governed|learned) memor|"
+            r"teach (you|hal)|"
+            r"based on .{0,40}governed memor"
+            r")\b",
+            q,
+        )
+    )
+    if (not handled) and wants_learn:
+        highlights: list[str] = []
+        try:
+            all_payload = build_all_pages_widget_census()
+            raw = all_payload.get("emptyHighlights") if isinstance(all_payload, dict) else None
+            if isinstance(raw, list):
+                highlights = [str(h) for h in raw[:8]]
+        except Exception:  # noqa: BLE001
+            highlights = []
+        notes.append(format_learn_priorities_reply(empty_highlights=highlights or None))
+        actions.append(
+            {
+                "type": "set_status_banner",
+                "message": "Learning priorities · Remember this: …",
+                "hint": "Staff learned_memories + governed memories.jsonl — no PHI.",
+                "tone": "ok",
+            }
+        )
+        handled = True
+
+    # --- Treatment planning estimate (InsCo × ADA from payment-line aggregates) ---
+    if not handled:
+        try:
+            from softdent_treatment_planning import (
+                format_treatment_estimate_reply,
+                lookup_treatment_estimate,
+                parse_treatment_estimate_query,
+                treatment_planning_status,
+            )
+
+            parsed = parse_treatment_estimate_query(query)
+            if parsed:
+                est = lookup_treatment_estimate(payer=parsed["payer"], ada_code=parsed["adaCode"])
+                reply_txt = format_treatment_estimate_reply(est)
+                notes.append(reply_txt)
+                tone = "ok" if est.get("sufficient") else "warn"
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": f"Tx plan estimate · {parsed['payer']} × {parsed['adaCode']}",
+                        "hint": "Historical SoftDent payment-line averages — not a benefits guarantee.",
+                        "tone": tone,
+                    }
+                )
+                handled = True
+            elif re.search(
+                r"\b(treatment plan(ning)? (data|status|ready|estimates?)|insurance payment (analysis|lines)|"
+                r"ada (payer|payment) (data|estimates?))\b",
+                q,
+            ):
+                st = treatment_planning_status()
+                notes.append(
+                    f"Treatment-planning data: {st.get('paymentLines', 0)} payment lines, "
+                    f"{st.get('procedureCodes', 0)} procedure crosswalk rows, "
+                    f"{st.get('estimates', 0)} InsCo×ADA estimates "
+                    f"({st.get('estimatesWithMinSample', 0)} with n>=10). "
+                    f"{st.get('hint') or ''}"
+                )
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": (
+                            f"Tx planning: {st.get('estimatesWithMinSample', 0)} ready estimates "
+                            f"/ {st.get('estimates', 0)} total"
+                        ),
+                        "hint": st.get("hint") or "",
+                        "tone": "ok" if int(st.get("estimatesWithMinSample") or 0) else "warn",
+                    }
+                )
+                handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Treatment-planning lookup unavailable: {exc}")
+
     # --- SoftDent / QuickBooks export playbook (when + how) ---
     export_sd = bool(
         re.search(r"\b(how|when).{0,40}\b(softdent|soft dent)\b.{0,40}\b(export|sync|import|grab|pull|get)\b", q)

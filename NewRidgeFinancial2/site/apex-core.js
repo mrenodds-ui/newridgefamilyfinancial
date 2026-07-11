@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10497 (Availity eligibility in patient dossier)
+ * Build: hal-10498 (SoftDent sd_patient_insurance + Availity eligibility in dossier)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10497";
+  const ASSET_V = "hal-10498";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
