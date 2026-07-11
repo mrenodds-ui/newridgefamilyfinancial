@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10488"
+BUILD_ID = "hal-10489"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -5188,6 +5188,12 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         _REPORTS_BUNDLE_CACHE["errors"] = None
         _TICKER_CACHE["at"] = 0.0
         _TICKER_CACHE["payload"] = None
+        try:
+            from apex_reconciliation_pack import invalidate_explain_cache
+
+            result["explainCache"] = invalidate_explain_cache(reason="import")
+        except Exception as exc:  # noqa: BLE001
+            result["explainCache"] = {"ok": False, "error": str(exc)}
         result["status"] = "ok"
         result["completedAt"] = _utc_now()
         result["importMode"] = bundle.get("importMode")
