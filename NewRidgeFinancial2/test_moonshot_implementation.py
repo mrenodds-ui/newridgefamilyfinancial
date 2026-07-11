@@ -43,6 +43,34 @@ class ImportCompletenessTests(unittest.TestCase):
         self.assertEqual(result["scorePct"], 100.0)
         self.assertTrue(result["ok"])
 
+    def test_warning_gaps_do_not_fail_completeness(self) -> None:
+        from import_diagnostics import STATUS_CONNECTED, STATUS_MISSING, assess_import_completeness
+
+        diag = {
+            "datasets": [
+                {"severity": "critical", "automated": True, "status": STATUS_CONNECTED, "rowCount": 10, "datasetKey": "a"},
+                {
+                    "severity": "warning",
+                    "automated": True,
+                    "status": STATUS_MISSING,
+                    "rowCount": 0,
+                    "datasetKey": "quickbooks.expenseCategories",
+                },
+                {
+                    "severity": "optional",
+                    "automated": True,
+                    "status": STATUS_MISSING,
+                    "rowCount": 0,
+                    "datasetKey": "quickbooks.payroll",
+                },
+            ]
+        }
+        result = assess_import_completeness(diag)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["required"], 1)
+        self.assertEqual(result["gaps"], [])
+        self.assertEqual(len(result.get("softGaps") or []), 1)
+
 
 class RbacWriteoffTests(unittest.TestCase):
     def test_tier1_office_manager(self) -> None:

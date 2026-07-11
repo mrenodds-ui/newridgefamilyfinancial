@@ -391,33 +391,45 @@ IMPORT_COMPLETENESS_MIN_PCT = float(os.environ.get("NR2_IMPORT_COMPLETENESS_MIN_
 
 
 def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, Any]:
-    """Score required (non-optional) datasets for row presence and connection status."""
+    """Score required datasets for row presence and connection status.
+
+    Only ``critical`` severity datasets count toward the hard completeness gate.
+    ``warning`` / ``optional`` gaps stay visible for honesty widgets but must not
+    403 the Apex shell (payroll/AP/expense categories pending ≠ whole app offline).
+    """
     if not isinstance(diagnostics, dict):
         return {"ok": False, "scorePct": 0.0, "required": 0, "connected": 0, "gaps": []}
     required: list[dict[str, Any]] = []
     connected = 0
     gaps: list[dict[str, Any]] = []
+    soft_gaps: list[dict[str, Any]] = []
     for row in diagnostics.get("datasets") or []:
         if not isinstance(row, dict):
             continue
-        if str(row.get("severity") or "") == "optional":
+        severity = str(row.get("severity") or "warning")
+        if severity == "optional":
             continue
         if row.get("automated") is False:
             continue
-        required.append(row)
         status = str(row.get("status") or "")
         row_count = int(row.get("rowCount") or 0)
+        gap_item = {
+            "datasetKey": row.get("datasetKey"),
+            "status": status,
+            "rowCount": row_count,
+            "detail": row.get("detail"),
+            "severity": severity,
+        }
+        # Warning = soft honesty gap only (does not fail the read gate).
+        if severity == "warning":
+            if status in {STATUS_MISSING, STATUS_STALE} or row_count <= 0:
+                soft_gaps.append(gap_item)
+            continue
+        required.append(row)
         if status == STATUS_CONNECTED and row_count > 0:
             connected += 1
         elif status in {STATUS_MISSING, STATUS_STALE} or row_count <= 0:
-            gaps.append(
-                {
-                    "datasetKey": row.get("datasetKey"),
-                    "status": status,
-                    "rowCount": row_count,
-                    "detail": row.get("detail"),
-                }
-            )
+            gaps.append(gap_item)
     total = len(required) or 1
     score = round((connected / total) * 100.0, 1)
     min_pct = IMPORT_COMPLETENESS_MIN_PCT
@@ -428,6 +440,7 @@ def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, 
         "required": len(required),
         "connected": connected,
         "gaps": gaps,
+        "softGaps": soft_gaps,
     }
 
 
