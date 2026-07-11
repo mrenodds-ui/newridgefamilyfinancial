@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10470"
+BUILD_ID = "hal-10475"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -896,6 +896,13 @@ def build_ins_patient_split(bundle: dict[str, Any]) -> dict[str, Any]:
             segs.append({"label": "Insurance", "value": float(ins)})
             segs.append({"label": "Patient", "value": float(pat)})
     if not segs:
+        gap_code = None
+        try:
+            from apex_softdent_hardening_pack import assess_collections_gap
+
+            gap_code = assess_collections_gap(bundle).get("gapCode")
+        except Exception:
+            gap_code = None
         return {
             "id": "ins-patient-split",
             "type": "stacked-bar",
@@ -909,6 +916,8 @@ def build_ins_patient_split(bundle: dict[str, Any]) -> dict[str, Any]:
                 if pending
                 else "Need both insurance > 0 and patient > 0 (Register Ins Plan $0 / all-patient dumps are not a mix)."
             ),
+            "gapCode": gap_code,
+            "def": "DEF-001" if pending or gap_code not in (None, "OK") else None,
         }
     return {
         "id": "ins-patient-split",
@@ -1805,6 +1814,12 @@ def _financial_widgets_from_reports(
         append_financial_missing(widgets, bundle)
     except Exception:
         pass
+    try:
+        from apex_unified_db_pack import unified_db_widget
+
+        widgets.append(unified_db_widget(bundle))
+    except Exception:
+        pass
 
     _apply_threshold_alerts(widgets, reports)
     return widgets
@@ -2071,24 +2086,32 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     )
 
     coll = None
+    coll_gap: dict[str, Any] = {}
     if latest:
         if latest.get("collectionsReported") is False or latest.get("collectionsPending") is True:
             coll = None
         elif "collections" in latest:
             coll = _parse_money(latest.get("collections"))
-    widgets.append(
-        _money_kpi(
-            "sd-collections",
-            "Collections",
-            coll,
-            hint=(
-                "SoftDent dashboard collections."
-                if coll is not None
-                else "Collections pending for latest SoftDent period — not $0. Import SoftDent collections/daysheet."
-            ),
-            delta_label=period or None,
-        )
+    try:
+        from apex_softdent_hardening_pack import assess_collections_gap, enrich_widget_with_collections_gap
+
+        coll_gap = assess_collections_gap(bundle)
+    except Exception:
+        coll_gap = {}
+    coll_widget = _money_kpi(
+        "sd-collections",
+        "Collections",
+        coll,
+        hint=(
+            "SoftDent dashboard collections."
+            if coll is not None
+            else "Collections pending for latest SoftDent period — not $0. Import SoftDent collections/daysheet."
+        ),
+        delta_label=period or None,
     )
+    if coll is None and coll_gap:
+        coll_widget = enrich_widget_with_collections_gap(coll_widget, coll_gap)
+    widgets.append(coll_widget)
 
     np_rows = _section_rows(bundle, "softdent", "newPatients")
     np_latest = _latest_period_row(np_rows)
@@ -2217,6 +2240,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         )
     )
     widgets.append(build_provider_horizontal_bars(bundle))
+    try:
+        from apex_softdent_hardening_pack import collections_gap_widget
+
+        widgets.insert(0, collections_gap_widget(bundle))
+    except Exception:
+        pass
 
     return widgets
 
@@ -3325,6 +3354,18 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
         append_hal_page_hal_said(widgets)
     except Exception:
         pass
+    try:
+        from apex_structured_insight_pack import ai_insight_widget
+
+        widgets.append(ai_insight_widget())
+    except Exception:
+        pass
+    try:
+        from apex_unified_db_pack import unified_db_widget
+
+        widgets.append(unified_db_widget(bundle))
+    except Exception:
+        pass
     return widgets
 
 
@@ -3988,7 +4029,17 @@ def _build_hal_status_payload() -> dict[str, Any]:
         "buildId": BUILD_ID,
         "refreshedAt": _utc_now(),
         "metrics": extras or None,
+        "orchestrator": _orchestrator_status_safe(),
     }
+
+
+def _orchestrator_status_safe() -> dict[str, Any]:
+    try:
+        from apex_orchestrator_pack import orchestrator_status
+
+        return orchestrator_status()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "enabled": False, "error": str(exc), "phase": "I0"}
 
 
 def _print_packet_html(page: str, widget_ids: list[Any], job_id: str) -> str:
@@ -4268,6 +4319,9 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         (r"\bpolicy (change|changelog|updates?)\b", "policy-changelog", "office-manager"),
         (r"\bpayer contacts?|carrier (phones?|contacts?)|eligibility phones?\b", "payer-contact-admin", "office-manager"),
         (r"\b(teach hal|structured remember|remember (form|structured))\b", "hal-structured-remember", "hal"),
+        (r"\b(ai insight|structured insight|insight (card|widget))\b", "hal-ai-insight", "hal"),
+        (r"\b(collections gap|def-?001|daysheet gap|why .{0,20}collections)\b", "softdent-collections-gap", "softdent"),
+        (r"\b(unified (db|database|snapshot)|nr2_unified|practice health snapshot)\b", "unified-db-snapshot", "financial"),
     )
     if (not handled) and allow_topic_focus and (
         explicit_board or any(re.search(pat, q) for pat, _wid, _pg in focus_rules)
@@ -4700,6 +4754,37 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             notes.append(reply_txt)
             handled = True
 
+    # --- DEF-001 / Phase I2: why collections empty ---
+    if (not handled) and re.search(
+        r"\b(why .{0,40}collections|collections (empty|pending|missing|gap)|def-?001|daysheet (gap|missing))\b",
+        q,
+    ):
+        try:
+            from apex_softdent_hardening_pack import assess_collections_gap, format_collections_gap_reply
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            gap = assess_collections_gap(bundle)
+            notes.append(format_collections_gap_reply(gap))
+            if not gap.get("healthy"):
+                append_collections_pending_board_actions(actions)
+            if gap.get("healthy"):
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": f"Collections reported · {gap.get('period') or 'latest'}",
+                        "hint": "gapCode=OK",
+                        "tone": "ok",
+                    }
+                )
+            if page != "softdent" and not any(a.get("type") == "navigate" for a in actions):
+                actions.append({"type": "navigate", "page": "softdent"})
+            actions.append({"type": "focus_widget", "widgetId": "softdent-collections-gap"})
+            actions.append({"type": "highlight_widget", "widgetId": "softdent-collections-gap", "ms": 4500})
+            handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"Collections gap check failed: {exc}")
+            handled = True
+
     # --- HAL-said: assign SoftDent denials → Steve (NR2 tasks only) ---
     if (not handled) and re.search(
         r"\b(assign (open )?denials?( to steve)?|denials? (to|for) steve|steve.?s? denial(s| queue)?)\b",
@@ -4964,6 +5049,13 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "stale": summary.get("stale"),
         }
         result["freshness"] = build_import_freshness(bundle)
+        # Phase I3 — mirror import bundle into additive unified SQLite
+        try:
+            from apex_unified_db_pack import ingest_from_bundle
+
+            result["unifiedIngest"] = ingest_from_bundle(bundle)
+        except Exception as exc:  # noqa: BLE001
+            result["unifiedIngest"] = {"ok": False, "error": str(exc)}
     except Exception as exc:  # noqa: BLE001
         result["ok"] = False
         result["status"] = "error"
@@ -5437,6 +5529,140 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                     "error": str(exc),
                 }
             )
+
+    @app.get("/api/apex/hal/orchestrator")
+    def apex_hal_orchestrator_status():
+        try:
+            from apex_orchestrator_pack import orchestrator_status
+
+            payload = orchestrator_status()
+            payload["buildId"] = BUILD_ID
+            return json_response_fn(payload)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn(
+                {"ok": False, "enabled": False, "error": str(exc), "buildId": BUILD_ID},
+                status=500,
+            )
+
+    @app.post("/api/apex/hal/orchestrate")
+    def apex_hal_orchestrate_api():
+        """Phase I0 program-manager route: classify lane then (optional) evaluate_query."""
+        try:
+            import bottle
+            from apex_orchestrator_pack import orchestrate, orchestrator_enabled
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            query = str(payload.get("query") or "").strip()
+            classify_only = bool(payload.get("classifyOnly") or payload.get("classify_only"))
+            if not query:
+                return json_response_fn({"ok": False, "error": "query required", "buildId": BUILD_ID}, status=400)
+
+            # classifyOnly always allowed (validation) even when flag off
+            if not classify_only and not orchestrator_enabled():
+                return json_response_fn(
+                    {
+                        "ok": False,
+                        "error": "orchestrator_disabled",
+                        "hint": "Set NR2_AI_ORCHESTRATOR=1",
+                        "buildId": BUILD_ID,
+                    },
+                    status=503,
+                )
+
+            readiness = {"level": "unknown"}
+            try:
+                from import_diagnostics import assess_import_readiness
+
+                readiness = assess_import_readiness(operation="dailyOps") or readiness
+            except Exception:
+                readiness = {"level": "unknown"}
+
+            store = None
+            try:
+                from document_sync import NR2_DATA_DIR
+                from local_store import LocalStore
+
+                store = LocalStore(NR2_DATA_DIR)
+            except Exception:
+                store = None
+
+            result = orchestrate(
+                query,
+                readiness=readiness if isinstance(readiness, dict) else {"level": "unknown"},
+                context=payload.get("shiftContext")
+                if isinstance(payload.get("shiftContext"), dict)
+                else payload.get("context")
+                if isinstance(payload.get("context"), dict)
+                else {"page": payload.get("page")},
+                system_prompt=str(payload.get("systemPrompt") or payload.get("system") or ""),
+                messages=payload.get("messages") if isinstance(payload.get("messages"), list) else None,
+                options=payload.get("options") if isinstance(payload.get("options"), dict) else None,
+                store=store,
+                classify_only=classify_only,
+                force_enabled=True if classify_only else None,
+                require_structured=bool(payload.get("requireStructured") or payload.get("require_structured")),
+            )
+            result["buildId"] = BUILD_ID
+            status = 200 if result.get("ok") or classify_only else 400
+            if result.get("error") == "orchestrator_disabled":
+                status = 503
+            return json_response_fn(result, status=status)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/hal/insight-validate")
+    def apex_hal_insight_validate():
+        try:
+            import bottle
+            from apex_structured_insight_pack import parse_and_validate_insight_text, validate_insight
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            if "text" in payload and not payload.get("insight"):
+                result = parse_and_validate_insight_text(str(payload.get("text") or ""))
+            else:
+                insight = payload.get("insight") if isinstance(payload.get("insight"), dict) else payload
+                result = validate_insight(insight if isinstance(insight, dict) else None)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=200 if result.get("ok") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/hal/collections-gap")
+    def apex_hal_collections_gap():
+        try:
+            from apex_softdent_hardening_pack import assess_collections_gap
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            result = assess_collections_gap(bundle)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/unified/snapshot")
+    def apex_unified_snapshot():
+        try:
+            from apex_unified_db_pack import orchestrator_context_snapshot
+
+            result = orchestrator_context_snapshot(limit=12)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/unified/ingest")
+    def apex_unified_ingest():
+        try:
+            from apex_unified_db_pack import ingest_from_bundle
+
+            _reports, bundle, _err = _load_reports_and_bundle()
+            result = ingest_from_bundle(bundle)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=200 if result.get("ok") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
     @app.get("/api/apex/ticker")
     def apex_ticker_api():

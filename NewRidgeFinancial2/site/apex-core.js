@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10471 (IndexedDB widget cache + browser storage fallback)
+ * Build: hal-10475 (IndexedDB widget cache + browser storage fallback)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10471";
+  const ASSET_V = "hal-10475";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -233,6 +233,7 @@
       return "full";
     if (type === "data-table" || type === "tax-calendar" || type === "task-board") return "full";
     if (type === "status") return "s";
+    if (type === "ai-insight") return "l";
     return "s";
   }
 
@@ -404,6 +405,72 @@
               </span>
             </div>
           </div>
+        `;
+      }
+
+      if (this.type === "ai-insight") {
+        const insight = this.spec.insight && typeof this.spec.insight === "object" ? this.spec.insight : null;
+        const empty = this.spec.status === "empty" || !insight;
+        if (empty) {
+          return `
+            <header class="apex-widget-header">
+              <span class="apex-widget-label">${label}</span>
+              ${printBtn}
+            </header>
+            <div class="apex-kpi-value is-empty">${this.escape(this.spec.emptyMessage || "No structured insight")}</div>
+            <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+          `;
+        }
+        const data = insight.data && typeof insight.data === "object" ? insight.data : {};
+        const refs = Array.isArray(insight.source_refs) ? insight.source_refs : [];
+        const conf = this.escape(String(insight.confidence || ""));
+        const wt = this.escape(String(insight.widget_type || ""));
+        let body = "";
+        if (insight.widget_type === "kpi-card") {
+          const unit = data.unit === "dollars" ? "$" : data.unit === "percent" ? "%" : "";
+          const val =
+            data.value == null || data.value === ""
+              ? "—"
+              : unit === "$"
+                ? formatMoney(data.value)
+                : unit === "%"
+                  ? `${Number(data.value).toFixed(1)}%`
+                  : String(data.value);
+          body = `<div class="apex-kpi-value">${this.escape(val)}</div>
+            <div class="apex-kpi-hint">${this.escape(data.trend_direction || "")} ${
+            data.trend_percent != null ? this.escape(String(data.trend_percent) + "%") : ""
+          }</div>`;
+        } else if (insight.widget_type === "trend-chart") {
+          const series = Array.isArray(data.series) ? data.series : [];
+          body = `<ul class="apex-huddle-list">${series
+            .map(
+              (s) =>
+                `<li class="apex-huddle-item">${this.escape((s && s.label) || "")}: ${
+                  s && s.value != null ? this.escape(String(s.value)) : "—"
+                }</li>`
+            )
+            .join("")}</ul>`;
+        } else if (insight.widget_type === "alert-banner") {
+          body = `<div class="apex-kpi-value">${this.escape(String(data.severity || "info").toUpperCase())}</div>
+            <div class="apex-kpi-hint">${this.escape(String(data.message || ""))}</div>`;
+        }
+        const cta =
+          insight.action_cta && insight.action_cta.route
+            ? `<button type="button" class="apex-btn apex-btn--small" data-insight-route="${this.escape(
+                insight.action_cta.route
+              )}">${this.escape(insight.action_cta.label || "Open")}</button>`
+            : "";
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            <span class="apex-kpi-hint">${wt} · ${conf}</span>
+            ${printBtn}
+          </header>
+          ${body}
+          <p class="apex-kpi-hint">${this.escape(String(insight.explanation || ""))}</p>
+          <div class="apex-kpi-hint">sources: ${this.escape(refs.join(" · ") || "—")}</div>
+          ${cta}
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
         `;
       }
 
@@ -3430,6 +3497,9 @@
       if (this.type === "status" || this.spec.rememberForm) {
         wireHalSaidRemember(this.element);
       }
+      if (this.type === "ai-insight") {
+        wireAiInsight(this.element);
+      }
     }
   }
 
@@ -4759,6 +4829,17 @@
     });
   }
 
+  function wireAiInsight(root) {
+    if (!root || root.dataset.wiredInsight === "1") return;
+    root.dataset.wiredInsight = "1";
+    root.querySelectorAll("[data-insight-route]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const page = btn.getAttribute("data-insight-route") || "hal";
+        loadPage(page);
+      });
+    });
+  }
+
   function wireHalSaidRemember(root) {
     if (!root || root.dataset.wiredRemember === "1") return;
     const form = root.querySelector("[data-hal-remember-form]");
@@ -5210,6 +5291,27 @@
     return results;
   }
 
+  let orchestratorEnabledCache = null;
+  let orchestratorEnabledAt = 0;
+
+  async function refreshOrchestratorEnabled() {
+    const now = Date.now();
+    if (orchestratorEnabledCache !== null && now - orchestratorEnabledAt < 30000) {
+      return orchestratorEnabledCache;
+    }
+    try {
+      const res = await apexFetch(`${config.apiBase}/hal/orchestrator`);
+      const data = await res.json().catch(() => ({}));
+      orchestratorEnabledCache = !!(data && data.enabled);
+      orchestratorEnabledAt = now;
+      return orchestratorEnabledCache;
+    } catch (_err) {
+      orchestratorEnabledCache = false;
+      orchestratorEnabledAt = now;
+      return false;
+    }
+  }
+
   async function askHal(query, logEl) {
     const q = String(query || "").trim();
     if (!q) return;
@@ -5262,23 +5364,49 @@
         return;
       }
 
-      // 2) Conversational HAL for questions (still no write of invented $ into widgets)
-      const res = await apexFetch(config.halChatEndpoint, {
-        method: "POST",
-        body: JSON.stringify({
-          query: q,
-          lane: "chat8b",
-          shiftContext: {
+      // 2) Conversational HAL — Phase I0 orchestrator when flagged; else evaluate-query
+      const useOrch = await refreshOrchestratorEnabled();
+      const chatUrl = useOrch ? `${config.apiBase}/hal/orchestrate` : config.halChatEndpoint;
+      const chatBody = useOrch
+        ? {
+            query: q,
             page: currentPage,
-            boardHint: board && board.reply ? board.reply : undefined,
-            honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
-          },
-        }),
+            shiftContext: {
+              page: currentPage,
+              boardHint: board && board.reply ? board.reply : undefined,
+              honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
+            },
+          }
+        : {
+            query: q,
+            lane: "chat8b",
+            shiftContext: {
+              page: currentPage,
+              boardHint: board && board.reply ? board.reply : undefined,
+              honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
+            },
+          };
+      const res = await apexFetch(chatUrl, {
+        method: "POST",
+        body: JSON.stringify(chatBody),
       });
       const data = await res.json().catch(() => ({}));
       let reply = "";
       if (data && (data.text || data.answer || data.reply)) {
         reply = String(data.text || data.answer || data.reply);
+        if (useOrch && data.lane) {
+          reply = `${reply}\n\n— lane: ${data.lane}${data.classification && data.classification.reason ? ` (${data.classification.reason})` : ""}${
+            data.structured ? " · structured insight" : data.insightError ? ` · insight: ${data.insightError}` : ""
+          }`;
+        }
+        if (useOrch && data.structured && data.insight && currentPage === "hal") {
+          try {
+            // Soft-refresh HAL page so ai-insight widget can pick up last insight via session
+            sessionStorage.setItem("nr2-apex-last-insight", JSON.stringify(data.insight));
+          } catch (_e) {
+            /* ignore */
+          }
+        }
       } else if (data && data.error) {
         const reason = data.reason ? ` (${data.reason})` : "";
         reply = `HAL unavailable: ${data.error}${reason}`;
