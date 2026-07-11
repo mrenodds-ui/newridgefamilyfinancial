@@ -11,12 +11,22 @@
   --apex-magenta: #ff0066;
   --apex-text-primary: #f0f2f5;
   --apex-text-secondary: #8b9098;
-  --apex-grid-gap: 8px;
+  --apex-grid-gap: 6px;
+  --apex-grid-gap-comfortable: 10px;
   --apex-radius: 6px;
   --apex-anim-fast: 120ms;
-  --apex-anim-medium: 240ms;
+  --apex-anim-medium: 200ms;
   --apex-widget-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   --apex-widget-min: 140px;
+  --apex-body-font-size: 12px;
+  --apex-page-title-size: 16px;
+}
+
+/* Phase 5 density: Compact (default) vs Comfortable */
+html[data-apex-density="comfortable"] {
+  --apex-grid-gap: var(--apex-grid-gap-comfortable);
+  --apex-body-font-size: 13px;
+  --apex-page-title-size: 18px;
 }
 
 * {
@@ -37,7 +47,7 @@ body {
   background-size: 48px 48px, 48px 48px, auto;
   color: var(--apex-text-primary);
   font-family: "JetBrains Mono", ui-monospace, "Segoe UI", sans-serif;
-  font-size: 13px;
+  font-size: var(--apex-body-font-size, 12px);
   line-height: 1.4;
   overflow-x: hidden;
 }
@@ -510,22 +520,48 @@ body {
   .apex-hal-chat__dot {
     animation: none;
   }
+  .apex-widget,
+  .apex-widget.is-updating,
+  .apex-widget.apex-widget--skeleton.is-updating {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  .apex-widget:hover {
+    transform: none !important;
+  }
+}
+
+@media (max-width: 1279px) {
+  .apex-inst--xl {
+    grid-row: span 1;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --apex-grid-gap: 4px;
+  }
+  .apex-widget {
+    min-height: 48px;
+    padding: 8px;
+  }
 }
 
 .apex-widget {
   background: var(--apex-elevated);
   border: 1px solid var(--apex-border);
   border-radius: var(--apex-radius);
-  padding: 12px;
+  padding: 10px;
   position: relative;
-  min-height: 100px;
-  transition: transform var(--apex-anim-fast), box-shadow var(--apex-anim-fast);
+  min-height: 60px;
+  transition: border-color var(--apex-anim-fast), box-shadow var(--apex-anim-fast);
   animation: apexEnter var(--apex-anim-medium) ease-out backwards;
 }
 
 .apex-widget--wide {
   grid-column: span 2;
-  min-height: 180px;
+  min-height: 140px;
 }
 
 .apex-widget--status {
@@ -533,19 +569,27 @@ body {
   opacity: 0.92;
 }
 
+/* Moonshot M-1: solid hover — border only, no float/scale */
 .apex-widget:hover {
-  transform: translateY(-2px);
+  border-color: var(--apex-cyan, #00d2ff);
   box-shadow: var(--apex-widget-shadow), 0 0 0 1px var(--apex-cyan-dim);
+  transform: none;
 }
 
-.apex-widget.is-updating {
-  animation: apexBreathe 2s ease-in-out infinite;
+/* Breathe only on explicit loading skeletons (finite), never infinite on static cards */
+.apex-widget.is-updating:not(.apex-widget--skeleton) {
+  animation: none;
+  opacity: 1;
+}
+
+.apex-widget.apex-widget--skeleton.is-updating {
+  animation: apexBreathe 1.2s ease-in-out 3;
 }
 
 @keyframes apexEnter {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;

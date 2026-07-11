@@ -656,6 +656,76 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
     return widgets
 
 
+def build_claims_kanban_subpage(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Full Claims workbench — moved off main page (Moonshot compact Phase 4)."""
+    del reports
+    widgets: list[dict[str, Any]] = [
+        _nav(
+            "Claims · Kanban",
+            "Full table + kanban workbench",
+            "Hash #claims/kanban · SoftDent read-only · NR2 actions only.",
+        )
+    ]
+    try:
+        from apex_claims_narratives_pack import build_status_columns, kanban_widget
+        from apex_program_improve_pack import apply_era_to_kanban_columns, attachment_counts
+
+        claim_rows = _section_rows(bundle, "softdent", "claims") or _section_rows(
+            bundle, "softdent", "claimStatus"
+        )
+        kanban_payload = build_status_columns(claim_rows if isinstance(claim_rows, list) else [])
+        cols = kanban_payload.get("columns") if isinstance(kanban_payload.get("columns"), dict) else {}
+        kanban_payload["columns"] = apply_era_to_kanban_columns(cols)
+        kanban_payload["counts"] = {
+            k: len(v) if isinstance(v, list) else 0 for k, v in (kanban_payload.get("columns") or {}).items()
+        }
+        att_counts = attachment_counts()
+        for _col, cards in (kanban_payload.get("columns") or {}).items():
+            if not isinstance(cards, list):
+                continue
+            for card in cards:
+                if not isinstance(card, dict):
+                    continue
+                cid = str(card.get("claimId") or "")
+                n = int(att_counts.get(cid) or 0)
+                if n and not card.get("attachments"):
+                    card["attachments"] = {"current": n, "required": None}
+        widgets.append(kanban_widget(kanban_payload))
+    except Exception as exc:
+        widgets.append(
+            {
+                "id": "claims-kanban-error",
+                "type": "status",
+                "label": "Kanban",
+                "size": "strip",
+                "status": "empty",
+                "emptyMessage": f"Kanban unavailable: {exc}",
+            }
+        )
+    return widgets
+
+
+def build_om_operatory_subpage(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Operatory detail drill-down (Moonshot compact Phase 4)."""
+    widgets = build_softdent_schedule(reports, bundle)
+    if widgets and isinstance(widgets[0], dict) and widgets[0].get("type") == "status":
+        widgets[0]["label"] = "Office Mgr · Operatory"
+        widgets[0]["hint"] = "Hash #office-manager/operatory · from operatoryChairs import."
+    try:
+        from apex_bar_trend_page_org_pack import build_operatory_util_chart
+        from apex_financial_console_pack import collapse_empty_large
+
+        util = build_operatory_util_chart(bundle)
+        if util.get("status") == "empty":
+            util = collapse_empty_large(util)
+        else:
+            util["size"] = "m"
+        widgets.insert(1, util)
+    except Exception:
+        pass
+    return widgets
+
+
 WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
     ("taxes", "entities"): build_tax_entities,
     ("taxes", "calendar"): build_tax_calendar,
@@ -666,12 +736,14 @@ WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
     ("quickbooks", "vendors"): build_qb_vendors,
     ("ar", "aging-detail"): build_ar_aging_detail,
     ("claims", "attachments"): build_claims_attachments,
+    ("claims", "kanban"): build_claims_kanban_subpage,
     ("narratives", "templates"): build_narrative_templates,
     ("narratives", "history"): build_narrative_history,
     ("narratives", "audit"): build_narrative_audit,
     ("documents", "tax-docs"): build_tax_docs,
     ("library", "codes"): build_library_codes,
     ("office-manager", "tasks"): build_om_tasks,
+    ("office-manager", "operatory"): build_om_operatory_subpage,
     ("hal", "history"): build_hal_history,
     ("hal", "system-logs"): build_hal_system_logs,
 }

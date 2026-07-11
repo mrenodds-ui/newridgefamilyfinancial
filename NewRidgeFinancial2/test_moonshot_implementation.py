@@ -71,6 +71,27 @@ class ImportCompletenessTests(unittest.TestCase):
         self.assertEqual(result["gaps"], [])
         self.assertEqual(len(result.get("softGaps") or []), 1)
 
+    def test_stale_critical_with_rows_counts_connected(self) -> None:
+        from import_diagnostics import STATUS_CONNECTED, STATUS_STALE, assess_import_completeness
+
+        diag = {
+            "datasets": [
+                {"severity": "critical", "automated": True, "status": STATUS_CONNECTED, "rowCount": 10, "datasetKey": "a"},
+                {
+                    "severity": "critical",
+                    "automated": True,
+                    "status": STATUS_STALE,
+                    "rowCount": 4,
+                    "datasetKey": "softdent.ar",
+                },
+            ]
+        }
+        result = assess_import_completeness(diag)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["connected"], 2)
+        self.assertEqual(result["gaps"], [])
+        self.assertEqual(len(result.get("softGaps") or []), 1)
+
 
 class RbacWriteoffTests(unittest.TestCase):
     def test_tier1_office_manager(self) -> None:

@@ -396,6 +396,9 @@ def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, 
     Only ``critical`` severity datasets count toward the hard completeness gate.
     ``warning`` / ``optional`` gaps stay visible for honesty widgets but must not
     403 the Apex shell (payroll/AP/expense categories pending ≠ whole app offline).
+
+    Critical + ``stale`` with rows still counts as connected for the gate: freshness
+    chips show honesty; a 2h SoftDent TTL must not 403 the whole shell.
     """
     if not isinstance(diagnostics, dict):
         return {"ok": False, "scorePct": 0.0, "required": 0, "connected": 0, "gaps": []}
@@ -428,7 +431,11 @@ def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, 
         required.append(row)
         if status == STATUS_CONNECTED and row_count > 0:
             connected += 1
-        elif status in {STATUS_MISSING, STATUS_STALE} or row_count <= 0:
+        elif status == STATUS_STALE and row_count > 0:
+            # Present but aged — soft honesty gap; still counts toward completeness.
+            connected += 1
+            soft_gaps.append(gap_item)
+        elif status == STATUS_MISSING or row_count <= 0:
             gaps.append(gap_item)
     total = len(required) or 1
     score = round((connected / total) * 100.0, 1)
@@ -445,7 +452,11 @@ def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, 
 
 
 def blocking_import_issues(diagnostics: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Datasets whose missing/stale state should degrade integration health imports."""
+    """Critical datasets that are missing (not merely stale) block money-read freshness.
+
+    Stale-with-rows is honesty/soft health — freshness chips surface age without 403ing
+    the Apex shell when SoftDent TTLs (e.g. 120 min) expire between syncs.
+    """
     if not isinstance(diagnostics, dict):
         return []
     blocking: list[dict[str, Any]] = []
@@ -453,14 +464,13 @@ def blocking_import_issues(diagnostics: dict[str, Any] | None) -> list[dict[str,
         if not isinstance(row, dict):
             continue
         severity = str(row.get("severity") or "warning")
-        if severity == "optional":
+        if severity in {"optional", "warning"}:
             continue
         status = row.get("status")
-        if severity == "warning" and status in {STATUS_MISSING, STATUS_STALE}:
-            continue
-        if status in {STATUS_MISSING, STATUS_STALE}:
+        row_count = int(row.get("rowCount") or 0)
+        if status == STATUS_MISSING or (severity == "critical" and row_count <= 0 and status != STATUS_CONNECTED):
             blocking.append(row)
-        elif status != STATUS_CONNECTED and severity == "critical":
+        elif status != STATUS_CONNECTED and status != STATUS_STALE and severity == "critical":
             blocking.append(row)
     return blocking
 

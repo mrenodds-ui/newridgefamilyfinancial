@@ -180,14 +180,15 @@
       "sourceOwner": "qb_sdk_summary",
       "generatedBy": ["qb_sdk_summary", "qb_sdk_expense_categories"],
       "freshnessMaxMinutes": 1440,
-      "severity": "critical",
+      "severity": "warning",
       "automated": true,
       "requiredFields": ["TotalExpense"],
       "optionalFields": ["Amount", "Expenses", "Expense", "Month", "Period"],
       "fieldAliases": {
         "TotalExpense": ["TotalExpense", "Expenses", "Expense", "total_expense", "Amount", "amount"],
         "Month": ["Month", "month", "Period", "period"]
-      }
+      },
+      "note": "Warning — missing QB expenses shows pending honesty widgets; must not 403 Apex money reads when SoftDent criticals are present."
     },
     "quickbooks.expenseCategories": {
       "system": "quickbooks",

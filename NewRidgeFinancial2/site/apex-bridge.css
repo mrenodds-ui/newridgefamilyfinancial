@@ -4,7 +4,7 @@
 :root {
   --sidebar-width: 240px;
   --ticker-height: 32px;
-  --mosaic-col: 300px;
+  --mosaic-col: 160px;
   --mosaic-row: 200px;
   --mosaic-gap: 10px;
   --apex-chrome: rgba(0, 240, 255, 0.08);
@@ -643,7 +643,7 @@ body.apex-bridge {
 
 .apex-page-title {
   font-family: "Orbitron", sans-serif;
-  font-size: 16px;
+  font-size: var(--apex-page-title-size, 16px);
   font-weight: 600;
   color: var(--apex-cyan);
   margin: 0;
@@ -1000,7 +1000,8 @@ body.apex-bridge {
 .apex-inst--full {
   grid-column: 1 / -1;
   grid-row: span 2;
-  min-height: 400px;
+  min-height: 200px;
+  max-height: min(420px, 55vh);
 }
 
 /* Override legacy wide stretch */
@@ -1008,8 +1009,12 @@ body.apex-bridge {
   grid-column: span 2;
 }
 
-.apex-inst.is-updating {
-  animation: apexBreathe 1.4s ease-in-out infinite;
+.apex-inst.is-updating:not(.apex-widget--skeleton) {
+  animation: none;
+}
+
+.apex-inst.apex-widget--skeleton.is-updating {
+  animation: apexBreathe 1.2s ease-in-out 3;
 }
 
 .apex-inst.is-patched {

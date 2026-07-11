@@ -12,7 +12,7 @@
   text-shadow: 0 0 8px rgba(0, 240, 255, 0.35), 0 0 16px rgba(0, 240, 255, 0.12);
 }
 
-.apex-page-title.apex-glitch.active {
+.apex-page-title.apex-glitch.active.is-error {
   animation: apexGlitch 0.15s ease-out;
 }
 
@@ -21,22 +21,21 @@
   transition: opacity 0.28s ease, transform 0.28s ease;
 }
 
-/* Holographic instrument lift */
+/* Holographic instrument lift — Moonshot M-1: border feedback only */
 .apex-mosaic {
   perspective: 1200px;
 }
 
 .apex-inst {
-  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .apex-inst:hover {
-  transform: translateY(-3px) scale(1.015);
+  transform: none;
+  border-color: var(--apex-cyan, #00d2ff);
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.55),
-    0 0 18px rgba(0, 240, 255, 0.12),
-    0 0 36px rgba(0, 240, 255, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 0 0 1px var(--apex-cyan-dim);
 }
 
 /* Corner brackets via background (does not steal ::before/::after from apex-bridge) */
@@ -72,8 +71,8 @@
     16px 1px, 1px 16px;
 }
 
-/* Ambient scanline sweep */
-body.apex-scan-sweep::after {
+/* Ambient scanline sweep — OFF by default; enable with body.apex-ambient-enabled */
+body.apex-ambient-enabled.apex-scan-sweep::after {
   content: "";
   position: fixed;
   top: 0;
@@ -163,7 +162,7 @@ body.apex-scan-sweep::after {
     transform: none;
   }
 
-  body.apex-scan-sweep::after {
+  body.apex-ambient-enabled.apex-scan-sweep::after {
     animation: none;
     opacity: 0;
   }

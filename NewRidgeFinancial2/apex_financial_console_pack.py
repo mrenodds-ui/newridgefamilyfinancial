@@ -400,7 +400,7 @@ def build_dual_axis_trend(bundle: dict[str, Any]) -> dict[str, Any]:
         "id": "financial-dual-trend",
         "type": "dual-axis-trend",
         "label": "Production & Collections Trend",
-        "size": "m",
+        "size": "l",
         "production": series_prod,
         "collections": series_coll,
         "status": "ok",
@@ -460,21 +460,10 @@ def build_ebitda_station(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
-    """FIN-002: empty l/xl widgets become strip-sized compact cards."""
-    if not isinstance(widget, dict):
-        return widget
-    if widget.get("status") != "empty":
-        return widget
-    size = str(widget.get("size") or "")
-    if size not in {"l", "xl", "full", "large"}:
-        return widget
-    if widget.get("collapseWhenEmpty") is False:
-        return widget
-    out = dict(widget)
-    out["collapseWhenEmpty"] = True
-    out["size"] = "strip"
-    out["compact"] = True
-    return out
+    """FIN-002 / Moonshot compact: empty l/xl → strip. Skip loading/skeleton (R3)."""
+    from apex_compact_pages_pack import collapse_empty_large as _collapse
+
+    return _collapse(widget)
 
 
 def format_hal_morning_financial_reply(brief: dict[str, Any]) -> str:

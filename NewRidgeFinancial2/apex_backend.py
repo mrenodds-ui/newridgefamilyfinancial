@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10501"
+BUILD_ID = "hal-10550"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2841,7 +2841,31 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
             )
         )
         widgets.append(claims_critical_actions_widget(kanban_payload))
-        widgets.append(kanban_widget(kanban_payload))
+        # Moonshot compact: pipeline summary on main page; full workbench → #claims/kanban
+        try:
+            from apex_compact_pages_pack import claims_pipeline_summary_widget
+
+            widgets.append(
+                claims_pipeline_summary_widget(
+                    kanban_payload.get("counts") if isinstance(kanban_payload, dict) else None,
+                    available=bool(kanban_payload.get("available")),
+                )
+            )
+            widgets.append(
+                {
+                    "id": "claims-open-kanban",
+                    "type": "status",
+                    "label": "Claims Workbench",
+                    "size": "strip",
+                    "compact": True,
+                    "status": "ok",
+                    "message": "Open full Kanban / table workbench",
+                    "hint": "Hash #claims/kanban — Moonshot compact plan (pipeline summary above).",
+                    "navHash": "claims/kanban",
+                }
+            )
+        except Exception:
+            widgets.append(kanban_widget(kanban_payload))
         widgets.append(
             claims_risk_analytics_widget(kmeta, available=bool(kanban_payload.get("available")))
         )
@@ -3300,7 +3324,23 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         util = build_operatory_util_chart(bundle)
         if util.get("status") == "empty":
             util = collapse_empty_large(util)
+        else:
+            util["size"] = "s"
         widgets.insert(1, util)
+        widgets.insert(
+            2,
+            {
+                "id": "om-open-operatory",
+                "type": "status",
+                "label": "Operatory",
+                "size": "strip",
+                "compact": True,
+                "status": "ok",
+                "message": "Open operatory detail",
+                "hint": "Hash #office-manager/operatory",
+                "navHash": "office-manager/operatory",
+            },
+        )
     except Exception:
         pass
     try:
@@ -3320,16 +3360,6 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
     widgets: list[dict[str, Any]] = []
-
-    widgets.append(
-        {
-            "id": "hal-ask",
-            "type": "hal-chat",
-            "label": "Ask HAL",
-            "status": "ok",
-            "hint": "Local HAL command surface",
-        }
-    )
 
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
@@ -3357,6 +3387,17 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
             )
         )
 
+    # Moonshot HAL exemption: sole `l` chat after status strip
+    widgets.append(
+        {
+            "id": "hal-ask",
+            "type": "hal-chat",
+            "label": "Ask HAL",
+            "size": "l",
+            "status": "ok",
+            "hint": "Local HAL command surface · sole large instrument (Moonshot HAL exemption).",
+        }
+    )
     if isinstance(connected, int) and isinstance(total, int) and total > 0 and missing == 0:
         posture_msg = "Operational"
         posture_hint = "Imports connected — Apex P5 automation + live widgets."
@@ -3645,6 +3686,17 @@ def build_apex_widgets(
             source_note += " +U3 layout"
         except Exception:
             pass
+
+    # Moonshot compact Phases 2–3: empty-collapse + first-viewport size discipline
+    try:
+        from apex_compact_pages_pack import apply_collapse_empty_all, normalize_first_viewport
+
+        widgets = apply_collapse_empty_all(widgets if isinstance(widgets, list) else [])
+        if not sub_key:
+            widgets = normalize_first_viewport(widgets, page=pid)
+        source_note += " +compact"
+    except Exception:
+        pass
 
     page_label = f"{pid}/{sub_key}" if sub_key else pid
     payload = {

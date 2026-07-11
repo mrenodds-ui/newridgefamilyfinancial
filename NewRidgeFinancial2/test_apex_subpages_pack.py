@@ -194,6 +194,8 @@ def test_wave5_remaining_add_builders_resolve():
     assert ("hal", "system-logs") in WAVE5_BUILDERS
     assert resolve_subpage_builder("taxes", "calendar") is not None
     assert resolve_subpage_builder("office-manager", "tasks") is not None
+    assert resolve_subpage_builder("claims", "kanban") is not None
+    assert resolve_subpage_builder("office-manager", "operatory") is not None
 
 
 def test_wave5_register_empty_honest():

@@ -1,15 +1,16 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10497 (Availity eligibility in patient dossier)
+ * Build: hal-10550 (Moonshot compact professional pages Phases 1–5)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10497";
+  const ASSET_V = "hal-10550";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
+  const DENSITY_KEY = "nr2-apex-density";
   const PARENT_PAGES = new Set([
     "financial",
     "taxes",
@@ -47,7 +48,8 @@
       { sub: "vendors", label: "Vendors" },
     ],
     claims: [
-      { sub: null, label: "Workbench" },
+      { sub: null, label: "Overview" },
+      { sub: "kanban", label: "Kanban" },
       { sub: "detail", label: "Detail" },
       { sub: "batch", label: "Batch" },
       { sub: "era", label: "ERA" },
@@ -79,6 +81,7 @@
       { sub: null, label: "Overview" },
       { sub: "huddle", label: "Huddle" },
       { sub: "tasks", label: "Tasks" },
+      { sub: "operatory", label: "Operatory" },
     ],
     hal: [
       { sub: null, label: "Chat" },
@@ -100,6 +103,7 @@
     batch: "Batch",
     era: "ERA",
     attachments: "Attachments",
+    kanban: "Kanban",
     collections: "Collections",
     "aging-detail": "Aging Detail",
     forecast: "Forecast",
@@ -112,6 +116,7 @@
     codes: "Codes",
     huddle: "Huddle",
     tasks: "Tasks",
+    operatory: "Operatory",
     "system-logs": "System Logs",
   };
 
@@ -246,7 +251,7 @@
     refreshInterval: 0,
     apiBase: "/api/apex",
     halChatEndpoint: "/api/hal/evaluate-query",
-    animStagger: 50,
+    animStagger: 40,
   };
 
   const ICONS = {
@@ -356,7 +361,13 @@
       if (Array.isArray(this.spec.aliasIds) && this.spec.aliasIds.length) {
         el.dataset.aliasIds = this.spec.aliasIds.map(String).join(" ");
       }
-      el.style.animationDelay = `${index * config.animStagger}ms`;
+      el.style.animationDelay = `${Math.min(index, 2) * config.animStagger}ms`;
+      if (this.spec.navHash) {
+        el.dataset.navHash = String(this.spec.navHash);
+        el.classList.add("apex-widget--nav");
+        el.style.cursor = "pointer";
+        el.title = el.title || `Open #${this.spec.navHash}`;
+      }
       if (this.type === "hal-chat") {
         el.classList.add("apex-widget--hal-chat", "apex-inst--hal-chat");
       }
@@ -384,15 +395,30 @@
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
+            <span class="apex-hal-chat__live-indicator" data-hal-live aria-hidden="true"></span>
           </header>
           <div class="apex-hal-chat" data-hal-chat>
-            <div class="apex-hal-chat__messages" data-hal-messages aria-live="polite"></div>
-            <div class="apex-hal-chat__chips" data-hal-chips></div>
-            <form class="apex-hal-chat__form" data-hal-form>
-              <textarea class="apex-hal-chat__input" data-hal-input rows="2" placeholder="Ask HAL…" aria-label="Ask HAL"></textarea>
-              <button type="submit" class="apex-hal-chat__send" data-hal-send>Send</button>
+            <div class="apex-hal-chat__messages" data-hal-messages role="log" aria-live="polite" aria-label="HAL conversation history"></div>
+            <div class="apex-hal-chat__chips-wrap">
+              <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
+            </div>
+            <form class="apex-hal-chat__composer" data-hal-form action="#" method="dialog">
+              <div class="apex-hal-chat__input-sizer" data-input-sizer>
+                <textarea class="apex-hal-chat__input" data-hal-input rows="1" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL" maxlength="2000"></textarea>
+              </div>
+              <button type="submit" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
             </form>
-            <div class="apex-kpi-hint">${this.escape(this.spec.hint || "Local HAL command surface")}</div>
+            <div class="apex-hal-chat__meta">
+              <span class="apex-hal-chat__hint">${this.escape(this.spec.hint || "Local HAL command surface")}</span>
+              <span class="apex-hal-chat__indicator" data-hal-indicator hidden>
+                <span class="apex-hal-chat__dot"></span> Thinking…
+              </span>
+            </div>
           </div>
         `;
       }
@@ -2906,6 +2932,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }
 
     attachEvents() {
+      if (this.spec.navHash && this.element && this.element.dataset.navWired !== "1") {
+        this.element.dataset.navWired = "1";
+        this.element.addEventListener("click", (ev) => {
+          if (ev.target.closest("button, a, input, textarea, select")) return;
+          const hash = String(this.spec.navHash || "").replace(/^#/, "");
+          if (hash) loadPage(hash);
+        });
+      }
       const header = this.element.querySelector(".apex-widget-header");
       if (header && this.type !== "hal-chat" && !header.querySelector('[data-action="ask-hal"]')) {
         const ask = document.createElement("button");
@@ -5074,9 +5108,12 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       if (chat) askHal(q, chat);
       return;
     }
+    const chatRoot =
+      logEl.closest(".apex-widget--hal-chat") || logEl.closest("[data-hal-chat]") || document;
     appendHalMessage(logEl, "user", q);
     appendHalMessage(logEl, "hal", "Thinking…");
     const pending = logEl.lastElementChild;
+    setHalChatBusyUi(chatRoot, true);
     if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
       window.ApexHal.setHeaderStatus("busy", "HAL Busy");
     }
@@ -5098,12 +5135,17 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         board = null;
       }
 
-      if (board && board.handled && Array.isArray(board.actions) && board.actions.length) {
-        await runHalBoardActions(board.actions);
+      // Deterministic board reply wins over LLM — including replies with no actions.
+      if (board && board.handled) {
+        let boardResults = null;
+        if (Array.isArray(board.actions) && board.actions.length) {
+          boardResults = await runHalBoardActions(board.actions);
+        }
         const reply = String(board.reply || "Board updated from imports.");
         if (pending) {
           finalizeHalPending(pending, reply);
         } else appendHalMessage(logEl, "hal", reply);
+        if (boardResults) appendHalReceipt(logEl, board.actions, boardResults);
         if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
           window.ApexHalBrain.setState("reply");
         }
@@ -5296,6 +5338,16 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       .replace(/</g, "&lt;");
   }
 
+  function wireHalChatAutoResize(input) {
+    if (!input) return;
+    const resize = () => {
+      input.style.height = "auto";
+      input.style.height = `${Math.min(input.scrollHeight, 160)}px`;
+    };
+    input.addEventListener("input", resize);
+    resize();
+  }
+
   function wireHalChat(root) {
     const panel = root.querySelector("[data-hal-chat]");
     if (!panel || panel.dataset.wired === "1") return;
@@ -5306,12 +5358,40 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     const chips = panel.querySelector("[data-hal-chips]");
     restoreHalTranscript(logEl);
     loadHalSuggestionChips(chips, logEl);
+    wireHalChatAutoResize(input);
+
+    const submitAsk = () => {
+      if (!input) return;
+      const q = input.value;
+      input.value = "";
+      wireHalChatAutoResize(input);
+      askHal(q, logEl);
+      try {
+        input.focus();
+      } catch (_err) {
+        /* ignore */
+      }
+    };
+
     if (form && input) {
       form.addEventListener("submit", (ev) => {
         ev.preventDefault();
-        const q = input.value;
-        input.value = "";
-        askHal(q, logEl);
+        ev.stopPropagation();
+        submitAsk();
+      });
+      // Enter sends; Shift+Enter inserts a newline; Ctrl/Cmd+Enter also sends
+      input.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" || ev.isComposing) return;
+        if (ev.metaKey || ev.ctrlKey) {
+          ev.preventDefault();
+          if (form.requestSubmit) form.requestSubmit();
+          else submitAsk();
+          return;
+        }
+        if (ev.shiftKey) return;
+        ev.preventDefault();
+        if (form.requestSubmit) form.requestSubmit();
+        else submitAsk();
       });
     }
   }
@@ -5797,6 +5877,25 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     lastHalStatus = data;
   }
 
+  function applyDensity(mode) {
+    const next = mode === "comfortable" ? "comfortable" : "compact";
+    document.documentElement.setAttribute("data-apex-density", next);
+    try {
+      localStorage.setItem(DENSITY_KEY, next);
+    } catch (_err) {
+      /* ignore */
+    }
+    const btn = document.getElementById("btn-density");
+    if (btn) {
+      btn.textContent = next === "comfortable" ? "Compact" : "Comfortable";
+      btn.title =
+        next === "comfortable"
+          ? "Switch to Compact density (default)"
+          : "Switch to Comfortable density";
+      btn.setAttribute("aria-pressed", next === "comfortable" ? "true" : "false");
+    }
+  }
+
   function wireUi() {
     document.querySelectorAll("[data-page]").forEach((btn) => {
       btn.addEventListener("click", () => loadPage(btn.dataset.page));
@@ -5804,6 +5903,20 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     const printBtn = document.getElementById("btn-print");
     const refreshBtn = document.getElementById("btn-refresh");
     const askHal = document.getElementById("btn-ask-hal");
+    const densityBtn = document.getElementById("btn-density");
+    let savedDensity = "compact";
+    try {
+      savedDensity = localStorage.getItem(DENSITY_KEY) || "compact";
+    } catch (_err) {
+      savedDensity = "compact";
+    }
+    applyDensity(savedDensity);
+    if (densityBtn) {
+      densityBtn.addEventListener("click", () => {
+        const cur = document.documentElement.getAttribute("data-apex-density") || "compact";
+        applyDensity(cur === "comfortable" ? "compact" : "comfortable");
+      });
+    }
     if (printBtn) {
       printBtn.innerHTML = ICONS.print;
       printBtn.addEventListener("click", () => printPage());
@@ -5825,6 +5938,20 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       const hash = (location.hash || "").replace(/^#/, "").trim();
       const next = routeKey(currentPage, currentSub, currentQuery);
       if (hash && hash !== next) loadPage(hash);
+    });
+    // Optional keyboard j/k between strip widgets (Phase 5)
+    window.addEventListener("keydown", (ev) => {
+      if (ev.target && /INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+      if (ev.key !== "j" && ev.key !== "k") return;
+      const strips = Array.from(document.querySelectorAll("#apex-stage .apex-inst--strip, #apex-stage .apex-inst--s"));
+      if (!strips.length) return;
+      const active = document.activeElement;
+      let idx = strips.findIndex((el) => el === active || el.contains(active));
+      if (idx < 0) idx = ev.key === "j" ? -1 : 0;
+      const next = ev.key === "j" ? Math.min(strips.length - 1, idx + 1) : Math.max(0, idx - 1);
+      strips[next].setAttribute("tabindex", "-1");
+      strips[next].focus();
+      ev.preventDefault();
     });
   }
 
