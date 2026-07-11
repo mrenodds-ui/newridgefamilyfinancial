@@ -1,6 +1,9 @@
 {
-  "BUILD_ID": "hal-10460",
-  "assetVersion": "hal-10460",
-  "schemaVersion": "hal-10460",
-  "notes": "hal-10460: Wave-5 remaining master-map ADD subpages (taxes/SD/QB/AR aging/narratives/docs/lib/OM/HAL)."
+  "BUILD_ID": "hal-10476",
+  "assetVersion": "hal-10476",
+  "schemaVersion": "hal-10476",
+  "epoch": "nr2-apex",
+  "releasedAt": "2026-07-10",
+  "notes": "hal-10476: Widgets/charts/subpages merged onto main (post AI-PM MUST + HAL UX).",
+  "builtAt": "2026-07-11T21:30:00.000Z"
 }
