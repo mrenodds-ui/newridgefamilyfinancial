@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10460 (wave-5 remaining master-map ADD subpages)
+ * Build: hal-10461 (kill periodic page flicker)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10460";
+  const ASSET_V = "hal-10461";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -237,7 +237,8 @@
   }
 
   const config = {
-    refreshInterval: 30 * 60 * 1000, // 30 minutes — avoid page flicker from silent widget polls
+    // 0 = no automatic page reload. Sync button / HAL refresh_page still reload.
+    refreshInterval: 0,
     apiBase: "/api/apex",
     halChatEndpoint: "/api/hal/evaluate-query",
     animStagger: 50,
@@ -5366,28 +5367,35 @@
     });
   }
 
-  function setPageTitle(pageId, sub) {
+  function setPageTitle(pageId, sub, opts) {
+    const silent = Boolean(opts && opts.silent);
     const el = document.getElementById("apex-page-title");
     if (el) {
       const base = PAGE_TITLES[pageId] || pageId || "Apex";
       const subLabel = sub ? SUBPAGE_TITLES[sub] || sub : "";
-      el.textContent = subLabel ? `${base} · ${subLabel}` : base;
-      if (window.ApexMotion && typeof window.ApexMotion.triggerGlitch === "function") {
+      const next = subLabel ? `${base} · ${subLabel}` : base;
+      if (el.textContent !== next) el.textContent = next;
+      // Never glitch/flash on silent polls — that looked like a full page refresh.
+      if (!silent && window.ApexMotion && typeof window.ApexMotion.triggerGlitch === "function") {
         window.ApexMotion.triggerGlitch(el);
       }
     }
-    if (window.ApexMotion && typeof window.ApexMotion.flashStage === "function") {
+    if (!silent && window.ApexMotion && typeof window.ApexMotion.flashStage === "function") {
       window.ApexMotion.flashStage();
     }
   }
 
-  function setMeta(payload) {
+  function setMeta(payload, opts) {
     const el = metaEl();
     if (!el) return;
+    const silent = Boolean(opts && opts.silent);
     const at = payload && payload.refreshedAt ? payload.refreshedAt : "—";
     const page = payload && payload.page ? payload.page : routeKey(currentPage, currentSub, currentQuery);
     const note = payload && payload.sourceNote ? payload.sourceNote : "";
-    el.textContent = `Page: ${page} · Refreshed: ${at}${note ? " · " + note : ""}`;
+    const next = `Page: ${page} · Refreshed: ${at}${note ? " · " + note : ""}`;
+    if (el.textContent === next) return;
+    el.textContent = next;
+    if (silent) return;
     el.classList.add("is-live");
     setTimeout(() => el.classList.remove("is-live"), 1200);
   }
@@ -5408,8 +5416,8 @@
     // Never wipe HAL chat while a reply is in flight (auto-refresh / nav race).
     if (halChatBusy && currentPage === "hal") silent = true;
     setHash(currentPage, currentSub, currentQuery);
-    setPageTitle(currentPage, currentSub);
-    renderSubnav(currentPage, currentSub);
+    setPageTitle(currentPage, currentSub, { silent });
+    if (!silent) renderSubnav(currentPage, currentSub);
     const root = stage();
     if (!root) return;
 
@@ -5439,7 +5447,11 @@
             '<div class="apex-status-msg is-error">Narratives module missing (apex-narratives.js).</div>';
         }
       }
-      setMeta({ page: "narratives", refreshedAt: new Date().toISOString(), sourceNote: "interactive narratives bridge" });
+      setMeta(
+        { page: "narratives", refreshedAt: new Date().toISOString(), sourceNote: "interactive narratives bridge" },
+        { silent }
+      );
+      startAutoRefresh();
       return;
     }
 
@@ -5454,11 +5466,7 @@
       root.dataset.page = currentPage;
       if (currentSub) root.dataset.sub = currentSub;
       else delete root.dataset.sub;
-      root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => {
-        // Keep HAL chat interactive during silent refresh (it is not re-patched).
-        if (el.classList.contains("apex-widget--hal-chat")) return;
-        el.classList.add("is-updating");
-      });
+      // Do not add is-updating (breathe animation) on silent polls — that flickered the mosaic.
     }
 
     try {
@@ -5477,20 +5485,19 @@
         /* in-place — no flash */
       } else if (silent && currentPage === "hal" && !currentSub) {
         // Never full-remount HAL on silent refresh — that wiped chat history on hover/timer races.
-        if (!softRenderHalMain(list)) {
-          root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => el.classList.remove("is-updating"));
-        }
+        softRenderHalMain(list);
+      } else if (silent) {
+        // Silent poll must never wipe the mosaic (instBoot looked like a full page refresh).
+        // Keep current widgets; Sync / navigation still remount intentionally.
       } else {
         renderWidgets(list);
         if (currentPage === "hal" && !currentSub) {
           restoreHalTranscript(document.querySelector("[data-hal-messages]"));
         }
-        if (!silent) {
-          root.classList.add("is-entering");
-          setTimeout(() => root.classList.remove("is-entering"), 400);
-        }
+        root.classList.add("is-entering");
+        setTimeout(() => root.classList.remove("is-entering"), 400);
       }
-      setMeta(payload);
+      setMeta(payload, { silent });
       startAutoRefresh();
     } catch (err) {
       if (!silent) {
@@ -5498,17 +5505,20 @@
         root.innerHTML = `<div class="apex-status-msg is-error">Error loading data: ${String(
           (err && err.message) || err
         )}</div>`;
-      } else {
-        root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => el.classList.remove("is-updating"));
       }
     }
   }
 
   function startAutoRefresh() {
-    if (refreshTimer) clearInterval(refreshTimer);
+    if (refreshTimer) {
+      clearInterval(refreshTimer);
+      refreshTimer = null;
+    }
+    const ms = Number(config.refreshInterval) || 0;
+    if (ms <= 0) return;
     refreshTimer = setInterval(
       () => loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }),
-      config.refreshInterval
+      ms
     );
   }
 

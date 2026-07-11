@@ -1,6 +1,6 @@
 {
-  "BUILD_ID": "hal-10460",
-  "assetVersion": "hal-10460",
-  "schemaVersion": "hal-10460",
-  "notes": "hal-10460: Wave-5 remaining master-map ADD subpages (taxes/SD/QB/AR aging/narratives/docs/lib/OM/HAL)."
+  "BUILD_ID": "hal-10461",
+  "assetVersion": "hal-10461",
+  "schemaVersion": "hal-10461",
+  "notes": "hal-10461: Disable automatic Apex page refresh and stop silent-poll flicker."
 }
