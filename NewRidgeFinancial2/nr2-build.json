@@ -1,7 +1,8 @@
 {
-  "BUILD_ID": "hal-10493",
-  "assetVersion": "hal-10493",
-  "schemaVersion": "hal-10493",
-  "notes": "hal-10493: Moonshot X0-X2 burn-in ops runbooks (flags stay OFF until operator runs scripts).",
-  "builtAt": "2026-07-11T20:00:00.000Z"
+  "schemaVersion": "hal-10494",
+  "BUILD_ID": "hal-10494",
+  "assetVersion": "hal-10494",
+  "builtAt": "2026-07-11T20:33:47.000Z",
+  "notes": "hal-10494: Moonshot OM-A0 daily appointments + tx estimate HAL tool + claims narrative queue."
 }
+

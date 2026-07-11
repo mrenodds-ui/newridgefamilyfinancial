@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10493"
+BUILD_ID = "hal-10494"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · payer appeal templates · which widgets empty on all pages? · SoftDent sync"
@@ -3869,6 +3869,39 @@ def format_census_reply(page: str, census: dict[str, Any]) -> str:
         lines.append("Fix: place SoftDent/QB exports in the inbox (or refresh ODBC), then Sync imports. Ask: how do I get SoftDent/QuickBooks exports?")
     else:
         lines.append("All listed instruments on this page currently show data from the import cache.")
+    return " ".join(lines)
+
+
+def format_learn_priorities_reply(*, empty_highlights: list[str] | None = None) -> str:
+    """Staff-assistant answer: what to teach HAL (not a generic 'no preferences' disclaimer)."""
+    lines = [
+        "Operational learning priorities for New Ridge (not hobbies) — two lanes:",
+        "A) STAFF MEMORY (Remember this: … → learned_memories.jsonl; no PHI/secrets): "
+        "payer-specific denial reason codes and appeal narratives (Sun Life composites, MetLife downgrades, etc.); "
+        "carrier workflow quirks (prior-auth steps, DentaQuest/Medicaid forms, surface notation); "
+        "clearinghouse/SoftDent error → rejection mappings; internal billing exceptions "
+        "(write-off thresholds, discount agreements, payment-plan rules); concise appeal templates that worked.",
+        "B) IMPORT DATA (not memory — dollars stay in analytics): SoftDent Insurance Payment Analysis CSV → "
+        r"C:\SoftDentFinancialExports\insurance_payments_YYYYMMDD.csv (+ optional procedure_codes_YYYYMMDD.csv), "
+        "then Sync so HAL can answer InsCo × ADA paid-after-write-off estimates for treatment planning "
+        "(e.g. How much will Delta Dental typically pay for D0274?).",
+        "Governed layer: docs/hal_knowledge/memories.jsonl (maintainer-approved). "
+        "Worksheet: docs/hal_knowledge/NEW_RIDGE_OPERATING_RULES_WORKSHEET.md + scripts/seed_practice_learned_memories.py.",
+        "Ask: Treatment planning data status · which widgets are empty on all pages?",
+    ]
+    try:
+        from softdent_treatment_planning import treatment_planning_status
+
+        st = treatment_planning_status()
+        lines.append(
+            f"Live tx-planning ingest: {st.get('paymentLines', 0)} payment lines, "
+            f"{st.get('estimatesWithMinSample', 0)} InsCo×ADA estimates with n>=10 "
+            f"(of {st.get('estimates', 0)} total)."
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    if empty_highlights:
+        lines.append("Current empty widget examples: " + " · ".join(str(h) for h in empty_highlights[:8]) + ".")
     return " ".join(lines)
 
 
