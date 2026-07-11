@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10493 (V2 explain cache + mobile polish)
+ * Build: hal-10497 (Availity eligibility in patient dossier)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10493";
+  const ASSET_V = "hal-10497";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -211,6 +211,7 @@
       type === "patient-dossier-card"
     )
       return "l";
+    if (type === "eligibility-card") return "m";
     if (type === "dual-axis-trend" || type === "timeline-lanes" || type === "status-matrix" || type === "radial-gauge" || type === "action-list" || type === "bar-list")
       return "m";
     if (type === "credit-float") return "strip";
@@ -2260,6 +2261,8 @@
         const gap = data.schemaGap
           ? `<div class="apex-kpi-hint">${this.escape(String(data.schemaGap))}</div>`
           : "";
+        const eligCard = data.eligibilityCard && typeof data.eligibilityCard === "object" ? data.eligibilityCard : null;
+        const eligHtml = eligCard ? this.renderEligibilityCardInner(eligCard) : "";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
@@ -2281,9 +2284,29 @@
                    <div>Last visit: ${this.escape(String(data.lastVisit || "unknown"))}</div>
                    <div>Balance: ${this.escape(String(data.accountBalance || "unavailable"))}</div>
                    <div>Notes: ${data.hasClinicalNotes ? "on file" : "none"}</div>
+                   ${eligHtml}
                  </div>`
           }
           ${gap}
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "eligibility-card") {
+        const data = this.spec.data && typeof this.spec.data === "object" ? this.spec.data : {};
+        const empty = this.spec.status === "empty" && !data.rows;
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  data.emptyMessage || this.spec.emptyMessage || "No eligibility data"
+                )}</div>`
+              : this.renderEligibilityCardInner(data)
+          }
           <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
         `;
       }
@@ -3302,6 +3325,42 @@
         ${deltaHtml}
         ${sparkHtml}
         <div class="apex-kpi-hint" data-kpi-hint>${this.escape(this.spec.hint || "")}</div>
+      `;
+    }
+
+    renderEligibilityCardInner(w) {
+      const card = w && typeof w === "object" ? w : {};
+      const demoBanner = card.badge
+        ? `<span class="apex-badge apex-badge--${this.escape(String(card.badgeColor || "orange"))}">${this.escape(String(card.badge))}</span>`
+        : "";
+      const gapBanner = card.warning
+        ? `<div class="apex-kpi-hint apex-kpi-hint--warn">${this.escape(String(card.warning))}</div>`
+        : "";
+      const errBanner = card.error
+        ? `<div class="apex-kpi-hint apex-kpi-hint--warn">${this.escape(String(card.error))}</div>`
+        : "";
+      const rows = (card.rows || [])
+        .map(
+          (r) =>
+            `<tr><td>${this.escape(String((r && r.label) || ""))}</td><td>${this.escape(
+              String((r && r.value) || "—")
+            )}</td></tr>`
+        )
+        .join("");
+      const lims = (card.limitations || [])
+        .map((l) => `<li class="apex-kpi-hint">${this.escape(String(l))}</li>`)
+        .join("");
+      return `
+        <div class="apex-eligibility-card">
+          <h4 class="apex-eligibility-title">${this.escape(String(card.title || "Insurance Eligibility"))} ${demoBanner}</h4>
+          ${gapBanner}
+          ${errBanner}
+          <table class="apex-mini-table">${rows}</table>
+          ${lims ? `<ul class="apex-eligibility-limits">${lims}</ul>` : ""}
+          <div class="apex-kpi-hint">Queried: ${this.escape(String(card.queriedAt || "—"))}${
+            card.cacheHit ? " · cached" : ""
+          }</div>
+        </div>
       `;
     }
 

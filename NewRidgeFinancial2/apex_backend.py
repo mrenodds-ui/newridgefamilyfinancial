@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10495"
+BUILD_ID = "hal-10497"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -6802,9 +6802,34 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 "true",
                 "yes",
             )
-            dossier = build_patient_dossier(patient_id, practice_id=practice)
+            member_id = str(bottle.request.query.get("memberId") or "").strip()
+            payer_id = str(bottle.request.query.get("payerId") or "").strip()
+            payer_name = str(bottle.request.query.get("payerName") or "").strip()
+            provider_npi = str(bottle.request.query.get("providerNpi") or "").strip()
+            fetch_eligibility = str(bottle.request.query.get("fetchEligibility") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            eligibility_overrides: dict[str, str] = {}
+            if member_id:
+                eligibility_overrides["memberId"] = member_id
+            if payer_id:
+                eligibility_overrides["payerId"] = payer_id
+            if payer_name:
+                eligibility_overrides["payerName"] = payer_name
+            if provider_npi:
+                eligibility_overrides["providerNpi"] = provider_npi
+            dossier = build_patient_dossier(
+                patient_id,
+                practice_id=practice,
+                eligibility_overrides=eligibility_overrides or None,
+                force_eligibility_fetch=fetch_eligibility,
+            )
             staff_id = str(bottle.request.headers.get("X-NR2-Staff-Id") or current_role() or "Staff")
             log_patient_query(staff_id, patient_id, "dossier_summary", session_id=session_id)
+            if eligibility_overrides or fetch_eligibility:
+                log_patient_query(staff_id, patient_id, "eligibility_query", session_id=session_id)
 
             payload: dict[str, Any] = {
                 "ok": bool(dossier.get("ok", True)),
