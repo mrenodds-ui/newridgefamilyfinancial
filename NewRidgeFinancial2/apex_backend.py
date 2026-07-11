@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10450"
+BUILD_ID = "hal-10455"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -1799,6 +1799,13 @@ def _financial_widgets_from_reports(
     except Exception:
         pass
 
+    try:
+        from apex_missing_widgets_pack import append_financial_missing
+
+        append_financial_missing(widgets, bundle)
+    except Exception:
+        pass
+
     _apply_threshold_alerts(widgets, reports)
     return widgets
 
@@ -2278,6 +2285,12 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
         except Exception:
             widgets.append(build_expense_horizontal_bars(bundle))
         widgets.append(build_categorize_assist(bundle))
+        try:
+            from apex_missing_widgets_pack import append_quickbooks_missing
+
+            append_quickbooks_missing(widgets, bundle)
+        except Exception:
+            pass
         return widgets
 
     widgets.append(
@@ -2368,6 +2381,12 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
     except Exception:
         pass
     widgets.append(build_categorize_assist(bundle))
+    try:
+        from apex_missing_widgets_pack import append_quickbooks_missing
+
+        append_quickbooks_missing(widgets, bundle)
+    except Exception:
+        pass
     return widgets
 
 
@@ -2505,6 +2524,12 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
     except Exception:
         pass
     widgets.append(build_collection_bullet(bundle))
+    try:
+        from apex_missing_widgets_pack import append_ar_missing
+
+        append_ar_missing(widgets, bundle)
+    except Exception:
+        pass
     _apply_threshold_alerts(widgets, reports)
     return widgets
 
@@ -2716,6 +2741,12 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
 
     # Below-fold analytics (not part of primary above-fold console)
     widgets.append(build_ins_patient_split(bundle))
+    try:
+        from apex_missing_widgets_pack import append_claims_missing
+
+        append_claims_missing(widgets, bundle)
+    except Exception:
+        pass
     _apply_threshold_alerts(widgets, reports, claims_summary=summary)
     return widgets
 
@@ -3128,6 +3159,12 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         if util.get("status") == "empty":
             util = collapse_empty_large(util)
         widgets.insert(1, util)
+    except Exception:
+        pass
+    try:
+        from apex_missing_widgets_pack import append_office_manager_missing
+
+        append_office_manager_missing(widgets, bundle)
     except Exception:
         pass
     return widgets
@@ -3854,6 +3891,30 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
     actions: list[dict[str, Any]] = []
     notes: list[str] = []
     handled = False
+    ctx = body.get("context") if isinstance(body.get("context"), dict) else {}
+    ctx_widget = str(ctx.get("widgetId") or ctx.get("id") or "").strip()
+
+    # --- Ask-HAL on a specific widget (consult §4) — focus/highlight only, then chat may continue ---
+    if ctx_widget and re.search(r"\b(explain this widget|explain (the )?widget|what is this widget)\b", q):
+        actions.append({"type": "focus_widget", "widgetId": ctx_widget})
+        actions.append({"type": "highlight_widget", "widgetId": ctx_widget, "ms": 4000})
+        denial_codes = ctx.get("denialCodes") if isinstance(ctx.get("denialCodes"), list) else []
+        patient_hash = ctx.get("patientHash") if isinstance(ctx.get("patientHash"), list) else []
+        if denial_codes:
+            notes.append(
+                "Denial codes in view (import-backed): "
+                + ", ".join(str(c) for c in denial_codes[:8])
+                + ". Summarize top denial impact only from these codes — never invent dollars."
+            )
+        elif patient_hash:
+            notes.append(
+                "Anonymized patient hashes in view: "
+                + ", ".join(str(h) for h in patient_hash[:8])
+                + ". Refer by hash/initials only — no PHI expansion."
+            )
+        else:
+            notes.append(f"Focusing widget `{ctx_widget}` for explanation (import-backed display only).")
+        handled = True
 
     # Advisory / ethics questions must reach chat — do not hijack on topic keywords
     # like "categorize", "import health", or "ebitda" embedded in a longer ask.
@@ -3929,6 +3990,26 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         notes.append("Refreshing widgets from the current import cache (no new file sync).")
         handled = True
 
+    # --- Phase 3: targeted refresh_widget (consult optional enhancement) ---
+    if re.search(r"\b(refresh (this |the )?(widget|instrument)|reload (this |the )?widget)\b", q):
+        wid = ctx_widget or ""
+        if not wid:
+            # try focus_rules match for named widget in same utterance
+            for pat, rule_wid, _pg in (
+                (r"\bexpense treemap\b", "expense-treemap", None),
+                (r"\bdenial pareto\b", "denial-pareto", None),
+                (r"\bunapplied\b", "unapplied-credit-float", None),
+                (r"\brecall gauge\b", "recall-gauge", None),
+                (r"\bcash (flow )?bridge\b", "cash-flow-bridge", None),
+            ):
+                if re.search(pat, q):
+                    wid = rule_wid
+                    break
+        if wid:
+            actions.append({"type": "refresh_widget", "widgetId": wid})
+            notes.append(f"Refreshing widget `{wid}` from import cache.")
+            handled = True
+
     # --- Navigate to a page ---
     page_map = {
         "financial": r"\b(financial|finance|dashboard)\b",
@@ -3996,11 +4077,23 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         (r"\b(claims status (bar|distribution|chart)|status distribution)\b", "claims-status-bar", "claims"),
         (r"\b(claims (aging )?trend|90\+ aging trend)\b", "claims-aging-mini-trend", "claims"),
         (r"\b(import health timeline|import timeline)\b", "import-health-timeline", "softdent"),
-        (r"\b(operatory (util|slot|load)|chair (load|slots))\b", "operatory-util-trend", "office-manager"),
+        # Prefer W-09 board for board/schedule/status; keep trend for util/slot/load charts
+        (r"\b(operatory (slot|load)|chair (load|slots)|operatory util(ization)? (trend|chart))\b", "operatory-util-trend", "office-manager"),
         (r"\b(ar forecast|a/?r forecast|era velocity)\b", "ar-forecast-trend", "ar"),
         (r"\b(expense (hbar|bars|categories)|qb expense)\b", "qb-expense-hbar", "quickbooks"),
         (r"\b(a/?r forecast|aging forecast)\b", "ar-aging-forecast", "ar"),
         (r"\b(claim attachments?|attachment bridge)\b", "claim-attachments-bridge", "documents"),
+        # W-01..W-10 Missing Widgets (Moonshot CODING_HAL consult 2026-07-11) + Phase 3 phrase polish
+        (r"\bexpense treemap|spending (map|tree|concentration)|where (is|does) (the )?money go|expense concentration\b", "expense-treemap", "financial"),
+        (r"\bprocedure profitability|procedure scatter|dental code profit|which procedures (lose|make) money|profitable procedures?\b", "procedure-profitability-scatter", "financial"),
+        (r"\bdenial pareto|denial (reason )?chart|claim denials by impact|top denial (codes|reasons)|pareto (of )?denials?\b", "denial-pareto", "claims"),
+        (r"\btreatment (plan )?conversion|case acceptance|treatment pipeline|presented to accepted|conversion funnel\b", "treatment-conversion-pipeline", "financial"),
+        (r"\bpre[- ]?auth (aging|lanes|board)|preauthorization status|pending preauths|pre-auth timeline|pre auth aging\b", "preauth-aging-lanes", "claims"),
+        (r"\bunapplied (credit|payment)s?|credit float|floating money|unallocated payments|unapplied float\b", "unapplied-credit-float", "ar"),
+        (r"\bcash (flow )?bridge|liquidity bridge|cash projection|30[- ]?day cash|projected cash\b", "cash-flow-bridge", "financial"),
+        (r"\b(insurance )?verification matrix|eligibility matrix|verify (patients|benefits)|insurance check|elig(ibility)? matrix\b", "verification-matrix", "claims"),
+        (r"\boperatory (util|board|schedule|status)|chair (util|schedule|board)|room (board|schedule)|op schedule|op board\b", "operatory-util-board", "office-manager"),
+        (r"\brecall gauge|recall (status|tracker|compliance)|hygiene (recall|due)|recall (percent|rate|board)\b", "recall-gauge", "office-manager"),
     )
     if (not handled) and allow_topic_focus and (
         explicit_board or any(re.search(pat, q) for pat, _wid, _pg in focus_rules)
