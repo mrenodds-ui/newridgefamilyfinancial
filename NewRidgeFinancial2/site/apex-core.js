@@ -1,14 +1,119 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10441 (HAL session 403 recovery via refresh token)
+ * Build: hal-10460 (wave-5 remaining master-map ADD subpages)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10441";
+  const ASSET_V = "hal-10460";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
+  const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
+  const PARENT_PAGES = new Set([
+    "financial",
+    "taxes",
+    "softdent",
+    "quickbooks",
+    "ar",
+    "claims",
+    "narratives",
+    "documents",
+    "library",
+    "office-manager",
+    "hal",
+  ]);
+  const SUBPAGE_LINKS = {
+    financial: [
+      { sub: null, label: "Overview" },
+      { sub: "workpapers", label: "Workpapers" },
+      { sub: "providers", label: "Providers" },
+      { sub: "periods", label: "Periods" },
+    ],
+    taxes: [
+      { sub: null, label: "Overview" },
+      { sub: "entities", label: "Entities" },
+      { sub: "calendar", label: "Calendar" },
+      { sub: "workpapers", label: "Workpapers" },
+    ],
+    softdent: [
+      { sub: null, label: "Overview" },
+      { sub: "register", label: "Register" },
+      { sub: "schedule", label: "Schedule" },
+    ],
+    quickbooks: [
+      { sub: null, label: "Overview" },
+      { sub: "coa", label: "COA" },
+      { sub: "vendors", label: "Vendors" },
+    ],
+    claims: [
+      { sub: null, label: "Workbench" },
+      { sub: "detail", label: "Detail" },
+      { sub: "batch", label: "Batch" },
+      { sub: "era", label: "ERA" },
+      { sub: "attachments", label: "Attachments" },
+    ],
+    ar: [
+      { sub: null, label: "Overview" },
+      { sub: "collections", label: "Collections" },
+      { sub: "aging-detail", label: "Aging Detail" },
+      { sub: "forecast", label: "Forecast" },
+    ],
+    narratives: [
+      { sub: null, label: "Workspace" },
+      { sub: "templates", label: "Templates" },
+      { sub: "history", label: "History" },
+      { sub: "audit", label: "Audit" },
+    ],
+    documents: [
+      { sub: null, label: "Overview" },
+      { sub: "claim-docs", label: "Claim Docs" },
+      { sub: "tax-docs", label: "Tax Docs" },
+    ],
+    library: [
+      { sub: null, label: "Overview" },
+      { sub: "payers", label: "Payers" },
+      { sub: "codes", label: "Codes" },
+    ],
+    "office-manager": [
+      { sub: null, label: "Overview" },
+      { sub: "huddle", label: "Huddle" },
+      { sub: "tasks", label: "Tasks" },
+    ],
+    hal: [
+      { sub: null, label: "Chat" },
+      { sub: "history", label: "History" },
+      { sub: "system-logs", label: "System Logs" },
+    ],
+  };
+  const SUBPAGE_TITLES = {
+    workpapers: "Workpapers",
+    providers: "Providers",
+    periods: "Periods",
+    entities: "Entities",
+    calendar: "Calendar",
+    register: "Register",
+    schedule: "Schedule",
+    coa: "COA",
+    vendors: "Vendors",
+    detail: "Detail",
+    batch: "Batch",
+    era: "ERA",
+    attachments: "Attachments",
+    collections: "Collections",
+    "aging-detail": "Aging Detail",
+    forecast: "Forecast",
+    templates: "Templates",
+    history: "History",
+    audit: "Audit",
+    "claim-docs": "Claim Docs",
+    "tax-docs": "Tax Docs",
+    payers: "Payers",
+    codes: "Codes",
+    huddle: "Huddle",
+    tasks: "Tasks",
+    "system-logs": "System Logs",
+  };
 
   function formatPatientDisplay(name) {
     const raw = String(name || "").trim();
@@ -121,6 +226,12 @@
     if (type === "claims-risk-bars" || type === "claims-era-gauge" || type === "claim-attachments")
       return type === "claim-attachments" ? "l" : "m";
     if (type === "scenario-manager" || type === "workpaper") return type === "scenario-manager" ? "xl" : "l";
+    if (type === "workpaper-scrubber" || type === "claim-detail-card") return "full";
+    if (type === "collection-task-list" || type === "huddle-mosaic" || type === "batch-selector") return "full";
+    if (type === "attachment-dropzone" || type === "payer-reference-card") return "full";
+    if (type === "era-matching-table" || type === "forecast-trend-line" || type === "period-variance-chart")
+      return "full";
+    if (type === "data-table" || type === "tax-calendar" || type === "task-board") return "full";
     if (type === "status") return "s";
     return "s";
   }
@@ -141,6 +252,8 @@
 
   let sessionToken = "";
   let currentPage = "financial";
+  let currentSub = null;
+  let currentQuery = {};
   let refreshTimer = null;
   const widgets = new Map();
   let lastHalStatus = null;
@@ -775,6 +888,576 @@
                   <p class="apex-kpi-hint">Opens printable HTML with book-to-tax + EBITDA citations.</p>
                 </div>`
           }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "workpaper-scrubber") {
+        const cats = Array.isArray(this.spec.categories) ? this.spec.categories : [];
+        const empty = this.spec.status === "empty" || !cats.length;
+        const rows = cats
+          .map((c) => {
+            const id = String((c && c.id) || "");
+            const amt =
+              c && c.amount != null && Number.isFinite(Number(c.amount))
+                ? formatMoney(c.amount)
+                : "—";
+            return `<tr data-wp-cat="${this.escape(id)}">
+              <td><label class="apex-wp-flag"><input type="checkbox" data-cpa-flag value="${this.escape(
+                id
+              )}" /> Flag</label></td>
+              <td>${this.escape((c && c.label) || "")}</td>
+              <td class="apex-num">${this.escape(amt || "—")}</td>
+              <td class="apex-cite">${this.escape((c && c.citation) || "")}</td>
+            </tr>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No categories"
+                )}</div>`
+              : `<div class="apex-workpaper-scrubber" data-workpaper-scrubber>
+                  <table class="apex-cite-table">
+                    <thead><tr><th>CPA</th><th>Category</th><th>Amount</th><th>Citation</th></tr></thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                </div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "claim-detail-card") {
+        const claim = this.spec.claim && typeof this.spec.claim === "object" ? this.spec.claim : null;
+        const empty = this.spec.status === "empty" || !claim;
+        if (empty) {
+          return `
+            <header class="apex-widget-header">
+              <span class="apex-widget-label">${label}</span>
+              ${printBtn}
+            </header>
+            <div class="apex-kpi-value is-empty">${this.escape(
+              this.spec.emptyMessage || "No claim selected"
+            )}</div>
+            <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+            <div class="apex-claim-detail-actions">
+              <button type="button" class="apex-btn" data-back-claims>Back to Claims</button>
+            </div>
+          `;
+        }
+        const procs = Array.isArray(claim.procedures) ? claim.procedures.join(", ") : "—";
+        const billed =
+          claim.billedAmount != null && Number.isFinite(Number(claim.billedAmount))
+            ? formatMoney(claim.billedAmount)
+            : "— (not on import)";
+        const cid = String(claim.claimId || this.spec.claimId || "");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <dl class="apex-claim-dl apex-claim-detail-card" data-claim-detail data-claim-id="${this.escape(cid)}">
+            <div><dt>Claim ID</dt><dd>${this.escape(cid)}</dd></div>
+            <div><dt>Patient</dt><dd>${this.escape(claim.patientInitials || claim.patientName || "—")}</dd></div>
+            <div><dt>Date of service</dt><dd>${this.escape(claim.date || "—")}</dd></div>
+            <div><dt>Age (days)</dt><dd>${this.escape(
+              claim.ageDays != null ? String(claim.ageDays) : "—"
+            )}</dd></div>
+            <div><dt>Payer</dt><dd>${this.escape(claim.payer || "—")}</dd></div>
+            <div><dt>Status</dt><dd>${this.escape(claim.status || "—")}</dd></div>
+            <div><dt>Procedures</dt><dd>${this.escape(procs)}</dd></div>
+            <div><dt>Billed</dt><dd>${this.escape(billed)}</dd></div>
+          </dl>
+          <div class="apex-claim-detail-actions">
+            <button type="button" class="apex-btn" data-back-claims>Back to Claims</button>
+            <button type="button" class="apex-btn apex-btn--primary" data-draft-narrative-sub>Draft Narrative</button>
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "collection-task-list") {
+        const seeds = Array.isArray(this.spec.seeds) ? this.spec.seeds : [];
+        const notes = Array.isArray(this.spec.notes) ? this.spec.notes : [];
+        const empty = this.spec.status === "empty" && !seeds.length && !notes.length;
+        const seedRows = seeds
+          .map((s) => {
+            const cid = String((s && s.claimId) || "");
+            const amt =
+              s && s.billedAmount != null && Number.isFinite(Number(s.billedAmount))
+                ? formatMoney(s.billedAmount)
+                : "—";
+            return `<tr>
+              <td>${this.escape(cid)}</td>
+              <td>${this.escape((s && s.patientInitials) || "—")}</td>
+              <td>${this.escape(String((s && s.ageDays) != null ? s.ageDays : "—"))}</td>
+              <td>${this.escape((s && s.bucket) || "—")}</td>
+              <td>${this.escape(amt || "—")}</td>
+              <td><button type="button" class="apex-btn apex-btn--small" data-col-seed-claim="${this.escape(
+                cid
+              )}" data-col-initials="${this.escape((s && s.patientInitials) || "")}">Log</button></td>
+            </tr>`;
+          })
+          .join("");
+        const noteRows = notes
+          .map((n) => {
+            return `<tr>
+              <td>${this.escape((n && n.claimId) || "")}</td>
+              <td>${this.escape((n && n.patientInitials) || "—")}</td>
+              <td>${this.escape((n && n.status) || "")}</td>
+              <td>${this.escape((n && n.followUp) || "—")}</td>
+              <td colspan="2">${this.escape((n && n.note) || "")}</td>
+            </tr>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No collection items"
+                )}</div>`
+              : `<div class="apex-collection-bench" data-collection-bench>
+                  <form class="apex-col-form" data-col-form>
+                    <input name="claimId" placeholder="Claim ID" required />
+                    <input name="patientInitials" placeholder="Initials" maxlength="8" />
+                    <select name="status">
+                      <option value="called">called</option>
+                      <option value="promised">promised</option>
+                      <option value="disputed">disputed</option>
+                      <option value="open">open</option>
+                      <option value="closed">closed</option>
+                    </select>
+                    <input name="followUp" placeholder="Follow-up YYYY-MM-DD" />
+                    <input name="note" placeholder="Note (local only)" />
+                    <button type="submit" class="apex-btn apex-btn--primary">Save note</button>
+                  </form>
+                  <h3 class="apex-subhead">Aged claim seeds</h3>
+                  <table class="apex-cite-table"><thead><tr>
+                    <th>Claim</th><th>Pt</th><th>Age</th><th>Bucket</th><th>Billed</th><th></th>
+                  </tr></thead><tbody>${seedRows || "<tr><td colspan='6'>None</td></tr>"}</tbody></table>
+                  <h3 class="apex-subhead">Local notes</h3>
+                  <table class="apex-cite-table"><thead><tr>
+                    <th>Claim</th><th>Pt</th><th>Status</th><th>Follow-up</th><th colspan="2">Note</th>
+                  </tr></thead><tbody>${noteRows || "<tr><td colspan='6'>None yet</td></tr>"}</tbody></table>
+                </div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "huddle-mosaic") {
+        const priorities = Array.isArray(this.spec.priorities) ? this.spec.priorities : [];
+        const history = Array.isArray(this.spec.history) ? this.spec.history : [];
+        const tasks = Array.isArray(this.spec.tasks) ? this.spec.tasks : [];
+        const list = priorities
+          .map((p) => `<li class="apex-huddle-item">${this.escape(String(p))}</li>`)
+          .join("");
+        const hist = history
+          .map(
+            (h) =>
+              `<li class="apex-huddle-hist">${this.escape((h && h.createdAt) || "")} · ${this.escape(
+                String(((h && h.priorities) || []).length)
+              )} items</li>`
+          )
+          .join("");
+        const taskRows = tasks
+          .map(
+            (t) =>
+              `<li class="apex-huddle-task">${this.escape((t && t.title) || "")}${
+                t && t.dueDate ? " · due " + this.escape(t.dueDate) : ""
+              }</li>`
+          )
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-huddle-mosaic" data-huddle-mosaic>
+            <ol class="apex-huddle-list">${list || `<li class="apex-huddle-item">No priorities flagged</li>`}</ol>
+            <div class="apex-claim-detail-actions">
+              <button type="button" class="apex-btn apex-btn--primary" data-huddle-save>Save huddle snapshot</button>
+            </div>
+            <form class="apex-col-form" data-huddle-task-form>
+              <input name="title" placeholder="New office task" required />
+              <input name="assignee" placeholder="Assignee" />
+              <input name="dueDate" placeholder="Due YYYY-MM-DD" />
+              <button type="submit" class="apex-btn">Add task</button>
+            </form>
+            <h3 class="apex-subhead">Open tasks</h3>
+            <ul class="apex-huddle-list">${taskRows || "<li class='apex-huddle-item'>None</li>"}</ul>
+            <h3 class="apex-subhead">Recent huddle history</h3>
+            <ul class="apex-huddle-list">${hist || "<li class='apex-huddle-item'>None saved yet</li>"}</ul>
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "batch-selector") {
+        const cands = Array.isArray(this.spec.candidates) ? this.spec.candidates : [];
+        const empty = this.spec.status === "empty" || !cands.length;
+        const rows = cands
+          .map((c) => {
+            const cid = String((c && c.claimId) || "");
+            const amt =
+              c && c.billedAmount != null && Number.isFinite(Number(c.billedAmount))
+                ? formatMoney(c.billedAmount)
+                : "—";
+            return `<tr>
+              <td><input type="checkbox" data-batch-claim value="${this.escape(cid)}" /></td>
+              <td>${this.escape(cid)}</td>
+              <td>${this.escape((c && c.patientInitials) || "—")}</td>
+              <td>${this.escape((c && c.payer) || "—")}</td>
+              <td>${this.escape(String((c && c.ageDays) != null ? c.ageDays : "—"))}</td>
+              <td>${this.escape((c && c.status) || "—")}</td>
+              <td>${this.escape(amt || "—")}</td>
+            </tr>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            <div class="apex-widget-actions">
+              <button type="button" class="apex-btn apex-btn--primary" data-batch-seed>Seed Narratives</button>
+              ${printBtn}
+            </div>
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No candidates"
+                )}</div>`
+              : `<div class="apex-batch-selector" data-batch-selector>
+                  <table class="apex-cite-table">
+                    <thead><tr>
+                      <th></th><th>Claim</th><th>Pt</th><th>Payer</th><th>Age</th><th>Status</th><th>Billed</th>
+                    </tr></thead>
+                    <tbody>${rows}</tbody>
+                  </table>
+                </div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "attachment-dropzone") {
+        const items = Array.isArray(this.spec.items) ? this.spec.items : [];
+        const empty = this.spec.status === "empty" || !items.length;
+        const prefill = String(this.spec.claimId || "");
+        const rows = items
+          .map(
+            (it) =>
+              `<div class="apex-att-row"><strong>${this.escape(it.claimId || "")}</strong>
+              <span>${this.escape(it.filename || "")}</span>
+              <span class="apex-kpi-hint">${this.escape(String(it.bytes != null ? it.bytes + " B" : ""))} · ${this.escape(
+                it.at || ""
+              )}</span></div>`
+          )
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-dropzone" data-attachment-dropzone>
+            <form class="apex-att-upload apex-col-form" data-claim-att-upload>
+              <input type="text" name="claimId" placeholder="Claim ID" value="${this.escape(prefill)}" required />
+              <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg" required />
+              <input type="text" name="note" placeholder="Note (optional)" />
+              <button type="submit" class="apex-btn apex-btn--primary">Upload</button>
+            </form>
+            <p class="apex-kpi-hint">Dropzone: PDF / PNG / JPG · max 10MB · ${this.escape(
+              this.spec.storageRoot || "local claim_attachments"
+            )}</p>
+            ${
+              empty
+                ? `<div class="apex-kpi-value is-empty">${this.escape(
+                    this.spec.emptyMessage || "No attachments"
+                  )}</div>`
+                : `<div class="apex-att-list">${rows}</div>`
+            }
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "payer-reference-card") {
+        const payers = Array.isArray(this.spec.payers) ? this.spec.payers : [];
+        const empty = this.spec.status === "empty" || !payers.length;
+        const cards = payers
+          .map(
+            (p) => `<article class="apex-payer-card">
+              <h3>${this.escape((p && p.payerName) || "")}</h3>
+              <p class="apex-kpi-hint">Appeal deadline: ${this.escape(
+                p && p.appealDeadlineDays != null ? String(p.appealDeadlineDays) + " days" : "—"
+              )} · Contact: ${this.escape((p && p.contact) || "—")}</p>
+              <p>${this.escape((p && p.guidelines) || "")}</p>
+            </article>`
+          )
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-payer-lib" data-payer-reference>
+            <form class="apex-col-form" data-payer-form>
+              <input name="payerName" placeholder="Payer name" required />
+              <input name="appealDeadlineDays" placeholder="Appeal days" />
+              <input name="contact" placeholder="Contact" />
+              <input name="guidelines" placeholder="Guidelines / requirements" />
+              <button type="submit" class="apex-btn apex-btn--primary">Save payer</button>
+            </form>
+            ${
+              empty
+                ? `<div class="apex-kpi-value is-empty">${this.escape(
+                    this.spec.emptyMessage || "No payers"
+                  )}</div>`
+                : `<div class="apex-payer-grid">${cards}</div>`
+            }
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "era-matching-table") {
+        const rows = Array.isArray(this.spec.rows) ? this.spec.rows : [];
+        const history = Array.isArray(this.spec.history) ? this.spec.history : [];
+        const empty = this.spec.status === "empty" || !rows.length;
+        const body = rows
+          .map((r) => {
+            const paid =
+              r && r.paidAmount != null && Number.isFinite(Number(r.paidAmount))
+                ? formatMoney(r.paidAmount)
+                : "—";
+            const conf =
+              r && r.confidence != null && Number.isFinite(Number(r.confidence))
+                ? (Number(r.confidence) * 100).toFixed(0) + "%"
+                : "—";
+            return `<tr>
+              <td>${this.escape((r && r.claimId) || "")}</td>
+              <td>${this.escape((r && r.patientInitials) || "—")}</td>
+              <td>${this.escape(conf)}</td>
+              <td>${this.escape(paid || "—")}</td>
+              <td>${this.escape((r && r.denialCode) || "—")}</td>
+              <td>${this.escape((r && r.sourceFile) || "—")}</td>
+            </tr>`;
+          })
+          .join("");
+        const hist = history
+          .map(
+            (h) =>
+              `<li>${this.escape((h && h.at) || "")} · ${this.escape((h && h.filename) || "era")} · matched ${this.escape(
+                String((h && h.matchedCount) != null ? h.matchedCount : "—")
+              )}/${this.escape(String((h && h.segmentCount) != null ? h.segmentCount : "—"))}</li>`
+          )
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-era-table" data-era-matching>
+            <form class="apex-att-upload apex-col-form" data-era-upload title="Upload ERA/835 text">
+              <input type="file" name="file" accept=".txt,.835,.era,*" required />
+              <button type="submit" class="apex-btn apex-btn--primary">Ingest ERA 835</button>
+            </form>
+            ${
+              empty
+                ? `<div class="apex-kpi-value is-empty">${this.escape(
+                    this.spec.emptyMessage || "Awaiting ERA 835 Pipeline"
+                  )}</div>`
+                : `<table class="apex-cite-table"><thead><tr>
+                    <th>Claim</th><th>Pt</th><th>Conf</th><th>Paid</th><th>Code</th><th>File</th>
+                  </tr></thead><tbody>${body}</tbody></table>`
+            }
+            <h3 class="apex-subhead">Ingest history</h3>
+            <ul class="apex-huddle-list">${hist || "<li>None yet</li>"}</ul>
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "forecast-trend-line") {
+        const points = Array.isArray(this.spec.points) ? this.spec.points : [];
+        const empty = this.spec.status === "empty" || this.spec.blocked || !points.length;
+        const max = Math.max(...points.map((p) => Number(p.value) || 0), 1);
+        const bars = points
+          .map((p) => {
+            const v = Number(p.value) || 0;
+            const pct = Math.max(6, Math.round((v / max) * 100));
+            return `<div class="apex-forecast-col" title="${this.escape(p.label || "")}: ${this.escape(
+              String(v)
+            )}">
+              <div class="apex-forecast-bar" style="height:${pct}%"></div>
+              <span>${this.escape(String(p.label || "").slice(5) || p.label || "")}</span>
+            </div>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "Awaiting ERA 835 Pipeline"
+                )}</div>`
+              : `<div class="apex-forecast-trend" data-forecast-trend>${bars}</div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "period-variance-chart") {
+        const bars = Array.isArray(this.spec.bars) ? this.spec.bars : [];
+        const empty = this.spec.status === "empty" || this.spec.blocked || !bars.length;
+        const max = Math.max(...bars.map((b) => Math.abs(Number(b.value) || 0)), 1);
+        const rows = bars
+          .map((b) => {
+            const v = Number(b.value) || 0;
+            const pct = Math.max(6, Math.round((Math.abs(v) / max) * 100));
+            const neg = v < 0;
+            return `<div class="apex-var-row${neg ? " is-down" : ""}">
+              <span class="apex-var-label">${this.escape((b && b.label) || "")}</span>
+              <div class="apex-var-track"><i style="width:${pct}%"></i></div>
+              <span class="apex-var-val">${this.escape(formatMoney(v) || String(v))}</span>
+            </div>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "Awaiting multi-period imports"
+                )}</div>`
+              : `<div class="apex-period-variance" data-period-variance>${rows}</div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "data-table") {
+        const cols = Array.isArray(this.spec.columns) ? this.spec.columns : [];
+        const rows = Array.isArray(this.spec.rows) ? this.spec.rows : [];
+        const empty = this.spec.status === "empty" || !rows.length;
+        const head = cols.map((c) => `<th>${this.escape(c)}</th>`).join("");
+        const body = rows
+          .map((r) => {
+            const cells = cols
+              .map((c) => {
+                let v = r && r[c];
+                if (c.toLowerCase().includes("amount") || c === "fee" || c === "billedAmount") {
+                  v =
+                    v != null && Number.isFinite(Number(v)) ? formatMoney(v) : v == null ? "—" : v;
+                }
+                return `<td>${this.escape(v == null ? "—" : String(v))}</td>`;
+              })
+              .join("");
+            return `<tr>${cells}</tr>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No rows"
+                )}</div>`
+              : `<div class="apex-data-table-wrap"><table class="apex-cite-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "tax-calendar") {
+        const items = Array.isArray(this.spec.items) ? this.spec.items : [];
+        const empty = this.spec.status === "empty" || !items.length;
+        const cards = items
+          .map((it) => {
+            const amt =
+              it && it.amount != null && Number.isFinite(Number(it.amount))
+                ? formatMoney(it.amount)
+                : "—";
+            return `<article class="apex-payer-card">
+              <h3>${this.escape((it && it.label) || "Q")}</h3>
+              <p><strong>${this.escape(amt || "—")}</strong> · due ${this.escape((it && it.due) || "—")}</p>
+              <p class="apex-kpi-hint">${it && it.logged ? "Payment logged (local)" : "Not logged"}</p>
+              <button type="button" class="apex-btn apex-btn--small" data-tax-log="${this.escape(
+                (it && it.label) || ""
+              )}">Log payment</button>
+            </article>`;
+          })
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          ${
+            empty
+              ? `<div class="apex-kpi-value is-empty">${this.escape(
+                  this.spec.emptyMessage || "No quarters"
+                )}</div>`
+              : `<div class="apex-payer-grid" data-tax-calendar>${cards}</div>`
+          }
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
+      if (this.type === "task-board") {
+        const tasks = Array.isArray(this.spec.tasks) ? this.spec.tasks : [];
+        const empty = this.spec.status === "empty" && !tasks.length;
+        const list = tasks
+          .map(
+            (t) => `<li class="apex-huddle-task${t && t.done ? " is-done" : ""}">
+              <label><input type="checkbox" data-task-toggle="${this.escape(String((t && t.id) || ""))}" ${
+              t && t.done ? "checked" : ""
+            }/> ${this.escape((t && t.title) || "")}</label>
+              <span class="apex-kpi-hint">${this.escape((t && t.assignee) || "")} ${this.escape(
+              (t && t.dueDate) || ""
+            )}</span>
+            </li>`
+          )
+          .join("");
+        return `
+          <header class="apex-widget-header">
+            <span class="apex-widget-label">${label}</span>
+            ${printBtn}
+          </header>
+          <div class="apex-task-board" data-task-board>
+            <form class="apex-col-form" data-task-form>
+              <input name="title" placeholder="Task title" required />
+              <input name="assignee" placeholder="Assignee" />
+              <input name="dueDate" placeholder="Due YYYY-MM-DD" />
+              <button type="submit" class="apex-btn apex-btn--primary">Add task</button>
+            </form>
+            ${
+              empty
+                ? `<div class="apex-kpi-value is-empty">${this.escape(
+                    this.spec.emptyMessage || "No tasks"
+                  )}</div>`
+                : `<ul class="apex-huddle-list">${list}</ul>`
+            }
+          </div>
           <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
         `;
       }
@@ -2641,6 +3324,36 @@
       if (this.type === "workpaper") {
         wireWorkpaper(this.element);
       }
+      if (this.type === "workpaper-scrubber") {
+        wireWorkpaperScrubber(this.element);
+      }
+      if (this.type === "claim-detail-card") {
+        wireClaimDetailCard(this.element, this.spec);
+      }
+      if (this.type === "collection-task-list") {
+        wireCollectionTaskList(this.element, this.spec);
+      }
+      if (this.type === "huddle-mosaic") {
+        wireHuddleMosaic(this.element, this.spec);
+      }
+      if (this.type === "batch-selector") {
+        wireBatchSelector(this.element);
+      }
+      if (this.type === "attachment-dropzone") {
+        wireAttachmentDropzone(this.element);
+      }
+      if (this.type === "payer-reference-card") {
+        wirePayerReferenceCard(this.element);
+      }
+      if (this.type === "era-matching-table") {
+        wireEraMatchingTable(this.element);
+      }
+      if (this.type === "tax-calendar") {
+        wireTaxCalendar(this.element);
+      }
+      if (this.type === "task-board") {
+        wireTaskBoard(this.element);
+      }
       if (this.type === "claim-shelf") {
         wireClaimShelf(this.element, this.spec);
       }
@@ -3241,6 +3954,352 @@
     });
   }
 
+  function loadCpaFlags() {
+    try {
+      const raw = sessionStorage.getItem(CPA_FLAG_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_err) {
+      return {};
+    }
+  }
+
+  function saveCpaFlags(flags) {
+    try {
+      sessionStorage.setItem(CPA_FLAG_KEY, JSON.stringify(flags || {}));
+    } catch (_err) {
+      /* ignore */
+    }
+  }
+
+  function wireWorkpaperScrubber(root) {
+    const box = root.querySelector("[data-workpaper-scrubber]");
+    if (!box || box.dataset.wired === "1") return;
+    box.dataset.wired = "1";
+    const flags = loadCpaFlags();
+    box.querySelectorAll("[data-cpa-flag]").forEach((input) => {
+      const id = String(input.value || "");
+      input.checked = !!flags[id];
+      input.addEventListener("change", () => {
+        const next = loadCpaFlags();
+        if (input.checked) next[id] = true;
+        else delete next[id];
+        saveCpaFlags(next);
+      });
+    });
+  }
+
+  function wireClaimDetailCard(root, spec) {
+    if (!root || root.dataset.wiredDetail === "1") return;
+    root.dataset.wiredDetail = "1";
+    const back = root.querySelector("[data-back-claims]");
+    if (back) {
+      back.addEventListener("click", () => loadPage("claims"));
+    }
+    const draft = root.querySelector("[data-draft-narrative-sub]");
+    if (draft) {
+      draft.addEventListener("click", () => {
+        const claim = (spec && spec.claim) || {};
+        const cid = String((claim && claim.claimId) || (spec && spec.claimId) || "");
+        try {
+          sessionStorage.setItem(
+            "nr2-apex-narrative-seed",
+            JSON.stringify({
+              claimId: cid,
+              patientName: "",
+              payer: (claim && claim.payer) || "",
+              date: (claim && claim.date) || "",
+            })
+          );
+          sessionStorage.setItem("nr2-apex-focused-claim", cid);
+        } catch (_err) {
+          /* ignore */
+        }
+        loadPage("narratives");
+      });
+    }
+  }
+
+  function wireCollectionTaskList(root, _spec) {
+    if (!root || root.dataset.wiredCol === "1") return;
+    root.dataset.wiredCol = "1";
+    const form = root.querySelector("[data-col-form]");
+    if (form) {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(form);
+        const body = {
+          claimId: String(fd.get("claimId") || "").trim(),
+          patientInitials: String(fd.get("patientInitials") || "").trim(),
+          status: String(fd.get("status") || "open"),
+          followUp: String(fd.get("followUp") || "").trim(),
+          note: String(fd.get("note") || "").trim(),
+        };
+        try {
+          const res = await apexFetch(`${config.apiBase}/local/collection-notes`, {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Save failed (HTTP ${res.status})`);
+            return;
+          }
+          await loadPage("ar/collections");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    }
+    root.querySelectorAll("[data-col-seed-claim]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (!form) return;
+        const claimInput = form.querySelector('[name="claimId"]');
+        const initInput = form.querySelector('[name="patientInitials"]');
+        if (claimInput) claimInput.value = btn.getAttribute("data-col-seed-claim") || "";
+        if (initInput) initInput.value = btn.getAttribute("data-col-initials") || "";
+        claimInput && claimInput.focus();
+      });
+    });
+  }
+
+  function wireHuddleMosaic(root, spec) {
+    if (!root || root.dataset.wiredHuddle === "1") return;
+    root.dataset.wiredHuddle = "1";
+    const saveBtn = root.querySelector("[data-huddle-save]");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", async () => {
+        const priorities = Array.isArray(spec && spec.priorities) ? spec.priorities : [];
+        try {
+          const res = await apexFetch(`${config.apiBase}/local/huddle`, {
+            method: "POST",
+            body: JSON.stringify({ priorities }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Huddle save failed (HTTP ${res.status})`);
+            return;
+          }
+          await loadPage("office-manager/huddle");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    }
+    const taskForm = root.querySelector("[data-huddle-task-form]");
+    if (taskForm) {
+      taskForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(taskForm);
+        const body = {
+          title: String(fd.get("title") || "").trim(),
+          assignee: String(fd.get("assignee") || "").trim(),
+          dueDate: String(fd.get("dueDate") || "").trim(),
+        };
+        try {
+          const res = await apexFetch(`${config.apiBase}/local/tasks`, {
+            method: "POST",
+            body: JSON.stringify(body),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Task save failed (HTTP ${res.status})`);
+            return;
+          }
+          await loadPage("office-manager/huddle");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    }
+  }
+
+  function wireBatchSelector(root) {
+    if (!root || root.dataset.wiredBatch === "1") return;
+    root.dataset.wiredBatch = "1";
+    const seedBtn = root.querySelector("[data-batch-seed]");
+    if (!seedBtn) return;
+    seedBtn.addEventListener("click", async () => {
+      const ids = Array.from(root.querySelectorAll("[data-batch-claim]:checked")).map((el) => el.value);
+      if (!ids.length) {
+        window.alert("Select at least one claim.");
+        return;
+      }
+      try {
+        const res = await apexFetch(`${config.apiBase}/narratives/batch-seed`, {
+          method: "POST",
+          body: JSON.stringify({ claimIds: ids }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          window.alert(data.error || `Batch seed failed (HTTP ${res.status})`);
+          return;
+        }
+        try {
+          sessionStorage.setItem("nr2-apex-narrative-seed", JSON.stringify(data.seed || { claimIds: ids }));
+        } catch (_err) {
+          /* ignore */
+        }
+        loadPage("narratives");
+      } catch (err) {
+        window.alert(String((err && err.message) || err));
+      }
+    });
+  }
+
+  function wireAttachmentDropzone(root) {
+    if (!root || root.dataset.wiredDrop === "1") return;
+    root.dataset.wiredDrop = "1";
+    const form = root.querySelector("[data-claim-att-upload]");
+    if (!form) return;
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const cid = String(fd.get("claimId") || "").trim();
+      try {
+        const res = await apexFetch(`${config.apiBase}/claims/attachments`, { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          window.alert(data.error || "Upload failed");
+          return;
+        }
+        const hash =
+          currentPage === "claims" && currentSub === "attachments"
+            ? cid
+              ? `claims/attachments?id=${encodeURIComponent(cid)}`
+              : "claims/attachments"
+            : cid
+              ? `documents/claim-docs?id=${encodeURIComponent(cid)}`
+              : "documents/claim-docs";
+        await loadPage(hash);
+      } catch (err) {
+        window.alert(String((err && err.message) || err));
+      }
+    });
+  }
+
+  function wirePayerReferenceCard(root) {
+    if (!root || root.dataset.wiredPayer === "1") return;
+    root.dataset.wiredPayer = "1";
+    const form = root.querySelector("[data-payer-form]");
+    if (!form) return;
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      const body = {
+        payerName: String(fd.get("payerName") || "").trim(),
+        appealDeadlineDays: String(fd.get("appealDeadlineDays") || "").trim(),
+        contact: String(fd.get("contact") || "").trim(),
+        guidelines: String(fd.get("guidelines") || "").trim(),
+      };
+      try {
+        const res = await apexFetch(`${config.apiBase}/local/payers`, {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          window.alert(data.error || `Save failed (HTTP ${res.status})`);
+          return;
+        }
+        await loadPage("library/payers");
+      } catch (err) {
+        window.alert(String((err && err.message) || err));
+      }
+    });
+  }
+
+  function wireEraMatchingTable(root) {
+    if (!root || root.dataset.wiredEra === "1") return;
+    root.dataset.wiredEra = "1";
+    const era = root.querySelector("[data-era-upload]");
+    if (!era) return;
+    era.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(era);
+      try {
+        const res = await apexFetch(`${config.apiBase}/claims/era-ingest`, { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        window.alert(
+          data.ok
+            ? `ERA ingested: ${data.matchedCount || 0} matched of ${data.segmentCount || 0} segments`
+            : data.error || "ERA ingest failed"
+        );
+        if (data.ok) await loadPage("claims/era");
+      } catch (err) {
+        window.alert(String((err && err.message) || err));
+      }
+    });
+  }
+
+  function wireTaxCalendar(root) {
+    if (!root || root.dataset.wiredTaxCal === "1") return;
+    root.dataset.wiredTaxCal = "1";
+    root.querySelectorAll("[data-tax-log]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const quarter = btn.getAttribute("data-tax-log") || "";
+        try {
+          const res = await apexFetch(`${config.apiBase}/local/tax-payments`, {
+            method: "POST",
+            body: JSON.stringify({ quarter }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || "Log failed");
+            return;
+          }
+          await loadPage("taxes/calendar");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    });
+  }
+
+  function wireTaskBoard(root) {
+    if (!root || root.dataset.wiredTasks === "1") return;
+    root.dataset.wiredTasks = "1";
+    const form = root.querySelector("[data-task-form]");
+    if (form) {
+      form.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(form);
+        try {
+          const res = await apexFetch(`${config.apiBase}/local/tasks`, {
+            method: "POST",
+            body: JSON.stringify({
+              title: String(fd.get("title") || "").trim(),
+              assignee: String(fd.get("assignee") || "").trim(),
+              dueDate: String(fd.get("dueDate") || "").trim(),
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || "Task save failed");
+            return;
+          }
+          await loadPage("office-manager/tasks");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    }
+    root.querySelectorAll("[data-task-toggle]").forEach((cb) => {
+      cb.addEventListener("change", async () => {
+        const id = cb.getAttribute("data-task-toggle");
+        try {
+          await apexFetch(`${config.apiBase}/local/tasks`, {
+            method: "POST",
+            body: JSON.stringify({ id: Number(id), done: cb.checked }),
+          });
+          await loadPage("office-manager/tasks", { silent: true });
+        } catch (_err) {
+          /* ignore */
+        }
+      });
+    });
+  }
+
   function closeClaimDrawer() {
     const drawer = document.getElementById("apex-claim-drawer");
     if (drawer) drawer.remove();
@@ -3256,91 +4315,7 @@
       /* ignore */
     }
     closeClaimDrawer();
-    const drawer = document.createElement("aside");
-    drawer.id = "apex-claim-drawer";
-    drawer.className = "apex-claim-drawer";
-    drawer.setAttribute("role", "dialog");
-    drawer.setAttribute("aria-label", "Claim detail");
-    drawer.innerHTML = `<header class="apex-claim-drawer__head">
-      <h2>Claim ${escapeHtml(id)}</h2>
-      <button type="button" class="apex-icon-btn" data-close-drawer aria-label="Close">×</button>
-    </header>
-    <div class="apex-claim-drawer__body">Loading import-backed claim…</div>
-    <footer class="apex-claim-drawer__foot">
-      <button type="button" class="apex-btn apex-btn--primary" data-draft-narrative disabled>Draft Narrative</button>
-    </footer>`;
-    document.body.appendChild(drawer);
-    document.body.classList.add("apex-claim-drawer-open");
-    drawer.querySelector("[data-close-drawer]")?.addEventListener("click", closeClaimDrawer);
-    // Click dimmed page (pseudo backdrop) to close — capture on body outside drawer.
-    const onBackdrop = (ev) => {
-      if (!document.body.classList.contains("apex-claim-drawer-open")) {
-        document.removeEventListener("mousedown", onBackdrop, true);
-        return;
-      }
-      if (drawer.contains(ev.target)) return;
-      closeClaimDrawer();
-      document.removeEventListener("mousedown", onBackdrop, true);
-    };
-    document.addEventListener("mousedown", onBackdrop, true);
-    const esc = (ev) => {
-      if (ev.key === "Escape") {
-        closeClaimDrawer();
-        document.removeEventListener("keydown", esc);
-      }
-    };
-    document.addEventListener("keydown", esc);
-    try {
-      const res = await apexFetch(`${config.apiBase}/claims/${encodeURIComponent(id)}`);
-      const data = await res.json().catch(() => ({}));
-      const body = drawer.querySelector(".apex-claim-drawer__body");
-      const draftBtn = drawer.querySelector("[data-draft-narrative]");
-      if (!res.ok || data.ok === false) {
-        if (body) body.textContent = data.error || "Claim not found in SoftDent import.";
-        return;
-      }
-      const procs = Array.isArray(data.procedures) ? data.procedures.join(", ") : "—";
-      const billed =
-        data.billedAmount != null && Number.isFinite(Number(data.billedAmount))
-          ? formatMoney(data.billedAmount)
-          : "— (not on import)";
-      if (body) {
-        body.innerHTML = `<dl class="apex-claim-dl">
-          <div><dt>Claim ID</dt><dd>${escapeHtml(data.claimId || id)}</dd></div>
-          <div><dt>Patient</dt><dd>${escapeHtml(data.patientName || "—")}</dd></div>
-          <div><dt>Date of service</dt><dd>${escapeHtml(data.date || "—")}</dd></div>
-          <div><dt>Age (days)</dt><dd>${escapeHtml(data.ageDays != null ? String(data.ageDays) : "—")}</dd></div>
-          <div><dt>Payer</dt><dd>${escapeHtml(data.payer || "—")}</dd></div>
-          <div><dt>Status</dt><dd>${escapeHtml(data.status || "—")}</dd></div>
-          <div><dt>Procedures</dt><dd>${escapeHtml(procs)}</dd></div>
-          <div><dt>Billed</dt><dd>${escapeHtml(billed)}</dd></div>
-        </dl>
-        <p class="apex-kpi-hint">Source: SoftDent import · never invented.</p>`;
-      }
-      if (draftBtn) {
-        draftBtn.disabled = false;
-        draftBtn.addEventListener("click", () => {
-          try {
-            sessionStorage.setItem(
-              "nr2-apex-narrative-seed",
-              JSON.stringify({
-                claimId: data.claimId || id,
-                patientName: data.patientName || "",
-                payer: data.payer || "",
-                date: data.date || "",
-              })
-            );
-          } catch (_err) {
-            /* ignore */
-          }
-          closeClaimDrawer();
-          loadPage("narratives");
-        });
-      }
-    } catch (err) {
-      const body = drawer.querySelector(".apex-claim-drawer__body");
-      if (body) body.textContent = String((err && err.message) || err);
-    }
+    await loadPage(`claims/detail?id=${encodeURIComponent(id)}`);
   }
 
   function wireClaimShelf(root, spec) {
@@ -3563,19 +4538,17 @@
     if (batch) {
       batch.addEventListener("click", () => {
         const ids = Array.from(root.querySelectorAll("[data-batch-claim]:checked")).map((el) => el.value);
-        if (!ids.length) {
-          window.alert("Check Batch on one or more claim rows/cards first.");
-          return;
+        if (ids.length) {
+          try {
+            sessionStorage.setItem(
+              "nr2-apex-narrative-seed",
+              JSON.stringify({ claimIds: ids, claimId: ids[0], bulkAppeal: true, batchNarrative: true })
+            );
+          } catch (_err) {
+            /* ignore */
+          }
         }
-        try {
-          sessionStorage.setItem(
-            "nr2-apex-narrative-seed",
-            JSON.stringify({ claimIds: ids, claimId: ids[0], bulkAppeal: true, batchNarrative: true })
-          );
-        } catch (_err) {
-          /* ignore */
-        }
-        loadPage("narratives");
+        loadPage("claims/batch");
       });
     }
   }
@@ -3595,7 +4568,11 @@
             window.alert(data.error || "Upload failed");
             return;
           }
-          await loadPage("documents", { silent: false });
+          await loadPage(
+            currentSub === "claim-docs"
+              ? formatApexHash("documents", "claim-docs", currentQuery)
+              : "documents"
+          );
         } catch (err) {
           window.alert(String((err && err.message) || err));
         }
@@ -4312,10 +5289,89 @@
     }
   }
 
-  function setPageTitle(pageId) {
+  function parseApexHash(raw) {
+    const hash = String(raw || "")
+      .replace(/^#/, "")
+      .trim();
+    if (!hash) return { parent: "financial", sub: null, query: {} };
+    const qIdx = hash.indexOf("?");
+    const pathPart = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
+    const queryPart = qIdx >= 0 ? hash.slice(qIdx + 1) : "";
+    const query = {};
+    if (queryPart) {
+      try {
+        new URLSearchParams(queryPart).forEach((v, k) => {
+          query[k] = v;
+        });
+      } catch (_err) {
+        /* ignore */
+      }
+    }
+    const parts = pathPart.split("/").filter(Boolean);
+    let parent = String(parts[0] || "financial")
+      .toLowerCase()
+      .replace(/[^a-z0-9\-]/g, "");
+    let sub = parts[1]
+      ? String(parts[1])
+          .toLowerCase()
+          .replace(/[^a-z0-9\-]/g, "")
+      : null;
+    if (!PARENT_PAGES.has(parent)) {
+      parent = "financial";
+      sub = null;
+    }
+    if (sub === "") sub = null;
+    return { parent, sub, query };
+  }
+
+  function formatApexHash(parent, sub, query) {
+    let h = String(parent || "financial").trim();
+    if (sub) h += `/${sub}`;
+    const id = query && query.id ? String(query.id).trim() : "";
+    if (id) h += `?id=${encodeURIComponent(id)}`;
+    return h;
+  }
+
+  function routeKey(parent, sub, query) {
+    return formatApexHash(parent, sub, query || {});
+  }
+
+  function renderSubnav(parent, sub) {
+    const nav = document.getElementById("apex-subnav");
+    if (!nav) return;
+    const links = SUBPAGE_LINKS[parent];
+    if (!links || !links.length) {
+      nav.hidden = true;
+      nav.innerHTML = "";
+      nav.classList.remove("is-visible");
+      return;
+    }
+    nav.hidden = false;
+    nav.classList.add("is-visible");
+    nav.innerHTML = links
+      .map((item) => {
+        const active = (item.sub || null) === (sub || null);
+        return `<button type="button" class="apex-subnav-btn${active ? " is-active" : ""}" data-sub-parent="${parent}" data-sub="${
+          item.sub || ""
+        }">${escapeHtml(item.label)}</button>`;
+      })
+      .join("");
+    nav.querySelectorAll("[data-sub-parent]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const p = btn.getAttribute("data-sub-parent") || parent;
+        const s = btn.getAttribute("data-sub") || "";
+        const q = s === "detail" && currentQuery.id ? { id: currentQuery.id } : {};
+        loadPage(formatApexHash(p, s || null, q));
+      });
+    });
+  }
+
+  function setPageTitle(pageId, sub) {
     const el = document.getElementById("apex-page-title");
     if (el) {
-      el.textContent = PAGE_TITLES[pageId] || pageId || "Apex";
+      const base = PAGE_TITLES[pageId] || pageId || "Apex";
+      const subLabel = sub ? SUBPAGE_TITLES[sub] || sub : "";
+      el.textContent = subLabel ? `${base} · ${subLabel}` : base;
       if (window.ApexMotion && typeof window.ApexMotion.triggerGlitch === "function") {
         window.ApexMotion.triggerGlitch(el);
       }
@@ -4329,29 +5385,31 @@
     const el = metaEl();
     if (!el) return;
     const at = payload && payload.refreshedAt ? payload.refreshedAt : "—";
-    const page = payload && payload.page ? payload.page : currentPage;
+    const page = payload && payload.page ? payload.page : routeKey(currentPage, currentSub, currentQuery);
     const note = payload && payload.sourceNote ? payload.sourceNote : "";
     el.textContent = `Page: ${page} · Refreshed: ${at}${note ? " · " + note : ""}`;
     el.classList.add("is-live");
     setTimeout(() => el.classList.remove("is-live"), 1200);
   }
 
-  function setHash(pageId) {
-    const next = String(pageId || "").trim();
-    if (!next) return;
-    const desired = `#${next}`;
+  function setHash(parent, sub, query) {
+    const desired = `#${formatApexHash(parent, sub, query)}`;
     if (location.hash !== desired) {
       history.replaceState(null, "", desired);
     }
   }
 
-  async function loadPage(pageId, opts) {
+  async function loadPage(pageIdOrHash, opts) {
     let silent = Boolean(opts && opts.silent);
-    currentPage = pageId || currentPage || "financial";
+    const parsed = parseApexHash(pageIdOrHash || formatApexHash(currentPage, currentSub, currentQuery));
+    currentPage = parsed.parent || currentPage || "financial";
+    currentSub = parsed.sub;
+    currentQuery = parsed.query && typeof parsed.query === "object" ? parsed.query : {};
     // Never wipe HAL chat while a reply is in flight (auto-refresh / nav race).
     if (halChatBusy && currentPage === "hal") silent = true;
-    setHash(currentPage);
-    setPageTitle(currentPage);
+    setHash(currentPage, currentSub, currentQuery);
+    setPageTitle(currentPage, currentSub);
+    renderSubnav(currentPage, currentSub);
     const root = stage();
     if (!root) return;
 
@@ -4366,7 +5424,7 @@
     });
 
     // Interactive narratives workspace (not KPI mosaic)
-    if (currentPage === "narratives") {
+    if (currentPage === "narratives" && !currentSub) {
       if (refreshTimer) clearInterval(refreshTimer);
       if (window.ApexHalBrain && typeof window.ApexHalBrain.destroy === "function") {
         window.ApexHalBrain.destroy();
@@ -4386,11 +5444,16 @@
     }
 
     if (!silent) {
-      root.className = currentPage === "hal" ? "apex-stage apex-stage--hal" : "apex-stage apex-mosaic";
+      root.className =
+        currentPage === "hal" && !currentSub ? "apex-stage apex-stage--hal" : "apex-stage apex-mosaic";
       root.dataset.page = currentPage;
+      if (currentSub) root.dataset.sub = currentSub;
+      else delete root.dataset.sub;
       root.innerHTML = '<div class="apex-status-msg">Loading bridge instruments…</div>';
     } else {
       root.dataset.page = currentPage;
+      if (currentSub) root.dataset.sub = currentSub;
+      else delete root.dataset.sub;
       root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => {
         // Keep HAL chat interactive during silent refresh (it is not re-patched).
         if (el.classList.contains("apex-widget--hal-chat")) return;
@@ -4399,20 +5462,27 @@
     }
 
     try {
-      const res = await apexFetch(`${config.apiBase}/widgets/${encodeURIComponent(currentPage)}`);
+      let url = `${config.apiBase}/widgets/${encodeURIComponent(currentPage)}`;
+      if (currentSub) {
+        const qs = new URLSearchParams();
+        qs.set("sub", currentSub);
+        if (currentQuery.id) qs.set("id", String(currentQuery.id));
+        url += `?${qs.toString()}`;
+      }
+      const res = await apexFetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
       const list = payload.widgets || [];
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
-      } else if (silent && currentPage === "hal") {
+      } else if (silent && currentPage === "hal" && !currentSub) {
         // Never full-remount HAL on silent refresh — that wiped chat history on hover/timer races.
         if (!softRenderHalMain(list)) {
           root.querySelectorAll(".apex-inst, .apex-widget").forEach((el) => el.classList.remove("is-updating"));
         }
       } else {
         renderWidgets(list);
-        if (currentPage === "hal") {
+        if (currentPage === "hal" && !currentSub) {
           restoreHalTranscript(document.querySelector("[data-hal-messages]"));
         }
         if (!silent) {
@@ -4436,7 +5506,10 @@
 
   function startAutoRefresh() {
     if (refreshTimer) clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => loadPage(currentPage, { silent: true }), config.refreshInterval);
+    refreshTimer = setInterval(
+      () => loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }),
+      config.refreshInterval
+    );
   }
 
   async function printPage(widgetId) {
@@ -4486,7 +5559,7 @@
     } catch (_err) {
       syncNote = "Sync request failed — refreshing anyway";
     }
-    await loadPage(currentPage, { silent: true });
+    await loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true });
     const meta = metaEl();
     if (meta && syncNote) {
       meta.textContent = `${meta.textContent} · ${syncNote}`;
@@ -4544,7 +5617,8 @@
     }
     window.addEventListener("hashchange", () => {
       const hash = (location.hash || "").replace(/^#/, "").trim();
-      if (hash && hash !== currentPage) loadPage(hash);
+      const next = routeKey(currentPage, currentSub, currentQuery);
+      if (hash && hash !== next) loadPage(hash);
     });
   }
 
@@ -4569,6 +5643,8 @@
     openClaimDrawer,
     closeClaimDrawer,
     focusClaimTile,
+    parseApexHash,
+    formatApexHash,
   };
 
   if (document.readyState === "loading") {

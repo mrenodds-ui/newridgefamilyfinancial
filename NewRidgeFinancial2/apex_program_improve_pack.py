@@ -457,6 +457,23 @@ def save_claim_attachment(
     if not cid:
         return {"ok": False, "error": "claimId required"}
     safe_name = re.sub(r"[^\w.\-]+", "_", Path(filename or "attachment.bin").name)[:120]
+    ext = Path(safe_name).suffix.lower()
+    allowed = {".pdf", ".png", ".jpg", ".jpeg"}
+    if ext not in allowed:
+        return {
+            "ok": False,
+            "error": f"File type not allowed ({ext or 'none'}). Allowed: PDF, PNG, JPG (max 10MB).",
+        }
+    if len(raw) > 10 * 1024 * 1024:
+        return {"ok": False, "error": "File exceeds 10MB limit"}
+    # Lightweight content sniff (not a full AV scan — operator-approved gate)
+    head = raw[:8]
+    if ext == ".pdf" and not head.startswith(b"%PDF"):
+        return {"ok": False, "error": "File content does not look like a PDF"}
+    if ext in {".png"} and not head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return {"ok": False, "error": "File content does not look like a PNG"}
+    if ext in {".jpg", ".jpeg"} and not head.startswith(b"\xff\xd8"):
+        return {"ok": False, "error": "File content does not look like a JPEG"}
     dest_dir = Path(NR2_DATA_DIR) / "claim_attachments" / re.sub(r"[^\w\-]+", "_", cid)[:80]
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / f"{uuid.uuid4().hex[:8]}_{safe_name}"
@@ -469,6 +486,7 @@ def save_claim_attachment(
         "bytes": len(raw),
         "note": (note or "")[:500],
         "at": _utc_now(),
+        "storageRoot": str(Path(NR2_DATA_DIR) / "claim_attachments").replace("\\", "/"),
     }
     data = _load_json(STORE_KEY_CLAIM_ATTACHMENTS)
     items = data.get("items") if isinstance(data.get("items"), list) else []
