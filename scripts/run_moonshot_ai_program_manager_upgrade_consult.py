@@ -50,47 +50,42 @@ NewRidge Family Financial (Kansas dental S-corp; SoftDent + QuickBooks imports;
 local HTTPS starship-bridge; Ollama GPU lanes chat8b + escalate30b).
 
 CRITICAL CONSTRAINTS:
-1. Answer the OPERATOR REQUEST VERBATIM: audit + upgrade plan for AI-as-program-manager
-   (8B/30B) and full SoftDent/QB automation. The operator message was CUT OFF mid-sentence
-   at "unified local database/state management system (e.g.," — note the truncation,
-   assume SQLite/LocalStore/NR2 app_data as the intended unified store, and still deliver
-   a complete consult for sections 1–2.
-2. CONSULT ONLY — DO NOT APPLY code. Provide paste-ready sketches labeled CONSULT ONLY.
-   Wait for operator approve/proceed.
-3. Ground EVERY recommendation in LIVE FACTS + attached codebase excerpts. Prefer evolving
-   existing NR2 (apex_backend, nr2_hal_gateway, hal-core lanes, import_sync, LocalStore,
-   nr2_local_db) over a greenfield rewrite. Do not resurrect retired mockups.
-4. Honesty: never invent dollars; SoftDent/QB are import/ODBC-backed; HAL never SoftDent
-   write-back; PHI stays local; empty widgets stay empty.
-5. Map CURRENT vs TARGET for: model lanes (chat8b / reason21b / escalate30b), board-actions
-   vs LLM, import Direct-First vs CSV, unified state.
-6. Rank MUST / SHOULD / NICE with effort S/M/L and phased plan + validation gates.
-7. For coding sketches: additive packs (apex_*_pack.py), orchestrator module, JSON schemas
-   for widget-safe AI insights, parser hardening — not a second dashboard.
-8. End with APPROVAL CHECKLIST.
+1. Answer the OPERATOR REQUEST VERBATIM again (RE-AUDIT). The operator message was CUT OFF
+   mid-sentence at "unified local database/state management system (e.g.," — note truncation,
+   assume SQLite/NR2 app_data as unified store. Deliver a complete consult for sections 1–2
+   against the LIVE codebase NOW (build hal-10475), not the pre-upgrade state.
+2. MUST WAVE ALREADY APPLIED (I0–I4 on hal-10471..10475): AI Orchestrator shell
+   (NR2_AI_ORCHESTRATOR flag default OFF), structured JSON insight schemas + PHI reject,
+   SoftDent Collections/Daysheet honesty (DEF-001), additive nr2_unified.db, I4 integration
+   gates. Do NOT re-propose rebuilding those. Audit what still remains for "fully functional
+   SoftDent & QuickBooks automation" and polished AI program-manager behavior.
+3. CONSULT ONLY — DO NOT APPLY code. Paste-ready sketches labeled CONSULT ONLY. Wait for approve.
+4. Ground EVERY recommendation in LIVE FACTS + attached codebase excerpts. Evolve NR2 packs;
+   no greenfield rewrite; no SoftDent write-back; never invent dollars; PHI local.
+5. Map CURRENT (post I0–I4) vs TARGET. Rank remaining MUST / SHOULD / NICE with S/M/L effort
+   and phased plan + validation gates for the NEXT wave only.
+6. End with APPROVAL CHECKLIST for next phases only.
 
 OUTPUT FORMAT (strict markdown):
-# Verdict — Path to AI Program Manager + full SoftDent/QB automation
-## 0. Operator Intent (quote; note truncation; consult-only)
-## 1. Current Architecture Audit (what exists at hal-10470)
-### 1A Model lanes & routing (8B/30B)
-### 1B SoftDent import automation
-### 1C QuickBooks import automation
-### 1D Unified local state (LocalStore / SQLite / bundles)
-### 1E Apex widget honesty / structured payloads
-## 2. Gap Map (CURRENT → TARGET)
+# Verdict — AI Program Manager re-audit (post MUST I0–I4)
+## 0. Operator Intent (quote; note truncation; consult-only re-run)
+## 1. Current Architecture Audit (what exists at hal-10475 AFTER MUST wave)
+### 1A Model lanes & orchestrator (flag, 8B/30B)
+### 1B SoftDent import automation + DEF-001 honesty
+### 1C QuickBooks import automation (remaining gaps)
+### 1D Unified local state (nr2_unified.db vs nr2_local + bundles)
+### 1E Structured insights / widget binding
+## 2. Gap Map — REMAINING only (CURRENT → TARGET)
 Table: Area | Status | Gap | Effort | Depends on
-## 3. Target Architecture (AI Orchestrator + data plane)
-Mermaid or clear layers: UI → board-actions → Orchestrator → 8B/30B → structured JSON → widgets
-## 4. Coding Plan — Phase I0..In (CONSULT ONLY sketches)
-### 4A AI Orchestrator middleware
-### 4B Structured JSON insight schema for widgets
-### 4C SoftDent parser / Direct-First hardening
-### 4D QuickBooks mapping (expenses, payroll, net profit, AP)
-### 4E Unified local DB / state
-## 5. MUST / SHOULD / NICE ranked table
+## 3. Target Architecture (next wave)
+## 4. Coding Plan — Phase S0..Sn (CONSULT ONLY sketches for remaining work)
+### 4A SoftDent remaining (ERA / Direct-First polish if still needed)
+### 4B QuickBooks payroll / AP / net profit automation
+### 4C Proactive AI health monitor
+### 4D Orchestrator enablement / polish (flag on, latency, widget binding)
+## 5. MUST / SHOULD / NICE ranked table (remaining)
 ## 6. Risks, PHI, SoftDent honesty, Rollback
-## 7. Approval Checklist
+## 7. Approval Checklist (next wave only)
 DO NOT APPLY until operator says approve / proceed.
 """
 
@@ -119,11 +114,13 @@ def _extract_lines(path: Path, start_marker: str, end_marker: str | None, max_li
 
 CONTEXT_FILES: list[tuple[str, int]] = [
     ("NewRidgeFinancial2/nr2-build.json", 12),
-    ("NewRidgeFinancial2/README.md", 120),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_I4_APPLIED_2026-07-11.md", 80),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_I3_APPLIED_2026-07-11.md", 50),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_I2_APPLIED_2026-07-11.md", 40),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_I1_APPLIED_2026-07-11.md", 40),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PM_PHASE_I0_APPLIED_2026-07-11.md", 40),
+    ("NewRidgeFinancial2/docs/MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_CONSULT_2026-07-11.md", 40),
     ("NewRidgeFinancial2/site/data/hal-models.json", 80),
-    ("NewRidgeFinancial2/docs/MOONSHOT_PROGRAM_IMPROVE_APPLIED_2026-07-10.md", 40),
-    ("NewRidgeFinancial2/docs/MOONSHOT_HAL_SAID_IMPROVE_FIX_APPLIED_2026-07-11.md", 50),
-    ("NewRidgeFinancial2/docs/MOONSHOT_WHATS_WRONG_CONSULT_2026-07-10.md", 60),
 ]
 
 
@@ -138,72 +135,49 @@ def build_context() -> str:
         ext = path.suffix.lstrip(".") or "txt"
         parts.append(f"### FILE: {rel}\n```{ext}\n{body}\n```")
 
-    hal_core = REPO / "NewRidgeFinancial2" / "site" / "hal-core.js"
-    parts.append(
-        "### EXTRACT: hal-core.js — laneRuntime / escalate\n```js\n"
-        + _extract_lines(hal_core, "function laneRuntime", "function laneReady", 40)
-        + "\n```"
-    )
-    parts.append(
-        "### EXTRACT: hal-core.js — preRoute escalate / chat8b\n```js\n"
-        + _extract_lines(hal_core, "return { intent: \"escalation\", lane: \"escalate30b\"", None, 50)
-        + "\n```"
-    )
+    for rel, max_lines in (
+        ("NewRidgeFinancial2/apex_orchestrator_pack.py", 90),
+        ("NewRidgeFinancial2/apex_structured_insight_pack.py", 70),
+        ("NewRidgeFinancial2/apex_softdent_hardening_pack.py", 70),
+        ("NewRidgeFinancial2/apex_unified_db_pack.py", 80),
+        ("NewRidgeFinancial2/test_apex_ai_pm_i4_gates.py", 60),
+    ):
+        path = REPO / rel
+        if path.is_file():
+            parts.append(
+                f"### FILE: {rel}\n```python\n"
+                + _truncate(path.read_text(encoding="utf-8", errors="replace"), max_lines)
+                + "\n```"
+            )
 
     gateway = REPO / "NewRidgeFinancial2" / "nr2_hal_gateway.py"
     if gateway.is_file():
         parts.append(
             "### EXTRACT: nr2_hal_gateway.py head\n```python\n"
-            + _truncate(gateway.read_text(encoding="utf-8", errors="replace"), 80)
+            + _truncate(gateway.read_text(encoding="utf-8", errors="replace"), 60)
             + "\n```"
         )
-
-    backend = REPO / "NewRidgeFinancial2" / "apex_backend.py"
-    parts.append(
-        "### EXTRACT: apex_backend.py — resolve_hal_board_actions head\n```python\n"
-        + _extract_lines(backend, "def resolve_hal_board_actions", "def build_apex_ticker", 60)
-        + "\n```"
-    )
 
     import_sync = REPO / "NewRidgeFinancial2" / "import_sync.py"
     if import_sync.is_file():
         parts.append(
-            "### EXTRACT: import_sync.py head + sync entry\n```python\n"
-            + _truncate(import_sync.read_text(encoding="utf-8", errors="replace"), 70)
+            "### EXTRACT: import_sync.py head\n```python\n"
+            + _truncate(import_sync.read_text(encoding="utf-8", errors="replace"), 50)
             + "\n```"
         )
 
-    http = REPO / "NewRidgeFinancial2" / "nr2_http_server.py"
     parts.append(
-        "### EXTRACT: nr2_http_server.py — evaluate-query\n```python\n"
-        + _extract_lines(http, '@app.post("/api/hal/evaluate-query")', '@app.post("/api/hal/', 50)
-        + "\n```"
-    )
-
-    local_db = REPO / "NewRidgeFinancial2" / "nr2_local_db.py"
-    parts.append(
-        "### EXTRACT: nr2_local_db.py schema head\n```python\n"
-        + _truncate(local_db.read_text(encoding="utf-8", errors="replace"), 80)
-        + "\n```"
-    )
-
-    parts.append(
-        """### LIVE FACTS (hal-10470 — consult time)
+        """### LIVE FACTS (hal-10475 — RE-AUDIT after MUST I0–I4)
 - Epoch: NR2 Apex starship bridge (local HTTPS Chrome). SoftDent + QuickBooks import-backed.
-- LLM lanes (Ollama GPU on workstation): chat8b (hal-chat:8b) fast; escalate30b (hal-escalate:30b)
-  deep; optional reason21b / coder lanes in hal-models.json / hal-core.js.
-- Routing today: deterministic board-actions FIRST (apex_backend.resolve_hal_board_actions),
-  then /api/hal/evaluate-query → gateway/LLM. Not a full "AI Orchestrator" middleware yet.
-- SoftDent: Direct-First / ODBC / Sensei DataSync preferred; CSV/Excel exports still used;
-  import_sync + import_loader + softdent_* modules; honesty = empty KPIs when missing.
-- QuickBooks: import-backed P&L/expenses style data; read-only; payroll/AP may be partial/absent.
-- State: LocalStore keys + nr2_local_db SQLite (tasks, huddle, notes) + import bundles —
-  not one fully unified warehouse yet.
-- Recently shipped: program improve IMP-001..010; HAL-said pack (denials→Steve, sign-off,
-  EOB backlog, payer sync, structured Remember) at hal-10470.
-- Hard rules: never invent $; no SoftDent write-back from Apex; PHI local; consult-only until approve.
-- Operator request truncated after "unified local database/state management system (e.g.,".
-- Operator wants: Moonshot audit + production-ready coding plan/report (not apply yet).
+- MUST wave SHIPPED: I0 orchestrator (flag NR2_AI_ORCHESTRATOR default OFF), I1 structured
+  insights + schemas + PHI reject, I2 DEF-001 Collections honesty, I3 additive nr2_unified.db,
+  I4 integration gates (44 tests green). Build hal-10475.
+- LLM lanes: chat8b fast; escalate30b deep; reason21b via gateway when not forced fast/deep.
+- SoftDent: Direct-First / exports; Collections empty ≠ $0; no SoftDent write-back.
+- QuickBooks: import-backed expenses/P&L style; payroll/AP automation still a known gap.
+- Unified: nr2_unified.db mirrors import bundle periods + QB expenses; nr2_local.sqlite3 unchanged.
+- Operator request (verbatim) re-submitted for remaining-gap consult. CONSULT ONLY.
+- Hard rules: never invent $; PHI local; empty widgets stay empty.
 """
     )
     return "\n\n".join(parts)
@@ -224,11 +198,11 @@ def main() -> int:
 
     print(f"Using {key_name} @ {base_url} model={model}")
     user = (
-        "OPERATOR REQUEST (VERBATIM — do not rewrite):\n\n"
+        "OPERATOR REQUEST (VERBATIM — do not rewrite) — RE-RUN after MUST I0–I4 applied:\n\n"
         f"{OPERATOR_REQUEST_VERBATIM}\n\n"
-        "NOTE: Operator message was truncated mid-sentence at unified DB. "
-        "Complete the audit + upgrade consult for AI Program Manager (8B/30B) and "
-        "full SoftDent/QB automation. CONSULT ONLY — do not apply. Wait for approval.\n\n"
+        "NOTE: Same truncated operator message. MUST wave I0–I4 is already shipped on "
+        "hal-10475. Re-audit remaining gaps for full SoftDent/QB automation + polished "
+        "AI program manager. CONSULT ONLY — do not apply. Wait for approval.\n\n"
         "## Codebase context\n\n"
         + build_context()
     )
@@ -270,13 +244,14 @@ def main() -> int:
         status = "error"
 
     header = (
-        f"# Moonshot AI — AI Program Manager + SoftDent/QB Automation Upgrade (CONSULT ONLY)\n\n"
+        f"# Moonshot AI — AI Program Manager Upgrade RE-AUDIT (CONSULT ONLY)\n\n"
         f"**Date:** {DATE}  \n"
         f"**Model:** {model}  \n"
         f"**Key:** {key_name}  \n"
         f"**Endpoint:** {base_url}  \n"
         f"**Status:** {status}  \n"
-        f"**Build reviewed:** hal-10470  \n"
+        f"**Build reviewed:** hal-10475 (post MUST I0–I4)  \n"
+        f"**Prior consult:** `MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_CONSULT_2026-07-11.md`  \n"
         f"**Script:** `scripts/run_moonshot_ai_program_manager_upgrade_consult.py`  \n"
         f"**Apply:** DO NOT APPLY / DO NOT CODE until operator approves.\n\n"
         f"## Operator request (verbatim)\n\n"
@@ -284,8 +259,8 @@ def main() -> int:
         f"---\n\n"
     )
     full = header + (content or "(empty)")
-    out_file = OUT / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_CONSULT_{DATE}.md"
-    doc_file = DOCS / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_CONSULT_{DATE}.md"
+    out_file = OUT / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT_{DATE}.md"
+    doc_file = DOCS / f"MOONSHOT_AI_PROGRAM_MANAGER_UPGRADE_REAUDIT_{DATE}.md"
     out_file.write_text(full, encoding="utf-8")
     doc_file.write_text(full, encoding="utf-8")
     print(out_file)
