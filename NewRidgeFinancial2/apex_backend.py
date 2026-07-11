@@ -28,7 +28,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10488"
+BUILD_ID = "hal-10489"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · payer appeal templates · which widgets empty on all pages? · SoftDent sync"
@@ -4586,6 +4586,20 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 
         sync = bool(body.get("fullSync", True))
         bundle = load_import_bundle(sync=sync, deep=False)
+        # Fresh imports must not serve stale page payloads.
+        _WIDGETS_CACHE.clear()
+        _REPORTS_BUNDLE_CACHE["at"] = 0.0
+        _REPORTS_BUNDLE_CACHE["reports"] = None
+        _REPORTS_BUNDLE_CACHE["bundle"] = None
+        _REPORTS_BUNDLE_CACHE["errors"] = None
+        _TICKER_CACHE["at"] = 0.0
+        _TICKER_CACHE["payload"] = None
+        try:
+            from apex_reconciliation_pack import invalidate_explain_cache
+
+            result["explainCache"] = invalidate_explain_cache(reason="import")
+        except Exception as exc:  # noqa: BLE001
+            result["explainCache"] = {"ok": False, "error": str(exc)}
         result["status"] = "ok"
         result["completedAt"] = _utc_now()
         result["importMode"] = bundle.get("importMode")
