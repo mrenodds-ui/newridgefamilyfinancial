@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10464 (HAL census skip + Collections pending actions)
+ * Build: hal-10470 (HAL census skip + Collections pending actions)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10464";
+  const ASSET_V = "hal-10470";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const PARENT_PAGES = new Set([
@@ -429,6 +429,18 @@
         const refreshBtn = this.spec.refreshUrl
           ? `<button type="button" class="apex-btn apex-btn--small" data-c0-refresh>Refresh SoftDent period imports</button>`
           : "";
+        const rememberForm = this.spec.rememberForm
+          ? `<form class="apex-col-form" data-hal-remember-form>
+              <select name="category" aria-label="Memory category">
+                ${(Array.isArray(this.spec.categories) ? this.spec.categories : ["payer_policy", "workflow_quirk", "denial_template", "office_policy"])
+                  .map((c) => `<option value="${this.escape(String(c))}">${this.escape(String(c))}</option>`)
+                  .join("")}
+              </select>
+              <input name="payerId" placeholder="Payer id (optional)" />
+              <input name="fact" placeholder="Fact to remember (no PHI)" required minlength="10" />
+              <button type="submit" class="apex-btn apex-btn--primary">Remember</button>
+            </form>`
+          : "";
         if (compact) {
           const tone = this.spec.status === "empty" || this.spec.status === "warn" ? "is-warn" : "is-ok";
           return `
@@ -449,6 +461,7 @@
           ${checkHtml}
           ${actionHtml}
           ${refreshBtn}
+          ${rememberForm}
           <div class="apex-kpi-hint" data-kpi-hint>${this.escape(this.spec.hint || "Phased Apex migration.")}</div>
         `;
       }
@@ -1221,12 +1234,13 @@
             </article>`
           )
           .join("");
+        const halSaidAttr = this.spec.halSaidAdmin ? ' data-hal-said-admin="1"' : "";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             ${printBtn}
           </header>
-          <div class="apex-payer-lib" data-payer-reference>
+          <div class="apex-payer-lib" data-payer-reference${halSaidAttr}>
             <form class="apex-col-form" data-payer-form>
               <input name="payerName" placeholder="Payer name" required />
               <input name="appealDeadlineDays" placeholder="Appeal days" />
@@ -2827,20 +2841,47 @@
       if (this.type === "claim-attachments") {
         const items = Array.isArray(this.spec.items) ? this.spec.items : [];
         const empty = this.spec.status === "empty" || !items.length;
+        const isSignoff = !!this.spec.signoffForm;
+        const isEob = this.spec.id === "eob-posting-backlog" || /eob/i.test(String(this.spec.label || ""));
+        const isPolicy = this.spec.id === "policy-changelog" || this.spec.id === "payer-change-alerts";
         const rows = items
-          .map(
-            (it) =>
-              `<div class="apex-att-row"><strong>${this.escape(it.claimId || "")}</strong>
+          .map((it) => {
+            const cid = this.escape(it.claimId || "");
+            const extra =
+              isSignoff && it.id
+                ? `<button type="button" class="apex-btn apex-btn--small" data-signoff-approve="${this.escape(
+                    it.id
+                  )}">Approve</button>
+                   <button type="button" class="apex-btn apex-btn--small" data-signoff-reject="${this.escape(
+                     it.id
+                   )}">Reject</button>`
+                : isEob && it.claimId
+                  ? `<button type="button" class="apex-btn apex-btn--small" data-eob-posted="${cid}">Mark posted</button>`
+                  : "";
+            return `<div class="apex-att-row"><strong>${cid}</strong>
               <span>${this.escape(it.filename || "")}</span>
-              <span class="apex-kpi-hint">${this.escape(it.at || "")}</span></div>`
-          )
+              <span class="apex-kpi-hint">${this.escape(it.at || "")}</span>
+              ${extra}</div>`;
+          })
           .join("");
+        const signoffReq = isSignoff
+          ? `<form class="apex-att-upload" data-clinical-signoff-form>
+              <input type="text" name="claimId" placeholder="Claim ID" required />
+              <input type="text" name="narrativeId" placeholder="Narrative id (optional)" />
+              <button type="submit" class="apex-btn apex-btn--small">Request Dr. Reno sign-off</button>
+            </form>`
+          : "";
+        const hideUpload = isSignoff || isEob || isPolicy || this.spec.id === "payer-change-alerts";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             ${printBtn}
           </header>
-          <form class="apex-att-upload" data-claim-att-upload>
+          ${signoffReq}
+          ${
+            hideUpload
+              ? ""
+              : `<form class="apex-att-upload" data-claim-att-upload>
             <input type="text" name="claimId" placeholder="Claim ID" required />
             <input type="file" name="file" required />
             <button type="submit" class="apex-btn apex-btn--small">Upload</button>
@@ -2848,7 +2889,8 @@
           <form class="apex-att-upload" data-era-upload title="Upload ERA/835 text">
             <input type="file" name="file" accept=".txt,.835,.era,*" required />
             <button type="submit" class="apex-btn apex-btn--small">Ingest ERA 835</button>
-          </form>
+          </form>`
+          }
           ${
             empty
               ? `<div class="apex-kpi-value is-empty">${this.escape(
@@ -3384,6 +3426,9 @@
       }
       if (this.type === "claim-attachments") {
         wireClaimAttachments(this.element);
+      }
+      if (this.type === "status" || this.spec.rememberForm) {
+        wireHalSaidRemember(this.element);
       }
     }
   }
@@ -4202,13 +4247,49 @@
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const fd = new FormData(form);
-      const body = {
-        payerName: String(fd.get("payerName") || "").trim(),
-        appealDeadlineDays: String(fd.get("appealDeadlineDays") || "").trim(),
-        contact: String(fd.get("contact") || "").trim(),
-        guidelines: String(fd.get("guidelines") || "").trim(),
-      };
+      const payerName = String(fd.get("payerName") || "").trim();
+      const contact = String(fd.get("contact") || "").trim();
+      const guidelines = String(fd.get("guidelines") || "").trim();
+      // HAL-said admin on office-manager: update payer_reference.json eligibilityNotes
+      const isHalSaid = !!root.querySelector("[data-hal-said-admin]");
       try {
+        if (isHalSaid) {
+          // Resolve payer id via normalize, then patch eligibilityNotes
+          const normRes = await apexFetch(
+            `${config.apiBase}/hal/normalize-carrier?label=${encodeURIComponent(payerName)}`
+          );
+          const norm = await normRes.json().catch(() => ({}));
+          const payerId = norm.canonical_id && norm.matched ? norm.canonical_id : payerName;
+          if (contact) {
+            const res = await apexFetch(`${config.apiBase}/hal/payer-field`, {
+              method: "POST",
+              body: JSON.stringify({
+                payerId,
+                field: "eligibilityNotes",
+                value: contact.startsWith("Eligibility") ? contact : `Eligibility phone ${contact}`,
+              }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.ok === false) {
+              window.alert(data.error || `Payer field update failed (HTTP ${res.status})`);
+              return;
+            }
+          }
+          if (guidelines) {
+            await apexFetch(`${config.apiBase}/hal/payer-field`, {
+              method: "POST",
+              body: JSON.stringify({ payerId, field: "narrativeNotes", value: guidelines }),
+            });
+          }
+          await loadPage("office-manager");
+          return;
+        }
+        const body = {
+          payerName,
+          appealDeadlineDays: String(fd.get("appealDeadlineDays") || "").trim(),
+          contact,
+          guidelines,
+        };
         const res = await apexFetch(`${config.apiBase}/local/payers`, {
           method: "POST",
           body: JSON.stringify(body),
@@ -4613,6 +4694,99 @@
         }
       });
     }
+    const signoffForm = root.querySelector("[data-clinical-signoff-form]");
+    if (signoffForm) {
+      signoffForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const fd = new FormData(signoffForm);
+        try {
+          const res = await apexFetch(`${config.apiBase}/hal/clinical-signoff`, {
+            method: "POST",
+            body: JSON.stringify({
+              claimId: String(fd.get("claimId") || "").trim(),
+              narrativeId: String(fd.get("narrativeId") || "").trim(),
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || "Sign-off request failed");
+            return;
+          }
+          await loadPage("narratives");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    }
+    root.querySelectorAll("[data-signoff-approve], [data-signoff-reject]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const id = btn.getAttribute("data-signoff-approve") || btn.getAttribute("data-signoff-reject");
+        const status = btn.hasAttribute("data-signoff-approve") ? "approved" : "rejected";
+        try {
+          const res = await apexFetch(`${config.apiBase}/hal/clinical-signoff`, {
+            method: "POST",
+            body: JSON.stringify({ id, status }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || "Update failed");
+            return;
+          }
+          await loadPage(currentPage || "narratives");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    });
+    root.querySelectorAll("[data-eob-posted]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const claimId = btn.getAttribute("data-eob-posted") || "";
+        try {
+          const res = await apexFetch(`${config.apiBase}/hal/eob-posted`, {
+            method: "POST",
+            body: JSON.stringify({ claimId }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || "Mark posted failed");
+            return;
+          }
+          await loadPage(currentPage || "office-manager");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        }
+      });
+    });
+  }
+
+  function wireHalSaidRemember(root) {
+    if (!root || root.dataset.wiredRemember === "1") return;
+    const form = root.querySelector("[data-hal-remember-form]");
+    if (!form) return;
+    root.dataset.wiredRemember = "1";
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const fd = new FormData(form);
+      try {
+        const res = await apexFetch(`${config.apiBase}/hal/remember-structured`, {
+          method: "POST",
+          body: JSON.stringify({
+            category: String(fd.get("category") || "").trim(),
+            payerId: String(fd.get("payerId") || "").trim(),
+            fact: String(fd.get("fact") || "").trim(),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.ok === false) {
+          window.alert(data.error || "Remember failed");
+          return;
+        }
+        window.alert("Saved to learned memories (no PHI).");
+        form.reset();
+      } catch (err) {
+        window.alert(String((err && err.message) || err));
+      }
+    });
   }
 
   function focusClaimTile(claimId) {

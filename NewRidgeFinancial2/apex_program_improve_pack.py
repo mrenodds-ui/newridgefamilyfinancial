@@ -321,13 +321,21 @@ def ingest_era_835(
     data["updatedAt"] = _utc_now()
     _save_json(STORE_KEY_ERA_MATCHES, data)
     _audit("era:ingest", {"segments": len(segments), "matched": len(matched), "file": filename})
-    return {
+    result = {
         "ok": True,
         "segmentCount": len(segments),
         "matchedCount": len(matched),
         "matches": matched[:40],
         "byClaimCount": len(by_claim),
     }
+    # HAL-said improve: denial→Steve + EOB backlog (NR2-local only)
+    try:
+        from apex_hal_said_improve_pack import process_era_workflow
+
+        result["halSaidWorkflow"] = process_era_workflow(result, filename=filename)
+    except Exception as exc:  # noqa: BLE001
+        result["halSaidWorkflow"] = {"ok": False, "error": str(exc)}
+    return result
 
 
 def era_matches_map() -> dict[str, dict[str, Any]]:
@@ -531,6 +539,14 @@ def build_daily_huddle_widget(reports: dict[str, Any], bundle: dict[str, Any]) -
     for a in health.get("alerts") or []:
         if isinstance(a, dict) and a.get("message"):
             priorities.append(str(a["message"]))
+    try:
+        from apex_hal_said_improve_pack import huddle_extra_priorities
+
+        for extra in huddle_extra_priorities():
+            if extra not in priorities:
+                priorities.append(extra)
+    except Exception:
+        pass
 
     # Claims 90+
     try:
