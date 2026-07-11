@@ -381,11 +381,14 @@ def sync_dashboard_period_rows() -> dict[str, Any]:
     ]
     if not merged:
         merged = list(by_period.values())
-    path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+    from import_cache_ttl import write_text_if_changed
+
+    changed = write_text_if_changed(path, json.dumps(merged, indent=2))
     diagnostic = diagnose_collections_gap(db_path, periods)
     return {
         "ok": bool(merged),
         "path": str(path),
+        "changed": changed,
         "periods": [row.get("period") for row in merged if row.get("period") in periods],
         "rowCount": len(merged),
         "source": str(db_path) if db_path else None,

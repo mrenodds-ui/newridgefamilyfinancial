@@ -268,18 +268,25 @@ def _read_claims_csv_rows(path: Path) -> list[dict[str, Any]]:
         return []
 
 
-def _write_json(path: Path, payload: object) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+def _write_json(path: Path, payload: object) -> bool:
+    """Write JSON only when bytes change. Returns True if mutated."""
+    from import_cache_ttl import write_text_if_changed
+
+    text = json.dumps(payload, indent=2)
+    return write_text_if_changed(path, text)
 
 
-def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> None:
+def _write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str]) -> bool:
+    """Write CSV only when bytes change. Returns True if mutated."""
+    from import_cache_ttl import write_bytes_if_changed
+
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({key: row.get(key, "") for key in fieldnames})
+    buf = __import__("io").StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames)
+    writer.writeheader()
+    for row in rows:
+        writer.writerow({key: row.get(key, "") for key in fieldnames})
+    return write_bytes_if_changed(path, buf.getvalue().encode("utf-8"))
 
 
 def _write_csv_json_sidecar(csv_path: Path) -> None:
@@ -660,6 +667,14 @@ def _sync_quickbooks_sdk_summary(destination: Path) -> list[str]:
     written: list[str] = []
     revenue_path = destination / "quickbooks_revenue.csv"
     expense_path = destination / "quickbooks_expenses.csv"
+    # Do not thrash Period-based monthly expenses with probe TotalExpense-only shape.
+    if expense_path.is_file() and expense_path.stat().st_size > 10:
+        try:
+            head = expense_path.read_text(encoding="utf-8-sig", errors="ignore")[:120].lower()
+            if "period" in head and "totalexpense" in head:
+                return _recover_expense_categories_csv(destination)
+        except OSError:
+            pass
     _write_csv(revenue_path, [{"TotalIncome": revenue}], ["TotalIncome"])
     _write_csv(expense_path, [{"TotalExpense": expenses}], ["TotalExpense"])
     written.extend([revenue_path.name, expense_path.name])
@@ -799,6 +814,7 @@ def _sync_quickbooks_report_cache_derived(destination: Path) -> list[str]:
 
 def _purge_sample_cache(destination: Path) -> list[str]:
     removed: list[str] = []
+    # Never unlink AR criticals here (Moonshot inbox coherence).
     dashboard = destination / "softdent_dashboard_data.json"
     if dashboard.is_file():
         try:

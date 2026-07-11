@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10550",
-  "BUILD_ID": "hal-10550",
-  "assetVersion": "hal-10550",
-  "builtAt": "2026-07-11T22:45:00Z",
-  "notes": "hal-10550: Moonshot compact professional pages Phases 1-5 (motion kill, empty collapse, size discipline, Claims pipeline+kanban subpage, HAL sole-l, density toggle).",
+  "schemaVersion": "hal-10560",
+  "BUILD_ID": "hal-10560",
+  "assetVersion": "hal-10560",
+  "builtAt": "2026-07-11T23:20:00Z",
+  "notes": "hal-10560: Moonshot inbox sync coherence — preserve critical SoftDent/QB files on retention; content-hash no-op writes.",
   "staffRenderMode": "apex"
 }
