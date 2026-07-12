@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10567",
-  "BUILD_ID": "hal-10567",
-  "assetVersion": "hal-10567",
-  "builtAt": "2026-07-12T21:20:00.000Z",
-  "notes": "hal-10567: Moonshot Better Backend Widgets MUST — tax planning data-table, collections radial-gauge (mode=collections), system health status-matrix; FE target/headers patches.",
+  "schemaVersion": "hal-10568",
+  "BUILD_ID": "hal-10568",
+  "assetVersion": "hal-10568",
+  "builtAt": "2026-07-12T21:45:00.000Z",
+  "notes": "hal-10568: Moonshot Better Backend Widgets SHOULD \u2014 HAL action-list, A/R collection-task-list, narratives ai-insight, SoftDent patient-dossier.",
   "staffRenderMode": "apex"
 }

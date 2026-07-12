@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10567"
+BUILD_ID = "hal-10568"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2298,6 +2298,14 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
 
+    # Moonshot SHOULD: SoftDent patient dossier (empty placeholder)
+    try:
+        from apex_better_backend_widgets_pack import build_softdent_patient_dossier
+
+        widgets.append(build_softdent_patient_dossier(bundle))
+    except Exception:
+        pass
+
     return widgets
 
 
@@ -2707,6 +2715,13 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
         append_ar_missing(widgets, bundle)
     except Exception:
         pass
+    # Moonshot SHOULD: A/R main page collection task list
+    try:
+        from apex_better_backend_widgets_pack import build_ar_main_collection_task_list
+
+        widgets.append(build_ar_main_collection_task_list(bundle))
+    except Exception:
+        pass
     _apply_threshold_alerts(widgets, reports)
     return widgets
 
@@ -3059,6 +3074,14 @@ def _narratives_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
                 status="empty",
             )
         )
+
+    # Moonshot SHOULD: Narratives AI insight (rule-backed variance)
+    try:
+        from apex_better_backend_widgets_pack import build_narratives_ai_insight
+
+        widgets.append(build_narratives_ai_insight(bundle))
+    except Exception:
+        pass
 
     return widgets
 
@@ -3574,6 +3597,13 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
         from apex_structured_insight_pack import ai_insight_widget
 
         widgets.append(ai_insight_widget())
+    except Exception:
+        pass
+    # Moonshot SHOULD: HAL recommended actions action-list
+    try:
+        from apex_better_backend_widgets_pack import build_hal_action_list
+
+        widgets.append(build_hal_action_list(bundle))
     except Exception:
         pass
     try:

@@ -339,3 +339,316 @@ def build_system_health_status_matrix(bundle: dict[str, Any]) -> dict[str, Any]:
             "emptyMessage": "System diagnostics unavailable",
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Moonshot SHOULD wave — continuation after MUST (hal-10567)
+# Gap-fill: action-list (hal), collection-task-list (ar main),
+# ai-insight (narratives), patient-dossier-card (softdent)
+# ---------------------------------------------------------------------------
+
+
+def _section_rows(bundle: dict[str, Any], system: str, key: str) -> list[dict[str, Any]]:
+    root = bundle.get(system) if isinstance(bundle.get(system), dict) else {}
+    if not isinstance(root, dict):
+        return []
+    block = root.get(key)
+    if isinstance(block, list):
+        return [r for r in block if isinstance(r, dict)]
+    if isinstance(block, dict):
+        rows = block.get("rows")
+        if isinstance(rows, list):
+            return [r for r in rows if isinstance(r, dict)]
+        data = block.get("data")
+        if isinstance(data, list):
+            return [r for r in data if isinstance(r, dict)]
+    return []
+
+
+def _patient_initials(name: str) -> str:
+    return _initials(name)
+
+
+def _load_local_json(key: str) -> dict[str, Any] | None:
+    try:
+        import json
+
+        from document_sync import NR2_DATA_DIR
+        from local_store import LocalStore
+
+        raw = LocalStore(NR2_DATA_DIR).get(key)
+        if not raw:
+            return None
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        return payload if isinstance(payload, dict) else None
+    except Exception:
+        return None
+
+
+def build_hal_action_list(bundle: dict[str, Any]) -> dict[str, Any]:
+    """HAL recommended actions (action-list). Rule-backed; no invented $."""
+    items: list[dict[str, Any]] = []
+    diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
+    summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
+    missing = summary.get("missing") or 0
+    stale = summary.get("stale") or 0
+    try:
+        missing = int(missing)
+    except (TypeError, ValueError):
+        missing = 0
+    try:
+        stale = int(stale)
+    except (TypeError, ValueError):
+        stale = 0
+
+    if missing:
+        items.append(
+            {
+                "id": "hal-act-missing-imports",
+                "label": f"Reconnect {missing} missing data source(s)",
+                "payer": "System",
+                "status": "alert",
+                "amount": None,
+                "serviceDate": "",
+            }
+        )
+    if stale:
+        items.append(
+            {
+                "id": "hal-act-stale-imports",
+                "label": f"Refresh {stale} stale dataset(s)",
+                "payer": "System",
+                "status": "warning",
+                "amount": None,
+                "serviceDate": "",
+            }
+        )
+
+    try:
+        from apex_structured_insight_pack import load_last_insight
+
+        insight = load_last_insight() or {}
+        audit = insight.get("efficiency_audit") if isinstance(insight, dict) else None
+        if isinstance(audit, dict) and audit.get("flag"):
+            items.append(
+                {
+                    "id": "hal-act-efficiency",
+                    "label": f"Efficiency alert: {audit.get('message', 'Review payroll vs production')}",
+                    "payer": "Practice",
+                    "status": "review",
+                    "amount": audit.get("variance_dollars"),
+                    "serviceDate": str(audit.get("period") or ""),
+                }
+            )
+    except Exception:
+        pass
+
+    tax = bundle.get("taxes") if isinstance(bundle.get("taxes"), dict) else {}
+    if tax.get("next_deadline"):
+        items.append(
+            {
+                "id": "hal-act-filing",
+                "label": f"Upcoming filing: {tax.get('next_deadline')}",
+                "payer": "IRS/KDOR",
+                "status": "scheduled",
+                "amount": None,
+                "serviceDate": str(tax.get("due_date") or ""),
+            }
+        )
+
+    status = "ok" if items else "empty"
+    return {
+        "id": "hal-recommended-actions",
+        "type": "action-list",
+        "label": "Recommended Actions",
+        "size": "m",
+        "status": status,
+        "emptyMessage": "No active recommendations — imports healthy and filings on track.",
+        "hint": "Rule-backed HAL prompts (no LLM inference).",
+        "data": {
+            "items": items,
+            "count": len(items),
+            "emptyMessage": "No active recommendations — imports healthy and filings on track.",
+        },
+    }
+
+
+def build_ar_main_collection_task_list(bundle: dict[str, Any]) -> dict[str, Any]:
+    """A/R MAIN page collection-task-list. Seeds from aging/denied; PHI = initials."""
+    seeds: list[dict[str, Any]] = []
+    notes: list[dict[str, Any]] = []
+
+    try:
+        from apex_claims_narratives_pack import build_aging_buckets, normalize_claim_row
+
+        rows = (
+            _section_rows(bundle, "softdent", "claims")
+            or _section_rows(bundle, "softdent", "claimStatus")
+            or []
+        )
+        aging = build_aging_buckets(rows)
+        for bucket_key in ("90", "60", "30"):
+            tiles = (aging.get("buckets") or {}).get(bucket_key) or []
+            if not isinstance(tiles, list):
+                continue
+            for tile in tiles[:20]:
+                if not isinstance(tile, dict):
+                    continue
+                seeds.append(
+                    {
+                        "claimId": tile.get("claimId"),
+                        "patientInitials": _patient_initials(str(tile.get("patientName") or "")),
+                        "ageDays": tile.get("ageDays"),
+                        "bucket": bucket_key,
+                        "billedAmount": tile.get("billedAmount"),
+                    }
+                )
+        for row in rows:
+            tile = normalize_claim_row(row)
+            if not tile:
+                continue
+            if str(tile.get("status") or "").lower() in ("denied", "rejected"):
+                seeds.append(
+                    {
+                        "claimId": tile.get("claimId"),
+                        "patientInitials": _patient_initials(str(tile.get("patientName") or "")),
+                        "ageDays": tile.get("ageDays"),
+                        "bucket": tile.get("bucket") or "denied",
+                        "billedAmount": tile.get("billedAmount"),
+                    }
+                )
+        seen: set[Any] = set()
+        deduped: list[dict[str, Any]] = []
+        for s in seeds:
+            cid = s.get("claimId")
+            if cid and cid not in seen:
+                seen.add(cid)
+                deduped.append(s)
+        seeds = deduped[:40]
+    except Exception:
+        seeds = []
+
+    try:
+        from nr2_local_db import list_collection_notes
+
+        notes = list_collection_notes(limit=100)
+        if not isinstance(notes, list):
+            notes = []
+    except Exception:
+        notes = []
+
+    has_data = bool(seeds) or bool(notes)
+    return {
+        "id": "ar-collection-task-list",
+        "type": "collection-task-list",
+        "label": "Collections Workbench",
+        "size": "full",
+        "status": "ok" if has_data else "empty",
+        "emptyMessage": "No aged claims or local notes — import SoftDent A/R and claims to populate.",
+        "seeds": seeds,
+        "notes": notes,
+        "hint": "Seeds from 30/60/90+ buckets and denied claims. PHI = initials only.",
+    }
+
+
+def build_narratives_ai_insight(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Narratives page ai-insight — rule-backed variance; no invented $."""
+    state = _load_local_json("nr2:v2:narratives") or {}
+    drafts = state.get("drafts") if isinstance(state.get("drafts"), list) else []
+    draft_text = str(state.get("draftText") or "").strip()
+    clinical = _section_rows(bundle, "softdent", "clinicalNotes") or []
+
+    draft_count = len(drafts) + (1 if draft_text else 0)
+    clinical_count = len(clinical)
+
+    if draft_count == 0 and clinical_count > 0:
+        explanation = f"{clinical_count} clinical note(s) available but no narrative drafts started."
+        widget_type = "alert-banner"
+        cta_label = "Start draft from clinical notes"
+        cta_route = "narratives"
+        data: dict[str, Any] = {"severity": "info", "message": explanation}
+    elif draft_count > 0 and clinical_count == 0:
+        explanation = f"{draft_count} draft(s) saved without recent clinical notes import."
+        widget_type = "alert-banner"
+        cta_label = "Import SoftDent clinical notes"
+        cta_route = "softdent"
+        data = {"severity": "warning", "message": explanation}
+    elif draft_count > 0 and clinical_count > 0:
+        explanation = f"Workflow active: {draft_count} draft(s), {clinical_count} note(s) available."
+        widget_type = "kpi-card"
+        cta_label = "Review drafts"
+        cta_route = "narratives"
+        data = {
+            "value": draft_count,
+            "unit": "count",
+            "trend_direction": f"{clinical_count} notes",
+        }
+    else:
+        explanation = "No narrative drafts or clinical notes found."
+        widget_type = "alert-banner"
+        cta_label = "Import clinical data"
+        cta_route = "softdent"
+        data = {"severity": "info", "message": explanation}
+
+    insight = {
+        "widget_type": widget_type,
+        "confidence": "high",
+        "explanation": explanation,
+        "source_refs": ["nr2:v2:narratives", "softdent:clinicalNotes"],
+        "data": data,
+        "action_cta": {"label": cta_label, "route": cta_route},
+    }
+
+    return {
+        "id": "narratives-ai-insight",
+        "type": "ai-insight",
+        "label": "Narrative Insight",
+        "size": "l",
+        "status": "ok",
+        "insight": insight,
+        "hint": "Rule-backed variance (no LLM). source_refs required for audit.",
+    }
+
+
+def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
+    """SoftDent page patient-dossier-card — honest empty until patient selected."""
+    empty_msg = "Select a patient from the schedule (Mon–Thu) to load dossier."
+    selected = (
+        bundle.get("selectedPatient") if isinstance(bundle.get("selectedPatient"), dict) else None
+    )
+    if selected:
+        demo = selected.get("demographics") if isinstance(selected.get("demographics"), dict) else {}
+        payload = {
+            "patientHash": selected.get("patientHash") or demo.get("nameHash") or "——",
+            "initials": selected.get("initials") or demo.get("initials") or "P—",
+            "primaryCarrier": selected.get("primaryCarrier") or demo.get("primaryCarrier"),
+            "openClaims": selected.get("openClaims"),
+            "lastVisit": selected.get("lastVisit") or demo.get("lastVisit") or "unknown",
+            "accountBalance": selected.get("accountBalance") or "unavailable",
+            "hasClinicalNotes": selected.get("hasClinicalNotes"),
+            "emptyMessage": None,
+        }
+        st = "ok"
+    else:
+        # Live FE: empty message shows when status=empty and patientHash falsy
+        payload = {
+            "patientHash": None,
+            "initials": None,
+            "primaryCarrier": None,
+            "openClaims": None,
+            "lastVisit": None,
+            "accountBalance": None,
+            "hasClinicalNotes": None,
+            "emptyMessage": empty_msg,
+        }
+        st = "empty"
+
+    return {
+        "id": "softdent-patient-dossier",
+        "type": "patient-dossier-card",
+        "label": "Patient Dossier",
+        "size": "l",
+        "status": st,
+        "data": payload,
+        "hint": "PHI-safe hashes/initials · empty until patient selected.",
+    }
