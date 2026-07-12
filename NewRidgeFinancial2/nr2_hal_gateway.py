@@ -17,12 +17,12 @@ SOFT_STALE_WATERMARK = (
     "[DATA SOFT-STALE — analytical guidance only; verify amounts against fresh imports before acting]"
 )
 LANE_MODELS = {
-    # R9700 32 GB single-model layout: all approved local lanes → hal-local:24b (Q4_K_M).
+    # R9700 32 GB single-model layout: all approved local lanes → hal-local:32b (qwen3:32b Q4_K_M).
     # Lane keys preserved for routing policy; do not load 8B/30B/coder concurrently.
-    "chat8b": "hal-local:24b",
-    "reason21b": "hal-local:24b",
-    "escalate30b": "hal-local:24b",
-    "coder32b": "hal-local:24b",
+    "chat8b": "hal-local:32b",
+    "reason21b": "hal-local:32b",
+    "escalate30b": "hal-local:32b",
+    "coder32b": "hal-local:32b",
 }
 LANE_HISTORY_KEY = "nr2:hal:lane-history"
 LANE_OVERRIDE_KEY = "nr2:hal:lane-override-log"

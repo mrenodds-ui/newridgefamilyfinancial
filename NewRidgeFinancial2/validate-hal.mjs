@@ -649,7 +649,7 @@ async function main() {
     assert(runtime.enabled === true, "model lane must be enabled for local execution");
     assert(HalCore.isLocalModelEndpoint(runtime.endpoint), `model endpoint must be loopback-only: ${runtime.endpoint}`);
     if (singleGpu) {
-      assert(runtime.model === "hal-local:24b", "single-GPU layout must pin all active runtimes to hal-local:24b");
+      assert(runtime.model === "hal-local:32b", "single-GPU layout must pin all active runtimes to hal-local:32b");
     }
   }
   for (const lane of halModels.lanes) {
@@ -664,10 +664,10 @@ async function main() {
     assert(runtime && HalCore.isLocalModelEndpoint(runtime.endpoint), `lane ${lane.id} runtime must be loopback-only`);
   }
   if (singleGpu) {
-    assert(halModels.config.singleGpuLayout.approvedModel === "hal-local:24b", "approved single-GPU model must be hal-local:24b");
+    assert(halModels.config.singleGpuLayout.approvedModel === "hal-local:32b", "approved single-GPU model must be hal-local:32b");
     assert(halModels.readinessDisplay.allModelsEnabled === false, "single-GPU layout keeps standby lanes disabled");
-    assert(halModels.readinessDisplay.configuredModels.local.model === "hal-local:24b", "local model must be hal-local:24b");
-    assert(halHtml.includes("hal-local:24b"), "HAL page must show single 24B model inventory");
+    assert(halModels.readinessDisplay.configuredModels.local.model === "hal-local:32b", "local model must be hal-local:32b");
+    assert(halHtml.includes("hal-local:32b"), "HAL page must show single 32B model inventory");
   } else {
     assert(halModels.readinessDisplay.allModelsEnabled === true, "readiness display must reflect all models enabled");
     assert(halModels.readinessDisplay.configuredModels.local.model === "hal-chat:8b", "local model must use the GPU 8B chat lane");
@@ -690,7 +690,7 @@ async function main() {
   const chatRuntime = HalCore.laneRuntime(halModels, "chat8b");
   const localRuntime = halModels.config.localModel || {};
   if (singleGpu) {
-    assert(chatRuntime && chatRuntime.model === "hal-local:24b", "chat lane model must be hal-local:24b under single-GPU layout");
+    assert(chatRuntime && chatRuntime.model === "hal-local:32b", "chat lane model must be hal-local:32b under single-GPU layout");
     assert(localRuntime.think === false, "localModel must disable thinking tokens");
     assert(localRuntime.options && Number(localRuntime.options.num_ctx) === 8192, "single-GPU chat context must be 8192");
   } else {
