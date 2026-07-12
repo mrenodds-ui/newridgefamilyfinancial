@@ -374,7 +374,8 @@ def read_practice_export_datasets(db_path: Path | None = None) -> dict[str, dict
         return out
 
     periods = relevant_period_labels()
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10.0)
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         np_rows = _aggregate_new_patients(conn, periods)
         tp_rows = _aggregate_treatment_plans(conn, periods)
@@ -706,7 +707,8 @@ def sync_practice_exports(db_path: Path | None = None, destination: Path | None 
     if not db_path or not db_path.is_file():
         return result
 
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=10.0)
+    conn.execute("PRAGMA busy_timeout = 5000")
     tp_rows: list[dict[str, Any]] = []
     tp_source = "analytics-db"
     try:
@@ -859,7 +861,8 @@ def ingest_csv_reports_to_sqlite(
 
     counts: dict[str, int] = {}
     extracted_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(db_path), timeout=10.0)
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         for filename, (table, colmap) in mappings.items():
             path = _find(filename)
