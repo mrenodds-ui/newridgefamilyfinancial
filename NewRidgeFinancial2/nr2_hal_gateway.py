@@ -1175,7 +1175,12 @@ def iter_ollama_sse_tokens(
 def _ollama_think_flag(model: str) -> bool | None:
     """Staff-facing lanes disable hidden reasoning (DeepSeek-R1 / Qwen3)."""
     name = str(model or "").lower()
-    if name.startswith("hal-escalate") or name.startswith("qwen3:"):
+    # hal-local:32b is qwen3:32b under an alias — must disable think or content stays empty.
+    if (
+        name.startswith("hal-escalate")
+        or name.startswith("hal-local")
+        or name.startswith("qwen3:")
+    ):
         return False
     if name.startswith("hal-chat") or name.startswith("deepseek"):
         return False
@@ -1188,7 +1193,7 @@ def call_ollama_chat(
     messages: list[dict[str, Any]],
     stream: bool = False,
     options: dict[str, Any] | None = None,
-    timeout: float = 120.0,
+    timeout: float = 180.0,
     keep_alive: int | str | None = None,
     format: Any | None = None,
 ) -> dict[str, Any]:
@@ -1238,7 +1243,18 @@ def call_ollama_chat(
             body = dict(body)
             body["message"] = dict(message)
             body["message"]["content"] = text
-            return {"ok": True, "body": body}
+            # Preserve raw thinking length for diagnostics (never staff-facing).
+            thinking_len = len(str(message.get("thinking") or ""))
+            return {
+                "ok": True,
+                "body": body,
+                "diag": {
+                    "contentChars": len(text),
+                    "thinkingChars": thinking_len,
+                    "thinkFlag": think,
+                    "stream": False,
+                },
+            }
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         return {"ok": False, "error": f"ollama_http_{exc.code}", "detail": detail[:2000]}
@@ -1544,8 +1560,15 @@ def evaluate_query(
     chat_messages = inject_deliverable_messages(chat_messages, query)
     opts = options_for_query(query, options)
     fmt = _DELIVERABLE_JSON_SCHEMA if is_deliverable_request(query) else None
+    # Phase 5: 180s ceiling — analytical reason21b prompts can exceed 60s on Q4_K_M.
+    timeout = float(os.environ.get("NR2_OLLAMA_CHAT_TIMEOUT") or "180")
     result = call_ollama_chat(
-        model=model, messages=chat_messages, stream=False, options=opts, format=fmt
+        model=model,
+        messages=chat_messages,
+        stream=False,
+        options=opts,
+        format=fmt,
+        timeout=timeout,
     )
     if not result.get("ok"):
         return {
@@ -1553,11 +1576,51 @@ def evaluate_query(
             "error": result.get("error"),
             "detail": result.get("detail"),
             "resolvedLane": resolved["lane"],
+            "model": model,
+            "intent": intent,
+            "routingReason": routing_reason or None,
         }
 
     body = result.get("body") or {}
     message = body.get("message") or {}
     text = extract_ollama_message_text(message, query=query)
+    diag = dict(result.get("diag") or {})
+
+    # Qwen3 / think-only race: non-stream sometimes returns empty content — retry once via stream.
+    if not str(text or "").strip():
+        retry = call_ollama_chat(
+            model=model,
+            messages=chat_messages,
+            stream=True,
+            options=opts,
+            format=fmt,
+            timeout=timeout,
+        )
+        diag["emptyRetryStream"] = True
+        diag["retryOk"] = bool(retry.get("ok"))
+        if retry.get("ok"):
+            body = retry.get("body") or {}
+            message = body.get("message") or {}
+            text = extract_ollama_message_text(message, query=query)
+            diag["retryContentChars"] = len(str(text or ""))
+        else:
+            diag["retryError"] = retry.get("error")
+
+    if not str(text or "").strip():
+        return {
+            "ok": False,
+            "error": "empty_response",
+            "detail": diag,
+            "text": "",
+            "message": {"content": ""},
+            "model": model,
+            "readinessLevel": level,
+            "intent": intent,
+            "softStale": soft_stale,
+            "resolvedLane": resolved["lane"],
+            "routingReason": routing_reason or None,
+        }
+
     if level != "fresh" and intent == "transactional":
         text = redact_financial_numbers(text)
     elif level != "fresh" and soft_stale and intent in ("analytical", "clinical", "insurance_ops"):
@@ -1579,4 +1642,5 @@ def evaluate_query(
         "softStale": soft_stale,
         "resolvedLane": resolved["lane"],
         "routingReason": routing_reason or None,
+        "diag": diag or None,
     }

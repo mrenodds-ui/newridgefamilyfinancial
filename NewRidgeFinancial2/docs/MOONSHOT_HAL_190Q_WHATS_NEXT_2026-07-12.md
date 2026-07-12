@@ -16,52 +16,59 @@
 ---
 
 # Verdict
-Execute a live 190Q subset re-run to measure Phase 1–3 lift before committing engineering cycles to Phase 4.
+Execute the live 190Q subset re-run (n≈50) to validate directional lift from Phases 1–3 before committing engineering cycles to Phase 4 hardening or the full n=190 eval.
 
 ## 0. Operator Intent (verbatim: next)
 
-## 1. Recommended NEXT (name, why now, effort, REAL files, validation gate)
-**Name:** 190Q Phase 1–3 Validation Re-run (Subset)  
-**Why now:** Three consecutive constraint, structure, and latency fixes just shipped; we must validate actual quality/read-only/deliverable rate improvement on R9700 hardware before building Phase 4 (CARC whitelist hardening). If Phase 1–3 already lifted quality to ≥75% and read-only OK to ≥90%, Phase 4 priority drops; if metrics are still poor, we target Phase 4 with fresh failure logs rather than speculative code. Measurement is higher-leverage than additional engineering while the baseline is unverified.  
-**Effort:** Low (ops/eval only; zero code changes).  
+## 1. Recommended NEXT (Live 190Q Subset Validation n≈50)
+**Why now:** Phases 1–3 are applied but unproven in live execution against real queries. The baseline (26.3% quality, 25% read‑only OK) is catastrophic; we need empirical proof of directional lift before investing in Phase 4 CARC whitelist hardening or the expensive full n=190 run.  
+**Effort:** Medium — ~1–2 h compute on R9700 (Q4_K_M 32B) plus 30 min analysis.  
 **REAL files:**  
-- `scripts/run_moonshot_hal_190q_eval.py` (execution harness)  
-- `scripts/hal_eval_scoring.py` (scoring rubric calibrated in Phase 1)  
-- `NewRidgeFinancial2/apex_hal_cache_warm_pack.py` (ensure warm state before eval)  
-- `NewRidgeFinancial2/nr2_hal_gateway.py` (read-only for config verification)  
+- `scripts/run_moonshot_hal_190q_eval.py` (subset execution)  
+- `scripts/hal_eval_scoring.py` (rubric validation)  
+- `NewRidgeFinancial2/nr2_hal_gateway.py` (log telemetry only; no code change)  
 
 **Validation gate:**  
-- Run n=50 subset through `run_moonshot_hal_190q_eval.py`.  
-- Compare against baseline `HAL_190Q_EVAL_2026-07-12.json` (26.3% quality, 25% read-only OK, 53s avg latency).  
-- Success = quality ≥75%, read-only OK ≥90%, avg TTFT <2s, full response <45s.  
-- Deliver comparison table to operator; go/no-go on Phase 4 depends on read-only OK <90% or quality <75%.
+- Subset completes without crash or timeout.  
+- Quality ≥ 40 % (directional lift from 26.3 %).  
+- Read‑only OK ≥ 60 % (lift from 25 %).  
+- Deliverable format compliance (numbered steps) ≥ 50 %.  
+- Median TTFT < 2 s (Phase 3 streaming efficacy).  
+- Zero invented dollars/CARC/PHI.  
+**Go/No‑Go:** If gates pass, approve Phase 4; if fail, debug Phase 1–3 implementation before any new features.
 
-## 2. Runner-ups (2–3, why not now)
-1. **Phase 4: CARC Whitelist Hardening (known-code briefs)** — Important for sparse known-code briefs, but blocked until we confirm Phase 1–3 compliance fixes didn’t already resolve the refusal patterns; building whitelist on unvalidated base risks wasted effort if the model now correctly refuses unknown codes but still fails on known-code formatting.  
-2. **Apex Orchestrator Path Streaming** — Convert orchestrator JSON aggregate to progressive SSE; Phase 3 already delivered perceived TTFT wins for chat, and further latency work is lower ROI than confirming baseline quality metrics.  
-3. **Full 190Q Re-run (n=190)** — Higher statistical confidence but 4× compute/RAM time on R9700; defer full run until subset proves directional improvement and no regressions.
+## 2. Runner-ups (why not now)
+- **Phase 4: CARC Whitelist Hardening** — Adds strict briefs for known CARC codes and refusal templates for unknowns. *Defer* until subset proves the gateway logic is sound; hardening is wasted if base constraint enforcement is still broken.  
+- **Full 190Q Re‑run (n=190)** — Complete statistical evaluation. *Defer* because running 190 queries is ~4 h on R9700; validate architecture with n≈50 first to avoid wasting time if fixes are ineffective.  
+- **Orchestrator Path Streaming** — Extend Phase 3 SSE streaming to the non‑stream JSON orchestrator path. *Defer*; UX polish is secondary to confirming that answers are correct and compliant.
 
 ## 3. What NOT to redo
-- Do not re-apply Phase 1 (post-generation sentence constraints, write/CARC/empty≠$0 preflight, rubric recalibration).  
-- Do not re-apply Phase 2 (JSON schema deliverables → numbered markdown + UI).  
-- Do not re-apply Phase 3 (SSE typing/ttft meta, `X-Accel-Buffering: no`, DesktopBridge streaming, fake-typewriter skip).  
-- Do not modify CARC handling logic (Phase 4) or add new HAL/Apex features until measurement validates current state.
+- **Phase 1:** Post‑generation sentence limits, write/CARC/empty≠$0 preflight, short‑ask `num_predict` caps, rubric recalibration.  
+- **Phase 2:** Structured deliverables (JSON schema → numbered markdown), `is_deliverable_request` detection, client‑side step rendering.  
+- **Phase 3:** Early SSE `typing`/`ttft` meta, `X-Accel-Buffering: no`, `onToken` accumulation, Apex `askHal` streaming, fake‑typewriter skip.  
+Do not re‑apply code changes already marked **APPLIED** in the manifest.
 
 ## 4. Acceptance criteria
-- Subset eval JSON generated with new timestamp (e.g., `HAL_190Q_EVAL_2026-07-13_subset.json`).  
-- `hal_eval_scoring.py` reports: quality pass %, read-only OK %, deliverable rate, avg end-to-end latency, TTFT p50/p95.  
-- Side-by-side comparison vs baseline (26.3% / 25% / 53s) posted for operator review.  
-- Explicit go/no-go decision recorded for Phase 4 based on read-only OK rate threshold (<90% triggers Phase 4; ≥90% deprioritizes).
+1. Command executes: `python scripts/run_moonshot_hal_190q_eval.py --subset 50 --model hal-local:32b --warm` (warm cache per REC‑007).  
+2. Output `HAL_190Q_SUBSET_2026-07-12.json` generated with 50 scored responses.  
+3. Aggregate quality score ≥ 40 % (up from 26.3 %).  
+4. Read‑only OK rate ≥ 60 % (up from 25 %).  
+5. Deliverable asks rendered as numbered steps ≥ 50 % of the time.  
+6. Median TTFT < 2000 ms measured via SSE `ttft` meta events.  
+7. Zero hallucinated dollar amounts, CARC code meanings, or PHI.  
+8. Comparison report generated: pre‑fix baseline vs. post‑fix subset.
 
-## 5. Executive Summary (5 bullets)
-- Phases 1–3 (constraints, structured deliverables, streaming UX) just landed on `hal-local:32b` R9700.  
-- Unknown if fixes moved the 190Q baseline (26.3% quality, 25% read-only OK) to production-ready levels.  
-- Proposed next step is empirical measurement using existing harness, not additional code commits.  
-- Outcome directly gates Phase 4 (CARC whitelist) engineering priority and resource allocation.  
-- Low-risk, high-information validation that prevents over-engineering against an already-fixed baseline.
+## 5. Executive Summary
+- **Validation blocks waste:** The subset is the cheapest way to confirm that Phases 1–3 actually moved the metrics before building Phase 4.  
+- **Hardware fit:** n≈50 on R9700 Q4_K_M finishes in under 2 hours; acceptable cost for a go/no‑go decision.  
+- **Metric thresholds:** Quality > 40 % and read‑only > 60 % prove the rubric recalibration (Phase 1) and constraint enforcement (Phase 1) are functioning; lower numbers indicate implementation bugs, not model limits.  
+- **Streaming sanity check:** TTFT < 2 s validates that Phase 3 SSE changes reduced perceived latency without breaking output correctness.  
+- **CARC hardening queued:** Phase 4 (CARC whitelist) is ready to spec but gates on this subset proving the system refuses unknown codes correctly under live load.
 
 ## 6. Approval checklist
-- [ ] Operator confirms subset size (recommend n=50 for speed, or full n=190 if cluster idle).  
-- [ ] Confirm `hal-local:32b` is warm (execute `apex_hal_cache_warm_pack.py` preflight).  
-- [ ] Confirm baseline JSON `HAL_190Q_EVAL_2026-07-12.json` archived for comparison.  
-- [ ] Review comparison table before proceeding to Phase 4 or stopping.
+- [ ] Cache warmed via `apex_hal_cache_warm_pack.py` (REC‑007) to avoid cold‑start latency skew.  
+- [ ] Subset size strictly capped at n=50 (operator can override, but 50 is the recommended minimum for directional signal).  
+- [ ] Scoring script uses Phase 1 updated rubric (regex for read‑only, not literal match).  
+- [ ] Output filenames timestamped to prevent collision with prior runs.  
+- [ ] No GitHub PR required; this is local execution and analysis only.  
+- [ ] Operator confirms “proceed” on subset results before any work on Phase 4 begins.

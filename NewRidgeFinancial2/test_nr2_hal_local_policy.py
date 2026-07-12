@@ -162,6 +162,12 @@ class HalLocalPolicyTests(unittest.TestCase):
         )
         self.assertEqual(text, "")
 
+    def test_hal_local_disables_think(self) -> None:
+        from nr2_hal_gateway import _ollama_think_flag
+
+        self.assertIs(False, _ollama_think_flag("hal-local:32b"))
+        self.assertIs(False, _ollama_think_flag("qwen3:32b"))
+
     def test_imports_read_only(self) -> None:
         reply = try_local_policy_reply("Are imports read-only?")
         self.assertIsNotNone(reply)

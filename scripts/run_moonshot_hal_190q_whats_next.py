@@ -53,10 +53,10 @@ JUST SHIPPED (Phase 3 — faa3113):
 - Live full 190Q re-run still NOT done
 
 PRIOR 190Q FIX PHASES STILL OPEN:
+- Live 190Q subset re-run (n≈50) — RECOMMENDED after Phase 3 but NOT YET RUN
+  (operator has not said proceed). If still correct, say so bluntly.
 - Phase 4: CARC whitelist hardening (unknown refuse done; known-code briefs sparse)
-- Live 190Q subset/full re-run to measure Phase 1–3 lift (eval action — recommend
-  as NEXT if measurement is now the highest-leverage step vs more code)
-- Other additive HAL/ops packages only if clearly higher ROI than Phase 4 / re-run
+- Full 190Q (n=190) only after subset proves directional lift
 
 Do NOT redo Phases 1–3. Prefer one clear next.
 
