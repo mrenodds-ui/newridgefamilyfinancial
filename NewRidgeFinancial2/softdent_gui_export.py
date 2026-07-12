@@ -503,17 +503,75 @@ def _focus_main():
     return hwnd
 
 
-def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
-    """Open SoftDent report via keyboard only.
+def _softdent_click(ctrl) -> None:
+    """Mouse click only if the control belongs to SoftDent (SDWIN). Never click AMD/other."""
+    pids = _softdent_pids()
+    try:
+        hwnd = int(ctrl.handle)
+    except Exception as exc:
+        raise RuntimeError(f"SoftDent click: no handle ({type(exc).__name__})") from exc
+    pid = _window_pid(hwnd)
+    # Child controls may report parent process — also accept if SoftDent main is parent chain
+    if pids and pid not in pids:
+        # Walk parent hwnds
+        import win32gui
 
-    IMPORTANT: Do NOT send Alt+R — AMD Adrenalin Instant Replay steals Alt+R and
-    launches/focuses AMD Software. Use F10 (menu bar) then R for Reports.
-    Never send Escape after Sign On (SoftDent quit prompt).
-    Anytime a printer prompt appears, cancel it via keyboard (Alt+C).
+        cur = hwnd
+        owned = False
+        for _ in range(8):
+            try:
+                cur = int(win32gui.GetParent(cur) or 0)
+            except Exception:
+                break
+            if not cur:
+                break
+            if _window_pid(cur) in pids:
+                owned = True
+                break
+        if not owned:
+            raise RuntimeError(f"Refusing click — control pid {pid} is not SoftDent {sorted(pids)}")
+    ctrl.click_input()
+    time.sleep(0.2)
+    cancel_printer_dialogs(max_rounds=2)
+
+
+def _open_report_via_win32_menu(menu_path: str) -> bool:
+    """Open SoftDent report via classic Win32 menu (mouse/menu API on SoftDent only).
+
+    SoftDent v19 exposes a real HMENU — UIA only shows top-level bar items, so cascade
+    leaves like Accounting/Registers are selected via menu_select / GetMenu.
+
+    Example: 'Reports->Accounting->Registers->Period'
     """
+    from pywinauto import Application
+
     _focus_main()
     cancel_printer_dialogs()
-    # F10 = menu bar (SoftDent-owned). Then R=Reports, A=Accounting, then report keys.
+    hwnd = _main_softdent_hwnd()
+    _force_foreground(hwnd)
+    try:
+        app = Application(backend="win32").connect(handle=hwnd)
+        win = app.window(handle=hwnd)
+        # SoftDent-owned window only
+        if _softdent_pids() and _window_pid(hwnd) not in _softdent_pids():
+            return False
+        win.menu_select(menu_path)
+    except Exception as exc:
+        logger.warning("SoftDent menu_select(%s) failed: %s", menu_path, type(exc).__name__)
+        return False
+    time.sleep(0.6)
+    for _ in range(24):
+        cancel_printer_dialogs(max_rounds=1)
+        if find_dialog("Output Options"):
+            return True
+        time.sleep(0.25)
+    return bool(find_dialog("Output Options"))
+
+
+def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
+    """Fallback: SoftDent menu via F10 + letters (never global Alt+R — AMD Instant Replay)."""
+    _focus_main()
+    cancel_printer_dialogs()
     _send_softdent_keys("{F10}")
     time.sleep(0.35)
     cancel_printer_dialogs(max_rounds=2)
@@ -529,6 +587,35 @@ def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
         time.sleep(0.35)
     time.sleep(0.8)
     cancel_printer_dialogs()
+
+
+def _open_accounting_report(report_id: str, menu_keys: str) -> None:
+    """Open SoftDent accounting report per Carestream docs; Win32 menu preferred, keyboard fallback."""
+    # Probed on CS SoftDent v19.1.4 (classic HMENU under Reports)
+    win32_paths: dict[str, list[str]] = {
+        "register": ["Reports->Accounting->Registers->Period"],
+        "daysheet": ["Reports->Accounting->Daysheet", "Reports->5. Daysheet"],
+        "transactions": ["Reports->Accounting->Trans for a Period"],
+        "aging": ["Reports->Accounting->Account Aging"],
+        # Collections live under Practice Management on this build (not Accounting)
+        "collections": [
+            "Reports->Practice Management->Collection Reports->Summary",
+            "Reports->Practice Management->Collection Reports->Reconciliation",
+        ],
+    }
+    for path in win32_paths.get(report_id) or []:
+        if _open_report_via_win32_menu(path):
+            return
+    _open_report_via_keys(menu_keys)
+    if not find_dialog("Output Options") and report_id in win32_paths:
+        for path in win32_paths[report_id]:
+            if _open_report_via_win32_menu(path):
+                return
+    if not find_dialog("Output Options"):
+        raise RuntimeError(
+            "Output Options dialog did not appear after SoftDent menu "
+            f"(report={report_id}). Ensure Excel path — Printer triggers waiting dialog."
+        )
 
 
 def load_menu_map(path: Path | None = None) -> dict[str, Any]:
@@ -603,9 +690,10 @@ def _complete_output_setup_and_save(
     canonical_name: str,
     also_copy_as: list[str] | None = None,
 ) -> Path:
-    """Drive Output Options → Report Setup → Save with keyboard only.
+    """Drive Output Options → Report Setup → Save (SoftDent keyboard/mouse only).
 
-    No mouse, no set_edit_text, no Escape. Printer prompts → Alt+C cancel.
+    Output Options: click Excel prompt, then Enter (never leave Printer selected).
+    No Escape on SoftDent main. Printer wait → Alt+C cancel.
     """
     dismiss_softdent_alerts()
     cancel_printer_dialogs()
@@ -620,10 +708,27 @@ def _complete_output_setup_and_save(
         raise RuntimeError("Output Options dialog did not appear")
 
     _keyboard_activate_dialog(out)
-    # Excel output via accelerator E, then Enter = OK
-    _send_softdent_keys("e", hwnd=int(out.handle))
-    time.sleep(0.2)
-    _keyboard_press_ok(hwnd=int(out.handle))
+    # SoftDent Output Options: click Excel radio/prompt, then Enter (not Printer).
+    excel_clicked = False
+    try:
+        from pywinauto import Application
+
+        app_out = Application(backend="win32").connect(handle=out.handle)
+        d_out = app_out.window(handle=out.handle)
+        for b in d_out.descendants(class_name="Button"):
+            label = (b.window_text() or "").replace("&", "")
+            if "Excel" in label:
+                _softdent_click(b)
+                excel_clicked = True
+                break
+    except Exception as exc:
+        logger.warning("Excel radio click failed: %s", type(exc).__name__)
+    if not excel_clicked:
+        _send_softdent_keys("e", hwnd=int(out.handle))
+        time.sleep(0.2)
+    time.sleep(0.25)
+    # User-confirmed SoftDent flow: Excel selected → Enter (do not click OK / Printer)
+    _send_softdent_keys("{ENTER}", hwnd=int(out.handle))
     time.sleep(1.0)
     cancel_printer_dialogs()
 
@@ -732,7 +837,7 @@ def export_report_by_id(
         use_end = end
 
     keys = resolve_menu_keys(report, menu_keys)
-    _open_report_via_keys(keys)
+    _open_accounting_report(report_id, keys)
     stem = _format_stem(str(report.get("short_stem_template") or "RPT"), use_start, use_end)
     canonical = _format_canonical(
         str(report.get("canonical_template") or f"{report_id}.xls"),

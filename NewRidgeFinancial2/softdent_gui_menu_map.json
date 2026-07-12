@@ -2,14 +2,14 @@
   "version": 1,
   "softdentVersionHint": "CS SoftDent Software v19.1.4",
   "notes": [
-    "ALL SoftDent export UI is keyboard-only (no mouse, no set_edit_text, no BM_CLICK).",
-    "Keys are typed after F10 (menu bar) then R (Reports) then A (Accounting).",
-    "NEVER use Alt+R — AMD Adrenalin Instant Replay steals Alt+R and focuses AMD Software.",
-    "NEVER send Escape after Sign On — SoftDent interprets Escape as quit/close prompt.",
-    "Printer / Waiting for printer connection → cancel via Alt+C (keyboard).",
-    "register_period 'rp' = Registers → Period.",
-    "SoftDent save dialog rejects long paths — use 8.3 short stem under C:\\SOFTDE~1 (tilde escaped when typing).",
-    "Launch SoftDent only from desktop/Programs shortcut (CS SoftDent Software.lnk), never bare SDWIN.EXE."
+    "Carestream docs: Reports > Accounting > Registers > Period → Output Options → Excel → Register Setup.",
+    "Interaction: keyboard OR mouse, SoftDent (SDWIN) windows only — never AMD (Alt+R = Instant Replay).",
+    "Prefer SoftDent Win32 menu_select (Reports->Accounting->Registers->Period); F10+letters fallback.",
+    "MUST click Excel in Output Options then Enter — Printer causes Waiting for printer connection…",
+    "Printer wait → Cancel via Alt+C / Cancel button (never leave SoftDent hanging).",
+    "NEVER Esc on SoftDent main (quit). Enter=OK, Tab=fields, Space=checkbox (Carestream KystrkSht).",
+    "Launch only via desktop/Programs shortcut CS SoftDent Software.lnk (-sus).",
+    "Save with short 8.3 path C:\\SOFTDE~1\\… (tilde escaped when typing)."
   ],
   "pathPrefix": "{F10} r a",
   "reports": {
@@ -29,7 +29,7 @@
     "collections": {
       "id": "collections",
       "label": "Collections for a Period",
-      "menuPath": "Reports → Accounting → Collections",
+      "menuPath": "Reports → Practice Management → Collection Reports → Summary",
       "menu_keys": "c",
       "menu_keys_env": "SOFTDENT_COLLECTIONS_MENU_KEYS",
       "date_mode": "range",
@@ -43,7 +43,7 @@
     "transactions": {
       "id": "transactions",
       "label": "Transactions for a Period",
-      "menuPath": "Reports → Accounting → Transactions for a Period",
+      "menuPath": "Reports → Accounting → Trans for a Period",
       "menu_keys": "t",
       "menu_keys_env": "SOFTDENT_TRANSACTIONS_MENU_KEYS",
       "date_mode": "range",
