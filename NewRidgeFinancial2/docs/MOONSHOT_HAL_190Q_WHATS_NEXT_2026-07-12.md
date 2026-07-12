@@ -16,49 +16,54 @@
 ---
 
 # Verdict
-Phase 2 (Structured Deliverables) remains the correct next package; enforce JSON schema or bulleted output for step-oriented queries in the gateway to raise deliverable rates above 70% before any live 190Q re-run.
+Apply Phase 2 Structured Deliverables (JSON/bullet schema enforcement) to `nr2_hal_gateway.py` and `hal-agent.js` to close the deliverable gap on "steps/paths" queries identified in 190Q, confirming this remains the correct next step after Phase 1 stabilization.
 
 ## 0. Operator Intent (verbatim)
 next
 
 ## 1. Recommended NEXT (name, why now, effort, REAL files, validation gate)
-**Phase 2: Structured Deliverables (JSON/Bullet Enforcement)**  
-- **Why now**: Phase 1 fixed constraints and scoring alignment, but ~75% of quality failures on action-oriented queries still stem from narrative prose instead of machine-readable steps. Raising deliverable rates to >70% is required before a meaningful live 190Q re-run can validate end-to-end quality.  
-- **Effort**: Medium (prompt engineering + JSON mode toggle + fallback logic).  
-- **REAL files**:  
-  - `NewRidgeFinancial2/nr2_hal_gateway.py`: Add `is_deliverable_request()` helper to detect intent keywords ("steps", "path", "how to", "procedure", "checklist"); modify `evaluate_query()` to inject `format: json` with schema `{"steps": [], "caution": "", "references": []}` when intent is detected; implement markdown bullet fallback if JSON parse fails.  
-  - `scripts/run_moonshot_hal_190q_eval.py`: Add deliverable-rate metric capture to validate the gate.  
-- **Validation gate**: Run 50-question subset containing explicit "provide steps" queries; deliverable rate must exceed 70% (bulleted or JSON) with zero hallucinated file paths.
+**Phase 2: Structured Deliverables (JSON/Bullet Schema Enforcement)**
+
+**Why now:** Phase 1 fixed post-generation constraints and rubric scoring, raising offline quality ~50→181 and local-policy hit rates to ~25 queries. The remaining 190Q failures cluster on "steps/path/procedure" queries returning narrative prose instead of actionable, machine-readable structures. Enforcing schema now capitalizes on the constraint layer shipped in Phase 1 without requiring a second model or infrastructure changes.
+
+**Effort:** Low–Medium (2–3 days). Additive prompt-path logic; no model swap.
+
+**REAL files:**
+- `NewRidgeFinancial2/nr2_hal_gateway.py`: Add `is_deliverable_request()` intent classifier (keywords: "steps", "path", "how do I", "procedure"); branch `evaluate_query()` to inject `format: json` with schema `{"steps": [], "caution": "", "references": []}`; implement markdown-bullet fallback on JSON parse failure; retain Phase 1 sentence caps.
+- `NewRidgeFinancial2/site/hal-agent.js`: Add renderer for structured deliverables (bulleted steps + caution box) to prevent UI from flattening JSON into wall-of-text; respect existing SSE stream handlers.
+
+**Validation gate:** Re-run 190Q subset (n=30) filtered for explicit deliverable intent; achieve >70% structured output rate (bullets or JSON); zero regression on read-only compliance (maintain 100% pass on SoftDent/QB write-blocks); latency delta <10% vs. Phase 1 baseline.
 
 ## 2. Runner-ups (2–3, why not now)
-1. **Phase 3 (Streaming TTFT Polish)** — SSE infrastructure already exists; perceived latency gains are lower priority than structural deliverable quality. Apply only after Phase 2 proves deliverable rates are stable.  
-2. **Phase 4 (CARC Whitelist Hardening)** — Partially addressed in Phase 1’s "unknown CARC refuse" logic; additional whitelist expansion yields diminishing returns compared to schema enforcement.  
-3. **Live 190Q Re-run** — Do not execute until Phase 2 is applied; re-running now would waste operator review cycles on known deliverable-format failures that Phase 2 is designed to eliminate.
+- **Phase 3 Streaming TTFT UX polish:** SSE infrastructure exists, but perceived latency optimization is lower priority than functional deliverable quality. Defer until Phase 2 proves structured output does not increase token overhead beyond acceptable limits.
+- **Phase 4 CARC whitelist hardening:** Phase 1 already implemented unknown CARC refusal; remaining work is whitelist expansion for known codes, which is data maintenance rather than architecture. Schedule after deliverable schema is stable.
+- **Live 190Q full re-run:** This is an evaluation action, not a code package. Execute only after Phase 2 is applied and validated to avoid confounding quality metrics.
 
 ## 3. What NOT to redo
-- Post-generation sentence caps or plain-language stripping (already in `nr2_hal_gateway.py`).  
-- Write-intent SoftDent/QB preflight or empty ≠ $0 logic (already blocking inventively).  
-- Rubric recalibration for read-only variants (already fixed in `scripts/hal_eval_scoring.py`).  
-- CARC unknown-code refusal logic (already hardened in Phase 1).  
-- GitHub/PR process as the primary work package (focus remains on local additive gateway fixes).
+- Do not re-implement sentence-limit caps, plain-language stripping, or post-generation validation (Phase 1 completed).
+- Do not re-tune rubric scoring for read-only compliance (Phase 1 completed).
+- Do not re-implement SoftDent/QB write-intent preflight or empty≠$0 guards (Phase 1 completed).
+- Do not introduce a second 8B sidecar model (out of scope; R9700 load sufficient with `hal-local:32b` + `num_predict` caps).
 
 ## 4. Acceptance criteria
-- [ ] `is_deliverable_request()` correctly flags >90% of step-oriented queries in unit tests.  
-- [ ] JSON schema output renders for flagged queries with `"steps"` array present and non-empty.  
-- [ ] Fallback to markdown bullets occurs within 500ms if JSON parsing fails (no blank responses).  
-- [ ] Deliverable rate on 50-question test set ≥70%.  
-- [ ] No invented file paths (validation confirms only `NewRidgeFinancial2/nr2_hal_gateway.py` and `scripts/run_moonshot_hal_190q_eval.py` are touched).  
-- [ ] Existing Phase 1 tests (`test_nr2_hal_local_policy.py`, `test_hal_eval_scoring.py`) continue to pass.
+- [ ] Deliverable intent detection triggers on keywords "steps", "path", "how do I", "procedure", "checklist" with <5% false-positive rate on narrative queries.
+- [ ] Schema enforcement produces valid JSON or clean markdown bullets (fallback) for 100% of triggered queries.
+- [ ] 190Q deliverable-specific subset (n≥30) shows >70% structured pass rate (previously ~0% in raw eval).
+- [ ] Zero hallucinated dollar amounts, CARC meanings, or PHI in structured outputs (maintain Phase 1 honesty constraints).
+- [ ] `hal-agent.js` renders structured responses as distinct UI components (bulleted list + caution callout) rather than concatenated text.
+- [ ] Unit tests added: `test_nr2_hal_deliverable_schema.py` (validate JSON schema compliance) and `test_hal_agent_render.py` (validate UI component separation).
+- [ ] No regression in overall 190Q quality score vs. Phase 1 baseline (maintain >180 offline score).
 
 ## 5. Executive Summary (5 bullets)
-- Phase 2 is the highest-yield remaining fix: it converts narrative prose into actionable, machine-readable steps.  
-- Implementation is localized entirely to `nr2_hal_gateway.py` (detection + JSON mode) and the eval script (metric capture).  
-- Success unblocks the live 190Q re-run by ensuring staff receive structured answers rather than essays.  
-- Risk is low: additive feature with graceful markdown fallback; no breaking changes to existing SSE or preflight logic.  
-- Deferred work (Phase 3 streaming polish, Phase 4 CARC expansion) remains queued behind this package.
+- **Phase 1 stabilized:** Post-gen sentence caps, write-intent preflight, and rubric recalibration applied; offline re-score shows 3.6× quality improvement and 100% read-only compliance on blocked writes.
+- **Gap identified:** 190Q queries requesting "steps" or "paths" still receive narrative paragraphs instead of actionable bullets/JSON, failing deliverable criteria despite correct content.
+- **Next package:** Phase 2 adds intent detection and schema enforcement to `nr2_hal_gateway.py`, with `hal-agent.js` rendering support, converting prose into structured deliverables without model changes.
+- **Risk profile:** Low; additive to existing constraint layer; fallback to markdown ensures graceful degradation if JSON generation fails.
+- **Success metric:** >70% structured deliverable rate on targeted 190Q subset while maintaining Phase 1 latency and compliance standards.
 
 ## 6. Approval checklist
-- [ ] Confirm operator wants to proceed with Phase 2 (Structured Deliverables) as described.  
-- [ ] Confirm real file scope limited to `NewRidgeFinancial2/nr2_hal_gateway.py` and `scripts/run_moonshot_hal_190q_eval.py`.  
-- [ ] Confirm no SoftDent write-back or dollar invention is introduced (read-only constraints preserved).  
-- [ ] Confirm Phase 3 (streaming UX) and live 190Q re-run remain blocked until Phase 2 validation gate passes.
+- [ ] Operator confirms "proceed" to Phase 2 (acknowledges Phase 1 is stable in production).
+- [ ] Confirm 190Q subset test cases tagged with `intent:deliverable` are extracted for validation gate.
+- [ ] Confirm `hal-agent.js` UI component library supports bulleted lists and caution callouts (or approve lightweight CSS additions).
+- [ ] Confirm fallback to markdown bullets is acceptable if strict JSON mode increases TTFT >20%.
+- [ ] Confirm no immediate hotfixes required for Phase 1 (stable at 325d24a).
