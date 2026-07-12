@@ -125,6 +125,34 @@ def ensure_transactions_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_sd_trans_type ON sd_transactions_full(transaction_type);
         CREATE INDEX IF NOT EXISTS idx_sd_trans_code ON sd_transactions_full(ada_code);
 
+        -- Moonshot account-tx Excel ledger (distinct from sd_transactions_full)
+        CREATE TABLE IF NOT EXISTS sd_account_transactions (
+            stable_id TEXT PRIMARY KEY,
+            source_file TEXT NOT NULL,
+            row_number INTEGER NOT NULL,
+            account_num TEXT NOT NULL,
+            patient_name TEXT,
+            service_date TEXT,
+            provider TEXT,
+            procedure TEXT,
+            note_flag TEXT,
+            amount REAL,
+            prod REAL,
+            charges REAL,
+            prod_adj REAL,
+            cash REAL,
+            "check" REAL,
+            credit REAL,
+            pay_adj REAL,
+            period_start TEXT,
+            period_end TEXT,
+            extracted_at TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_acctx_account ON sd_account_transactions(account_num);
+        CREATE INDEX IF NOT EXISTS idx_acctx_date ON sd_account_transactions(service_date);
+        CREATE INDEX IF NOT EXISTS idx_acctx_period ON sd_account_transactions(period_start, period_end);
+        CREATE INDEX IF NOT EXISTS idx_acctx_source ON sd_account_transactions(source_file);
+
         CREATE TABLE IF NOT EXISTS sd_register_detail (
             register_id TEXT PRIMARY KEY,
             transaction_id TEXT,
@@ -987,8 +1015,9 @@ def ingest_account_transactions_xls(
     path: Path | str | None = None,
     *,
     out_dir: Path | None = None,
+    db_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Parse TXN*.xls and write JSONL under tx_parsed/ (no SoftDent GUI)."""
+    """Parse TXN*.xls, write JSONL under tx_parsed/, upsert into analytics DB."""
     target = Path(path) if path else DEFAULT_TXN_INBOX / "TXN260201.xls"
     parsed = parse_account_transactions_xls(target)
     if not parsed.get("ok"):
@@ -1000,13 +1029,15 @@ def ingest_account_transactions_xls(
             "recordCount": parsed.get("recordCount"),
         }
     written = write_account_transactions_jsonl(parsed, out_dir=out_dir, source_path=target)
+    db_result = upsert_account_transactions_jsonl(written["path"], db_path=db_path)
     return {
-        "ok": True,
+        "ok": bool(written.get("ok") and db_result.get("ok")),
         "sourcePath": str(target),
         "jsonlPath": written["path"],
         "rowCount": parsed.get("rowCount"),
         "recordCount": parsed.get("recordCount"),
         "periodHint": parsed.get("periodHint"),
+        "db": db_result,
         "donnaNickelLines": sum(
             1
             for r in (parsed.get("records") or [])
@@ -1021,8 +1052,293 @@ def ingest_account_transactions_xls(
     }
 
 
-def load_parsed_account_transactions(
+def _split_period_hint(period_hint: Any) -> tuple[str | None, str | None]:
+    text = str(period_hint or "").strip()
+    if not text:
+        return None, None
+    if ":" in text:
+        left, right = text.split(":", 1)
+        return left.strip()[:10] or None, right.strip()[:10] or None
+    return text[:10] or None, text[:10] or None
+
+
+def _money_or_none(value: Any) -> float | None:
+    """Preserve null honesty — never coerce empty to 0.0."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    return parse_money(value)
+
+
+def ensure_account_transactions_schema(conn: sqlite3.Connection) -> None:
+    """Ensure sd_account_transactions exists (Moonshot account-tx DB design)."""
+    ensure_transactions_schema(conn)
+
+
+def upsert_account_transactions_jsonl(
+    jsonl_path: Path | str,
+    db_path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Idempotent load of TXN JSONL into sd_account_transactions.
+
+    Purges prior rows for the same source_file, then inserts.
+    stable_id = ``{source_file}:{row_number}``. empty money -> SQL NULL.
+    """
+    path = Path(jsonl_path)
+    result: dict[str, Any] = {
+        "ok": False,
+        "jsonlPath": str(path),
+        "dbPath": None,
+        "sourceFile": None,
+        "inserted": 0,
+        "warnings": [],
+    }
+    if not path.is_file():
+        result["warnings"].append("jsonl missing")
+        return result
+
+    target_db = Path(db_path) if db_path else resolve_analytics_db()
+    if not target_db:
+        target_db = resolve_exports_dir() / "softdent_financial_analytics.db"
+    target_db.parent.mkdir(parents=True, exist_ok=True)
+    result["dbPath"] = str(target_db)
+
+    meta: dict[str, Any] = {}
+    records: list[dict[str, Any]] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            obj = json.loads(line)
+            if not isinstance(obj, dict):
+                continue
+            if obj.get("_meta"):
+                meta = obj
+                continue
+            records.append(obj)
+    except (OSError, json.JSONDecodeError) as exc:
+        result["warnings"].append(f"jsonl_read_{type(exc).__name__}")
+        return result
+
+    source_file = None
+    if meta.get("sourcePath"):
+        source_file = Path(str(meta["sourcePath"])).name
+    if not source_file and records:
+        source_file = str(records[0].get("source_file") or path.stem + ".xls")
+    if not source_file:
+        source_file = path.stem + ".xls"
+    result["sourceFile"] = source_file
+    period_start, period_end = _split_period_hint(meta.get("periodHint"))
+    extracted_at = _utc_now()
+
+    conn = sqlite3.connect(str(target_db))
+    try:
+        ensure_account_transactions_schema(conn)
+        conn.execute("BEGIN")
+        conn.execute(
+            "DELETE FROM sd_account_transactions WHERE source_file = ?",
+            (source_file,),
+        )
+        insert_sql = """
+            INSERT INTO sd_account_transactions (
+                stable_id, source_file, row_number, account_num, patient_name,
+                service_date, provider, procedure, note_flag,
+                amount, prod, charges, prod_adj, cash, "check", credit, pay_adj,
+                period_start, period_end, extracted_at
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, ?
+            )
+        """
+        rows_out = 0
+        for rec in records:
+            acct = _account_num_str(rec.get("account_num"))
+            if not acct:
+                continue
+            row_number = int(rec.get("row_number") or 0)
+            src = str(rec.get("source_file") or source_file)
+            stable_id = f"{src}:{row_number}"
+            conn.execute(
+                insert_sql,
+                (
+                    stable_id,
+                    src,
+                    row_number,
+                    acct,
+                    rec.get("patient_name"),
+                    rec.get("date"),
+                    rec.get("provider"),
+                    rec.get("procedure"),
+                    rec.get("note_flag"),
+                    _money_or_none(rec.get("amount")),
+                    _money_or_none(rec.get("prod")),
+                    _money_or_none(rec.get("charges")),
+                    _money_or_none(rec.get("prod_adj")),
+                    _money_or_none(rec.get("cash")),
+                    _money_or_none(rec.get("check")),
+                    _money_or_none(rec.get("credit")),
+                    _money_or_none(rec.get("pay_adj")),
+                    period_start,
+                    period_end,
+                    extracted_at,
+                ),
+            )
+            rows_out += 1
+        conn.commit()
+        result["inserted"] = rows_out
+
+        counted = conn.execute(
+            "SELECT COUNT(*) FROM sd_account_transactions WHERE source_file = ?",
+            (source_file,),
+        ).fetchone()[0]
+        result["dbCount"] = int(counted)
+        expected = meta.get("recordCount")
+        if expected is not None and int(expected) != int(counted):
+            result["warnings"].append(
+                f"parity recordCount={expected} dbCount={counted}"
+            )
+        donna = conn.execute(
+            """
+            SELECT COUNT(*) FROM sd_account_transactions
+            WHERE account_num = '27002'
+              AND (period_start = '2026-02-01' OR service_date LIKE '2026-02-%')
+            """
+        ).fetchone()[0]
+        result["donna27002Count"] = int(donna)
+        # Null honesty spot-check: count rows with amount IS NULL for this source
+        null_amt = conn.execute(
+            """
+            SELECT COUNT(*) FROM sd_account_transactions
+            WHERE source_file = ? AND amount IS NULL
+            """,
+            (source_file,),
+        ).fetchone()[0]
+        result["nullAmountCount"] = int(null_amt)
+        result["ok"] = int(counted) == rows_out and rows_out > 0
+        if donna and source_file.upper().startswith("TXN260201"):
+            # Live gate for known Feb export
+            if int(donna) != 5:
+                result["warnings"].append(f"donna_expected_5_got_{donna}")
+    except Exception as exc:  # noqa: BLE001
+        conn.rollback()
+        result["warnings"].append(f"upsert_{type(exc).__name__}:{exc}")
+        result["ok"] = False
+    finally:
+        conn.close()
+    return result
+
+
+def _account_tx_db_row_count(db_path: Path) -> int:
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sd_account_transactions'"
+            ).fetchone()
+            if not row or int(row[0]) == 0:
+                return 0
+            return int(conn.execute("SELECT COUNT(*) FROM sd_account_transactions").fetchone()[0])
+        finally:
+            conn.close()
+    except Exception:
+        return 0
+
+
+def _query_account_transactions_db(
+    account_num: str | int | None = None,
+    patient_name: str | None = None,
+    date_range: Any = None,
     *,
+    db_path: Path | None = None,
+    limit: int = 200,
+) -> dict[str, Any] | None:
+    """SQL query against sd_account_transactions. Returns None if DB unavailable/empty."""
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    if not target or not target.is_file():
+        return None
+    if _account_tx_db_row_count(target) <= 0:
+        return None
+
+    start, end = _parse_date_range(date_range)
+    acct = _account_num_str(account_num) if account_num not in (None, "") else None
+    name_q = str(patient_name or "").strip().lower()
+    name_tokens = [t for t in name_q.replace(",", " ").split() if t]
+
+    sql = """
+        SELECT stable_id, source_file, row_number, account_num, patient_name,
+               service_date, provider, procedure, note_flag,
+               amount, prod, charges, prod_adj, cash, "check", credit, pay_adj,
+               period_start, period_end
+        FROM sd_account_transactions
+        WHERE 1=1
+    """
+    params: list[Any] = []
+    if acct:
+        sql += " AND account_num = ?"
+        params.append(acct)
+    if name_tokens:
+        for tok in name_tokens:
+            sql += " AND LOWER(COALESCE(patient_name,'')) LIKE ?"
+            params.append(f"%{tok}%")
+    sql += " ORDER BY service_date, row_number"
+
+    conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    finally:
+        conn.close()
+
+    matches: list[dict[str, Any]] = []
+    for row in rows:
+        rec = {
+            "date": row["service_date"],
+            "account_num": row["account_num"],
+            "patient_name": row["patient_name"],
+            "provider": row["provider"],
+            "procedure": row["procedure"],
+            "amount": row["amount"],
+            "note_flag": row["note_flag"],
+            "row_number": row["row_number"],
+            "source_file": row["source_file"],
+            "prod": row["prod"],
+            "charges": row["charges"],
+            "prod_adj": row["prod_adj"],
+            "cash": row["cash"],
+            "check": row["check"],
+            "credit": row["credit"],
+            "pay_adj": row["pay_adj"],
+            "period_start": row["period_start"],
+            "period_end": row["period_end"],
+            "stable_id": row["stable_id"],
+            "_source": "sd_account_transactions",
+        }
+        if start or end:
+            if not _date_in_range(rec.get("date"), start, end):
+                continue
+        matches.append(rec)
+        if len(matches) >= max(1, int(limit)):
+            break
+
+    return {
+        "ok": True,
+        "reason": None,
+        "matchCount": len(matches),
+        "matches": matches,
+        "filters": {
+            "account_num": acct,
+            "patient_name": patient_name,
+            "date_range": date_range,
+        },
+        "source": "sd_account_transactions",
+    }
+
+
+def load_parsed_account_transactions(    *,
     parsed_dir: Path | None = None,
     source_stem: str | None = None,
 ) -> list[dict[str, Any]]:
@@ -1110,17 +1426,35 @@ def query_account_transactions(
     date_range: Any = None,
     *,
     parsed_dir: Path | None = None,
+    db_path: Path | None = None,
+    prefer_db: bool = True,
     limit: int = 200,
 ) -> dict[str, Any]:
-    """Query parsed TXN Excel JSONL for HAL patient-ledger answers.
+    """Query SoftDent account transactions for HAL / widgets.
 
-    Falls back to ``data not yet exported`` when no parsed file exists.
+    Prefers ``sd_account_transactions`` in the analytics DB; falls back to
+    tx_parsed JSONL / live TXN*.xls when the table is empty. empty != $0.
     """
+    if prefer_db and parsed_dir is None:
+        db_hit = _query_account_transactions_db(
+            account_num=account_num,
+            patient_name=patient_name,
+            date_range=date_range,
+            db_path=db_path,
+            limit=limit,
+        )
+        if db_hit is not None:
+            return db_hit
+
     records = load_parsed_account_transactions(parsed_dir=parsed_dir)
     if not records:
         # Best-effort: parse live inbox file if present but not yet ingested
         inbox = DEFAULT_TXN_INBOX / "TXN260201.xls"
-        candidates = sorted(DEFAULT_TXN_INBOX.glob("TXN*.xls*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        candidates = sorted(
+            DEFAULT_TXN_INBOX.glob("TXN*.xls*"),
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
         target = candidates[0] if candidates else inbox
         if target.is_file():
             parsed = parse_account_transactions_xls(target)
@@ -1133,7 +1467,8 @@ def query_account_transactions(
                     "Account transaction data not yet exported. "
                     "Pull SoftDent Reports → Accounting → Trans for a Period → Excel "
                     r"into C:\SoftDentReportExports, then ingest to "
-                    r"C:\SoftDentFinancialExports\tx_parsed\."
+                    r"C:\SoftDentFinancialExports\tx_parsed\ and "
+                    r"softdent_financial_analytics.db."
                 ),
                 "matches": [],
                 "matchCount": 0,
@@ -1169,6 +1504,7 @@ def query_account_transactions(
             "patient_name": patient_name,
             "date_range": date_range,
         },
+        "source": "jsonl_or_xls",
     }
 
 
@@ -1187,7 +1523,8 @@ def format_account_transactions_hal_reply(result: dict[str, Any], *, max_lines: 
             f"(filters={filters}). Data source is read-only Excel ingest — empty != $0."
         )
     lines = [
-        f"SoftDent account transactions (parsed TXN Excel; {len(matches)} match(es); empty != $0):"
+        f"SoftDent account transactions "
+        f"({result.get('source') or 'parsed TXN'}; {len(matches)} match(es); empty != $0):"
     ]
     for rec in matches[: max(1, int(max_lines))]:
         amt = rec.get("amount")
