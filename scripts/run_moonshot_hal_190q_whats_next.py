@@ -35,27 +35,29 @@ SYSTEM = """You are Moonshot AI — principal engineer for NR2 Apex HAL
 (hal-10561 + hal-local:32b / qwen3:32b Q4_K_M on R9700).
 
 Operator said "next" — produce the SINGLE best next local work package after
-HAL 190Q Phase 1 was APPLIED. CONSULT ONLY — DO NOT claim you applied code.
+HAL 190Q Phase 1 + Phase 2 were APPLIED. CONSULT ONLY — DO NOT claim you applied code.
 Prefer additive Apex/HAL fixes. Avoid GitHub/PR as the primary package.
 Do not invent fictional file trees — only real paths listed below.
 
-JUST SHIPPED (Phase 1 — APPLIED + pushed as 325d24a on fix/main-validate-ci):
-- Post-gen sentence caps / plain-language strip in nr2_hal_gateway.py
-- Write-intent SoftDent/QB preflight; unknown CARC refuse; empty ≠ $0
-- Short-ask num_predict caps on evaluate/stream/SSE
-- Rubric recalibration in scripts/hal_eval_scoring.py (read-only variants;
-  deliverable only when ask implies steps)
-- Tests + MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md
-- Offline re-score of stored 190Q previews: quality ~50→181; local policy
-  now hits ~25 of those queries. Live 190Q re-run NOT yet done.
+JUST SHIPPED (Phase 1 — APPLIED + pushed as 325d24a):
+- Post-gen sentence caps / plain-language strip; write/CARC/empty≠$0 preflight
+- Short-ask num_predict caps; rubric recalibration
+- MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md
 
-PHASE 2 STATUS: Already recommended in WHATS_NEXT but NOT YET APPLIED
-(operator has not said proceed). If Phase 2 is still correct, say so bluntly.
+JUST SHIPPED (Phase 2 — APPLIED + pushed as f225b2b):
+- is_deliverable_request + Ollama JSON schema (steps/caution/references)
+- normalize JSON→numbered markdown; SSE aggregates deliverable replies
+- UI: hal-core/hal-agent preserve lists; app.js step/caution render
+- MOONSHOT_HAL_190Q_FIX_PHASE2_APPLIED_2026-07-12.md
+- Live full 190Q re-run still NOT done
 
-PRIOR 190Q FIX PHASES STILL OPEN (from MOONSHOT_HAL_190Q_FIX_CONSULT):
-- Phase 2: Structured deliverables (steps/paths → bullets/JSON schema) — PENDING
-- Phase 3: Streaming / TTFT UX (SSE already exists; polish perceived latency)
-- Phase 4: CARC whitelist hardening (partially done in Phase 1)
+PRIOR 190Q FIX PHASES STILL OPEN:
+- Phase 3: Streaming / TTFT UX polish (SSE exists; short-ask caps exist;
+  deliverable path aggregates — remaining is perceived latency / token stream UX)
+- Phase 4: CARC whitelist hardening (unknown refuse done; known-code briefs sparse)
+- Optional: live 190Q subset/full re-run to measure Phase 1+2 lift (eval action,
+  only recommend as NEXT if quality code packages are exhausted or measurement
+  is the highest-leverage next step)
 
 ALSO RECENTLY SHIPPED (context, do not redo):
 - REC-005 ERA 835 depth, REC-007 HAL keep-alive/warm, REC-008 batch narratives,
@@ -95,14 +97,15 @@ def main() -> int:
     print(f"Using {key_name} @ {base_url} model={model}")
 
     phase1 = DOCS / "MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md"
+    phase2 = DOCS / "MOONSHOT_HAL_190Q_FIX_PHASE2_APPLIED_2026-07-12.md"
     fix = DOCS / "MOONSHOT_HAL_190Q_FIX_CONSULT_2026-07-12.md"
     excerpts = []
-    for p in (phase1, fix):
+    for p in (phase2, phase1, fix):
         if p.is_file():
-            excerpts.append(f"--- {p.name} ---\n{p.read_text(encoding='utf-8')[:4500]}")
+            excerpts.append(f"--- {p.name} ---\n{p.read_text(encoding='utf-8')[:4000]}")
     user = (
         f"OPERATOR REQUEST (VERBATIM):\n{OPERATOR_REQUEST_VERBATIM}\n\n"
-        "Pick THE next local package after Phase 1. CONSULT ONLY.\n\n"
+        "Phase 1+2 APPLIED. Pick THE next local package. CONSULT ONLY.\n\n"
         + "\n\n".join(excerpts)
     )
     payload = {
@@ -134,7 +137,7 @@ def main() -> int:
         f"# Moonshot AI — What's Next After HAL 190Q Phase 1 (CONSULT ONLY)\n\n"
         f"**Date:** {DATE}  \n**Model:** {model}  \n**Key:** {key_name}  \n"
         f"**Status:** {status}  \n**Build:** hal-10561 + hal-local:32b  \n"
-        f"**Prior applied:** `MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md`  \n"
+        f"**Prior applied:** Phase 1 (`325d24a`) + Phase 2 (`f225b2b`)  \n"
         f"**Script:** `scripts/run_moonshot_hal_190q_whats_next.py`  \n"
         f"**Apply:** DO NOT APPLY until operator approves.\n\n"
         f"## Operator request (verbatim)\n\n> {OPERATOR_REQUEST_VERBATIM}\n\n---\n\n"
