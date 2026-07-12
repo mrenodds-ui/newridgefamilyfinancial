@@ -6094,6 +6094,41 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/apex/hal/cache-warm-status")
+    def apex_hal_cache_warm_status():
+        """REC-007 HAL model keep-alive / prompt-warm status (telemetry)."""
+        try:
+            from apex_hal_cache_warm_pack import warm_status
+
+            result = warm_status()
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.post("/api/apex/hal/cache-warm")
+    def apex_hal_cache_warm_run():
+        """Trigger HAL local model warm (optional CAS/payer lists). Background by default."""
+        try:
+            import bottle
+            from apex_hal_cache_warm_pack import warm_hal_cache
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            try:
+                payload = json.loads(raw or "{}")
+            except Exception:
+                payload = {}
+            background = payload.get("background", True)
+            result = warm_hal_cache(
+                payer_labels=list(payload.get("payerLabels") or payload.get("payers") or [])[:6],
+                cas_codes=list(payload.get("casCodes") or [])[:8],
+                background=bool(background),
+            )
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
     @app.get("/api/apex/hal/era835-status")
     def apex_era835_status():
         try:
@@ -6734,6 +6769,32 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             result = ingest_era_835(text, rows if isinstance(rows, list) else [], filename=filename)
             result["buildId"] = BUILD_ID
             return json_response_fn(result, status=200 if result.get("ok") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.post("/api/apex/claims/era-summary")
+    def apex_era_summary_api():
+        """REC-005 depth — structured 835 remittance summary for HAL (no invented dollars)."""
+        try:
+            import bottle
+            from era835_parser import parse_835_text, summarize_835_for_hal
+
+            upload = bottle.request.files.get("file") if bottle.request.files else None
+            text = ""
+            if upload is not None:
+                text = upload.file.read().decode("utf-8", errors="replace")
+            else:
+                raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+                try:
+                    payload = json.loads(raw or "{}")
+                except Exception:
+                    payload = {"text": raw}
+                text = str(payload.get("text") or payload.get("content") or "")
+            parsed = parse_835_text(text)
+            summary = summarize_835_for_hal(parsed)
+            summary["buildId"] = BUILD_ID
+            summary["segmentCount"] = parsed.get("count")
+            return json_response_fn(summary, status=200 if summary.get("ok") else 400)
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 

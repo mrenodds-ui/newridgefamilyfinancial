@@ -73,6 +73,8 @@ FINANCIAL_DATA_PREFIXES = (
 # Exact telemetry / meta paths — no dollar amounts or PHI in handlers.
 SYSTEM_STATUS_PREFIXES = (
     "/api/apex/hal/status",
+    "/api/apex/hal/cache-warm-status",
+    "/api/apex/hal/cache-warm",
     "/api/apex/import-health",
     "/api/apex/hal/sync-status",
     "/api/apex/hal/ai-lane-health",

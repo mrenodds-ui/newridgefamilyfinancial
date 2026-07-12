@@ -922,6 +922,7 @@ def call_ollama_chat(
     stream: bool = False,
     options: dict[str, Any] | None = None,
     timeout: float = 120.0,
+    keep_alive: int | str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"model": model, "messages": messages, "stream": bool(stream)}
     think = _ollama_think_flag(model)
@@ -929,6 +930,16 @@ def call_ollama_chat(
         payload["think"] = think
     if options:
         payload["options"] = options
+    # REC-007 HAL keep-alive: default forever (-1) so qwen3:32b stays GPU-resident.
+    if keep_alive is None:
+        raw = str(os.environ.get("NR2_OLLAMA_KEEP_ALIVE") or "-1").strip()
+        if raw.lstrip("-").isdigit():
+            keep_alive = int(raw)
+        elif raw:
+            keep_alive = raw
+        else:
+            keep_alive = -1
+    payload["keep_alive"] = keep_alive
     req = urllib.request.Request(
         OLLAMA_CHAT,
         data=json.dumps(payload).encode("utf-8"),

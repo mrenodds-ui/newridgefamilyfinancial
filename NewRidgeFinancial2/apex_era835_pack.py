@@ -123,11 +123,15 @@ def _parse_x12_835(raw: str) -> dict[str, Any]:
             current_paid = _parse_money(fields[4] if len(fields) > 4 else None) or 0.0
             total_paid += current_paid
         elif tag == "CAS" and len(fields) > 2:
-            # CAS*GROUP*REASON*AMOUNT...
-            group = fields[1]
-            reason = fields[2]
-            code = f"{group}{reason}" if group and reason else (reason or group or "UNK")
-            adj[str(code)[:16]] += 1
+            # CAS*GROUP*REASON*AMOUNT... → CO-45 style (REC-005 depth)
+            group = str(fields[1] or "").strip().upper()
+            i = 2
+            while i < len(fields):
+                reason = str(fields[i] or "").strip()
+                if group and reason and (reason.isdigit() or re.fullmatch(r"[A-Z0-9]+", reason)):
+                    code = f"{group}-{reason}"
+                    adj[str(code)[:16]] += 1
+                i += 2
         elif tag == "SVC" and len(fields) > 1:
             # SVC*AD:D1110*charge*paid  or HC:D1110
             proc_raw = fields[1]

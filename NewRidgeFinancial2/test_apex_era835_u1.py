@@ -70,7 +70,7 @@ class Era835PhaseU1Tests(unittest.TestCase):
         self.assertNotIn("JANE", blob)
         self.assertEqual(parsed.get("payer_name"), "DELTA DENTAL OF KANSAS")
         self.assertGreaterEqual(int(parsed.get("claim_count") or 0), 2)
-        self.assertIn("CO45", parsed.get("adjustment_reasons") or {})
+        self.assertIn("CO-45", parsed.get("adjustment_reasons") or {})
 
     def test_parse_csv_discards_patient_column(self):
         parsed = parse_era835_text(SAMPLE_CSV)

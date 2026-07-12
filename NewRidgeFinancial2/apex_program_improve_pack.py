@@ -327,6 +327,21 @@ def ingest_era_835(
                 if isinstance(m.get("segment"), dict)
                 else []
             ),
+            "rarcCodes": (
+                list((m.get("segment") or {}).get("rarcCodes") or [])
+                if isinstance(m.get("segment"), dict)
+                else []
+            ),
+            "denialFlag": bool(
+                (m.get("segment") or {}).get("denialFlag")
+                if isinstance(m.get("segment"), dict)
+                else False
+            ),
+            "serviceLines": (
+                list((m.get("segment") or {}).get("serviceLines") or [])
+                if isinstance(m.get("segment"), dict)
+                else []
+            ),
             "matchedAt": _utc_now(),
             "sourceFile": filename or None,
             "source": "era-835",
@@ -353,6 +368,22 @@ def ingest_era_835(
         "matches": matched[:40],
         "byClaimCount": len(by_claim),
     }
+    try:
+        from era835_parser import summarize_835_for_hal
+
+        result["remittanceSummary"] = summarize_835_for_hal(parsed)
+    except Exception as exc:  # noqa: BLE001
+        result["remittanceSummary"] = {"ok": False, "error": str(exc)}
+    # REC-007: selective HAL warm for CAS codes seen on this 835 (background).
+    try:
+        from apex_hal_cache_warm_pack import selective_warm_from_era_summary
+
+        result["halCacheWarm"] = selective_warm_from_era_summary(
+            result.get("remittanceSummary") if isinstance(result.get("remittanceSummary"), dict) else None,
+            background=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        result["halCacheWarm"] = {"ok": False, "error": str(exc)}
     # HAL-said improve: denial→Steve + EOB backlog (NR2-local only)
     try:
         from apex_hal_said_improve_pack import process_era_workflow
