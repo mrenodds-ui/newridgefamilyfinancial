@@ -1,14 +1,16 @@
 """SoftDent GUI report export helpers (read-only; no SoftDent write-back).
 
 For SoftDent data that cannot be reached via ODBC/database extract, Sign On and use
-the SoftDent UI to export reports (Register / Collections / daysheet), then ingest.
+the SoftDent UI to export reports (Register / Collections / daysheet / aging / trans),
+then ingest.
 
-Drives SDWIN menus to export Register / Collections reports into
-C:\\SoftDentReportExports. Credentials are never handled here — use softdent_signon.
+Drives SDWIN menus into C:\\SoftDentReportExports. Credentials are never handled
+here — use softdent_signon. Menu keys come from softdent_gui_menu_map.json.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -22,6 +24,10 @@ logger = logging.getLogger(__name__)
 EXPORT_ROOT = Path(r"C:\SoftDentReportExports")
 EXPORT_ROOT_SHORT = r"C:\SOFTDE~1"  # SoftDent save dialog rejects some long paths
 MIRROR_ROOT = Path(r"C:\SoftDent\softdentexportreports")
+STATUS_ROOT = Path(r"C:\SoftDentFinancialExports")
+MENU_MAP_PATH = Path(__file__).resolve().parent / "softdent_gui_menu_map.json"
+
+PHASE1_IDS = ("register", "collections", "transactions", "daysheet", "aging")
 
 
 def _desktop_dialogs() -> Iterable[Any]:
@@ -74,6 +80,14 @@ def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
     return dismissed
 
 
+def softdent_main_running() -> bool:
+    try:
+        _main_softdent_hwnd()
+        return True
+    except Exception:
+        return False
+
+
 def _main_softdent_hwnd() -> int:
     from pywinauto.findwindows import find_windows
     import win32gui
@@ -116,7 +130,6 @@ def _focus_main():
     try:
         win32gui.SetForegroundWindow(hwnd)
     except Exception:
-        # Common when SoftDent is elevated differently — click taskbar via ShowWindow then retry.
         try:
             win32gui.BringWindowToTop(hwnd)
             win32gui.SetForegroundWindow(hwnd)
@@ -155,6 +168,48 @@ def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
     time.sleep(0.8)
 
 
+def load_menu_map(path: Path | None = None) -> dict[str, Any]:
+    map_path = path or MENU_MAP_PATH
+    if not map_path.is_file():
+        raise FileNotFoundError(f"SoftDent GUI menu map missing: {map_path}")
+    return json.loads(map_path.read_text(encoding="utf-8-sig"))
+
+
+def resolve_menu_keys(report: dict[str, Any], override: str | None = None) -> str:
+    if override and str(override).strip():
+        return str(override).strip()
+    env_name = str(report.get("menu_keys_env") or "").strip()
+    if env_name:
+        env_val = str(os.environ.get(env_name) or "").strip()
+        if env_val:
+            return env_val
+    keys = str(report.get("menu_keys") or "").strip()
+    if not keys:
+        raise RuntimeError(f"No menu_keys for report {report.get('id')}")
+    return keys
+
+
+def _format_stem(template: str, start: date, end: date) -> str:
+    return (
+        template.replace("{yy}", f"{start.year % 100:02d}")
+        .replace("{mm}", f"{start.month:02d}")
+        .replace("{dd}", f"{end.day:02d}")
+        .replace("{end_yy}", f"{end.year % 100:02d}")
+        .replace("{end_mm}", f"{end.month:02d}")
+        .replace("{end_dd}", f"{end.day:02d}")
+    )
+
+
+def _format_canonical(template: str, start: date, end: date) -> str:
+    return (
+        template.replace("{start}", start.isoformat())
+        .replace("{end}", end.isoformat())
+        .replace("{yy}", f"{start.year % 100:02d}")
+        .replace("{mm}", f"{start.month:02d}")
+        .replace("{dd}", f"{end.day:02d}")
+    )
+
+
 def _complete_output_setup_and_save(
     *,
     start: date,
@@ -162,6 +217,7 @@ def _complete_output_setup_and_save(
     short_stem: str,
     dest_root: Path,
     canonical_name: str,
+    also_copy_as: list[str] | None = None,
 ) -> Path:
     from pywinauto import Application
 
@@ -243,13 +299,62 @@ def _complete_output_setup_and_save(
 
     canonical = dest_root / canonical_name
     shutil.copy2(produced, canonical)
+    for extra in also_copy_as or []:
+        try:
+            shutil.copy2(produced, dest_root / extra)
+        except OSError as exc:
+            logger.warning("SoftDent extra copy %s failed: %s", extra, type(exc).__name__)
     if MIRROR_ROOT.is_dir():
         try:
             shutil.copy2(produced, MIRROR_ROOT / canonical.name)
             shutil.copy2(produced, MIRROR_ROOT / produced.name)
+            for extra in also_copy_as or []:
+                shutil.copy2(produced, MIRROR_ROOT / extra)
         except OSError as exc:
             logger.warning("SoftDent export mirror copy failed: %s", type(exc).__name__)
     return canonical
+
+
+def export_report_by_id(
+    report_id: str,
+    *,
+    start: date,
+    end: date,
+    dest_root: Path | None = None,
+    menu_keys: str | None = None,
+    menu_map: dict[str, Any] | None = None,
+) -> Path:
+    """Export one catalog report by id using softdent_gui_menu_map.json."""
+    catalog = menu_map or load_menu_map()
+    reports = catalog.get("reports") or {}
+    report = reports.get(report_id)
+    if not isinstance(report, dict):
+        raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
+
+    dest = dest_root or EXPORT_ROOT
+    date_mode = str(report.get("date_mode") or "range")
+    use_start, use_end = start, end
+    if date_mode == "as_of":
+        use_start = end
+        use_end = end
+
+    keys = resolve_menu_keys(report, menu_keys)
+    _open_report_via_keys(keys)
+    stem = _format_stem(str(report.get("short_stem_template") or "RPT"), use_start, use_end)
+    canonical = _format_canonical(
+        str(report.get("canonical_template") or f"{report_id}.xls"),
+        use_start,
+        use_end,
+    )
+    also = [str(x) for x in (report.get("also_copy_as") or []) if str(x).strip()]
+    return _complete_output_setup_and_save(
+        start=use_start,
+        end=use_end,
+        short_stem=stem,
+        dest_root=dest,
+        canonical_name=canonical,
+        also_copy_as=also,
+    )
 
 
 def export_register_for_period(
@@ -259,17 +364,7 @@ def export_register_for_period(
     dest_root: Path | None = None,
 ) -> Path:
     """Reports → Accounting → Registers → Period → Excel."""
-    dest = dest_root or EXPORT_ROOT
-    _open_report_via_keys("rp")
-    stem = f"REG{start.year % 100:02d}{start.month:02d}"
-    canonical = f"register_for_period_{start.isoformat()}_{end.isoformat()}.xls"
-    return _complete_output_setup_and_save(
-        start=start,
-        end=end,
-        short_stem=stem,
-        dest_root=dest,
-        canonical_name=canonical,
-    )
+    return export_report_by_id("register", start=start, end=end, dest_root=dest_root)
 
 
 def export_collections_for_period(
@@ -279,23 +374,163 @@ def export_collections_for_period(
     dest_root: Path | None = None,
     menu_keys: str | None = None,
 ) -> Path:
-    """Reports → Accounting → Collections (keys configurable).
-
-    Default keys after Accounting: env SOFTDENT_COLLECTIONS_MENU_KEYS or 'c'.
-    SoftDent menus vary by version — set the env if 'c' is wrong.
-    """
-    dest = dest_root or EXPORT_ROOT
-    keys = (menu_keys or str(os.environ.get("SOFTDENT_COLLECTIONS_MENU_KEYS") or "c")).strip() or "c"
-    _open_report_via_keys(keys)
-    stem = f"COL{start.year % 100:02d}{start.month:02d}"
-    canonical = f"collections_for_period_{start.isoformat()}_{end.isoformat()}.xls"
-    return _complete_output_setup_and_save(
+    """Reports → Accounting → Collections (keys configurable)."""
+    return export_report_by_id(
+        "collections",
         start=start,
         end=end,
-        short_stem=stem,
-        dest_root=dest,
-        canonical_name=canonical,
+        dest_root=dest_root,
+        menu_keys=menu_keys,
     )
+
+
+def export_transactions_for_period(
+    *,
+    start: date,
+    end: date,
+    dest_root: Path | None = None,
+    menu_keys: str | None = None,
+) -> Path:
+    return export_report_by_id(
+        "transactions",
+        start=start,
+        end=end,
+        dest_root=dest_root,
+        menu_keys=menu_keys,
+    )
+
+
+def export_daysheet(
+    *,
+    start: date,
+    end: date,
+    dest_root: Path | None = None,
+    menu_keys: str | None = None,
+) -> Path:
+    return export_report_by_id(
+        "daysheet",
+        start=start,
+        end=end,
+        dest_root=dest_root,
+        menu_keys=menu_keys,
+    )
+
+
+def export_account_aging(
+    *,
+    as_of: date | None = None,
+    dest_root: Path | None = None,
+    menu_keys: str | None = None,
+) -> Path:
+    day = as_of or date.today()
+    return export_report_by_id(
+        "aging",
+        start=day,
+        end=day,
+        dest_root=dest_root,
+        menu_keys=menu_keys,
+    )
+
+
+def run_catalog_exports(
+    *,
+    start: date | None = None,
+    end: date | None = None,
+    report_ids: list[str] | None = None,
+    ensure_signon: bool = True,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Run Phase-1 (or selected) SoftDent GUI exports. Never returns password."""
+    today = date.today()
+    start = start or date(today.year, today.month, 1)
+    end = end or today
+    catalog = load_menu_map()
+    order = list(report_ids or catalog.get("phase1_order") or PHASE1_IDS)
+    reports_meta = catalog.get("reports") or {}
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "dryRun": bool(dry_run),
+        "signOn": None,
+        "reports": {},
+        "errors": [],
+        "requiredFailed": [],
+    }
+
+    if ensure_signon and not dry_run:
+        try:
+            from softdent_signon import ensure_softdent_signed_on, softdent_signon_status
+
+            status = softdent_signon_status()
+            assist = ensure_softdent_signed_on(timeout_s=60.0, force_change_login=False)
+            result["signOn"] = {
+                "user": status.get("user"),
+                "passwordConfigured": bool(status.get("passwordConfigured")),
+                "signedOn": bool(assist.get("signedOn")),
+                "assistOk": bool(assist.get("ok")),
+                "steps": assist.get("steps"),
+                "error": assist.get("error"),
+            }
+            if not assist.get("ok") and not softdent_main_running():
+                result["errors"].append("signon: SoftDent not signed on / not running")
+        except Exception as exc:  # noqa: BLE001
+            result["errors"].append(f"signon:{type(exc).__name__}")
+            result["signOn"] = {"ok": False, "error": type(exc).__name__}
+
+    for rid in order:
+        meta = reports_meta.get(rid) if isinstance(reports_meta.get(rid), dict) else {}
+        required = bool(meta.get("required", rid in PHASE1_IDS))
+        entry: dict[str, Any] = {
+            "id": rid,
+            "required": required,
+            "ok": False,
+            "path": None,
+            "menuKeys": resolve_menu_keys(meta) if meta else None,
+            "label": meta.get("label"),
+        }
+        if dry_run:
+            entry["ok"] = True
+            entry["dryRun"] = True
+            result["reports"][rid] = entry
+            continue
+        try:
+            if not softdent_main_running():
+                raise RuntimeError("SoftDent main window not available")
+            path = export_report_by_id(rid, start=start, end=end, menu_map=catalog)
+            entry["ok"] = True
+            entry["path"] = str(path)
+        except Exception as exc:  # noqa: BLE001
+            msg = f"{rid}:{type(exc).__name__}:{exc}"
+            entry["error"] = msg
+            result["errors"].append(msg)
+            if required:
+                result["requiredFailed"].append(rid)
+            logger.warning("SoftDent GUI export %s failed: %s", rid, type(exc).__name__)
+            # Clear stuck dialogs before next report
+            try:
+                from pywinauto.keyboard import send_keys
+
+                dismiss_softdent_alerts()
+                send_keys("{ESC}{ESC}{ESC}")
+            except Exception:
+                pass
+        result["reports"][rid] = entry
+
+    required_ok = all(
+        (result["reports"].get(rid) or {}).get("ok")
+        for rid in order
+        if bool((reports_meta.get(rid) or {}).get("required", rid in PHASE1_IDS))
+    )
+    any_ok = any(bool(v.get("ok") and v.get("path")) for v in result["reports"].values())
+    result["ok"] = bool(required_ok) if not dry_run else True
+    if dry_run:
+        result["ok"] = True
+    elif not required_ok and any_ok:
+        # Partial: register alone may still be useful; ok stays False when required failed
+        result["partialOk"] = True
+    return result
 
 
 def run_safe_period_exports(
@@ -306,52 +541,24 @@ def run_safe_period_exports(
     do_collections: bool = True,
     ensure_signon: bool = True,
 ) -> dict[str, Any]:
-    """Sign-on assist (optional) + Register/Collections exports. Never returns password."""
-    today = date.today()
-    start = start or date(today.year, today.month, 1)
-    end = end or today
-    result: dict[str, Any] = {
-        "ok": False,
-        "start": start.isoformat(),
-        "end": end.isoformat(),
-        "signOn": None,
-        "registerPath": None,
-        "collectionsPath": None,
-        "errors": [],
-    }
-    if ensure_signon:
-        try:
-            from softdent_signon import ensure_softdent_signed_on, softdent_signon_status
-
-            status = softdent_signon_status()
-            assist = ensure_softdent_signed_on(timeout_s=15.0, force_change_login=False)
-            result["signOn"] = {
-                "user": status.get("user"),
-                "passwordConfigured": bool(status.get("passwordConfigured")),
-                "signedOn": bool(assist.get("signedOn")),
-                "assistOk": bool(assist.get("ok")),
-                "steps": assist.get("steps"),
-                "error": assist.get("error"),
-            }
-        except Exception as exc:  # noqa: BLE001
-            result["errors"].append(f"signon:{type(exc).__name__}")
-            result["signOn"] = {"ok": False, "error": type(exc).__name__}
-
+    """Backward-compatible Register/Collections-only wrapper."""
+    ids: list[str] = []
     if do_register:
-        try:
-            path = export_register_for_period(start=start, end=end)
-            result["registerPath"] = str(path)
-        except Exception as exc:  # noqa: BLE001
-            result["errors"].append(f"register:{type(exc).__name__}:{exc}")
-            logger.warning("Register export failed: %s", type(exc).__name__)
-
+        ids.append("register")
     if do_collections:
-        try:
-            path = export_collections_for_period(start=start, end=end)
-            result["collectionsPath"] = str(path)
-        except Exception as exc:  # noqa: BLE001
-            result["errors"].append(f"collections:{type(exc).__name__}:{exc}")
-            logger.warning("Collections export failed: %s", type(exc).__name__)
-
-    result["ok"] = bool(result.get("registerPath") or result.get("collectionsPath"))
-    return result
+        ids.append("collections")
+    full = run_catalog_exports(
+        start=start,
+        end=end,
+        report_ids=ids or ["register"],
+        ensure_signon=ensure_signon,
+    )
+    return {
+        "ok": bool(full.get("ok") or full.get("partialOk")),
+        "start": full.get("start"),
+        "end": full.get("end"),
+        "signOn": full.get("signOn"),
+        "registerPath": (full.get("reports") or {}).get("register", {}).get("path"),
+        "collectionsPath": (full.get("reports") or {}).get("collections", {}).get("path"),
+        "errors": full.get("errors") or [],
+    }

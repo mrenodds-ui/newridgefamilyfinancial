@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "softdentVersionHint": "CS SoftDent Software v19.1.4",
+  "notes": [
+    "Keys are typed after Reports (Alt+R) then Accounting (a).",
+    "register_period 'rp' is proven on this workstation.",
+    "Other keys are SoftDent v19 Accounting accelerators; override via env or menu_keys.",
+    "SoftDent save dialog rejects long paths — use 8.3 short stem under C:\\SOFTDE~1."
+  ],
+  "pathPrefix": "%r a",
+  "reports": {
+    "register": {
+      "id": "register",
+      "label": "Register for a Period",
+      "menuPath": "Reports → Accounting → Registers → Period",
+      "menu_keys": "rp",
+      "menu_keys_env": null,
+      "date_mode": "range",
+      "short_stem_template": "REG{yy}{mm}",
+      "canonical_template": "register_for_period_{start}_{end}.xls",
+      "required": true,
+      "phase": 1,
+      "proven": true
+    },
+    "collections": {
+      "id": "collections",
+      "label": "Collections for a Period",
+      "menuPath": "Reports → Accounting → Collections",
+      "menu_keys": "c",
+      "menu_keys_env": "SOFTDENT_COLLECTIONS_MENU_KEYS",
+      "date_mode": "range",
+      "short_stem_template": "COL{yy}{mm}",
+      "canonical_template": "collections_for_period_{start}_{end}.xls",
+      "required": true,
+      "phase": 1,
+      "proven": false,
+      "alt_menu_keys": ["c", "o", "l"]
+    },
+    "transactions": {
+      "id": "transactions",
+      "label": "Transactions for a Period",
+      "menuPath": "Reports → Accounting → Transactions for a Period",
+      "menu_keys": "t",
+      "menu_keys_env": "SOFTDENT_TRANSACTIONS_MENU_KEYS",
+      "date_mode": "range",
+      "short_stem_template": "TRN{yy}{mm}",
+      "canonical_template": "transactions_for_period_{start}_{end}.xls",
+      "also_copy_as": ["transactions_for_period.xls"],
+      "note": "Period automation converts Excel→CSV; do not fake .csv by copying XLS bytes.",
+      "required": true,
+      "phase": 1,
+      "proven": false
+    },
+    "daysheet": {
+      "id": "daysheet",
+      "label": "Daysheet",
+      "menuPath": "Reports → Accounting → Daysheet",
+      "menu_keys": "d",
+      "menu_keys_env": "SOFTDENT_DAYSHEET_MENU_KEYS",
+      "date_mode": "range",
+      "short_stem_template": "DAY{yy}{mm}{dd}",
+      "canonical_template": "daysheet.xls",
+      "also_copy_as": [],
+      "required": true,
+      "phase": 1,
+      "proven": false
+    },
+    "aging": {
+      "id": "aging",
+      "label": "Account Aging",
+      "menuPath": "Reports → Accounting → Account Aging",
+      "menu_keys": "g",
+      "menu_keys_env": "SOFTDENT_AGING_MENU_KEYS",
+      "date_mode": "as_of",
+      "short_stem_template": "AGE{yy}{mm}{dd}",
+      "canonical_template": "account_aging.xls",
+      "also_copy_as": [],
+      "required": true,
+      "phase": 1,
+      "proven": false,
+      "alt_menu_keys": ["g", "aa", "n"]
+    }
+  },
+  "phase1_order": ["register", "collections", "transactions", "daysheet", "aging"],
+  "phase2_reserved": [
+    "production_by_provider",
+    "production_by_ada_code",
+    "writeoff_totals",
+    "collection_summary"
+  ]
+}
