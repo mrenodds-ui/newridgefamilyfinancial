@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10565",
-  "BUILD_ID": "hal-10565",
-  "assetVersion": "hal-10565",
-  "builtAt": "2026-07-12T13:13:45.000Z",
-  "notes": "hal-10565: DEF-001 period sync ingestion — inbox daysheet/register → period stub, DAYSHEET_WITHOUT_SPLIT / COLLECTIONS_EXPORT_REQUIRED, force_reimport on refresh.",
+  "schemaVersion": "hal-10566",
+  "BUILD_ID": "hal-10566",
+  "assetVersion": "hal-10566",
+  "builtAt": "2026-07-12T13:25:00.000Z",
+  "notes": "hal-10566: DEF-001 Register XLS/XLSX ingest — content period wins over filename; Ins Plan $0 → COLLECTIONS_FORMAT_REQUIRED; empty ≠ $0.",
   "staffRenderMode": "apex"
 }

@@ -589,6 +589,9 @@ def ingest_daysheet_to_period(*, force_reimport: bool = False) -> dict[str, Any]
                 float(row.get("insurance") or 0) > 0
             ):
                 row["collectionsFormatRequired"] = True
+        # Register with collections total but Ins Plan = $0 → honest format/export required.
+        if summary.get("collectionsFormatRequired") and float(row.get("insurance") or 0) <= 0:
+            row["collectionsFormatRequired"] = True
         if prior:
             updated.append(period)
         else:
@@ -617,6 +620,7 @@ def ingest_daysheet_to_period(*, force_reimport: bool = False) -> dict[str, Any]
                 "production": s.get("production"),
                 "hasInsurancePatientSplit": s.get("hasInsurancePatientSplit"),
                 "daysheetWithoutSplit": s.get("daysheetWithoutSplit"),
+                "collectionsFormatRequired": s.get("collectionsFormatRequired"),
             }
             for s in summaries
         ],

@@ -1016,6 +1016,158 @@ def _period_from_soft_date_text(text: str) -> str | None:
     return None
 
 
+def _period_from_register_filename(name: str) -> str | None:
+    """YYYY-MM from SoftDent RegisterForPeriodReportForMMDDYYYY*.xls names."""
+    raw = str(name or "")
+    m = re.search(r"(?i)(?:for|_)(\d{2})(\d{2})(20\d{2})", raw)
+    if m:
+        return f"{m.group(3)}-{m.group(1)}"
+    m = re.search(r"(20\d{2})[-_/]?(\d{2})", raw)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return None
+
+
+def _load_excel_register_rows(path: Path) -> list[list[Any]]:
+    """Load SoftDent Register .xls/.xlsx as row lists (no PHI logging)."""
+    suffix = path.suffix.lower()
+    if suffix == ".xls":
+        try:
+            import xlrd  # type: ignore
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("xlrd required to parse SoftDent .xls register exports") from exc
+        book = xlrd.open_workbook(str(path))
+        sheet = book.sheet_by_index(0)
+        return [[sheet.cell_value(r, c) for c in range(sheet.ncols)] for r in range(sheet.nrows)]
+    if suffix in {".xlsx", ".xlsm"}:
+        try:
+            from openpyxl import load_workbook  # type: ignore
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("openpyxl required to parse SoftDent .xlsx register exports") from exc
+        book = load_workbook(str(path), data_only=True, read_only=True)
+        try:
+            sheet = book.active
+            return [list(row) for row in sheet.iter_rows(values_only=True)]
+        finally:
+            book.close()
+    raise ValueError(f"unsupported excel suffix: {suffix}")
+
+
+def _summarize_register_rows(
+    rows: list[list[Any]],
+    *,
+    path: Path,
+    schema: dict[str, Any],
+    source_kind: str,
+    period_hint: str | None = None,
+) -> dict[str, Any] | None:
+    """Shared Register-for-a-Period label walk (CSV cells or Excel rows)."""
+    productions = None
+    net_productions = None
+    collections = None
+    ins_plan = None
+    regular = None
+    period = period_hint
+    for raw_row in rows:
+        cells = [("" if c is None else c) for c in (raw_row or [])]
+        # Flatten numeric Excel cells + string labels
+        text_cells = [str(c).strip() if not isinstance(c, (int, float)) else c for c in cells]
+        label = ""
+        for c in text_cells:
+            if isinstance(c, str) and c.strip():
+                label = c.strip()
+                break
+            if isinstance(c, (int, float)) and not label:
+                continue
+        if not period:
+            joined = " ".join(str(c) for c in text_cells if c not in ("", None))
+            period = _period_from_soft_date_text(joined)
+        label_l = str(label).lower()
+        amounts: list[float] = []
+        for c in text_cells:
+            if isinstance(c, (int, float)) and not isinstance(c, bool):
+                amounts.append(float(c))
+            else:
+                amt = _parse_money_cell(c)
+                if amt is not None:
+                    amounts.append(amt)
+        if re.match(r"(?i)^productions?$", label_l) and amounts:
+            productions = amounts[0]
+        elif re.match(r"(?i)^net productions?$", label_l) and amounts:
+            net_productions = amounts[0]
+        elif re.match(r"(?i)^collections?$", label_l) and amounts:
+            collections = amounts[0]
+        elif re.search(r"(?i)ins\s*plan\s*collections", label_l) and amounts:
+            ins_plan = amounts[0]
+        elif re.search(r"(?i)regular\s*collections|patient\s*collections", label_l) and amounts:
+            regular = amounts[0]
+        elif re.match(r"(?i)^net collections?$", label_l) and amounts and collections is None:
+            collections = amounts[0]
+    if not period:
+        period = _period_from_register_filename(path.name)
+    if not period:
+        return None
+    production = float(productions if productions is not None else (net_productions or 0.0))
+    coll = float(collections) if collections is not None else None
+    insurance = float(ins_plan) if ins_plan is not None else 0.0
+    split_ok = insurance > 0 and coll is not None and coll > 0
+    patient = 0.0
+    if split_ok:
+        patient = float(regular) if regular is not None else max(0.0, coll - insurance)
+    return {
+        "period": period,
+        "production": production,
+        "collections": coll,
+        "insurance": insurance if split_ok else 0.0,
+        "patient": patient if split_ok else 0.0,
+        "insuranceSplitReported": split_ok,
+        "hasInsurancePatientSplit": split_ok,
+        "daysheetWithoutSplit": bool(production > 0 and not split_ok and coll is None),
+        "collectionsFormatRequired": bool(production > 0 and coll is not None and coll > 0 and not split_ok),
+        "sourceKind": source_kind,
+        "sourcePath": str(path),
+        "schema": schema,
+        "insPlanCollections": ins_plan,
+        "regularCollections": regular,
+    }
+
+
+def parse_softdent_register_xls(path: Path | str) -> dict[str, Any] | None:
+    """Parse SoftDent Register for a Period .xls/.xlsx into a period stub (empty ≠ $0)."""
+    target = Path(path)
+    if not target.is_file():
+        return None
+    schema = detect_daysheet_export_schema(target)
+    try:
+        rows = _load_excel_register_rows(target)
+    except Exception as exc:  # noqa: BLE001
+        # Never log cell contents (PHI risk on other SoftDent sheets).
+        return {
+            "period": _period_from_register_filename(target.name) or (schema.get("periodHints") or [None])[0],
+            "production": 0.0,
+            "collections": None,
+            "insurance": 0.0,
+            "patient": 0.0,
+            "insuranceSplitReported": False,
+            "hasInsurancePatientSplit": False,
+            "daysheetWithoutSplit": False,
+            "collectionsFormatRequired": True,
+            "parseError": type(exc).__name__,
+            "sourceKind": "register_xls",
+            "sourcePath": str(target),
+            "schema": schema,
+        }
+    kind = "register_xls" if target.suffix.lower() == ".xls" else "register_xlsx"
+    hint = (schema.get("periodHints") or [None])[0]
+    return _summarize_register_rows(
+        rows,
+        path=target,
+        schema=schema,
+        source_kind=kind,
+        period_hint=hint,
+    )
+
+
 def detect_daysheet_export_schema(path: Path | str) -> dict[str, Any]:
     """Classify SoftDent Daysheet / Register export shape (schema only; no $ invent)."""
     target = Path(path)
@@ -1034,6 +1186,52 @@ def detect_daysheet_export_schema(path: Path | str) -> dict[str, Any]:
         return result
     suffix = target.suffix.lower()
     try:
+        if suffix in {".xls", ".xlsx", ".xlsm"}:
+            result["kind"] = "register_xls" if suffix == ".xls" else "register_xlsx"
+            name_period = _period_from_register_filename(target.name)
+            try:
+                rows = _load_excel_register_rows(target)
+            except Exception as exc:  # noqa: BLE001
+                result["notes"].append(f"excel_open_{type(exc).__name__}")
+                if name_period:
+                    result["periodHints"] = [name_period]
+                return result
+            content_period = None
+            ins_plan = None
+            has_prod = False
+            has_coll = False
+            for raw_row in rows:
+                cells = [("" if c is None else c) for c in (raw_row or [])]
+                joined = " ".join(str(c) for c in cells if c not in ("", None))
+                if not content_period:
+                    content_period = _period_from_soft_date_text(joined)
+                label = next((str(c).strip() for c in cells if isinstance(c, str) and c.strip()), "")
+                label_l = label.lower()
+                amounts = [
+                    float(c)
+                    for c in cells
+                    if isinstance(c, (int, float)) and not isinstance(c, bool)
+                ]
+                if re.match(r"(?i)^productions?$", label_l) and amounts:
+                    has_prod = True
+                if re.match(r"(?i)^collections?$", label_l) and amounts:
+                    has_coll = True
+                if re.search(r"(?i)ins\s*plan\s*collections", label_l) and amounts:
+                    ins_plan = amounts[0]
+            # Content period wins over filename run-date (SoftDent often stamps run day in name).
+            period = content_period or name_period
+            if period:
+                result["periodHints"] = [period]
+            if content_period and name_period and content_period != name_period:
+                result["notes"].append(
+                    f"filename suggests {name_period} but report body period is {content_period}"
+                )
+            result["hasProduction"] = has_prod
+            result["hasCollections"] = has_coll
+            result["hasInsurancePatientSplit"] = bool(ins_plan is not None and ins_plan > 0 and has_coll)
+            if has_coll and not result["hasInsurancePatientSplit"]:
+                result["notes"].append("register excel has collections without positive Ins Plan side")
+            return result
         if suffix == ".jsonl":
             first = ""
             with target.open("r", encoding="utf-8-sig", errors="ignore") as handle:
@@ -1106,6 +1304,9 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
         return None
     kind = str(schema.get("kind") or "unknown")
 
+    if kind in {"register_xls", "register_xlsx"} or target.suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
+        return parse_softdent_register_xls(target)
+
     if kind == "daysheet_jsonl":
         by_period: dict[str, dict[str, float]] = {}
         try:
@@ -1175,55 +1376,14 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
         return None
 
     if kind == "register_csv":
-        productions = None
-        net_productions = None
-        collections = None
-        ins_plan = None
-        regular = None
-        # Use csv.reader — SoftDent quotes amounts like "$167,203.80".
-        for cells in csv.reader(lines):
-            cells = [c.strip() for c in cells]
-            label = next((c for c in cells if c), "")
-            label_l = label.lower()
-            amounts = [a for a in (_parse_money_cell(c) for c in cells) if a is not None]
-            # Prefer amount cells after the label when present.
-            label_idx = next((i for i, c in enumerate(cells) if c == label), 0)
-            after = [a for a in (_parse_money_cell(c) for c in cells[label_idx + 1 :]) if a is not None]
-            if after:
-                amounts = after
-            if re.match(r"(?i)^productions?$", label_l) and amounts:
-                productions = amounts[0]
-            elif re.match(r"(?i)^net productions?$", label_l) and amounts:
-                net_productions = amounts[0]
-            elif re.match(r"(?i)^collections?$", label_l) and amounts:
-                collections = amounts[0]
-            elif re.search(r"(?i)ins\s*plan\s*collections", label_l) and amounts:
-                ins_plan = amounts[0]
-            elif re.search(r"(?i)regular\s*collections", label_l) and amounts:
-                regular = amounts[0]
-            elif re.match(r"(?i)^net collections?$", label_l) and amounts and collections is None:
-                collections = amounts[0]
-        production = float(productions if productions is not None else (net_productions or 0.0))
-        coll = float(collections) if collections is not None else None
-        insurance = float(ins_plan) if ins_plan is not None else 0.0
-        split_ok = insurance > 0 and coll is not None and coll > 0
-        patient = 0.0
-        if split_ok:
-            patient = float(regular) if regular is not None else max(0.0, coll - insurance)
-        return {
-            "period": period,
-            "production": production,
-            "collections": coll,
-            "insurance": insurance if split_ok else 0.0,
-            "patient": patient if split_ok else 0.0,
-            "insuranceSplitReported": split_ok,
-            "hasInsurancePatientSplit": split_ok,
-            "daysheetWithoutSplit": bool(production > 0 and not split_ok and coll is None),
-            "collectionsFormatRequired": bool(production > 0 and coll is not None and coll > 0 and not split_ok),
-            "sourceKind": "register_csv",
-            "sourcePath": str(target),
-            "schema": schema,
-        }
+        rows = list(csv.reader(lines))
+        return _summarize_register_rows(
+            rows,
+            path=target,
+            schema=schema,
+            source_kind="register_csv",
+            period_hint=period,
+        )
 
     # daysheet_csv (and unknown CSV with Daysheet header)
     production = 0.0
@@ -1288,6 +1448,7 @@ __all__ = [
     "ingest_csv_reports_to_sqlite",
     "detect_daysheet_export_schema",
     "summarize_daysheet_export",
+    "parse_softdent_register_xls",
 ]
 
 

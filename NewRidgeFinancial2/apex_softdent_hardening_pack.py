@@ -160,7 +160,7 @@ def _latest_period_from_bundle(bundle: dict[str, Any] | None) -> dict[str, Any] 
 
 
 def classify_daysheet_inbox_periods(matches: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    """Best-effort period labels from daysheet CSV/JSONL names and content (no $ invent)."""
+    """Best-effort period labels from daysheet/register CSV/JSONL/XLS names and content (no $ invent)."""
     from pathlib import Path
 
     items = matches if isinstance(matches, list) else []
@@ -174,49 +174,75 @@ def classify_daysheet_inbox_periods(matches: list[dict[str, Any]] | None = None)
         found: set[str] = set()
         for m in re.finditer(r"(20\d{2})[-_/]?(\d{2})", name):
             found.add(f"{m.group(1)}-{m.group(2)}")
-        if path.is_file() and path.suffix.lower() in {".csv", ".jsonl", ".txt"}:
-            try:
-                text = path.read_text(encoding="utf-8-sig", errors="ignore")[:8000]
-            except OSError:
-                text = ""
-            for m in re.finditer(
-                r"(?i)\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
-                r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
-                r"Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b",
-                text,
-            ):
-                mon = {
-                    "jan": "01",
-                    "january": "01",
-                    "feb": "02",
-                    "february": "02",
-                    "mar": "03",
-                    "march": "03",
-                    "apr": "04",
-                    "april": "04",
-                    "may": "05",
-                    "jun": "06",
-                    "june": "06",
-                    "jul": "07",
-                    "july": "07",
-                    "aug": "08",
-                    "august": "08",
-                    "sep": "09",
-                    "sept": "09",
-                    "september": "09",
-                    "oct": "10",
-                    "october": "10",
-                    "nov": "11",
-                    "november": "11",
-                    "dec": "12",
-                    "december": "12",
-                }.get(m.group(1).lower())
-                if mon:
-                    found.add(f"{m.group(3)}-{mon}")
-            for m in re.finditer(r"\b(20\d{2})[-/](\d{2})[-/](\d{2})\b", text):
-                found.add(f"{m.group(1)}-{m.group(2)}")
-            for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b", text):
-                found.add(f"{m.group(3)}-{int(m.group(1)):02d}")
+        if path.is_file() and path.suffix.lower() in {".csv", ".jsonl", ".txt", ".xls", ".xlsx", ".xlsm"}:
+            if path.suffix.lower() in {".xls", ".xlsx", ".xlsm"}:
+                try:
+                    from softdent_practice_exports import detect_daysheet_export_schema
+
+                    schema = detect_daysheet_export_schema(path)
+                    for p in schema.get("periodHints") or []:
+                        if p:
+                            found.add(str(p)[:7])
+                    for note in (schema.get("notes") or [])[:2]:
+                        notes.append(f"{name}: {note}")
+                except Exception:
+                    name_period = None
+                    m = re.search(r"(?i)(?:for|_)(\d{2})(\d{2})(20\d{2})", name)
+                    if m:
+                        name_period = f"{m.group(3)}-{m.group(1)}"
+                        found.add(name_period)
+            else:
+                try:
+                    text = path.read_text(encoding="utf-8-sig", errors="ignore")[:8000]
+                except OSError:
+                    text = ""
+                for m in re.finditer(
+                    r"(?i)\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+                    r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+                    r"Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b",
+                    text,
+                ):
+                    mon = {
+                        "jan": "01",
+                        "january": "01",
+                        "feb": "02",
+                        "february": "02",
+                        "mar": "03",
+                        "march": "03",
+                        "apr": "04",
+                        "april": "04",
+                        "may": "05",
+                        "jun": "06",
+                        "june": "06",
+                        "jul": "07",
+                        "july": "07",
+                        "aug": "08",
+                        "august": "08",
+                        "sep": "09",
+                        "sept": "09",
+                        "september": "09",
+                        "oct": "10",
+                        "october": "10",
+                        "nov": "11",
+                        "november": "11",
+                        "dec": "12",
+                        "december": "12",
+                    }.get(m.group(1).lower())
+                    if mon:
+                        found.add(f"{m.group(3)}-{mon}")
+                for m in re.finditer(r"\b(20\d{2})[-/](\d{2})[-/](\d{2})\b", text):
+                    found.add(f"{m.group(1)}-{m.group(2)}")
+                for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b", text):
+                    found.add(f"{m.group(3)}-{int(m.group(1)):02d}")
+                for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b", text):
+                    yy = int(m.group(3))
+                    year = 2000 + yy if yy < 80 else 1900 + yy
+                    found.add(f"{year}-{int(m.group(1)):02d}")
+        # Filename RegisterForPeriodReportForMMDDYYYY only when content yielded no period
+        if not found:
+            m = re.search(r"(?i)(?:for|_)(\d{2})(\d{2})(20\d{2})", name)
+            if m:
+                found.add(f"{m.group(3)}-{m.group(1)}")
         if found:
             periods.extend(sorted(found))
             notes.append(f"{name}: periods={','.join(sorted(found))}")

@@ -238,7 +238,7 @@ class SoftdentOdbcExtractTests(unittest.TestCase):
 
 
 class SoftDentInsuranceExtractTests(unittest.TestCase):
-    """Moonshot SoftDent insurance extract (hal-10565)."""
+    """Moonshot SoftDent insurance extract (hal-10566)."""
 
     def test_insurance_schema_created(self) -> None:
         from softdent_odbc_extract import SD_TABLES, _table_exists

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10565",
-  "BUILD_ID": "hal-10565",
-  "assetVersion": "hal-10565",
-  "builtAt": "2026-07-12T13:13:45.000Z",
+  "schemaVersion": "hal-10566",
+  "BUILD_ID": "hal-10566",
+  "assetVersion": "hal-10566",
+  "builtAt": "2026-07-12T13:25:00.000Z",
   "notes": "Mirror of ../nr2-build.json — served to the UI over the local HTTP server.",
   "staffRenderMode": "apex"
 }
