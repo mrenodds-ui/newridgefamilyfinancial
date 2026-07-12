@@ -4164,6 +4164,32 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
         "startedAt": _utc_now(),
         "steps": [],
     }
+    # 0) SoftDent GUI Sign On credentials status + optional UI assist (no password in payload)
+    try:
+        from softdent_signon import ensure_softdent_signed_on, softdent_signon_status
+
+        sign_status = softdent_signon_status()
+        sign_assist = ensure_softdent_signed_on(timeout_s=20.0)
+        result["steps"].append(
+            {
+                "step": "softdent_signon",
+                "ok": bool(sign_status.get("ok")),
+                "user": sign_status.get("user"),
+                "passwordConfigured": bool(sign_status.get("passwordConfigured")),
+                "signedOn": bool(sign_assist.get("signedOn")),
+                "assistOk": bool(sign_assist.get("ok")),
+                "assistSteps": sign_assist.get("steps"),
+                "error": sign_assist.get("error") or sign_status.get("hint"),
+            }
+        )
+        result["softdentSignOn"] = {
+            "user": sign_status.get("user"),
+            "passwordConfigured": bool(sign_status.get("passwordConfigured")),
+            "signedOn": bool(sign_assist.get("signedOn")),
+        }
+    except Exception as exc:  # noqa: BLE001
+        result["steps"].append({"step": "softdent_signon", "ok": False, "error": str(exc)})
+
     # 1) Period export automation (promote Register/Trans if present)
     auto_ps1 = _Path(r"C:\New folder\ops\softdent\automation\run_softdent_export_automation.ps1")
     auto_py = _Path(r"C:\New folder\ops\softdent\periods\softdent_period_export_automation.py")
