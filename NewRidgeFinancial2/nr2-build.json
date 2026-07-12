@@ -2,7 +2,7 @@
   "schemaVersion": "hal-10565",
   "BUILD_ID": "hal-10565",
   "assetVersion": "hal-10565",
-  "builtAt": "2026-07-12T13:11:24.304Z",
-  "notes": "hal-10565: DEF-001 period sync honesty — COLLECTIONS_FORMAT_REQUIRED, no invented patient=collections dumps, inbox period classify.",
+  "builtAt": "2026-07-12T13:13:45.000Z",
+  "notes": "hal-10565: DEF-001 period sync ingestion — inbox daysheet/register → period stub, DAYSHEET_WITHOUT_SPLIT / COLLECTIONS_EXPORT_REQUIRED, force_reimport on refresh.",
   "staffRenderMode": "apex"
 }

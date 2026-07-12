@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -945,10 +946,334 @@ def ingest_csv_reports_to_sqlite(
     return counts
 
 
-if __name__ == "__main__":
-    import json as _json
+def _parse_money_cell(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text in {"-", "—", "N/A", "n/a"}:
+        return None
+    neg = text.startswith("(") and text.endswith(")")
+    cleaned = text.replace("$", "").replace(",", "").replace("(", "").replace(")", "").strip()
+    if not cleaned:
+        return None
+    try:
+        amount = float(cleaned)
+    except ValueError:
+        return None
+    return -amount if neg else amount
 
-    print(_json.dumps(sync_practice_exports(), indent=2))
+
+def _period_from_soft_date_text(text: str) -> str | None:
+    """Best-effort YYYY-MM from SoftDent date lines (no invented periods)."""
+    raw = str(text or "")
+    month_map = {
+        "jan": "01",
+        "january": "01",
+        "feb": "02",
+        "february": "02",
+        "mar": "03",
+        "march": "03",
+        "apr": "04",
+        "april": "04",
+        "may": "05",
+        "jun": "06",
+        "june": "06",
+        "jul": "07",
+        "july": "07",
+        "aug": "08",
+        "august": "08",
+        "sep": "09",
+        "sept": "09",
+        "september": "09",
+        "oct": "10",
+        "october": "10",
+        "nov": "11",
+        "november": "11",
+        "dec": "12",
+        "december": "12",
+    }
+    m = re.search(
+        r"(?i)\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+        r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+        r"Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b",
+        raw,
+    )
+    if m:
+        mon = month_map.get(m.group(1).lower())
+        if mon:
+            return f"{m.group(3)}-{mon}"
+    m = re.search(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b", raw)
+    if m:
+        return f"{m.group(3)}-{int(m.group(1)):02d}"
+    m = re.search(r"\b(\d{1,2})/(\d{1,2})/(\d{2})\b", raw)
+    if m:
+        yy = int(m.group(3))
+        year = 2000 + yy if yy < 80 else 1900 + yy
+        return f"{year}-{int(m.group(1)):02d}"
+    m = re.search(r"\b(20\d{2})[-/](\d{2})(?:[-/]\d{2})?\b", raw)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return None
+
+
+def detect_daysheet_export_schema(path: Path | str) -> dict[str, Any]:
+    """Classify SoftDent Daysheet / Register export shape (schema only; no $ invent)."""
+    target = Path(path)
+    result: dict[str, Any] = {
+        "ok": target.is_file(),
+        "path": str(target),
+        "kind": "unknown",
+        "hasProduction": False,
+        "hasCollections": False,
+        "hasInsurancePatientSplit": False,
+        "periodHints": [],
+        "notes": [],
+    }
+    if not target.is_file():
+        result["notes"].append("file missing")
+        return result
+    suffix = target.suffix.lower()
+    try:
+        if suffix == ".jsonl":
+            first = ""
+            with target.open("r", encoding="utf-8-sig", errors="ignore") as handle:
+                first = handle.readline()
+            payload = json.loads(first) if first.strip() else {}
+            dataset = str(payload.get("dataset_name") or "").lower()
+            norm = payload.get("normalized") if isinstance(payload.get("normalized"), dict) else {}
+            if dataset == "daysheet" or "gross_production" in norm or "report_date" in norm:
+                result["kind"] = "daysheet_jsonl"
+            elif "register" in dataset:
+                result["kind"] = "register_jsonl"
+            period = _period_from_soft_date_text(str(norm.get("report_date") or ""))
+            if period:
+                result["periodHints"] = [period]
+            result["hasProduction"] = any(
+                norm.get(k) not in (None, "", 0, 0.0) for k in ("gross_production", "net_production")
+            )
+            result["hasCollections"] = norm.get("collections") not in (None, "", 0, 0.0)
+            try:
+                ins = float(norm.get("insurance_payment_total") or 0)
+            except (TypeError, ValueError):
+                ins = 0.0
+            result["hasInsurancePatientSplit"] = ins > 0 and result["hasCollections"]
+            return result
+        text = target.read_text(encoding="utf-8-sig", errors="ignore")[:12000]
+    except (OSError, json.JSONDecodeError) as exc:
+        result["notes"].append(str(exc))
+        return result
+
+    lower = text.lower()
+    if "register for a period" in lower:
+        result["kind"] = "register_csv"
+    elif "daysheet" in lower:
+        result["kind"] = "daysheet_csv"
+    period = _period_from_soft_date_text(text)
+    if period:
+        result["periodHints"] = [period]
+    result["hasProduction"] = bool(
+        re.search(r"(?i)\b(productions?|net productions?|prod)\b", text)
+        or ",Prod," in text
+        or "\tProd\t" in text
+    )
+    result["hasCollections"] = bool(re.search(r"(?i)\b(collections?|net collections?)\b", text))
+    has_ins = bool(re.search(r"(?i)ins\s*plan\s*collections|insurance\s*payment|posted to insurance", text))
+    has_pat = bool(re.search(r"(?i)regular\s*collections|patient", text))
+    # Split is only "present" when SoftDent reports a positive insurance side.
+    if result["kind"] == "register_csv":
+        for line in text.splitlines():
+            if re.search(r"(?i)^\s*,?\s*Ins\s*Plan\s*Collections", line):
+                cells = [c.strip() for c in line.split(",")]
+                for cell in cells:
+                    amt = _parse_money_cell(cell)
+                    if amt is not None and amt > 0:
+                        result["hasInsurancePatientSplit"] = True
+                        break
+    elif has_ins and result["hasCollections"]:
+        # Daysheet footer insurance alone is not a full Ins/Patient Collections export.
+        result["hasInsurancePatientSplit"] = False
+        result["notes"].append("daysheet may have insurance footer but not Collections Ins/Patient split")
+    if has_pat and not result["hasInsurancePatientSplit"]:
+        result["notes"].append("patient/regular collections labels seen without positive Ins Plan side")
+    return result
+
+
+def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
+    """Parse one SoftDent daysheet/register export into a period stub (honest; empty ≠ $0)."""
+    target = Path(path)
+    schema = detect_daysheet_export_schema(target)
+    if not schema.get("ok"):
+        return None
+    kind = str(schema.get("kind") or "unknown")
+
+    if kind == "daysheet_jsonl":
+        by_period: dict[str, dict[str, float]] = {}
+        try:
+            with target.open("r", encoding="utf-8-sig", errors="ignore") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        payload = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    norm = payload.get("normalized") if isinstance(payload.get("normalized"), dict) else {}
+                    period = _period_from_soft_date_text(str(norm.get("report_date") or ""))
+                    if not period:
+                        continue
+                    bucket = by_period.setdefault(
+                        period,
+                        {"production": 0.0, "collections": 0.0, "insurance": 0.0},
+                    )
+                    try:
+                        gross = float(norm.get("gross_production") or 0)
+                        net = float(norm.get("net_production") or 0)
+                        bucket["production"] += float(gross or net or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    try:
+                        bucket["collections"] += float(norm.get("collections") or 0)
+                    except (TypeError, ValueError):
+                        pass
+                    try:
+                        bucket["insurance"] += float(norm.get("insurance_payment_total") or 0)
+                    except (TypeError, ValueError):
+                        pass
+        except OSError:
+            return None
+        if not by_period:
+            return None
+        # Prefer the newest period key when multiple days are present.
+        period = sorted(by_period.keys())[-1]
+        totals = by_period[period]
+        production = float(totals.get("production") or 0)
+        collections = float(totals.get("collections") or 0)
+        insurance = float(totals.get("insurance") or 0)
+        split_ok = insurance > 0 and collections > 0
+        return {
+            "period": period,
+            "production": production,
+            "collections": collections if collections > 0 else None,
+            "insurance": insurance if split_ok else 0.0,
+            "patient": max(0.0, collections - insurance) if split_ok else 0.0,
+            "insuranceSplitReported": split_ok,
+            "hasInsurancePatientSplit": split_ok,
+            "daysheetWithoutSplit": bool(production > 0 and not split_ok),
+            "sourceKind": "daysheet_jsonl",
+            "sourcePath": str(target),
+            "schema": schema,
+        }
+
+    try:
+        text = target.read_text(encoding="utf-8-sig", errors="ignore")
+    except OSError:
+        return None
+    lines = text.splitlines()
+    period = (schema.get("periodHints") or [None])[0] or _period_from_soft_date_text(text)
+    if not period:
+        return None
+
+    if kind == "register_csv":
+        productions = None
+        net_productions = None
+        collections = None
+        ins_plan = None
+        regular = None
+        # Use csv.reader — SoftDent quotes amounts like "$167,203.80".
+        for cells in csv.reader(lines):
+            cells = [c.strip() for c in cells]
+            label = next((c for c in cells if c), "")
+            label_l = label.lower()
+            amounts = [a for a in (_parse_money_cell(c) for c in cells) if a is not None]
+            # Prefer amount cells after the label when present.
+            label_idx = next((i for i, c in enumerate(cells) if c == label), 0)
+            after = [a for a in (_parse_money_cell(c) for c in cells[label_idx + 1 :]) if a is not None]
+            if after:
+                amounts = after
+            if re.match(r"(?i)^productions?$", label_l) and amounts:
+                productions = amounts[0]
+            elif re.match(r"(?i)^net productions?$", label_l) and amounts:
+                net_productions = amounts[0]
+            elif re.match(r"(?i)^collections?$", label_l) and amounts:
+                collections = amounts[0]
+            elif re.search(r"(?i)ins\s*plan\s*collections", label_l) and amounts:
+                ins_plan = amounts[0]
+            elif re.search(r"(?i)regular\s*collections", label_l) and amounts:
+                regular = amounts[0]
+            elif re.match(r"(?i)^net collections?$", label_l) and amounts and collections is None:
+                collections = amounts[0]
+        production = float(productions if productions is not None else (net_productions or 0.0))
+        coll = float(collections) if collections is not None else None
+        insurance = float(ins_plan) if ins_plan is not None else 0.0
+        split_ok = insurance > 0 and coll is not None and coll > 0
+        patient = 0.0
+        if split_ok:
+            patient = float(regular) if regular is not None else max(0.0, coll - insurance)
+        return {
+            "period": period,
+            "production": production,
+            "collections": coll,
+            "insurance": insurance if split_ok else 0.0,
+            "patient": patient if split_ok else 0.0,
+            "insuranceSplitReported": split_ok,
+            "hasInsurancePatientSplit": split_ok,
+            "daysheetWithoutSplit": bool(production > 0 and not split_ok and coll is None),
+            "collectionsFormatRequired": bool(production > 0 and coll is not None and coll > 0 and not split_ok),
+            "sourceKind": "register_csv",
+            "sourcePath": str(target),
+            "schema": schema,
+        }
+
+    # daysheet_csv (and unknown CSV with Daysheet header)
+    production = 0.0
+    collections_footer = None
+    insurance_footer = None
+    header_idx = next(
+        (i for i, line in enumerate(lines) if re.search(r"(?i)\bProd\b", line) and re.search(r"(?i)\bCheck\b", line)),
+        None,
+    )
+    if header_idx is not None:
+        reader = csv.reader(lines[header_idx:])
+        rows = list(reader)
+        if rows:
+            header = [h.strip() for h in rows[0]]
+            idx = {name: i for i, name in enumerate(header)}
+            prod_i = idx.get("Prod")
+            for row in rows[1:]:
+                if prod_i is not None and len(row) > prod_i:
+                    amt = _parse_money_cell(row[prod_i])
+                    if amt:
+                        production += amt
+    for line in lines:
+        if re.search(r"(?i)posted to insurance plans", line):
+            for cell in line.split(","):
+                amt = _parse_money_cell(cell)
+                if amt is not None:
+                    insurance_footer = amt
+                    break
+        if re.search(r"(?i)^collections?\b", line.strip().strip(",")):
+            for cell in line.split(","):
+                amt = _parse_money_cell(cell)
+                if amt is not None and amt > 0:
+                    collections_footer = amt
+                    break
+    # SoftDent practice daysheet rarely has a Collections Ins/Patient split row.
+    split_ok = False
+    return {
+        "period": period,
+        "production": production,
+        "collections": collections_footer,
+        "insurance": 0.0,
+        "patient": 0.0,
+        "insuranceSplitReported": split_ok,
+        "hasInsurancePatientSplit": split_ok,
+        "daysheetWithoutSplit": bool(production > 0),
+        "insuranceFooter": insurance_footer,
+        "sourceKind": "daysheet_csv",
+        "sourcePath": str(target),
+        "schema": schema,
+    }
 
 
 from softdent_odbc_extract import ensure_softdent_odbc_fresh, extract_softdent_odbc, read_extract_status, run_odbc_lane
@@ -961,4 +1286,13 @@ __all__ = [
     "sync_practice_exports",
     "read_practice_export_datasets",
     "ingest_csv_reports_to_sqlite",
+    "detect_daysheet_export_schema",
+    "summarize_daysheet_export",
 ]
+
+
+if __name__ == "__main__":
+    import json as _json
+
+    print(_json.dumps(sync_practice_exports(), indent=2))
+

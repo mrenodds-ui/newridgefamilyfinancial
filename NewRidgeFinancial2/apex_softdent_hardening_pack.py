@@ -19,6 +19,8 @@ GAP_DAYSHEET_ZERO = "COLLECTIONS_ZERO_ON_DAYSHEET"
 GAP_REGISTER_ONLY = "REGISTER_ONLY"  # production without collections key
 GAP_NO_PERIOD = "NO_PERIOD_ROW"
 GAP_COLLECTIONS_FORMAT_REQUIRED = "COLLECTIONS_FORMAT_REQUIRED"  # files present but wrong period/split
+GAP_DAYSHEET_WITHOUT_SPLIT = "DAYSHEET_WITHOUT_SPLIT"  # period from daysheet; Collections export needed
+GAP_COLLECTIONS_EXPORT_REQUIRED = "COLLECTIONS_EXPORT_REQUIRED"  # ops synonym for format/split gap
 
 FIX_HINT = (
     "Import SoftDent daysheet / complete Register for a Period, then Sync "
@@ -30,6 +32,11 @@ FORMAT_HINT = (
     "Accounting → Register for a Period (open month) or Collections/Daysheet "
     r"with a real Ins/Patient split to C:\SoftDentReportExports, then Sync. Empty ≠ $0."
 )
+SPLIT_HINT = (
+    "Collections export required for ins/patient split. SoftDent → Reports → "
+    "Accounting → Collections (or Register for a Period with Ins Plan / Regular "
+    r"Collections) → C:\SoftDentReportExports, then Sync. Empty ≠ $0."
+)
 
 # SoftDent export inbox roots (same family as import_sync upstream)
 _EXPORT_INBOX_CANDIDATES = (
@@ -39,7 +46,7 @@ _EXPORT_INBOX_CANDIDATES = (
 )
 
 _COLLECTIONS_NAME_RE = re.compile(
-    r"(?i)(collections|daysheet|register.?for.?a.?period|col[_-]?\d{6})",
+    r"(?i)(collections|daysheet|register.?for.?(?:a.?)?period|col[_-]?\d{6})",
 )
 
 
@@ -232,12 +239,14 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     reported: bool | None = None
     has_collections_key = False
     format_required = False
+    daysheet_without_split = False
     production = None
     collections = None
 
     if latest:
         pending = bool(latest.get("collectionsPending"))
         format_required = bool(latest.get("collectionsFormatRequired"))
+        daysheet_without_split = bool(latest.get("daysheetWithoutSplit"))
         if "collectionsReported" in latest:
             reported = bool(latest.get("collectionsReported"))
         has_collections_key = "collections" in latest
@@ -267,7 +276,13 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         ):
             format_required = True
 
-        if format_required and not pending:
+        if daysheet_without_split and pending:
+            gap = GAP_DAYSHEET_WITHOUT_SPLIT
+            issues.append(
+                f"{period or 'latest'}: daysheetWithoutSplit — period row from daysheet "
+                "but Collections export required for ins/patient split."
+            )
+        elif format_required and not pending:
             gap = GAP_COLLECTIONS_FORMAT_REQUIRED
             issues.append(
                 f"{period or 'latest'}: collections total may exist but insurance/patient split "
@@ -314,20 +329,41 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         pass
 
     healthy = gap == GAP_OK
+    export_required = gap in {
+        GAP_COLLECTIONS_FORMAT_REQUIRED,
+        GAP_DAYSHEET_WITHOUT_SPLIT,
+        GAP_COLLECTIONS_EXPORT_REQUIRED,
+    } or format_required or daysheet_without_split
+    if export_required and gap == GAP_COLLECTIONS_PENDING and daysheet_without_split:
+        gap = GAP_DAYSHEET_WITHOUT_SPLIT
+    fix_hint = None
+    if not healthy:
+        if gap == GAP_DAYSHEET_WITHOUT_SPLIT or daysheet_without_split:
+            fix_hint = SPLIT_HINT
+        elif format_required or gap == GAP_COLLECTIONS_FORMAT_REQUIRED:
+            fix_hint = FORMAT_HINT
+        else:
+            fix_hint = FIX_HINT
     result = {
         "ok": True,
         "gapCode": gap,
-        "collectionsGapCode": gap,  # SoftDent daysheet code before ERA enrich
+        "collectionsGapCode": (
+            GAP_COLLECTIONS_EXPORT_REQUIRED
+            if export_required and gap != GAP_OK
+            else gap
+        ),  # SoftDent daysheet code before ERA enrich
         "healthy": healthy,
         "period": period,
         "collectionsPending": pending,
         "collectionsReported": reported,
         "collectionsFormatRequired": format_required or gap == GAP_COLLECTIONS_FORMAT_REQUIRED,
+        "daysheetWithoutSplit": daysheet_without_split or gap == GAP_DAYSHEET_WITHOUT_SPLIT,
+        "collectionsExportRequired": export_required and gap != GAP_OK,
         "hasCollectionsKey": has_collections_key,
         "production": production,
         "collections": collections if gap == GAP_OK else None,  # never surface unverified $ as truth
         "honesty": "empty_not_zero" if not healthy else "reported",
-        "fixHint": None if healthy else (FORMAT_HINT if format_required else FIX_HINT),
+        "fixHint": fix_hint,
         "issues": issues[:12],
         "def": "DEF-001",
         "checkedAt": _utc_now(),
@@ -362,10 +398,13 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             names = ", ".join(str(m.get("name")) for m in (inbox.get("matches") or [])[:3] if m.get("name"))
             if not covers:
                 # Files exist but do not cover open month → format/period required
-                result["gapCode"] = GAP_COLLECTIONS_FORMAT_REQUIRED
-                result["collectionsGapCode"] = GAP_COLLECTIONS_FORMAT_REQUIRED
-                result["collectionsFormatRequired"] = True
-                result["fixHint"] = FORMAT_HINT
+                # Keep DAYSHEET_WITHOUT_SPLIT when the period row already signals that state.
+                if result.get("gapCode") != GAP_DAYSHEET_WITHOUT_SPLIT:
+                    result["gapCode"] = GAP_COLLECTIONS_FORMAT_REQUIRED
+                    result["collectionsGapCode"] = GAP_COLLECTIONS_EXPORT_REQUIRED
+                    result["collectionsFormatRequired"] = True
+                    result["collectionsExportRequired"] = True
+                    result["fixHint"] = FORMAT_HINT
                 issues.append(
                     f"Export inbox has {names}, but classified periods "
                     f"{classified.get('periods') or []} do not cover open month {open_period}."
@@ -469,6 +508,7 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
     issues = g.get("issues") if isinstance(g.get("issues"), list) else []
     lines = [
         f"DEF-001 SoftDent collections gap: `{g.get('gapCode')}` · period `{g.get('period') or '—'}`.",
+        f"collectionsGapCode=`{g.get('collectionsGapCode') or g.get('gapCode')}`.",
         "Honesty: empty Collections / revenue-composition is not $0.",
         str(g.get("fixHint") or FIX_HINT),
         "Ops: SoftDent → Reports → Accounting → Collections or Daysheet (or Register for a Period) "

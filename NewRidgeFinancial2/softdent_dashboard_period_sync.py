@@ -314,22 +314,135 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
     return row
 
 
+def _ym_from_date(raw: str) -> str:
+    text = str(raw or "").strip().replace("/", "-")
+    if len(text) >= 7 and text[4] == "-" and text[:4].isdigit():
+        return text[:7]
+    return ""
+
+
+def _aggregate_inbox_daysheet(periods: list[str]) -> dict[str, dict[str, Any]]:
+    """Bootstrap open-month totals from SoftDentReportExports daysheet.jsonl.
+
+    Used when analytics DB has no daysheet_totals row (NO_PERIOD_ROW gap).
+    Never invents insurance/patient dollars — only sums present in the file.
+    """
+    if not periods:
+        return {}
+    period_set = {str(p).strip()[:7] for p in periods if str(p).strip()}
+    out: dict[str, dict[str, Any]] = {}
+
+    try:
+        from softdent_operational_pipeline import (
+            INSURANCE_PAYMENT_CODES,
+            PATIENT_PAYMENT_CODES,
+            _load_daysheet_transactions,
+            resolve_daysheet_jsonl_path,
+        )
+    except ImportError:
+        return {}
+
+    jsonl = resolve_daysheet_jsonl_path()
+    if jsonl and jsonl.is_file():
+        try:
+            txs = _load_daysheet_transactions(jsonl)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Inbox daysheet JSONL parse failed: %s", exc)
+            txs = []
+        buckets: dict[str, dict[str, float]] = {}
+        for tx in txs or []:
+            if not isinstance(tx, dict):
+                continue
+            ym = _ym_from_date(str(tx.get("reportDate") or ""))
+            if not ym or ym not in period_set:
+                continue
+            bucket = buckets.setdefault(ym, {"production": 0.0, "insurance": 0.0, "patient": 0.0})
+            code = str(tx.get("code") or "").strip()
+            try:
+                amt = float(tx.get("production")) if tx.get("production") is not None else 0.0
+            except (TypeError, ValueError):
+                amt = 0.0
+            if amt == 0:
+                continue
+            if code in INSURANCE_PAYMENT_CODES:
+                bucket["insurance"] += abs(amt)
+            elif code in PATIENT_PAYMENT_CODES:
+                bucket["patient"] += abs(amt)
+            else:
+                # Procedure / production lines (exclude write-offs handled as payment codes above)
+                if amt > 0:
+                    bucket["production"] += amt
+        for ym, bucket in buckets.items():
+            prod = float(bucket.get("production") or 0)
+            ins = float(bucket.get("insurance") or 0)
+            pat = float(bucket.get("patient") or 0)
+            coll = ins + pat
+            split_ok = ins > 0
+            if prod <= 0 and coll <= 0:
+                continue
+            out[ym] = {
+                "production": prod,
+                "collections": coll if coll > 0 else 0.0,
+                "insurance": ins if split_ok else 0.0,
+                "patient": pat if split_ok else 0.0,
+                "insuranceSplitReported": split_ok,
+                "_inboxPath": str(jsonl),
+            }
+
+    # Presence-only stub: inbox classifies open periods but JSONL had no usable totals.
+    try:
+        from apex_softdent_hardening_pack import classify_daysheet_inbox_periods, scan_collections_export_inbox
+
+        inbox = scan_collections_export_inbox()
+        classified = classify_daysheet_inbox_periods(inbox.get("matches") if isinstance(inbox, dict) else None)
+        for ym in classified.get("periods") or []:
+            label = str(ym).strip()[:7]
+            if label not in period_set or label in out:
+                continue
+            # File present for period — create honesty stub (no invented production $).
+            out[label] = {
+                "production": 0.0,
+                "collections": 0.0,
+                "insurance": 0.0,
+                "patient": 0.0,
+                "insuranceSplitReported": False,
+                "inboxPresenceOnly": True,
+            }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Inbox daysheet period classify failed: %s", exc)
+
+    return out
+
+
 def _month_rows(db_path: Path | None, periods: list[str]) -> list[dict[str, Any]]:
     daysheet = _aggregate_daysheet(db_path, periods) if db_path else {}
     provider_prod = _aggregate_production_by_provider(db_path, periods) if db_path else {}
     bridge = _bridge_rows_by_period()
+    inbox_daysheet = _aggregate_inbox_daysheet(periods)
     rows: list[dict[str, Any]] = []
     for period in periods:
-        sources: list[dict[str, float]] = []
+        sources: list[dict[str, Any]] = []
         if period in daysheet:
             sources.append({"_source": "daysheet", **daysheet[period]})
         if period in provider_prod:
             sources.append({"_source": "provider_prod", "production": provider_prod[period]})
         if period in bridge:
             sources.append({"_source": "bridge", **bridge[period]})
+        # DEF-001: SoftDentReportExports daysheet when analytics DB has no period row.
+        if period in inbox_daysheet and not any(
+            _collections_source_kind(s) == "daysheet" for s in sources
+        ):
+            sources.append({"_source": "daysheet", **inbox_daysheet[period]})
         if not sources:
             continue
-        rows.append(_build_period_row(period, sources))
+        row = _build_period_row(period, sources)
+        # Inbox presence without parsed production: still escape NO_PERIOD_ROW with honest flags.
+        if any(s.get("inboxPresenceOnly") for s in sources) and float(row.get("production") or 0) <= 0:
+            row["collectionsPending"] = True
+            row["collectionsFormatRequired"] = True
+            row.pop("collectionsReported", None)
+            row.pop("collections", None)
+        rows.append(row)
     return rows
 
 
@@ -418,6 +531,17 @@ def ingest_daysheet_to_period(*, force_reimport: bool = False) -> dict[str, Any]
             logger.warning("inbox export summarize failed for %s: %s", path, exc)
             continue
         if not summary or not summary.get("period"):
+            continue
+        # Skip empty/unknown parses — do not create blank period stubs.
+        try:
+            prod = float(summary.get("production") or 0)
+        except (TypeError, ValueError):
+            prod = 0.0
+        try:
+            coll = float(summary.get("collections") or 0) if summary.get("collections") is not None else 0.0
+        except (TypeError, ValueError):
+            coll = 0.0
+        if prod <= 0 and coll <= 0:
             continue
         summaries.append(summary)
 

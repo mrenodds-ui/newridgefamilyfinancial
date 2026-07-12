@@ -320,10 +320,18 @@ def build_revenue_composition(bundle: dict[str, Any]) -> dict[str, Any]:
     inbox = gap_meta.get("exportInbox") if isinstance(gap_meta.get("exportInbox"), dict) else {}
     inbox_n = int(inbox.get("matchCount") or 0)
     if gap_code and gap_code != "OK":
-        empty_msg = (
-            f"{gap_code} · {period}: Collections/Daysheet gap — empty ≠ $0. "
-            r"Export SoftDent Collections/Daysheet (Reports → Accounting) to C:\SoftDentReportExports, then Sync."
-        )
+        if gap_code in {"DAYSHEET_WITHOUT_SPLIT", "COLLECTIONS_EXPORT_REQUIRED", "COLLECTIONS_FORMAT_REQUIRED"} or gap_meta.get(
+            "daysheetWithoutSplit"
+        ):
+            empty_msg = (
+                f"{gap_code} · {period}: Collections export required for ins/patient split — empty ≠ $0. "
+                r"Export SoftDent Collections / Register for a Period to C:\SoftDentReportExports, then Sync."
+            )
+        else:
+            empty_msg = (
+                f"{gap_code} · {period}: Collections/Daysheet gap — empty ≠ $0. "
+                r"Export SoftDent Collections/Daysheet (Reports → Accounting) to C:\SoftDentReportExports, then Sync."
+            )
         if inbox_n:
             empty_msg += f" Inbox has {inbox_n} matching file(s) — try Refresh SoftDent period."
         else:

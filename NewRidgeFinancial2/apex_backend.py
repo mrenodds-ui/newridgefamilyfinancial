@@ -4212,16 +4212,56 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         result["steps"].append({"step": "period_automation", "ok": False, "error": str(exc)})
 
-    # 2) Dashboard period sync from analytics DB
+    # 2) DEF-001 inbox period stub ingest + dashboard sync (force when unprocessed exports present)
+    force_reimport = False
     try:
-        from softdent_dashboard_period_sync import sync_dashboard_period_rows
+        from apex_softdent_hardening_pack import scan_collections_export_inbox
 
-        dash = sync_dashboard_period_rows()
-        result["steps"].append({"step": "dashboard_period_sync", "ok": bool(dash.get("ok")), "detail": {
-            "periods": dash.get("periods"),
-            "rowCount": dash.get("rowCount"),
-            "mergeLog": dash.get("mergeLog"),
-        }})
+        pre_inbox = scan_collections_export_inbox()
+        force_reimport = bool(pre_inbox.get("matchCount"))
+        result["steps"].append(
+            {
+                "step": "inbox_preflight",
+                "ok": True,
+                "matchCount": pre_inbox.get("matchCount"),
+                "forceReimport": force_reimport,
+                "matches": (pre_inbox.get("matches") or [])[:6],
+            }
+        )
+        result["exportInbox"] = pre_inbox
+    except Exception as exc:  # noqa: BLE001
+        result["steps"].append({"step": "inbox_preflight", "ok": False, "error": str(exc)})
+
+    try:
+        from softdent_dashboard_period_sync import ingest_daysheet_to_period, sync_dashboard_period_rows
+
+        ingest = ingest_daysheet_to_period(force_reimport=force_reimport)
+        result["steps"].append(
+            {
+                "step": "inbox_period_ingest",
+                "ok": bool(ingest.get("ok")),
+                "detail": {
+                    "created": ingest.get("created"),
+                    "updated": ingest.get("updated"),
+                    "summaries": ingest.get("summaries"),
+                    "forceReimport": force_reimport,
+                },
+            }
+        )
+        dash = sync_dashboard_period_rows(force_reimport=force_reimport)
+        result["steps"].append(
+            {
+                "step": "dashboard_period_sync",
+                "ok": bool(dash.get("ok")),
+                "detail": {
+                    "periods": dash.get("periods"),
+                    "rowCount": dash.get("rowCount"),
+                    "mergeLog": dash.get("mergeLog"),
+                    "forceReimport": force_reimport,
+                    "inboxIngest": dash.get("inboxIngest"),
+                },
+            }
+        )
     except Exception as exc:  # noqa: BLE001
         result["steps"].append({"step": "dashboard_period_sync", "ok": False, "error": str(exc)})
 
