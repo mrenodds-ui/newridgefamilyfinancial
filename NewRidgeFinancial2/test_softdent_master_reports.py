@@ -16,18 +16,24 @@ from softdent_master_reports import (
 class SoftDentMasterReportsTests(unittest.TestCase):
     def test_master_catalog_shape(self):
         cat = load_master_reports()
-        self.assertEqual(cat.get("version"), 1)
+        self.assertEqual(cat.get("version"), 2)
         order = cat.get("masterOrder") or []
         self.assertIn("sd_odbc_core", order)
         self.assertIn("register", order)
+        self.assertEqual(cat["reports"]["register"].get("outputMode"), "excel")
+        self.assertEqual(cat["reports"]["collections"].get("outputMode"), "print_preview")
+        self.assertTrue(cat["reports"]["collections"].get("visualReadRequired"))
         for rid in order:
             self.assertIn(rid, cat["reports"])
             meta = cat["reports"][rid]
             self.assertIn(meta.get("preferredSource"), ("database", "gui"))
 
-    def test_gui_export_ids_align_with_menu_map(self):
+    def test_gui_export_ids_exclude_print_preview(self):
         from softdent_gui_export import load_menu_map
+        from softdent_master_reports import print_preview_report_ids
 
+        self.assertIn("collections", print_preview_report_ids())
+        self.assertNotIn("collections", gui_export_ids_required())
         menu = load_menu_map()
         for gid in gui_export_ids_required():
             self.assertIn(gid, menu["reports"], msg=f"missing menu map entry for {gid}")
@@ -44,6 +50,7 @@ class SoftDentMasterReportsTests(unittest.TestCase):
         text = format_master_reports_hal_reply()
         self.assertIn("prefer database", text.lower())
         self.assertIn("Sign On", text)
+        self.assertIn("Print Preview", text)
 
     def test_verify_never_leaks_password(self):
         blob = str(

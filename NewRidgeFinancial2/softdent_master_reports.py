@@ -43,7 +43,7 @@ def master_report_ids(*, required_only: bool = False) -> list[str]:
 
 
 def gui_export_ids_required() -> list[str]:
-    """GUI catalog ids that must be pulled via Sign On + SoftDent UI when missing."""
+    """GUI catalog ids that SoftDent can file-export (Excel) for automated pull."""
     catalog = load_master_reports()
     reports = catalog.get("reports") or {}
     out: list[str] = []
@@ -51,9 +51,28 @@ def gui_export_ids_required() -> list[str]:
         meta = reports.get(rid) or {}
         if not bool(meta.get("guiRequiredWhenMissing")):
             continue
+        if meta.get("outputMode") == "print_preview" or bool(meta.get("visualReadRequired")):
+            # Print Preview–only: no automated Excel file ingest
+            if not bool(meta.get("excelExport")):
+                continue
+        if bool(meta.get("excelExport")) is False and meta.get("outputMode") == "print_preview":
+            continue
         gid = str(meta.get("guiExportId") or "").strip()
-        if gid:
+        if gid and bool(meta.get("excelExport", True)):
             out.append(gid)
+    return out
+
+
+def print_preview_report_ids() -> list[str]:
+    """Reports that SoftDent only shows via Print Preview (visual read; no Excel file)."""
+    catalog = load_master_reports()
+    out: list[str] = []
+    for rid in catalog.get("masterOrder") or []:
+        meta = (catalog.get("reports") or {}).get(rid) or {}
+        if meta.get("outputMode") == "print_preview" or (
+            bool(meta.get("visualReadRequired")) and not bool(meta.get("excelExport"))
+        ):
+            out.append(rid)
     return out
 
 
@@ -61,18 +80,26 @@ def format_master_reports_hal_reply() -> str:
     catalog = load_master_reports()
     lines = [
         "SoftDent master retrieval: prefer database / ODBC / Sensei / sd_* when available.",
-        "If that info cannot be reached by the database, Sign On and export via SoftDent UI (Excel → Enter) — that is the only recovery path.",
+        "If that info cannot be reached by the database, Sign On and use SoftDent UI.",
+        "Excel-capable reports: click Excel then Enter and NR2 parses the file (e.g. Register Productions/Collections/Ins Plan/Regular).",
+        "Print Preview–only reports (no Excel): SoftDent pops Print Preview — visually read the figures; do not invent dollars.",
         "Master reports:",
     ]
     for rid in catalog.get("masterOrder") or []:
         meta = (catalog.get("reports") or {}).get(rid) or {}
         src = meta.get("preferredSource")
         label = meta.get("label") or rid
+        mode = meta.get("outputMode") or src
         if src == "database":
             lines.append(f"- {rid}: {label} (DB/Sensei preferred).")
+        elif mode == "print_preview" or bool(meta.get("visualReadRequired")):
+            path = meta.get("guiMenuPath") or "SoftDent UI"
+            lines.append(
+                f"- {rid}: {label} — Print Preview only → open in SoftDent and visually read ({path})."
+            )
         else:
             path = meta.get("guiMenuPath") or meta.get("guiWin32Path") or "SoftDent UI"
-            lines.append(f"- {rid}: {label} — GUI required when missing → {path}.")
+            lines.append(f"- {rid}: {label} — Excel GUI when missing → {path}.")
     return " ".join(lines)
 
 
@@ -185,11 +212,30 @@ def verify_master_reports(
             gid = str(meta.get("guiExportId") or "").strip()
             entry["guiExportId"] = gid or None
             entry["guiMenuPath"] = meta.get("guiMenuPath")
-            if gid and gid not in menu_reports:
+            entry["outputMode"] = meta.get("outputMode")
+            entry["excelExport"] = bool(meta.get("excelExport"))
+            entry["visualReadRequired"] = bool(meta.get("visualReadRequired"))
+            if gid and gid not in menu_reports and bool(meta.get("excelExport")):
                 catalog_gaps.append(f"menu_map_missing:{gid}")
                 entry["nextStep"] = f"Add {gid} to softdent_gui_menu_map.json"
+
+            # Print Preview–only: SoftDent has no Excel file — visual read, not inbox ingest
+            if meta.get("outputMode") == "print_preview" or (
+                bool(meta.get("visualReadRequired")) and not bool(meta.get("excelExport"))
+            ):
+                entry["ok"] = True
+                entry["sourceSatisfied"] = "print_preview_visual_read"
+                entry["nextStep"] = (
+                    "SoftDent Print Preview only (no Excel). Sign On → open "
+                    f"{meta.get('guiMenuPath') or rid} → Print Preview and visually read "
+                    "the figures. Do not invent dollars. Prefer Register Excel when it "
+                    "already has production/collections/Ins Plan."
+                )
+                items[rid] = entry
+                continue
+
             patterns = list(meta.get("canonicalPatterns") or [])
-            # Prefer period-specific register/collections when dates given
+            # Prefer period-specific register when dates given
             if start and end and gid == "register":
                 patterns = [
                     f"register_for_period_{start.isoformat()}_{end.isoformat()}.xls",
@@ -254,6 +300,7 @@ def verify_master_reports(
         "missingGuiPulls": missing_gui,
         "missingDb": missing_db,
         "catalogGaps": catalog_gaps,
+        "printPreviewOnly": print_preview_report_ids(),
         "guiExportIds": gui_export_ids_required(),
         "halSummary": format_master_reports_hal_reply(),
     }

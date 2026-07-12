@@ -30,11 +30,13 @@ _DEFAULT_USER_HINT = "COMPUTE"  # SoftDent Sign On user id (workstation/computer
 SOFTDENT_DATA_ACCESS_DOCTRINE = (
     "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed "
     "rows are available there. The only way to get SoftDent data that cannot be reached "
-    "by the database is SoftDent Sign On (env credentials) and use the SoftDent UI "
-    "(Reports → Excel export — click Excel then Enter), then place the file for NR2 "
-    "ingest/Sync. Master report list: softdent_master_reports.json (verify via "
-    "softdent_master_reports.verify_master_reports). No invented dollars, no SoftDent "
-    "write-back, and no fictional vendor CLI when the DB lane cannot supply the report."
+    "by the database is SoftDent Sign On (env credentials) and the SoftDent UI. "
+    "If SoftDent offers Excel: click Excel then Enter and NR2 parses the file "
+    "(Register: Productions, Collections, Ins Plan, Regular). "
+    "If SoftDent only offers Print Preview (e.g. Collection Summary on this build): "
+    "open Print Preview and visually read the figures — no file ingest, no invented dollars. "
+    "Master list: softdent_master_reports.json / verify_master_reports. "
+    "No SoftDent write-back and no fictional vendor CLI."
 )
 
 
@@ -227,14 +229,32 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
     """Inject Sign On + UI-only data-path knowledge into HAL LLM context when relevant."""
     prompt = str(system_prompt or "")
     if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
-        return ""
+        # Still append master list if missing from prompt
+        if "softdent_master_reports" in prompt.lower() or "master reports:" in prompt.lower():
+            return ""
     if not _query_touches_softdent_signon_or_ui_data(query):
         return ""
+    try:
+        from softdent_master_reports import format_master_reports_hal_reply
+
+        master = format_master_reports_hal_reply()
+    except Exception:
+        master = (
+            "Master SoftDent reports live in softdent_master_reports.json "
+            "(DB first; GUI Excel when DB cannot supply)."
+        )
     if "SOFTDENT_SIGNON_USER" in prompt:
-        return "SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply()
+        return (
+            "SOFTDENT DATA ACCESS: "
+            + format_softdent_data_access_hal_reply()
+            + " "
+            + master
+        )
     return (
         "SOFTDENT SIGN ON + DATA ACCESS: "
         + format_softdent_signon_hal_reply()
+        + " "
+        + master
     )
 
 

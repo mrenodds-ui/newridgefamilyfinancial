@@ -832,6 +832,27 @@ def export_report_by_id(
     if not isinstance(report, dict):
         raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
 
+    # Print Preview–only reports have no Excel file path — do not force Excel automation
+    try:
+        from softdent_master_reports import load_master_reports
+
+        master = ((load_master_reports().get("reports") or {}).get(report_id) or {})
+        if master.get("outputMode") == "print_preview" or (
+            bool(master.get("visualReadRequired")) and not bool(master.get("excelExport"))
+        ):
+            raise RuntimeError(
+                f"{report_id} is SoftDent Print Preview only (no Excel file). "
+                "Open the report in SoftDent, use Print Preview, and visually read the data. "
+                "Do not invent dollars. Prefer Register Excel when it already has the totals."
+            )
+    except ImportError:
+        pass
+    if str(report.get("outputMode") or "").strip().lower() == "print_preview":
+        raise RuntimeError(
+            f"{report_id} is SoftDent Print Preview only (no Excel file). "
+            "Open Print Preview and visually read the figures."
+        )
+
     dest = dest_root or EXPORT_ROOT
     date_mode = str(report.get("date_mode") or "range")
     use_start, use_end = start, end
@@ -994,6 +1015,20 @@ def run_catalog_exports(
         if dry_run:
             entry["ok"] = True
             entry["dryRun"] = True
+            result["reports"][rid] = entry
+            continue
+        # Print Preview–only: do not attempt Excel save automation
+        if str(meta.get("outputMode") or "").strip().lower() == "print_preview" or (
+            meta.get("excelExport") is False and meta.get("visualReadRequired")
+        ):
+            entry["ok"] = True
+            entry["skipped"] = True
+            entry["outputMode"] = "print_preview"
+            entry["visualReadRequired"] = True
+            entry["nextStep"] = (
+                "SoftDent Print Preview only — open report in SoftDent and visually read; "
+                "no Excel file ingest; do not invent dollars."
+            )
             result["reports"][rid] = entry
             continue
         try:
