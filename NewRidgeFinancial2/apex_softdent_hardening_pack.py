@@ -503,10 +503,20 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     return result
 
 
+def display_collections_gap_code(gap: dict[str, Any] | None) -> str:
+    """Visible gap code for tiles — prefer collectionsGapCode when ERA honesty applies."""
+    g = gap if isinstance(gap, dict) else {}
+    collections = str(g.get("collectionsGapCode") or "").strip()
+    outer = str(g.get("gapCode") or GAP_NO_PERIOD).strip()
+    if g.get("registerInsPlanZero") or collections == GAP_ERA_835_REQUIRED:
+        return GAP_ERA_835_REQUIRED
+    return collections or outer or GAP_NO_PERIOD
+
+
 def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, Any]:
     gap = assess_collections_gap(bundle)
     healthy = bool(gap.get("healthy"))
-    code = str(gap.get("gapCode") or GAP_NO_PERIOD)
+    code = display_collections_gap_code(gap)
     period = gap.get("period") or "—"
     if healthy:
         return {
@@ -520,6 +530,20 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
             "gapCode": code,
             "gap": gap,
         }
+    chips = [
+        {"label": "Collections gap", "query": "Why are collections empty?"},
+        {"label": "Refresh SoftDent period", "query": "Refresh SoftDent period imports"},
+        {"label": "Sync imports", "query": "Sync imports and populate the widgets"},
+    ]
+    if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
+        chips = [
+            {"label": "ERA-835 path", "query": "July insurance collections ERA-835"},
+            {"label": "Collections gap", "query": "Why are collections empty?"},
+            {"label": "Sync imports", "query": "Sync imports and populate the widgets"},
+        ]
+    hint = gap.get("fixHint") or FIX_HINT
+    if code == GAP_ERA_835_REQUIRED:
+        hint = str(gap.get("fixHint") or ERA_REGISTER_ZERO_HINT)
     return {
         "id": "softdent-collections-gap",
         "type": "status",
@@ -528,14 +552,10 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "status": "empty",
         "message": f"{code} · {period}",
         "emptyMessage": code,
-        "hint": gap.get("fixHint") or FIX_HINT,
+        "hint": hint,
         "gapCode": code,
         "gap": gap,
-        "halChips": [
-            {"label": "Collections gap", "query": "Why are collections empty?"},
-            {"label": "Refresh SoftDent period", "query": "Refresh SoftDent period imports"},
-            {"label": "Sync imports", "query": "Sync imports and populate the widgets"},
-        ],
+        "halChips": chips,
     }
 
 
@@ -547,13 +567,16 @@ def enrich_widget_with_collections_gap(widget: dict[str, Any], gap: dict[str, An
         return widget
     out = dict(widget)
     if out.get("status") == "empty" or out.get("value") is None:
-        out.setdefault("gapCode", gap.get("gapCode"))
+        display = display_collections_gap_code(gap)
+        out.setdefault("gapCode", display)
         out.setdefault("def", "DEF-001")
         hint = str(out.get("hint") or "")
         fix = str(gap.get("fixHint") or FIX_HINT)
+        if display == GAP_ERA_835_REQUIRED:
+            fix = str(gap.get("fixHint") or ERA_REGISTER_ZERO_HINT)
         if "daysheet" not in hint.lower() and "pending" not in hint.lower():
             out["hint"] = f"{hint} · {fix}".strip(" ·") if hint else fix
-        out.setdefault("emptyMessage", out.get("emptyMessage") or str(gap.get("gapCode")))
+        out.setdefault("emptyMessage", out.get("emptyMessage") or display)
     return out
 
 
@@ -561,13 +584,14 @@ def import_health_collections_alert(bundle: dict[str, Any] | None = None) -> dic
     gap = assess_collections_gap(bundle)
     if gap.get("healthy"):
         return None
+    code = display_collections_gap_code(gap)
     return {
         "id": "def-001-collections-gap",
         "severity": "warn",
-        "message": f"DEF-001 {gap.get('gapCode')}: SoftDent collections/daysheet gap ({gap.get('period') or 'latest'})",
-        "hint": gap.get("fixHint") or FIX_HINT,
+        "message": f"DEF-001 {code}: SoftDent collections/daysheet gap ({gap.get('period') or 'latest'})",
+        "hint": gap.get("fixHint") or (ERA_REGISTER_ZERO_HINT if code == GAP_ERA_835_REQUIRED else FIX_HINT),
         "halQuery": "Why are collections empty?",
-        "gapCode": gap.get("gapCode"),
+        "gapCode": code,
         "pending": gap.get("issues") or [],
     }
 

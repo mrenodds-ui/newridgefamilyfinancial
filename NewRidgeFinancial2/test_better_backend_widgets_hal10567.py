@@ -1,4 +1,4 @@
-"""Moonshot Better Backend Widgets MUST (hal-10571)."""
+"""Moonshot Better Backend Widgets MUST (hal-10572)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from apex_better_backend_widgets_pack import (
 
 class BetterBackendWidgetsMustTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10571")
+        self.assertEqual(BUILD_ID, "hal-10572")
 
     def test_tax_planning_table_empty_honest(self) -> None:
         w = build_tax_planning_data_table({})

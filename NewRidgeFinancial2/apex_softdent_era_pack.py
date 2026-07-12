@@ -192,10 +192,13 @@ def enrich_collections_gap_with_era(
     out["eraPaymentTotal"] = era.get("paymentTotal")
     out["eraClaimCount"] = era.get("claimCount")
     out["eraGapCode"] = GAP_ERA_835_AVAILABLE
-    out["gapCode"] = GAP_ERA_835_AVAILABLE
-    # Keep Register-Ins-Plan-$0 honesty code on collectionsGapCode when set
+    # Moonshot hal-10572 — Register Ins Plan $0: keep visible gapCode as REQUIRED
+    # (ERA aggregate presence is eraGapCode=AVAILABLE / eraAvailable only).
     if out.get("registerInsPlanZero") or str(out.get("collectionsGapCode") or "") == "ERA_835_REQUIRED":
         out["collectionsGapCode"] = "ERA_835_REQUIRED"
+        out["gapCode"] = "ERA_835_REQUIRED"
+    else:
+        out["gapCode"] = GAP_ERA_835_AVAILABLE
     issues = list(out.get("issues") or [])
     issues.insert(
         0,
@@ -206,7 +209,8 @@ def enrich_collections_gap_with_era(
     out["issues"] = issues[:12]
     if out.get("registerInsPlanZero"):
         out["fixHint"] = (
-            "SoftDent Register reports Ins Plan Collections $0.00; proceed with ERA-835 for insurance detail. "
+            "SoftDent Register reports Ins Plan Collections $0.00 is SoftDent truth — "
+            "proceed with ERA-835 for insurance detail. Do not re-export Register hoping Ins Plan > 0. "
             "ERA aggregate is proposal-only — staff post in SoftDent. Empty ≠ $0; no SoftDent write-back."
         )
     else:
@@ -220,8 +224,11 @@ def enrich_collections_gap_with_era(
 
 def format_era_gap_reply(gap: dict[str, Any] | None = None) -> str:
     g = gap or {}
+    code = g.get("collectionsGapCode") or g.get("gapCode")
+    if g.get("registerInsPlanZero"):
+        code = "ERA_835_REQUIRED"
     lines = [
-        f"Collections/ERA status: `{g.get('gapCode')}` — empty ≠ $0; no SoftDent write-back.",
+        f"Collections/ERA status: `{code}` — empty ≠ $0; no SoftDent write-back.",
     ]
     if g.get("eraAvailable"):
         lines.append(
