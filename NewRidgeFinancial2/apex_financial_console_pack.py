@@ -315,6 +315,24 @@ def build_revenue_composition(bundle: dict[str, Any]) -> dict[str, Any]:
         gap_meta = assess_collections_gap(bundle)
     except Exception:
         gap_meta = {}
+    period = gap_meta.get("period") or "current period"
+    gap_code = gap_meta.get("gapCode")
+    inbox = gap_meta.get("exportInbox") if isinstance(gap_meta.get("exportInbox"), dict) else {}
+    inbox_n = int(inbox.get("matchCount") or 0)
+    if gap_code and gap_code != "OK":
+        empty_msg = (
+            f"{gap_code} · {period}: Collections/Daysheet gap — empty ≠ $0. "
+            r"Export SoftDent Collections/Daysheet (Reports → Accounting) to C:\SoftDentReportExports, then Sync."
+        )
+        if inbox_n:
+            empty_msg += f" Inbox has {inbox_n} matching file(s) — try Refresh SoftDent period."
+        else:
+            empty_msg += " Export inbox has no Collections/Daysheet-named files yet."
+    else:
+        empty_msg = (
+            "Collections pending for current period — export SoftDent Collections/Daysheet "
+            "(Reports > Accounting) into C:\\SoftDent\\softdentexportreports or C:\\SoftDentReportExports"
+        )
     return {
         "id": "revenue-composition",
         "type": "revenue-composition",
@@ -324,13 +342,7 @@ def build_revenue_composition(bundle: dict[str, Any]) -> dict[str, Any]:
         "segments": [],
         "slices": [],
         "status": "empty",
-        "emptyMessage": (
-            f"{gap_meta.get('gapCode')}: Collections/Daysheet gap — export SoftDent Collections/Daysheet "
-            "(Reports > Accounting) then Sync"
-            if gap_meta.get("gapCode") and gap_meta.get("gapCode") != "OK"
-            else "Collections pending for current period — export SoftDent Collections/Daysheet "
-            "(Reports > Accounting) into C:\\SoftDent\\softdentexportreports or C:\\SoftDentReportExports"
-        ),
+        "emptyMessage": empty_msg,
         "hint": (gap_meta.get("fixHint") if gap_meta.get("fixHint") else None)
         or split.get("hint")
         or donut.get("hint")
@@ -340,6 +352,7 @@ def build_revenue_composition(bundle: dict[str, Any]) -> dict[str, Any]:
         "collectionsPending": pending or bool(gap_meta.get("collectionsPending")),
         "gapCode": gap_meta.get("gapCode"),
         "def": "DEF-001",
+        "exportInboxMatchCount": inbox_n,
         "aliasIds": ["ins-patient-split", "payer-donut"],
     }
 

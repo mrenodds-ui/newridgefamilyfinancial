@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10563"
+BUILD_ID = "hal-10564"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -1700,6 +1700,16 @@ def _financial_widgets_from_reports(
         if revenue.get("status") == "ok" and revenue.get("size") == "l":
             revenue["size"] = "m"
         widgets.append(revenue)
+        # DEF-001 — surface Collections gap strip on Financial when revenue is empty
+        if revenue.get("status") == "empty":
+            try:
+                from apex_softdent_hardening_pack import collections_gap_widget
+
+                gap_w = collections_gap_widget(bundle)
+                if gap_w.get("status") == "empty":
+                    widgets.insert(0, gap_w)
+            except Exception:
+                pass
     except Exception as exc:  # noqa: BLE001
         # Fallback: legacy mosaic if console pack fails
         widgets.append(
@@ -4224,7 +4234,27 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         result["steps"].append({"step": "practice_exports", "ok": False, "error": str(exc)})
 
-    # 4) Status snapshot
+    # 4) DEF-001 — scan SoftDent export inbox for Collections/Daysheet files (presence only)
+    try:
+        from apex_softdent_hardening_pack import scan_collections_export_inbox
+
+        inbox = scan_collections_export_inbox()
+        result["steps"].append(
+            {
+                "step": "collections_export_inbox",
+                "ok": True,
+                "matchCount": inbox.get("matchCount"),
+                "hasCollectionsLikeFile": inbox.get("hasCollectionsLikeFile"),
+                "hasDaysheetLikeFile": inbox.get("hasDaysheetLikeFile"),
+                "matches": (inbox.get("matches") or [])[:6],
+                "hint": inbox.get("hint"),
+            }
+        )
+        result["exportInbox"] = inbox
+    except Exception as exc:  # noqa: BLE001
+        result["steps"].append({"step": "collections_export_inbox", "ok": False, "error": str(exc)})
+
+    # 5) Status snapshot
     try:
         status_path = _Path(r"C:\SoftDentFinancialExports\softdent_period_export_automation_status.json")
         if status_path.is_file():
@@ -4234,10 +4264,20 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
 
     result["ok"] = any(bool(s.get("ok")) for s in result["steps"])
     result["completedAt"] = _utc_now()
-    result["nextStep"] = (
-        "If July still pending: SoftDent → Reports → Accounting → Register for a Period (07/01/2026–today) "
-        "to C:\\SoftDentReportExports, then run this refresh again."
-    )
+    inbox = result.get("exportInbox") if isinstance(result.get("exportInbox"), dict) else {}
+    if inbox.get("matchCount"):
+        result["nextStep"] = (
+            "Matching Collections/Daysheet/Register file(s) found in export inbox. "
+            "If revenue-composition is still empty, Sync imports again or re-run Refresh SoftDent period. "
+            "Honesty: empty ≠ $0 — do not invent insurance/patient dollars."
+        )
+    else:
+        result["nextStep"] = (
+            "DEF-001: SoftDent → Reports → Accounting → Collections or Daysheet "
+            "(or Register for a Period for the open month) → export CSV to "
+            r"C:\SoftDentReportExports, then Sync / Refresh SoftDent period. "
+            "Empty revenue-composition is not $0."
+        )
     return result
 
 
@@ -5012,9 +5052,14 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             notes.append(reply_txt)
             handled = True
 
-    # --- DEF-001 / Phase I2: why collections empty ---
+    # --- DEF-001 / Phase I2: why collections empty / revenue composition empty ---
     if (not handled) and re.search(
-        r"\b(why .{0,40}collections|collections (empty|pending|missing|gap)|def-?001|daysheet (gap|missing))\b",
+        r"\b("
+        r"why .{0,40}collections|collections (empty|pending|missing|gap)|def-?001|"
+        r"daysheet (gap|missing|empty)|"
+        r"why .{0,40}revenue.?composition|revenue.?composition (empty|pending|missing)|"
+        r"payer mix (empty|missing)|insurance.?patient (empty|pending|missing)"
+        r")\b",
         q,
     ):
         try:
@@ -5034,8 +5079,10 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
                         "tone": "ok",
                     }
                 )
-            if page != "softdent" and not any(a.get("type") == "navigate" for a in actions):
-                actions.append({"type": "navigate", "page": "softdent"})
+            if page not in ("softdent", "financial") and not any(a.get("type") == "navigate" for a in actions):
+                actions.append({"type": "navigate", "page": "financial"})
+            actions.append({"type": "focus_widget", "widgetId": "revenue-composition"})
+            actions.append({"type": "highlight_widget", "widgetId": "revenue-composition", "ms": 4500})
             actions.append({"type": "focus_widget", "widgetId": "softdent-collections-gap"})
             actions.append({"type": "highlight_widget", "widgetId": "softdent-collections-gap", "ms": 4500})
             handled = True

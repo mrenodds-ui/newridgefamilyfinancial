@@ -505,6 +505,41 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "policy:empty-not-zero",
             }
 
+    # DEF-001 — empty revenue-composition / collections ≠ $0 (local, no LLM)
+    if re.search(
+        r"\b("
+        r"revenue.?composition|payer mix|insurance.?patient|"
+        r"collections?\s+(empty|pending|missing|gap)|"
+        r"why .{0,40}(collections|revenue.?composition)|"
+        r"def-?001|daysheet"
+        r")\b",
+        q,
+    ) and re.search(r"\b(empty|pending|missing|gap|\$0|zero|why)\b", q):
+        try:
+            from apex_softdent_hardening_pack import assess_collections_gap, format_collections_gap_reply
+
+            bundle = None
+            try:
+                from apex_backend import _load_reports_and_bundle
+
+                _reports, bundle, _err = _load_reports_and_bundle()
+            except Exception:
+                bundle = None
+            gap = assess_collections_gap(bundle)
+            return {
+                "text": format_collections_gap_reply(gap),
+                "intent": "policy:def-001-collections",
+            }
+        except Exception:
+            return {
+                "text": (
+                    "DEF-001: Empty revenue-composition / Collections is not $0. "
+                    r"Export SoftDent Collections/Daysheet to C:\SoftDentReportExports, then Sync. "
+                    "HAL will not invent insurance or patient dollars."
+                ),
+                "intent": "policy:def-001-collections",
+            }
+
     # Two-sentence HAL summary (constraint-friendly local answer)
     if re.search(r"\bwhat hal does\b", q) or (
         re.search(r"\bsummarize\b", q) and re.search(r"\bhal\b", q) and re.search(r"\b(program|does|do)\b", q)

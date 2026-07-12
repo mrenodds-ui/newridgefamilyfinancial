@@ -7,6 +7,7 @@ share one gap code — never invent collections dollars.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -23,9 +24,108 @@ FIX_HINT = (
     "(or ask HAL: refresh SoftDent period). Empty ≠ $0."
 )
 
+# SoftDent export inbox roots (same family as import_sync upstream)
+_EXPORT_INBOX_CANDIDATES = (
+    r"C:\SoftDentReportExports",
+    r"C:\SoftDent\softdentexportreports",
+    r"C:\SoftDentFinancialExports",
+)
+
+_COLLECTIONS_NAME_RE = re.compile(
+    r"(?i)(collections|daysheet|register.?for.?a.?period|col[_-]?\d{6})",
+)
+
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def scan_collections_export_inbox(*, limit: int = 12) -> dict[str, Any]:
+    """List recent Collections/Daysheet/Register files in SoftDent export folders.
+
+    Does not invent dollars — only filesystem presence for DEF-001 ops guidance.
+    """
+    import os
+    from pathlib import Path
+
+    roots: list[Path] = []
+    for env_key in ("SOFTDENT_REPORT_EXPORTS", "NR2_SOFTDENT_EXPORT_SOURCE"):
+        raw = str(os.environ.get(env_key) or "").strip()
+        if raw:
+            roots.append(Path(raw))
+    for cand in _EXPORT_INBOX_CANDIDATES:
+        roots.append(Path(cand))
+
+    seen: set[str] = set()
+    matches: list[dict[str, Any]] = []
+    scanned_roots: list[str] = []
+    for root in roots:
+        try:
+            resolved = str(root.resolve()) if root.exists() else str(root)
+        except OSError:
+            resolved = str(root)
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if not root.is_dir():
+            scanned_roots.append(f"{resolved} (missing)")
+            continue
+        scanned_roots.append(resolved)
+        try:
+            files = sorted(
+                [p for p in root.iterdir() if p.is_file()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            continue
+        for path in files[:80]:
+            name = path.name
+            if not _COLLECTIONS_NAME_RE.search(name):
+                continue
+            try:
+                st = path.stat()
+                mtime = datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat()
+                size = int(st.st_size)
+            except OSError:
+                mtime = None
+                size = None
+            matches.append(
+                {
+                    "name": name,
+                    "path": str(path),
+                    "mtime": mtime,
+                    "sizeBytes": size,
+                    "kind": (
+                        "collections"
+                        if re.search(r"(?i)collections", name)
+                        else "daysheet"
+                        if re.search(r"(?i)daysheet", name)
+                        else "register"
+                    ),
+                }
+            )
+            if len(matches) >= max(1, int(limit)):
+                break
+        if len(matches) >= max(1, int(limit)):
+            break
+
+    return {
+        "ok": True,
+        "roots": scanned_roots,
+        "matches": matches,
+        "matchCount": len(matches),
+        "hasCollectionsLikeFile": any(m.get("kind") == "collections" for m in matches),
+        "hasDaysheetLikeFile": any(m.get("kind") == "daysheet" for m in matches),
+        "hasRegisterLikeFile": any(m.get("kind") == "register" for m in matches),
+        "hint": (
+            "Export SoftDent Collections/Daysheet (Reports → Accounting) to "
+            r"C:\SoftDentReportExports as CSV, then Sync / Refresh SoftDent period."
+            if not matches
+            else "Matching export file(s) found — Sync / Refresh SoftDent period if dashboard still pending."
+        ),
+        "checkedAt": _utc_now(),
+    }
 
 
 def _latest_period_from_bundle(bundle: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -119,6 +219,7 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     result = {
         "ok": True,
         "gapCode": gap,
+        "collectionsGapCode": gap,  # SoftDent daysheet code before ERA enrich
         "healthy": healthy,
         "period": period,
         "collectionsPending": pending,
@@ -132,6 +233,31 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         "def": "DEF-001",
         "checkedAt": _utc_now(),
     }
+    # Ops inbox scan — file presence only; never invents dollars
+    try:
+        inbox = scan_collections_export_inbox()
+        result["exportInbox"] = {
+            "matchCount": inbox.get("matchCount"),
+            "hasCollectionsLikeFile": inbox.get("hasCollectionsLikeFile"),
+            "hasDaysheetLikeFile": inbox.get("hasDaysheetLikeFile"),
+            "hasRegisterLikeFile": inbox.get("hasRegisterLikeFile"),
+            "matches": (inbox.get("matches") or [])[:6],
+            "hint": inbox.get("hint"),
+            "roots": inbox.get("roots"),
+        }
+        if not healthy and not inbox.get("matchCount"):
+            issues.append("No Collections/Daysheet-named files in SoftDent export inbox.")
+            result["issues"] = issues[:12]
+            result["fixHint"] = (
+                f"{FIX_HINT} Export inbox empty — drop Collections/Daysheet CSV into "
+                r"C:\SoftDentReportExports, then Sync."
+            )
+        elif not healthy and inbox.get("matchCount"):
+            names = ", ".join(str(m.get("name")) for m in (inbox.get("matches") or [])[:3] if m.get("name"))
+            issues.append(f"Export inbox has matching file(s): {names}. Refresh SoftDent period if still pending.")
+            result["issues"] = issues[:12]
+    except Exception:
+        pass
     # Phase S1 — ERA aggregate proposal when collections still empty
     try:
         from apex_softdent_era_pack import enrich_collections_gap_with_era
@@ -221,9 +347,19 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
     issues = g.get("issues") if isinstance(g.get("issues"), list) else []
     lines = [
         f"DEF-001 SoftDent collections gap: `{g.get('gapCode')}` · period `{g.get('period') or '—'}`.",
-        "Honesty: empty Collections is not $0.",
+        "Honesty: empty Collections / revenue-composition is not $0.",
         str(g.get("fixHint") or FIX_HINT),
+        "Ops: SoftDent → Reports → Accounting → Collections or Daysheet (or Register for a Period) "
+        r"→ CSV to C:\SoftDentReportExports → Sync / ask HAL to refresh SoftDent period.",
     ]
+    inbox = g.get("exportInbox") if isinstance(g.get("exportInbox"), dict) else {}
+    if inbox:
+        lines.append(
+            f"Export inbox: {inbox.get('matchCount') or 0} Collections/Daysheet/Register-like file(s)."
+        )
+        hint = inbox.get("hint")
+        if hint:
+            lines.append(str(hint))
     for issue in issues[:5]:
         lines.append(f"- {issue}")
     return "\n".join(lines)

@@ -1,8 +1,9 @@
 {
-  "schemaVersion": "hal-10563",
-  "BUILD_ID": "hal-10563",
-  "assetVersion": "hal-10563",
-  "builtAt": "2026-07-12T13:00:00Z",
-  "notes": "hal-10563: Moonshot cache coherence — IDB BUILD_ID gate, stub fill failure surface, warming poll timeout.",
+  "schemaVersion": "hal-10564",
+  "BUILD_ID": "hal-10564",
+  "assetVersion": "hal-10564",
+  "builtAt": "2026-07-12T13:03:18.263Z",
+  "notes": "Mirror of ../nr2-build.json — served to the UI over the local HTTP server.",
   "staffRenderMode": "apex"
 }
+
