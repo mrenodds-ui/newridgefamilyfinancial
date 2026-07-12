@@ -1421,6 +1421,9 @@ def evaluate_query_sse_frames(
         yield f"event: error\ndata: {json.dumps({'error': 'HAL_UNAVAILABLE_STALE_DATA', 'blocked': True, 'done': True})}\n\n"
         return
 
+    # Phase 3 TTFT: emit typing meta before local policy / Ollama so clients can paint immediately.
+    yield f"event: meta\ndata: {json.dumps({'lane': resolved['lane'], 'model': model, 'done': False, 'status': 'typing', 'ttft': True})}\n\n"
+
     local = try_local_policy_reply(query)
     if local:
         text = local["text"]

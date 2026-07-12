@@ -2290,6 +2290,8 @@ class NR2BottleServer(BottleServer):
             resolved = resolve_lane(lane_key)
             bottle.response.content_type = "text/event-stream; charset=utf-8"
             bottle.response.set_header("Cache-Control", "no-cache")
+            bottle.response.set_header("Connection", "keep-alive")
+            bottle.response.set_header("X-Accel-Buffering", "no")
             bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
             bottle.response.set_header("X-HAL-Lane-Used", str(resolved["lane"]))
 

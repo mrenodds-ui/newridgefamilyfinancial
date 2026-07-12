@@ -5327,62 +5327,99 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         return;
       }
 
-      // 2) Conversational HAL — Phase I0 orchestrator when flagged; else evaluate-query
+      // 2) Conversational HAL — Phase I0 orchestrator when flagged; else stream evaluate-query
       const useOrch = await refreshOrchestratorEnabled();
-      const chatUrl = useOrch ? `${config.apiBase}/hal/orchestrate` : config.halChatEndpoint;
-      const chatBody = useOrch
-        ? {
-            query: q,
-            page: currentPage,
-            shiftContext: {
-              page: currentPage,
-              boardHint: board && board.reply ? board.reply : undefined,
-              honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
-            },
-          }
-        : {
-            query: q,
-            lane: "chat8b",
-            shiftContext: {
-              page: currentPage,
-              boardHint: board && board.reply ? board.reply : undefined,
-              honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
-            },
-          };
-      const res = await apexFetch(chatUrl, {
-        method: "POST",
-        body: JSON.stringify(chatBody),
-      });
-      const data = await res.json().catch(() => ({}));
       let reply = "";
-      if (data && (data.text || data.answer || data.reply)) {
-        reply = String(data.text || data.answer || data.reply);
-        if (useOrch && data.lane) {
-          reply = `${reply}\n\n— lane: ${data.lane}${data.classification && data.classification.reason ? ` (${data.classification.reason})` : ""}${
-            data.structured ? " · structured insight" : data.insightError ? ` · insight: ${data.insightError}` : ""
-          }`;
-        }
-        if (useOrch && data.structured && data.insight && currentPage === "hal") {
+      const streamAbort = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const pendingTextEl = pending && pending.querySelector ? pending.querySelector(".apex-hal-chat__msg-text") : null;
+      if (pendingTextEl) {
+        pendingTextEl.classList.add("apex-hal-chat__msg-text--streaming");
+        pendingTextEl.textContent = "HAL is typing…";
+      }
+
+      if (!useOrch && window.DesktopBridge && typeof DesktopBridge.evaluateHalQuery === "function") {
+        // Phase 3 TTFT: progressive SSE via /api/v1/hal/stream-sse
+        let streamRenderAt = 0;
+        const data = await DesktopBridge.evaluateHalQuery({
+          query: q,
+          lane: "chat8b",
+          stream: true,
+          signal: streamAbort ? streamAbort.signal : undefined,
+          shiftContext: {
+            page: currentPage,
+            boardHint: board && board.reply ? board.reply : undefined,
+            honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
+          },
+          onToken: (partial) => {
+            if (!pendingTextEl || !partial) return;
+            const now = Date.now();
+            if (now - streamRenderAt < 40) {
+              pendingTextEl.textContent = partial;
+              return;
+            }
+            streamRenderAt = now;
+            pendingTextEl.textContent = partial;
+            if (logEl && logEl.scrollTop != null) logEl.scrollTop = logEl.scrollHeight;
+          },
+        });
+        reply = String((data && (data.text || (data.message && data.message.content))) || "");
+        if (!reply && data && data.error) reply = `HAL unavailable: ${data.error}`;
+        if (!reply) reply = "HAL returned no text for that query.";
+      } else {
+        const chatUrl = useOrch ? `${config.apiBase}/hal/orchestrate` : config.halChatEndpoint;
+        const chatBody = useOrch
+          ? {
+              query: q,
+              page: currentPage,
+              shiftContext: {
+                page: currentPage,
+                boardHint: board && board.reply ? board.reply : undefined,
+                honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
+              },
+            }
+          : {
+              query: q,
+              lane: "chat8b",
+              shiftContext: {
+                page: currentPage,
+                boardHint: board && board.reply ? board.reply : undefined,
+                honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
+              },
+            };
+        const res = await apexFetch(chatUrl, {
+          method: "POST",
+          body: JSON.stringify(chatBody),
+          signal: streamAbort ? streamAbort.signal : undefined,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data && (data.text || data.answer || data.reply)) {
+          reply = String(data.text || data.answer || data.reply);
+          if (useOrch && data.lane) {
+            reply = `${reply}\n\n— lane: ${data.lane}${data.classification && data.classification.reason ? ` (${data.classification.reason})` : ""}${
+              data.structured ? " · structured insight" : data.insightError ? ` · insight: ${data.insightError}` : ""
+            }`;
+          }
+          if (useOrch && data.structured && data.insight && currentPage === "hal") {
+            try {
+              sessionStorage.setItem("nr2-apex-last-insight", JSON.stringify(data.insight));
+            } catch (_e) {
+              /* ignore */
+            }
+          }
+        } else if (data && data.error) {
+          const reason = data.reason ? ` (${data.reason})` : "";
+          reply = `HAL unavailable: ${data.error}${reason}`;
+        } else if (!res.ok) {
+          let reason = "";
           try {
-            // Soft-refresh HAL page so ai-insight widget can pick up last insight via session
-            sessionStorage.setItem("nr2-apex-last-insight", JSON.stringify(data.insight));
+            reason = data && data.reason ? ` · ${data.reason}` : "";
           } catch (_e) {
             /* ignore */
           }
+          reply = `HAL request failed (HTTP ${res.status}${reason}). Hard-refresh the page if this persists.`;
+        } else {
+          reply = "HAL returned no text for that query.";
         }
-      } else if (data && data.error) {
-        const reason = data.reason ? ` (${data.reason})` : "";
-        reply = `HAL unavailable: ${data.error}${reason}`;
-      } else if (!res.ok) {
-        let reason = "";
-        try {
-          reason = data && data.reason ? ` · ${data.reason}` : "";
-        } catch (_e) {
-          /* ignore */
-        }
-        reply = `HAL request failed (HTTP ${res.status}${reason}). Hard-refresh the page if this persists.`;
-      } else {
-        reply = "HAL returned no text for that query.";
       }
       // Optional trailing action marker from model (ignored if invents dollars — we only allow known types)
       const marker = reply.match(/<!--HAL_ACTIONS:(\[[\s\S]*?\])-->/);
@@ -5418,6 +5455,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         }
         reply = reply.replace(/<!--HAL_ACTIONS:\[[\s\S]*?\]-->/, "").trim();
       }
+      if (pendingTextEl) pendingTextEl.classList.remove("apex-hal-chat__msg-text--streaming");
       if (pending) {
         finalizeHalPending(pending, reply);
       } else appendHalMessage(logEl, "hal", reply);
@@ -5426,8 +5464,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       }
     } catch (err) {
       const msg = `HAL bridge error: ${String((err && err.message) || err)}`;
-      if (pending) finalizeHalPending(pending, msg);
-      else appendHalMessage(logEl, "hal", msg);
+      if (pending) {
+        const textEl = pending.querySelector && pending.querySelector(".apex-hal-chat__msg-text");
+        if (textEl) textEl.classList.remove("apex-hal-chat__msg-text--streaming");
+        finalizeHalPending(pending, msg);
+      } else appendHalMessage(logEl, "hal", msg);
       if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
         window.ApexHalBrain.setState("idle");
       }

@@ -1232,7 +1232,12 @@ async function handleWorkstationHalSubmit(query) {
     workstationAskLoading = false;
     globalThis._halWorkstationQaMode = false;
     renderWorkstationScreen();
-    requestAnimationFrame(() => typewriteWorkstationHalReply());
+    requestAnimationFrame(() => {
+      const lastHal = [...workstationChatHistory].reverse().find((m) => m && m.role === "hal");
+      // Phase 3: skip fake typewriter when tokens already painted live.
+      if (lastHal && lastHal.streamedLive) return;
+      typewriteWorkstationHalReply();
+    });
   }
 }
 
@@ -4094,6 +4099,7 @@ async function handleHalSubmit(query) {
     ? (partial) => {
         if (!partial) return;
         placeholder.text = partial;
+        placeholder.streamedLive = true;
         if (typeof NR2Tier3 !== "undefined") {
           NR2Tier3.syncPresence({ loading: true, alert: false });
           NR2Tier3.updateStreamCitations(placeholder.tools, placeholder.citationWidgets);
@@ -4964,6 +4970,7 @@ function setInlineHalStreamingText(text) {
     halTypeTimer = null;
   }
   p.classList.remove("message-typing");
+  p.classList.add("hal-msg--streaming");
   p.textContent = text;
   box.scrollTop = box.scrollHeight;
 }
