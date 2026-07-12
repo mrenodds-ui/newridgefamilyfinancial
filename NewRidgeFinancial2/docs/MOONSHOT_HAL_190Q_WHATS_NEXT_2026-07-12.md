@@ -15,54 +15,50 @@
 
 ---
 
-# Verdict  
-Apply **Phase 3: Streaming / TTFT UX Polish**—the latency perception layer that makes the 32B model feel interactive despite 50s+ wall-clock time.
+# Verdict
+Apply **Phase 3 — Streaming TTFT UX Polish** (perceived-latency reduction via progressive SSE token streaming and skeletal UI states) to address the remaining ~53s average response blocker before any full 190Q re-run.
 
-## 0. Operator Intent (verbatim)  
-`next`
+## 0. Operator Intent (verbatim)
+next
 
-## 1. Recommended NEXT  
-**Phase 3: Streaming / TTFT UX Polish**  
-- **Why now:** Phase 1 fixed response constraints and Phase 2 added structured deliverables, but the gateway still buffers the entire 32B completion before emitting SSE frames. Staff perceive the 50s+ wait as “frozen.” Phase 3 unblocks the UX without buying new hardware.  
-- **Effort:** Medium (3–4 days). Server-side token streaming is already partially wired; needs progressive client render, abort handling, and a “thinking…” heartbeat.  
-- **REAL files:**  
-  - `NewRidgeFinancial2/nr2_hal_gateway.py` – `evaluate_query_stream()`: enable Ollama `stream=true` end-to-end, flush tokens every 2–4 chars, add `X-Accel-Buffering: no` header, implement `abort_id` query param to cancel pending generation.  
-  - `NewRidgeFinancial2/site/hal-core.js` – `streamChat()`: switch from fetch-then-render to `EventSource` incremental DOM insertion, add early skeleton loader (blinking cursor/“HAL is typing”), and token-per-50ms throttle to avoid layout thrash.  
-  - `NewRidgeFinancial2/site/hal-agent.js` – `finalizeReply()`: accept partial JSON fragments during streaming, render numbered steps as they arrive (progressive disclosure), and surface an abort button if TTFT >2s.  
-  - `NewRidgeFinancial2/site/app.js` – Add `hal-streaming` CSS state class for opacity fade-in per token chunk; keep scroll-anchor on user viewport.  
-- **Validation gate:**  
-  1. TTFT ≤2s perceived (first token hits browser ≤2s after POST).  
-  2. Smooth 20–30 tok/s visible render without jank on R9700.  
-  3. Abort button cancels Ollama request within 500ms and halts SSE without page reload.  
-  4. 190Q subset (n=20) still passes quality/read-only gates from Phase 1+2 (no regression).
+## 1. Recommended NEXT (name, why now, effort, REAL files, validation gate)
+**Name:** Phase 3 — Streaming TTFT UX Polish (Perceived Latency Mitigation)  
+**Why now:** Phase 1 (constraints) and Phase 2 (structured deliverables) are live; the 190Q report identified ~53s average latency as the primary UX blocker for staff workflows. True token-by-token streaming with skeletal loading states will drop TTFT under 2s—required for production release—without loading a second 8B model on the R9700.  
+**Effort:** Medium (3–4 days) — modifies gateway streaming loop and client progressive renderer.  
+**REAL files:**  
+- `NewRidgeFinancial2/nr2_hal_gateway.py` — refactor `evaluate_query_stream` to emit SSE frames on first token arrival (not after full generation); add `stream_options` seeding for deterministic low-latency path.  
+- `NewRidgeFinancial2/site/hal-core.js` — add `startStreamingState()` skeletal placeholder and `appendTokenChunk()` progressive markdown renderer.  
+- `NewRidgeFinancial2/site/hal-agent.js` — manage streaming lifecycle flags (`isStreaming`, `abortController`).  
+- `NewRidgeFinancial2/site/app.js` — TTFT timer, early bubble render, shimmer CSS hooks.  
+**Validation gate:** TTFT <2s measured from POST to first SSE `data:` frame on hal-local:32b Q4_K_M; 190Q subset (n=20) shows >80% “perceived latency acceptable” with no regression in Phase 2 numbered-list formatting.
 
-## 2. Runner-ups  
-- **Phase 4: CARC Whitelist Hardening** – Currently HAL refuses unknown CARC codes (good) but offers sparse briefs for *known* codes. Defer until Phase 3 lands because structured deliverables (Phase 2) already reduced CARC hallucinations; staff can wait 1 week for deeper ERA-835 lookup integration.  
-- **Live 190Q Full Re-run** – Do not schedule until Phase 3 is applied; current latency makes the re-run painful to execute and masks UX fixes in the metrics.  
-- **Second 8B Model Side-car** – Hardware budget and context-window sharding complexity exceed “local additive fix” mandate; revisit only if Phase 3 fails to meet TTFT target.
+## 2. Runner-ups (2–3, why not now)
+1. **Live Full 190Q Re-run** — *Why not now:* Measurement should follow the latency fix; re-running now would only re-confirm the 53s baseline. Execute after Phase 3 to validate the complete stack.  
+2. **Phase 4 — CARC Whitelist Hardening** — *Why not now:* Current unknown-code refusal works (Phase 1); sparse known-code briefs are lower leverage than TTFT. Batch with future ERA 835 depth work.  
+3. **REC-010 Voice Context Carry Optimization** — *Why not now:* Enhancement territory; 190Q blocker is text latency, not voice continuity.
 
-## 3. What NOT to redo  
-- Do not re-implement Phase 1 constraints (sentence caps, empty≠$0) or Phase 2 JSON schema deliverables—they are shipped.  
-- Do not prioritize GitHub/PR automation over local HAL gateway fixes; this package stays in-repo.  
-- Do not add SoftDent write-back or QB ledger invention; policy remains read-only/consent-based.
+## 3. What NOT to redo
+- Do **not** re-apply Phase 1 sentence-cap/plain-language filters or Phase 2 JSON schema/deliverable logic—already live at `325d24a` and `f225b2b`.  
+- Do **not** implement SoftDent write-back or QB ledger invention—policy remains read-only/empty≠$0 per Phase 1.  
+- Do **not** load a sidecar 8B model beside hal-local:32b—R9700 VRAM optimization prefers single-model streaming tuning.
 
-## 4. Acceptance Criteria  
-- [ ] `curl -N` against `/evaluate_query_stream` shows first byte in <2s for a 10-token warm prompt.  
-- [ ] Browser DevTools Network panel: TTFB ≤2s, subsequent chunks every 50–150ms.  
-- [ ] Client renders partial markdown (numbered steps) incrementally without duplicate keys.  
-- [ ] Abort signal propagates to Ollama `/api/generate` cancellation (no zombie processes on R9700).  
-- [ ] `scripts/run_moonshot_hal_190q_eval.py` subset (n=50) shows quality ≥85%, read-only OK = 100%, deliverable rate ≥70% (maintain Phase 1+2 gains).
+## 4. Acceptance criteria
+- TTFT (time to first token) ≤2 seconds on R9700 + hal-local:32b Q4_K_M for short asks (≤2 sentences).  
+- UI renders skeletal/shimmer state immediately on submit, then progressive text (no “blank wait → full dump”).  
+- Deliverable queries (steps/caution) still render numbered lists correctly while streaming.  
+- 190Q subset (n=20) re-run shows ≥80% “perceived latency acceptable” rubric scores.  
+- No increase in false-positive CARC invention or PHI leakage vs. Phase 1 baseline.
 
-## 5. Executive Summary  
-- **Phase 1+2 stabilized correctness; Phase 3 stabilizes perceived speed.**  
-- **Goal:** Make 32B feel like 8B by streaming tokens and rendering steps as they arrive.  
-- **Risk:** Low—additive to existing SSE path, rollback is header/config toggle.  
-- **Leverage:** High—53s average drops to <2s perceived TTFT, unlocking staff adoption.  
-- **Blocker cleared:** Phase 2 SSE aggregation already buffers deliverables; Phase 3 just flushes earlier.
+## 5. Executive Summary (5 bullets)
+- Phase 1 and 2 addressed quality and formatting; latency (~53s avg) is the last major 190Q blocker.  
+- Phase 3 switches SSE from aggregate-then-emit (Phase 2) to true token streaming with skeletal UI masking.  
+- Targets TTFT <2s without adding a second model, optimizing hal-local:32b Q4_K_M on R9700.  
+- Client-side progressive rendering ensures staff see immediate feedback, improving perceived performance even if total generation time remains >10s for complex queries.  
+- Validation via TTFT timer and 190Q subset precedes the optional full 190Q re-run.
 
-## 6. Approval Checklist  
-- [ ] Operator confirms “proceed Phase 3” or equivalent.  
-- [ ] R9700 Ollama `stream=true` verified working on `hal-local:32b` (no JSON mode conflict).  
-- [ ] UI/UX window allocated for `hal-core.js` progressive render refactor (3 days).  
-- [ ] Abort/cancellation test case added to `test_nr2_hal_local_policy.py`.  
-- [ ] No new external dependencies (keep vanilla JS/EventSource).
+## 6. Approval checklist
+- [ ] Confirm Ollama version on R9700 supports low-latency `stream` with `options` seed/temperature for deterministic TTFT.  
+- [ ] Verify client SSE parser handles partial markdown chunks without breaking Phase 2 numbered-list aggregation.  
+- [ ] Staging environment available for TTFT measurement (stopwatch + network tab).  
+- [ ] Operator accepts 3–4 day effort window vs. immediate measurement.  
+- [ ] Backup commit `f225b2b` tagged before gateway streaming loop modifications.
