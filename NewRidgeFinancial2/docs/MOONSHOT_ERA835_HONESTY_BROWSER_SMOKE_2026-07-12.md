@@ -44,3 +44,20 @@ Also released 50 `read_only`-caused quarantine items back to inbox and restarted
 - Gap strip **message** still shows `ERA_835_AVAILABLE · 2026-07` (outer `gapCode`); nested `collectionsGapCode` is `ERA_835_REQUIRED` — honesty path is correct.
 - Browser HAL POST `/api/apex/hal/orchestrate` returns `browser_mutation_forbidden` without mutation token; gap API + local policy cover the phrase gate.
 - SoftDent desktop remained logged in; no Register re-export run during smoke.
+
+## Re-verify (operator proceed 2026-07-12 ~22:25Z)
+
+Live re-check after Moonshot consult `MOONSHOT_WHATS_NEXT_AFTER_ERA835_HONESTY_2026-07-12.md` → **proceed**.
+
+| Gate | Result |
+|------|--------|
+| `/nr2-build.json` / UI badge **hal-10571** | **PASS** |
+| `GET /api/apex/hal/collections-gap` → `collectionsGapCode=ERA_835_REQUIRED`, `registerInsPlanZero=true`, `collectionsExportRequired=false` | **PASS** |
+| Honesty `fixHint` + issues “do not re-export Register hoping Ins Plan > 0” | **PASS** |
+| HAL chips = Collections gap / Refresh SoftDent period / Sync imports (no Re-export Register) | **PASS** |
+| Financial gap strip visible in browser (Ins Plan $0 → ERA-835) | **PASS** |
+| Widgets NICE: financial=36 (pareto), ar=13 (pareto), claims=18 (timeline-lanes), taxes=9 (tax-calendar), softdent=18 (ledger) | **PASS** |
+| TXN ledger `softdent-transaction-ledger` status=ok (25 rows in widget payload) | **PASS** |
+| `stub_era835_ingestion_path()` → `mode=stub`, `readOnly=true`, `existingRoots=[]` | **PASS** |
+
+No SoftDent Register re-export. Quarantine UI may still list pre-hotfix `read_only` failures; watcher fix is in `2439197`.
