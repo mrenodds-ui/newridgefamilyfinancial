@@ -128,6 +128,227 @@ def build_tax_calendar(reports: dict[str, Any], bundle: dict[str, Any]) -> list[
     return widgets
 
 
+def build_taxes_planning(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Taxes · Planning subpage (hal-10562) — quarantined planning KPIs off main cockpit."""
+    del reports
+    widgets: list[dict[str, Any]] = [
+        _nav(
+            "Taxes · Planning",
+            "Owner / K-1 / quarterly / federal+KS estimates",
+            "Hash #taxes/planning · planning only · CPA review · never invent dollars.",
+        )
+    ]
+    try:
+        from tax_engine import build_tax_plan_from_bundle
+
+        plan = build_tax_plan_from_bundle(bundle) or {}
+    except Exception as exc:  # noqa: BLE001
+        widgets.append(
+            {
+                "id": "tax-planning-engine-error",
+                "type": "status",
+                "label": "Tax engine",
+                "size": "strip",
+                "status": "empty",
+                "message": "Unavailable",
+                "hint": str(exc)[:160],
+            }
+        )
+        return widgets
+
+    has_book = bool(plan.get("hasBookData"))
+    period = str(plan.get("periodLabel") or "")
+
+    def _pm(value: Any) -> float | None:
+        return _parse_money(value)
+
+    def _money(wid: str, label: str, value: float | None, hint: str) -> dict[str, Any]:
+        if value is None:
+            return {
+                "id": wid,
+                "type": "kpi",
+                "label": label,
+                "value": None,
+                "status": "empty",
+                "emptyMessage": "No data",
+                "hint": hint,
+                "collapseWhenEmpty": True,
+                "omitWhenEmpty": False,  # subpage may show honest empties as chips
+                "size": "s",
+                "keepEmpty": True,
+            }
+        return {
+            "id": wid,
+            "type": "kpi",
+            "label": label,
+            "value": float(value),
+            "unit": "money",
+            "hint": hint,
+            "size": "s",
+        }
+
+    if has_book:
+        widgets.append(
+            _money(
+                "tax-book-net",
+                "Book Net Income",
+                _pm(plan.get("bookNetIncome")),
+                f"From QuickBooks P&L import ({period or 'period unknown'}).",
+            )
+        )
+        widgets.append(
+            _money(
+                "tax-est-owner",
+                "Est. Owner Tax (planning)",
+                _pm(plan.get("totalOwnerTaxEstimate")),
+                str(plan.get("disclaimer") or "Planning estimate — CPA review required."),
+            )
+        )
+        widgets.append(
+            _money(
+                "tax-k1-ordinary",
+                "Est. K-1 Ordinary",
+                _pm(plan.get("k1Ordinary")),
+                "Derived from book net after book-to-tax bridge lines.",
+            )
+        )
+        widgets.append(
+            {
+                "id": "tax-modeled-w2",
+                "type": "kpi",
+                "label": "Modeled Officer W-2",
+                "value": None,
+                "status": "empty",
+                "emptyMessage": "No payroll W-2",
+                "hint": "No payroll W-2 import — planning salary scenarios are notes only (not shown as $).",
+                "collapseWhenEmpty": True,
+                "keepEmpty": True,
+                "size": "s",
+            }
+        )
+        quarterly = plan.get("quarterlyEstimates") if isinstance(plan.get("quarterlyEstimates"), list) else []
+        if quarterly:
+            q1 = quarterly[0] if isinstance(quarterly[0], dict) else {}
+            fed = _pm(q1.get("federal"))
+            ks = _pm(q1.get("kansas"))
+            if fed is not None and ks is not None:
+                widgets.append(
+                    _money(
+                        "tax-q-estimate",
+                        "Quarterly Estimate (Q1 split)",
+                        fed + ks,
+                        f"Federal {fed:,.0f} + Kansas {ks:,.0f} · planning only.",
+                    )
+                )
+        fed = _pm(plan.get("federalTaxEstimate"))
+        ks = _pm(plan.get("kansasTaxEstimate"))
+        if fed is not None:
+            widgets.append(
+                _money(
+                    "tax-federal-est",
+                    "Federal Tax (planning)",
+                    fed,
+                    str(plan.get("federalRateLabel") or "Federal planning rate") + " — CPA review required.",
+                )
+            )
+        if ks is not None:
+            widgets.append(
+                _money(
+                    "tax-kansas-est",
+                    "Kansas Tax (planning)",
+                    ks,
+                    str(plan.get("kansasRateLabel") or "Kansas planning rate") + " — CPA review required.",
+                )
+            )
+        try:
+            from apex_backend import (
+                build_ebitda_scrubber,
+                build_ebitda_waterfall,
+                build_filing_workflow_widget,
+                build_scenario_manager_widget,
+                build_variance_alert_widget,
+                build_workpaper_widget,
+                _visual_boost_taxes,
+            )
+
+            widgets.append(build_ebitda_waterfall(bundle))
+            widgets.append(build_ebitda_scrubber(bundle))
+            widgets.append(build_scenario_manager_widget())
+            widgets.append(build_filing_workflow_widget())
+            widgets.append(build_workpaper_widget(plan, bundle))
+            widgets.append(build_variance_alert_widget(bundle))
+            widgets.extend(_visual_boost_taxes(plan))
+        except Exception:
+            pass
+        scenarios = plan.get("compScenarios") if isinstance(plan.get("compScenarios"), list) else []
+        if scenarios:
+            notes = [
+                str(s.get("note") or "").strip()
+                for s in scenarios
+                if isinstance(s, dict) and str(s.get("note") or "").strip()
+            ]
+            widgets.append(
+                {
+                    "id": "tax-comp-note",
+                    "type": "status",
+                    "label": "Compensation scenario",
+                    "size": "strip",
+                    "status": "ok",
+                    "message": f"{len(scenarios)} planning scenarios",
+                    "hint": (notes[0] if notes else "Document with BLS/MGMA · CPA review.")
+                    + " — salary dollars not shown (not from payroll import).",
+                }
+            )
+    else:
+        for wid, label, hint in (
+            ("tax-book-net", "Book Net Income", "QuickBooks P&L net income not imported — tax KPIs stay empty."),
+            ("tax-est-owner", "Est. Owner Tax (planning)", "S-corp estimates require QuickBooks book net income."),
+            ("tax-k1-ordinary", "Est. K-1 Ordinary", "Import QuickBooks P&L to unlock book-to-tax planning KPIs."),
+            ("tax-modeled-w2", "Modeled Officer W-2", "No book income — W-2 scenarios not shown (would invent dollars)."),
+            ("tax-q-estimate", "Quarterly Estimate", "Estimated tax quarters appear after QB net income is available."),
+        ):
+            widgets.append(
+                {
+                    "id": wid,
+                    "type": "kpi",
+                    "label": label,
+                    "value": None,
+                    "status": "empty",
+                    "emptyMessage": "No data",
+                    "hint": hint,
+                    "collapseWhenEmpty": True,
+                    "keepEmpty": True,
+                    "size": "s",
+                }
+            )
+        widgets.append(
+            {
+                "id": "tax-comp-note",
+                "type": "status",
+                "label": "Compensation scenario",
+                "size": "strip",
+                "status": "empty",
+                "message": "Awaiting book data",
+                "hint": "S-corp reasonable-comp scenarios unlock after QuickBooks P&L import.",
+            }
+        )
+
+    if plan.get("disclaimer"):
+        widgets.insert(
+            1,
+            {
+                "id": "tax-disclaimer",
+                "type": "status",
+                "label": "TAX PLANNING — CPA REVIEW",
+                "size": "strip",
+                "status": "ok",
+                "message": "PLANNING ESTIMATES ONLY — NOT FOR FILING",
+                "hint": str(plan.get("disclaimer")),
+            },
+        )
+    return widgets
+
+
 def build_tax_workpapers(reports: dict[str, Any], bundle: dict[str, Any], **kwargs: Any) -> list[dict[str, Any]]:
     """Reuse financial workpaper scrubber pattern under taxes."""
     from apex_subpages_pack import build_financial_workpapers
@@ -727,9 +948,10 @@ def build_om_operatory_subpage(reports: dict[str, Any], bundle: dict[str, Any]) 
 
 
 WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
-    ("taxes", "entities"): build_tax_entities,
-    ("taxes", "calendar"): build_tax_calendar,
-    ("taxes", "workpapers"): build_tax_workpapers,
+        ("taxes", "entities"): build_tax_entities,
+        ("taxes", "calendar"): build_tax_calendar,
+        ("taxes", "planning"): build_taxes_planning,
+        ("taxes", "workpapers"): build_tax_workpapers,
     ("softdent", "register"): build_softdent_register,
     ("softdent", "schedule"): build_softdent_schedule,
     ("quickbooks", "coa"): build_qb_coa,

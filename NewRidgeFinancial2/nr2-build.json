@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10561",
-  "BUILD_ID": "hal-10561",
-  "assetVersion": "hal-10561",
-  "builtAt": "2026-07-11T23:45:00Z",
-  "notes": "hal-10561: Moonshot zero-scroll — hard widget height caps, no HAL sole-l, Claims Top 5 + kanban subpage, compact density page lock.",
+  "schemaVersion": "hal-10562",
+  "BUILD_ID": "hal-10562",
+  "assetVersion": "hal-10562",
+  "builtAt": "2026-07-12T12:45:00Z",
+  "notes": "hal-10562: Moonshot KPI density — ≤4 KPIs above fold, empty omit, Taxes planning subpage, SoftDent/QB/AR/OM vital strips.",
   "staffRenderMode": "apex"
 }

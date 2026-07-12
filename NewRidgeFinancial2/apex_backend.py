@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10561"
+BUILD_ID = "hal-10562"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -135,6 +135,7 @@ def _spark_from_rows(rows: list[dict[str, Any]], field: str) -> list[float]:
 
 
 def _empty_kpi(widget_id: str, label: str, *, hint: str) -> dict[str, Any]:
+    """Honest empty KPI — collapse/omit by density contract (never $0 pad)."""
     return {
         "id": widget_id,
         "type": "kpi",
@@ -143,6 +144,9 @@ def _empty_kpi(widget_id: str, label: str, *, hint: str) -> dict[str, Any]:
         "status": "empty",
         "emptyMessage": "No data",
         "hint": hint,
+        "collapseWhenEmpty": True,
+        "omitWhenEmpty": True,
+        "size": "s",
     }
 
 
@@ -1714,63 +1718,71 @@ def _financial_widgets_from_reports(
         widgets.extend(_visual_boost_financial(reports, bundle))
         widgets.append(_ar_aging_widget())
 
-    # Level 5 — Secondary KPIs (compact size s, packed as one row)
+    # Level 5 — Secondary ops packed into ONE micro-strip (≤4 pills; KPI density)
     ct = reports.get("claimTracking") if isinstance(reports.get("claimTracking"), dict) else {}
     total_claims = ct.get("totalClaims")
-    claims_kpi = _count_kpi(
-        "claims-total",
-        "Claims (import)",
-        total_claims if isinstance(total_claims, int) else None,
-        hint=str(ct.get("followUpHint") or "From SoftDent claims import.")
-        if isinstance(total_claims, int)
-        else "Claims import not available.",
-        delta_label=f"Denied {ct.get('deniedCount', 0)}" if isinstance(total_claims, int) else None,
-    )
-    claims_kpi["size"] = "s"
-    widgets.append(claims_kpi)
     denied = ct.get("deniedCount")
-    if isinstance(denied, int):
-        widgets.append(
-            {
-                "id": "claims-denied",
-                "type": "kpi",
-                "label": "Denied Claims",
-                "value": denied,
-                "unit": "count",
-                "size": "s",
-                "deltaLabel": f"Aging 30+ {ct.get('deniedAgingPast30Days', 0)}",
-                "hint": "Counts from SoftDent claims import — not invented.",
-            }
-        )
-
     tp = reports.get("treatmentPlans") if isinstance(reports.get("treatmentPlans"), dict) else {}
     ca = reports.get("caseAcceptance") if isinstance(reports.get("caseAcceptance"), dict) else {}
-    widgets.append(
-        {
-            "id": "treatment-plans",
-            "type": "kpi",
-            "label": "Treatment Plans",
-            "value": tp.get("rowCount") if tp.get("available") else None,
-            "unit": "count",
-            "size": "s",
-            "status": "empty" if not tp.get("available") else "ok",
-            "emptyMessage": "No data",
-            "hint": "Practice export treatment plans." if tp.get("available") else "Treatment plan export not loaded.",
-        }
-    )
-    widgets.append(
-        {
-            "id": "case-acceptance",
-            "type": "kpi",
-            "label": "Case Acceptance Rows",
-            "value": ca.get("rowCount") if ca.get("available") else None,
-            "unit": "count",
-            "size": "s",
-            "status": "empty" if not ca.get("available") else "ok",
-            "emptyMessage": "No data",
-            "hint": "Practice export case acceptance." if ca.get("available") else "Case acceptance export not loaded.",
-        }
-    )
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        widgets.append(
+            build_kpi_micro_strip(
+                "financial-ops-strip",
+                "Ops Snapshot",
+                [
+                    {
+                        "id": "claims-total",
+                        "label": "Claims",
+                        "value": total_claims if isinstance(total_claims, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(total_claims, int),
+                        "sub": f"Denied {ct.get('deniedCount', 0)}"
+                        if isinstance(total_claims, int)
+                        else "",
+                    },
+                    {
+                        "id": "claims-denied",
+                        "label": "Denied",
+                        "value": denied if isinstance(denied, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(denied, int),
+                        "sub": f"Aging 30+ {ct.get('deniedAgingPast30Days', 0)}"
+                        if isinstance(denied, int)
+                        else "",
+                    },
+                    {
+                        "id": "treatment-plans",
+                        "label": "Tx Plans",
+                        "value": tp.get("rowCount") if tp.get("available") else None,
+                        "format": "count",
+                        "empty": not tp.get("available"),
+                    },
+                    {
+                        "id": "case-acceptance",
+                        "label": "Case Acc.",
+                        "value": ca.get("rowCount") if ca.get("available") else None,
+                        "format": "count",
+                        "empty": not ca.get("available"),
+                    },
+                ],
+                hint="Packed ops KPIs · import-backed only · empty stays empty.",
+                nav_hash="financial/workpapers",
+            )
+        )
+    except Exception:
+        # Fallback: at most one claims KPI (density budget)
+        if isinstance(total_claims, int):
+            claims_kpi = _count_kpi(
+                "claims-total",
+                "Claims (import)",
+                total_claims,
+                hint=str(ct.get("followUpHint") or "From SoftDent claims import."),
+                delta_label=f"Denied {ct.get('deniedCount', 0)}",
+            )
+            claims_kpi["size"] = "s"
+            widgets.append(claims_kpi)
 
     note = reports.get("collectionsNote")
     if note:
@@ -1895,6 +1907,7 @@ def _financial_widgets_from_reports(
 
 
 def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Taxes cockpit (hal-10562): ≤1 status + bridge chart; planning on #taxes/planning."""
     del reports  # reserved for future tax fields on financial_reports
     widgets: list[dict[str, Any]] = []
     plan: dict[str, Any] = {}
@@ -1916,134 +1929,93 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
 
     has_book = bool(plan.get("hasBookData"))
     period = str(plan.get("periodLabel") or "")
+    book_net = _parse_money(plan.get("bookNetIncome")) if has_book else None
 
-    if has_book:
+    widgets.insert(0, build_period_scrubber(bundle, page="taxes"))
+
+    # Single Tax Year Status chip (not a warehouse of planning KPIs)
+    if has_book and book_net is not None:
+        status_msg = f"Book connected · ${book_net:,.0f}"
+        if period:
+            status_msg = f"{period} · {status_msg}"
         widgets.append(
-            _money_kpi(
-                "tax-book-net",
-                "Book Net Income",
-                _parse_money(plan.get("bookNetIncome")),
-                hint=f"From QuickBooks P&L import ({period or 'period unknown'}).",
-                delta_label=period or None,
-            )
+            {
+                **_status_widget(
+                    "tax-year-status",
+                    "Tax Year Status",
+                    message=status_msg,
+                    hint="QB P&L book income linked · planning estimates on #taxes/planning (CPA review).",
+                    status="ok",
+                ),
+                "size": "strip",
+                "compact": True,
+                "navHash": "taxes/planning",
+                "kpiBudgetExempt": True,
+            }
         )
+    elif has_book:
         widgets.append(
-            _money_kpi(
-                "tax-est-owner",
-                "Est. Owner Tax (planning)",
-                _parse_money(plan.get("totalOwnerTaxEstimate")),
-                hint=str(plan.get("disclaimer") or "Planning estimate from book income — CPA review required."),
-            )
+            {
+                **_status_widget(
+                    "tax-year-status",
+                    "Tax Year Status",
+                    message="Book linked · net income field missing",
+                    hint="P&L present but book net not parsed — open #taxes/planning.",
+                    status="empty",
+                ),
+                "size": "strip",
+                "compact": True,
+                "navHash": "taxes/planning",
+            }
         )
-        widgets.append(
-            _money_kpi(
-                "tax-k1-ordinary",
-                "Est. K-1 Ordinary",
-                _parse_money(plan.get("k1Ordinary")),
-                hint="Derived from book net after book-to-tax bridge lines.",
-            )
-        )
-        # Do not surface modeledOfficerW2 as money — tax_engine clamps to planning
-        # floors (e.g. $180k) that are not payroll imports.
-        widgets.append(
-            _empty_kpi(
-                "tax-modeled-w2",
-                "Modeled Officer W-2",
-                hint="No payroll W-2 import — planning salary scenarios are notes only (not shown as $).",
-            )
-        )
-        quarterly = plan.get("quarterlyEstimates") if isinstance(plan.get("quarterlyEstimates"), list) else []
-        if quarterly:
-            q1 = quarterly[0] if isinstance(quarterly[0], dict) else {}
-            fed = _parse_money(q1.get("federal"))
-            ks = _parse_money(q1.get("kansas"))
-            if fed is not None and ks is not None:
-                widgets.append(
-                    _money_kpi(
-                        "tax-q-estimate",
-                        "Quarterly Estimate (Q1 split)",
-                        fed + ks,
-                        hint=f"Federal {fed:,.0f} + Kansas {ks:,.0f} · planning only.",
-                        delta_label=str(q1.get("due") or "Q1"),
-                    )
-                )
-            else:
-                widgets.append(
-                    _empty_kpi(
-                        "tax-q-estimate",
-                        "Quarterly Estimate",
-                        hint="Quarterly estimate lines missing from tax plan.",
-                    )
-                )
     else:
         widgets.append(
-            _empty_kpi(
-                "tax-book-net",
-                "Book Net Income",
-                hint="QuickBooks P&L net income not imported — tax KPIs stay empty.",
-            )
+            {
+                **_status_widget(
+                    "tax-year-status",
+                    "Tax Year Status",
+                    message="Book not connected",
+                    hint="Import QuickBooks P&L — tax KPIs stay empty (not $0). Planning on #taxes/planning.",
+                    status="empty",
+                ),
+                "size": "strip",
+                "compact": True,
+                "navHash": "taxes/planning",
+            }
         )
-        widgets.append(
-            _empty_kpi(
-                "tax-est-owner",
-                "Est. Owner Tax (planning)",
-                hint="S-corp estimates require QuickBooks book net income.",
-            )
-        )
-        widgets.append(
-            _empty_kpi(
-                "tax-k1-ordinary",
-                "Est. K-1 Ordinary",
-                hint="Import QuickBooks P&L to unlock book-to-tax planning KPIs.",
-            )
-        )
-        widgets.append(
-            _empty_kpi(
-                "tax-modeled-w2",
-                "Modeled Officer W-2",
-                hint="No book income — W-2 scenarios not shown (would invent dollars).",
-            )
-        )
-        widgets.append(
-            _empty_kpi(
-                "tax-q-estimate",
-                "Quarterly Estimate",
-                hint="Estimated tax quarters appear after QB net income is available.",
-            )
-        )
+
+    widgets.append(
+        {
+            **_status_widget(
+                "tax-open-planning",
+                "Tax Planning",
+                message="Open planning estimates",
+                hint="Owner tax / K-1 / quarterly / federal+KS · #taxes/planning · CPA review required.",
+            ),
+            "size": "strip",
+            "compact": True,
+            "navHash": "taxes/planning",
+            "halAction": "open_taxes_planning",
+            "halActionLabel": "Open Planning",
+        }
+    )
 
     if plan.get("disclaimer"):
         widgets.append(
-            _status_widget(
-                "tax-disclaimer",
-                "TAX PLANNING — CPA REVIEW",
-                message="PLANNING ESTIMATES ONLY — NOT FOR FILING",
-                hint=str(plan.get("disclaimer")),
-            )
+            {
+                **_status_widget(
+                    "tax-disclaimer",
+                    "TAX PLANNING — CPA REVIEW",
+                    message="PLANNING ESTIMATES ONLY — NOT FOR FILING",
+                    hint=str(plan.get("disclaimer")),
+                ),
+                "size": "strip",
+                "compact": True,
+            }
         )
-    # Federal + Kansas split (planning)
+
+    # Book-to-tax bridge chart only on main (not individual planning KPIs)
     if has_book:
-        fed = _parse_money(plan.get("federalTaxEstimate"))
-        ks = _parse_money(plan.get("kansasTaxEstimate"))
-        if fed is not None:
-            widgets.append(
-                _money_kpi(
-                    "tax-federal-est",
-                    "Federal Tax (planning)",
-                    fed,
-                    hint=str(plan.get("federalRateLabel") or "Federal planning rate") + " — CPA review required.",
-                )
-            )
-        if ks is not None:
-            widgets.append(
-                _money_kpi(
-                    "tax-kansas-est",
-                    "Kansas Tax (planning)",
-                    ks,
-                    hint=str(plan.get("kansasRateLabel") or "Kansas planning rate") + " — CPA review required.",
-                )
-            )
-        # Book-to-tax bridge as waterfall when lines present
         bridge = plan.get("bridgeLines") if isinstance(plan.get("bridgeLines"), list) else []
         bridge_steps = []
         for line in bridge:
@@ -2074,54 +2046,21 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
                     "id": "tax-bridge-waterfall",
                     "type": "waterfall",
                     "label": "Book-to-Tax Bridge (planning)",
-                    "size": "xl",
+                    "size": "l",
                     "steps": bridge_steps,
                     "status": "ok",
                     "hint": "Planning bridge from tax_engine — citations are import sources, not invented dollars.",
                     "showCitations": True,
                 }
             )
-        widgets.append(build_ebitda_waterfall(bundle))
-        widgets.append(build_ebitda_scrubber(bundle))
-        widgets.append(build_scenario_manager_widget())
-        widgets.append(build_filing_workflow_widget())
-        widgets.append(build_workpaper_widget(plan, bundle))
-        widgets.append(build_variance_alert_widget(bundle))
+
     try:
         from apex_cpa_pack import build_c0_import_guidance
 
         widgets.append(build_c0_import_guidance(bundle))
     except Exception:
         pass
-    scenarios = plan.get("compScenarios") if isinstance(plan.get("compScenarios"), list) else []
-    if scenarios and has_book:
-        notes = [
-            str(s.get("note") or "").strip()
-            for s in scenarios
-            if isinstance(s, dict) and str(s.get("note") or "").strip()
-        ]
-        widgets.append(
-            _status_widget(
-                "tax-comp-note",
-                "Compensation scenario",
-                message=f"{len(scenarios)} planning scenarios",
-                hint=(notes[0] if notes else "Document with BLS/MGMA · CPA review.")
-                + " — salary dollars not shown (not from payroll import).",
-            )
-        )
-    elif not has_book:
-        widgets.append(
-            _status_widget(
-                "tax-comp-note",
-                "Compensation scenario",
-                message="Awaiting book data",
-                hint="S-corp reasonable-comp scenarios unlock after QuickBooks P&L import.",
-                status="empty",
-            )
-        )
 
-    widgets.extend(_visual_boost_taxes(plan))
-    widgets.insert(0, build_period_scrubber(bundle, page="taxes"))
     try:
         from apex_bar_trend_page_org_pack import build_ebitda_variance_bar
         from apex_financial_console_pack import collapse_empty_large
@@ -2143,16 +2082,6 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     period = str((latest or {}).get("period") or (latest or {}).get("year_month") or "")
 
     prod = _parse_money((latest or {}).get("production")) if latest else None
-    widgets.append(
-        _money_kpi(
-            "sd-production",
-            "Production",
-            prod,
-            hint="SoftDent dashboard import." if prod is not None else "SoftDent dashboard production not loaded.",
-            delta_label=period or None,
-            sparkline=_spark_from_rows(rows, "production") or None,
-        )
-    )
 
     coll = None
     coll_gap: dict[str, Any] = {}
@@ -2162,58 +2091,17 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         elif "collections" in latest:
             coll = _parse_money(latest.get("collections"))
     try:
-        from apex_softdent_hardening_pack import assess_collections_gap, enrich_widget_with_collections_gap
+        from apex_softdent_hardening_pack import assess_collections_gap
 
         coll_gap = assess_collections_gap(bundle)
     except Exception:
         coll_gap = {}
-    coll_widget = _money_kpi(
-        "sd-collections",
-        "Collections",
-        coll,
-        hint=(
-            "SoftDent dashboard collections."
-            if coll is not None
-            else "Collections pending for latest SoftDent period — not $0. Import SoftDent collections/daysheet."
-        ),
-        delta_label=period or None,
-    )
-    if coll is None and coll_gap:
-        coll_widget = enrich_widget_with_collections_gap(coll_widget, coll_gap)
-    widgets.append(coll_widget)
 
     np_rows = _section_rows(bundle, "softdent", "newPatients")
     np_latest = _latest_period_row(np_rows)
     np_count = None
-    np_period = ""
     if np_latest:
         np_count = _parse_int(np_latest.get("Count") or np_latest.get("count") or np_latest.get("NewPatients"))
-        np_period = str(np_latest.get("Period") or np_latest.get("period") or "")
-    widgets.append(
-        _count_kpi(
-            "sd-new-patients",
-            "New Patients",
-            np_count,
-            hint="SoftDent new-patients export." if np_count is not None else "New-patients export not loaded.",
-            delta_label=np_period or None,
-        )
-    )
-
-    providers = {
-        str(r.get("provider") or r.get("Provider") or "").strip()
-        for r in rows
-        if str(r.get("provider") or r.get("Provider") or "").strip()
-    }
-    widgets.append(
-        _count_kpi(
-            "sd-providers",
-            "Providers (dashboard)",
-            len(providers) if providers else None,
-            hint="Distinct provider labels in SoftDent dashboard rows."
-            if providers
-            else "No provider labels in SoftDent dashboard import.",
-        )
-    )
 
     op = _section(bundle, "softdent", "operatory")
     chairs = op.get("operatoryChairs") if isinstance(op.get("operatoryChairs"), list) else []
@@ -2221,40 +2109,93 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     for chair in chairs:
         if isinstance(chair, dict) and isinstance(chair.get("slots"), list):
             slot_count += len(chair["slots"])
-    if chairs:
+
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        coll_sub = period or ""
+        if coll is None and coll_gap:
+            coll_sub = str(coll_gap.get("hint") or "Pending — sync Daysheet")[:40]
         widgets.append(
-            _count_kpi(
-                "sd-operatory-chairs",
-                "Operatory Chairs",
-                len(chairs),
-                hint=f"{slot_count} scheduled slot(s) in SoftDent operatory import.",
-                delta_label=f"{slot_count} slots",
+            build_kpi_micro_strip(
+                "sd-vitals-strip",
+                "SoftDent Vitals",
+                [
+                    {
+                        "id": "sd-production",
+                        "label": "Production",
+                        "value": prod,
+                        "format": "money",
+                        "tone": "success",
+                        "empty": prod is None,
+                        "sub": period or "",
+                    },
+                    {
+                        "id": "sd-collections",
+                        "label": "Collections",
+                        "value": coll,
+                        "format": "money",
+                        "tone": "warning" if coll is None else "success",
+                        "empty": coll is None,
+                        "pending": coll is None,
+                        "sub": coll_sub,
+                    },
+                    {
+                        "id": "sd-new-patients",
+                        "label": "New Patients",
+                        "value": np_count,
+                        "format": "count",
+                        "empty": np_count is None,
+                    },
+                    {
+                        "id": "sd-operatory-chairs",
+                        "label": "Chairs",
+                        "value": len(chairs) if chairs else None,
+                        "format": "count",
+                        "empty": not chairs,
+                        "sub": f"{slot_count} slots" if chairs else "",
+                    },
+                ],
+                hint="SoftDent dashboard vitals · empty stays empty · detail on charts below.",
             )
         )
+    except Exception:
         widgets.append(
-            _status_widget(
-                "sd-operatory-status",
-                "Operatory / daysheet",
-                message="Schedule loaded",
-                hint=f"{len(chairs)} chair(s), {slot_count} slot(s) from SoftDent operatory import.",
+            _money_kpi(
+                "sd-production",
+                "Production",
+                prod,
+                hint="SoftDent dashboard import." if prod is not None else "SoftDent dashboard production not loaded.",
+                delta_label=period or None,
             )
+        )
+
+    if chairs:
+        widgets.append(
+            {
+                **_status_widget(
+                    "sd-operatory-status",
+                    "Operatory / daysheet",
+                    message="Schedule loaded",
+                    hint=f"{len(chairs)} chair(s), {slot_count} slot(s) from SoftDent operatory import.",
+                ),
+                "size": "strip",
+                "compact": True,
+            }
         )
     else:
         widgets.append(
-            _empty_kpi(
-                "sd-operatory-chairs",
-                "Operatory Chairs",
-                hint="SoftDent operatory_schedule.json with operatoryChairs[] not present — run practice exports / Sensei schedule sync.",
-            )
-        )
-        widgets.append(
-            _status_widget(
-                "sd-operatory-status",
-                "Operatory / daysheet",
-                message="No schedule",
-                hint="Need operatoryChairs[] in SoftDent operatory import (not a row table).",
-                status="empty",
-            )
+            {
+                **_status_widget(
+                    "sd-operatory-status",
+                    "Operatory / daysheet",
+                    message="No schedule",
+                    hint="Need operatoryChairs[] in SoftDent operatory import (not a row table).",
+                    status="empty",
+                ),
+                "size": "strip",
+                "compact": True,
+            }
         )
 
     prod_vals = _spark_from_rows(rows, "production")
@@ -2299,15 +2240,6 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
 
-    procedures = _section_rows(bundle, "softdent", "procedures")
-    widgets.append(
-        _count_kpi(
-            "sd-procedures",
-            "Procedure Rows",
-            len(procedures) if procedures else None,
-            hint="SoftDent procedures import." if procedures else "Procedures export not loaded.",
-        )
-    )
     widgets.append(build_provider_horizontal_bars(bundle))
     try:
         from apex_softdent_hardening_pack import collections_gap_widget
@@ -2371,23 +2303,44 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
                 break
 
     if not pl_rows and not rev_rows and not exp_rows:
-        widgets.append(
-            _empty_kpi("qb-net-income", "Net Income", hint="QuickBooks not imported — P&L / revenue missing.")
-        )
-        widgets.append(
-            _empty_kpi("qb-revenue", "Revenue", hint="Import QuickBooks revenue or P&L to populate.")
-        )
-        widgets.append(
-            _empty_kpi("qb-expenses", "Total Expenses", hint="Import QuickBooks expenses or P&L to populate.")
-        )
-        widgets.append(
-            _status_widget(
-                "qb-pl-summary",
-                "P&L Summary",
-                message="Not imported",
-                hint="Drop QuickBooks exports into the document inbox and sync.",
-                status="empty",
+        try:
+            from apex_compact_pages_pack import build_kpi_micro_strip
+
+            widgets.append(
+                build_kpi_micro_strip(
+                    "qb-vitals-strip",
+                    "QuickBooks Vitals",
+                    [
+                        {"id": "qb-net-income", "label": "Net Income", "value": None, "format": "money", "empty": True},
+                        {"id": "qb-revenue", "label": "Revenue", "value": None, "format": "money", "empty": True},
+                        {"id": "qb-expenses", "label": "Expenses", "value": None, "format": "money", "empty": True},
+                        {
+                            "id": "qb-categories",
+                            "label": "Categories",
+                            "value": None,
+                            "format": "count",
+                            "empty": True,
+                        },
+                    ],
+                    hint="QuickBooks not imported — empty stays empty (not $0).",
+                )
             )
+        except Exception:
+            widgets.append(
+                _empty_kpi("qb-net-income", "Net Income", hint="QuickBooks not imported — P&L / revenue missing.")
+            )
+        widgets.append(
+            {
+                **_status_widget(
+                    "qb-pl-summary",
+                    "P&L Summary",
+                    message="Not imported",
+                    hint="Drop QuickBooks exports into the document inbox and sync.",
+                    status="empty",
+                ),
+                "size": "strip",
+                "compact": True,
+            }
         )
         widgets.append(
             _empty_chart(
@@ -2423,33 +2376,59 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
             pass
         return widgets
 
-    widgets.append(
-        _money_kpi(
-            "qb-net-income",
-            "Net Income",
-            net,
-            hint="QuickBooks P&L import." if net is not None else "Net income field missing on P&L row.",
-            delta_label=period or None,
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        widgets.append(
+            build_kpi_micro_strip(
+                "qb-vitals-strip",
+                "QuickBooks Vitals",
+                [
+                    {
+                        "id": "qb-net-income",
+                        "label": "Net Income",
+                        "value": net,
+                        "format": "money",
+                        "empty": net is None,
+                        "sub": period or "",
+                    },
+                    {
+                        "id": "qb-revenue",
+                        "label": "Revenue",
+                        "value": revenue,
+                        "format": "money",
+                        "empty": revenue is None,
+                        "sub": period or "",
+                    },
+                    {
+                        "id": "qb-expenses",
+                        "label": "Expenses",
+                        "value": expenses,
+                        "format": "money",
+                        "empty": expenses is None,
+                        "sub": period or "",
+                    },
+                    {
+                        "id": "qb-categories",
+                        "label": "Categories",
+                        "value": len(cat_rows) if cat_rows else None,
+                        "format": "count",
+                        "empty": not cat_rows,
+                    },
+                ],
+                hint="QuickBooks P&L vitals · import-backed only.",
+            )
         )
-    )
-    widgets.append(
-        _money_kpi(
-            "qb-revenue",
-            "Revenue",
-            revenue,
-            hint="QuickBooks revenue / P&L import." if revenue is not None else "Revenue field missing.",
-            delta_label=period or None,
+    except Exception:
+        widgets.append(
+            _money_kpi(
+                "qb-net-income",
+                "Net Income",
+                net,
+                hint="QuickBooks P&L import." if net is not None else "Net income field missing on P&L row.",
+                delta_label=period or None,
+            )
         )
-    )
-    widgets.append(
-        _money_kpi(
-            "qb-expenses",
-            "Total Expenses",
-            expenses,
-            hint="QuickBooks expenses / P&L import." if expenses is not None else "Expense field missing.",
-            delta_label=period or None,
-        )
-    )
 
     summary_bits = []
     if period:
@@ -2457,12 +2436,16 @@ def _quickbooks_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
     if net is not None:
         summary_bits.append(f"Net ${net:,.0f}")
     widgets.append(
-        _status_widget(
-            "qb-pl-summary",
-            "P&L Summary",
-            message=" · ".join(summary_bits) if summary_bits else "Loaded",
-            hint="Read-only QuickBooks import snapshot — not a live ledger.",
-        )
+        {
+            **_status_widget(
+                "qb-pl-summary",
+                "P&L Summary",
+                message=" · ".join(summary_bits) if summary_bits else "Loaded",
+                hint="Read-only QuickBooks import snapshot — not a live ledger.",
+            ),
+            "size": "strip",
+            "compact": True,
+        }
     )
 
     series = []
@@ -2550,39 +2533,9 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
                 any_amt = True
         ar_total = total if any_amt else None
 
-    widgets.append(
-        _money_kpi(
-            "ar-outstanding",
-            "A/R Outstanding",
-            float(ar_total) if isinstance(ar_total, (int, float)) else None,
-            hint=str(ar.get("followUpHint") or "From SoftDent A/R import.")
-            if isinstance(ar_total, (int, float))
-            else "A/R aging import not available.",
-        )
-    )
-
     ninety_pct = ar.get("ninetyPlusPct")
-    if isinstance(ninety_pct, (int, float)) and isinstance(ar_total, (int, float)):
-        widgets.append(
-            {
-                "id": "ar-90-plus-pct",
-                "type": "kpi",
-                "label": "90+ % of A/R",
-                "value": float(ninety_pct),
-                "unit": "percent",
-                "hint": f"90+ outstanding ${float(ar.get('ninetyPlusOutstanding') or 0):,.2f}.",
-            }
-        )
-    else:
-        widgets.append(
-            _empty_kpi(
-                "ar-90-plus-pct",
-                "90+ % of A/R",
-                hint="90+ share appears after SoftDent A/R aging import.",
-            )
-        )
 
-    series = []
+    series: list[dict[str, Any]] = []
     for b in buckets:
         if not isinstance(b, dict):
             continue
@@ -2595,6 +2548,74 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
             amt = _parse_money(row.get("Balance") or row.get("Outstanding") or row.get("Amount"))
             if label and amt is not None:
                 series.append({"label": label, "value": float(amt)})
+
+    lag: dict[str, Any] = {}
+    try:
+        from nr2_analytics import collection_lag
+
+        lag = collection_lag(bundle=bundle) or {}
+    except Exception:
+        lag = {}
+
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        ninety_val = float(ninety_pct) if isinstance(ninety_pct, (int, float)) else None
+        lag_val = float(lag["avgLagDays"]) if lag.get("hasData") and lag.get("avgLagDays") is not None else None
+        widgets.append(
+            build_kpi_micro_strip(
+                "ar-vitals-strip",
+                "A/R Vitals",
+                [
+                    {
+                        "id": "ar-outstanding",
+                        "label": "Outstanding",
+                        "value": float(ar_total) if isinstance(ar_total, (int, float)) else None,
+                        "format": "money",
+                        "empty": not isinstance(ar_total, (int, float)),
+                    },
+                    {
+                        "id": "ar-90-plus-pct",
+                        "label": "90+ %",
+                        "value": ninety_val,
+                        "format": "pct",
+                        "empty": ninety_val is None,
+                        "tone": "danger" if ninety_val is not None and ninety_val > 20 else "",
+                        "sub": f"${float(ar.get('ninetyPlusOutstanding') or 0):,.0f}"
+                        if ninety_val is not None
+                        else "",
+                    },
+                    {
+                        "id": "ar-collection-lag",
+                        "label": "Coll. Lag",
+                        "value": lag_val,
+                        "format": "count",
+                        "empty": lag_val is None,
+                        "sub": "days" if lag_val is not None else "",
+                    },
+                    {
+                        "id": "ar-bucket-count",
+                        "label": "Buckets",
+                        "value": len(series) if series else None,
+                        "format": "count",
+                        "empty": not series,
+                    },
+                ],
+                hint="A/R vitals from SoftDent aging · empty stays empty.",
+                nav_hash="ar/collections",
+            )
+        )
+    except Exception:
+        widgets.append(
+            _money_kpi(
+                "ar-outstanding",
+                "A/R Outstanding",
+                float(ar_total) if isinstance(ar_total, (int, float)) else None,
+                hint=str(ar.get("followUpHint") or "From SoftDent A/R import.")
+                if isinstance(ar_total, (int, float))
+                else "A/R aging import not available.",
+            )
+        )
 
     if series and any(s["value"] for s in series):
         widgets.append(
@@ -2616,43 +2637,18 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
             )
         )
 
-    lag: dict[str, Any] = {}
-    try:
-        from nr2_analytics import collection_lag
-
-        lag = collection_lag(bundle=bundle) or {}
-    except Exception:
-        lag = {}
-
-    if lag.get("hasData") and lag.get("avgLagDays") is not None:
-        widgets.append(
-            {
-                "id": "ar-collection-lag",
-                "type": "kpi",
-                "label": "Collection Lag (days)",
-                "value": float(lag["avgLagDays"]),
-                "unit": "count",
-                "deltaLabel": str(lag.get("caption") or ""),
-                "hint": str(lag.get("summary") or lag.get("source") or "Collection lag from import."),
-            }
-        )
-    else:
-        widgets.append(
-            _empty_kpi(
-                "ar-collection-lag",
-                "Collection Lag (days)",
-                hint=str(lag.get("summary") or "Collection lag appears when A/R aging or collections export is loaded."),
-            )
-        )
-
     widgets.append(
-        _status_widget(
-            "ar-follow-up",
-            "A/R Follow-up",
-            message="Guidance",
-            hint=str(ar.get("followUpHint") or "Prioritize 90+ balances when aging import is present."),
-            status="ok" if isinstance(ar_total, (int, float)) else "empty",
-        )
+        {
+            **_status_widget(
+                "ar-follow-up",
+                "A/R Follow-up",
+                message="Guidance",
+                hint=str(ar.get("followUpHint") or "Prioritize 90+ balances when aging import is present."),
+                status="ok" if isinstance(ar_total, (int, float)) else "empty",
+            ),
+            "size": "strip",
+            "compact": True,
+        }
     )
 
     widgets[0:0] = _visual_boost_ar(reports, bundle)
@@ -3203,52 +3199,67 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
     stale = summary.get("stale")
     total = summary.get("total")
 
-    if isinstance(connected, int):
-        widgets.append(
-            _count_kpi(
-                "om-connected",
-                "Imports Connected",
-                connected,
-                hint="Import diagnostics: datasets with connected status.",
-                delta_label=f"of {total}" if isinstance(total, int) else None,
-            )
-        )
-    else:
-        widgets.append(
-            _empty_kpi(
-                "om-connected",
-                "Imports Connected",
-                hint="Import diagnostics unavailable — refresh imports.",
-            )
-        )
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
 
-    widgets.append(
-        _count_kpi(
-            "om-partial",
-            "Partial Imports",
-            partial if isinstance(partial, int) else None,
-            hint="Datasets present but incomplete." if isinstance(partial, int) else "Diagnostics missing.",
-        )
-    )
-    widgets.append(
-        _count_kpi(
-            "om-missing",
-            "Missing Imports",
-            missing if isinstance(missing, int) else None,
-            hint="Required/optional datasets not found in cache."
-            if isinstance(missing, int)
-            else "Diagnostics missing.",
-        )
-    )
-    if isinstance(stale, int):
         widgets.append(
-            _count_kpi(
-                "om-stale",
-                "Stale Imports",
-                stale,
-                hint="Datasets older than freshness window.",
+            build_kpi_micro_strip(
+                "om-vitals-strip",
+                "Import Vitals",
+                [
+                    {
+                        "id": "om-connected",
+                        "label": "Connected",
+                        "value": connected if isinstance(connected, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(connected, int),
+                        "sub": f"of {total}" if isinstance(total, int) else "",
+                    },
+                    {
+                        "id": "om-partial",
+                        "label": "Partial",
+                        "value": partial if isinstance(partial, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(partial, int),
+                    },
+                    {
+                        "id": "om-missing",
+                        "label": "Missing",
+                        "value": missing if isinstance(missing, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(missing, int),
+                    },
+                    {
+                        "id": "om-stale",
+                        "label": "Stale",
+                        "value": stale if isinstance(stale, int) else None,
+                        "format": "count",
+                        "empty": not isinstance(stale, int),
+                    },
+                ],
+                hint="Import diagnostics vitals · empty stays empty.",
+                nav_hash="office-manager/tasks",
             )
         )
+    except Exception:
+        if isinstance(connected, int):
+            widgets.append(
+                _count_kpi(
+                    "om-connected",
+                    "Imports Connected",
+                    connected,
+                    hint="Import diagnostics: datasets with connected status.",
+                    delta_label=f"of {total}" if isinstance(total, int) else None,
+                )
+            )
+        else:
+            widgets.append(
+                _empty_kpi(
+                    "om-connected",
+                    "Imports Connected",
+                    hint="Import diagnostics unavailable — refresh imports.",
+                )
+            )
 
     # Readiness posture
     if isinstance(connected, int) and isinstance(total, int) and total > 0:
@@ -3270,13 +3281,17 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         posture_status = "empty"
 
     widgets.append(
-        _status_widget(
-            "om-readiness",
-            "Import Readiness",
-            message=posture,
-            hint=posture_hint,
-            status=posture_status,
-        )
+        {
+            **_status_widget(
+                "om-readiness",
+                "Import Readiness",
+                message=posture,
+                hint=posture_hint,
+                status=posture_status,
+            ),
+            "size": "strip",
+            "compact": True,
+        }
     )
 
     # Top priorities from diagnostic gaps
@@ -3583,6 +3598,7 @@ def build_apex_widgets(
         "forecast",
         "periods",
         "calendar",
+        "planning",
         "tasks",
         "attachments",
         "history",
@@ -3710,19 +3726,21 @@ def build_apex_widgets(
         except Exception:
             pass
 
-    # Moonshot compact + zero-scroll (hal-10561): collapse, viewport, hard height/row caps
+    # Moonshot compact + zero-scroll (hal-10561) + KPI density (hal-10562)
     try:
         from apex_compact_pages_pack import (
             apply_collapse_empty_all,
+            apply_kpi_density_contract,
             apply_zero_scroll_contract,
             normalize_first_viewport,
         )
 
         widgets = apply_collapse_empty_all(widgets if isinstance(widgets, list) else [])
+        widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
             widgets = normalize_first_viewport(widgets, page=pid)
         widgets = apply_zero_scroll_contract(widgets, page=pid, sub=sub_key or "")
-        source_note += " +compact+zero-scroll"
+        source_note += " +compact+zero-scroll+kpi-density"
     except Exception:
         pass
 

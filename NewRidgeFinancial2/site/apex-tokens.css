@@ -659,6 +659,17 @@ body {
   font-weight: 500;
 }
 
+/* Moonshot KPI density (hal-10562): omit empty KPI mosaic slots */
+.apex-inst--kpi-omitted,
+.apex-inst.is-kpi-empty[hidden] {
+  display: none !important;
+}
+
+.apex-inst--kpi-over-budget {
+  opacity: 0.85;
+  max-height: 120px;
+}
+
 .apex-kpi-delta {
   font-size: 11px;
   color: var(--apex-cyan);

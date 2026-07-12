@@ -1,11 +1,13 @@
-"""NR2 Apex compact + zero-scroll professional pages — Moonshot helpers.
+"""NR2 Apex compact + zero-scroll + KPI density — Moonshot helpers.
 
 CONSULTS:
 - MOONSHOT_COMPACT_PAGES_DETAILED_PLAN_2026-07-11.md
 - MOONSHOT_ZERO_SCROLL_WIDGETS_CONSULT_2026-07-11.md (hal-10561)
+- MOONSHOT_KPI_DENSITY_FIX_CONSULT_2026-07-12.md (hal-10562)
 
 Claims: pipeline summary on main + kanban subpage (zero-scroll: no board on Overview).
 HAL: no sole-l exemption — chat is a capped tile; full audit via Full Log strip.
+KPI: ≤4 visible KPI tiles above fold; empty KPIs omit (never $0 pad).
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ MAX_SECONDARY_PX = 240
 MAX_MICRO_PX = 120
 TABLE_ROW_CAP = 5
 TABLE_ROW_CAP_HARD = 7
+# Moonshot KPI density (hal-10562)
+KPI_BUDGET_ABOVE_FOLD = 4
 
 
 def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
@@ -40,6 +44,156 @@ def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
     out["collapseWhenEmpty"] = True
     out["size"] = "strip"
     out["compact"] = True
+    return out
+
+
+def is_empty_kpi(widget: dict[str, Any]) -> bool:
+    """True when a KPI tile has no import-backed value (empty ≠ $0)."""
+    if not isinstance(widget, dict):
+        return False
+    if str(widget.get("type") or "") != "kpi":
+        return False
+    if widget.get("keepEmpty") is True:
+        return False
+    status = str(widget.get("status") or "").lower()
+    if status in {"empty", "awaiting-migration"}:
+        return True
+    return widget.get("value") is None or widget.get("value") == ""
+
+
+def build_kpi_micro_strip(
+    strip_id: str,
+    label: str,
+    pills: list[dict[str, Any]],
+    *,
+    hint: str = "",
+    nav_hash: str | None = None,
+    max_pills: int = KPI_BUDGET_ABOVE_FOLD,
+) -> dict[str, Any]:
+    """Pack up to 4 KPI pills into one executive-strip (counts as 1 mosaic slot)."""
+    cleaned: list[dict[str, Any]] = []
+    for p in pills[: max(1, int(max_pills))]:
+        if not isinstance(p, dict):
+            continue
+        pill = dict(p)
+        if "empty" not in pill:
+            pill["empty"] = pill.get("value") is None or pill.get("value") == ""
+        cleaned.append(pill)
+    any_data = any(not p.get("empty") for p in cleaned)
+    out: dict[str, Any] = {
+        "id": strip_id,
+        "type": "executive-strip",
+        "label": label,
+        "size": "strip",
+        "compact": True,
+        "maxHeight": MAX_MICRO_PX,
+        "pills": cleaned,
+        "status": "ok" if any_data else "empty",
+        "emptyMessage": "Import data pending — empty stays empty (not $0).",
+        "hint": hint or "KPI micro-strip · ≤4 pills · never invents dollars.",
+        "collapseWhenEmpty": True,
+        "kpiBudgetExempt": True,
+        "aliasIds": [str(p.get("id") or "") for p in cleaned if p.get("id")],
+    }
+    if nav_hash:
+        out["navHash"] = nav_hash
+    return out
+
+
+def pending_modules_chip(omitted_labels: list[str]) -> dict[str, Any] | None:
+    """One composite status chip for multiple omitted empty KPIs."""
+    labels = [str(x).strip() for x in omitted_labels if str(x).strip()]
+    if not labels:
+        return None
+    n = len(labels)
+    preview = ", ".join(labels[:3])
+    if n > 3:
+        preview += f" +{n - 3} more"
+    return {
+        "id": "kpi-data-pending",
+        "type": "status",
+        "label": "Data Pending",
+        "size": "strip",
+        "compact": True,
+        "maxHeight": MAX_MICRO_PX,
+        "status": "empty",
+        "message": f"{n} module(s) pending",
+        "hint": f"Omitted empty KPIs (not $0): {preview}",
+        "collapseWhenEmpty": True,
+        "kpiBudgetExempt": True,
+    }
+
+
+def apply_kpi_density_contract(
+    widgets: list[Any],
+    *,
+    page: str = "",
+    sub: str = "",
+    budget: int = KPI_BUDGET_ABOVE_FOLD,
+) -> list[Any]:
+    """Omit empty KPIs; enforce ≤budget standalone KPI tiles on parent pages.
+
+    Executive-strips / command strips are exempt (already packed). Subpages keep
+    planning detail KPIs. Honesty: never pad empty with $0.
+    """
+    if not isinstance(widgets, list):
+        return widgets
+    is_subpage = bool(str(sub or "").strip())
+    cap = max(0, int(budget))
+    out: list[Any] = []
+    omitted: list[str] = []
+    kpi_kept = 0
+    pending_inserted = False
+
+    for w in widgets:
+        if not isinstance(w, dict):
+            out.append(w)
+            continue
+        item = dict(w)
+        wtype = str(item.get("type") or "")
+        if wtype == "kpi" and is_empty_kpi(item) and item.get("omitWhenEmpty") is not False:
+            # Default: omit empty KPI mosaic slots
+            if item.get("omitWhenEmpty") is True or item.get("collapseWhenEmpty") is not False:
+                omitted.append(str(item.get("label") or item.get("id") or "KPI"))
+                continue
+        if wtype == "kpi" and not is_subpage and item.get("kpiBudgetExempt") is not True:
+            if kpi_kept >= cap:
+                if is_empty_kpi(item):
+                    omitted.append(str(item.get("label") or item.get("id") or "KPI"))
+                    continue
+                # Excess populated KPIs → demote to micro strip chip (still visible, not tile flood)
+                item["size"] = "xs"
+                item["compact"] = True
+                item["maxHeight"] = MAX_MICRO_PX
+                item["kpiOverBudget"] = True
+                item["hint"] = (
+                    str(item.get("hint") or "")
+                    + f" · Over KPI budget (>{cap}); demoted micro."
+                ).strip(" ·")
+            else:
+                kpi_kept += 1
+                item.setdefault("size", "s")
+                item.setdefault("maxHeight", MAX_MICRO_PX)
+        item["kpiDensity"] = True
+        out.append(item)
+
+    if omitted and not is_subpage and not pending_inserted:
+        chip = pending_modules_chip(omitted)
+        if chip:
+            # Place after first strip/command if present, else at front
+            insert_at = 0
+            for i, x in enumerate(out):
+                if isinstance(x, dict) and str(x.get("type") or "") in {
+                    "financial-command-strip",
+                    "executive-strip",
+                    "claims-executive-strip",
+                    "import-freshness",
+                    "import-health",
+                    "status",
+                }:
+                    insert_at = i + 1
+            out.insert(insert_at, chip)
+
     return out
 
 

@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10561 (Moonshot zero-scroll + compact pages)
+ * Build: hal-10562 (Moonshot KPI density + zero-scroll + compact pages)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10561";
+  const ASSET_V = "hal-10562";
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const DENSITY_KEY = "nr2-apex-density";
@@ -396,6 +396,20 @@
       if (this.spec.status === "awaiting-migration" || this.spec.status === "empty") {
         el.classList.add("apex-widget--status");
         el.dataset.empty = "true";
+      }
+      // Moonshot KPI density: hide omitted / collapsed empty KPI tiles (never $0 pad)
+      if (
+        this.type === "kpi" &&
+        (this.spec.omitWhenEmpty === true || this.spec.collapseWhenEmpty === true) &&
+        (this.spec.status === "empty" || this.spec.value == null || this.spec.value === "") &&
+        this.spec.keepEmpty !== true
+      ) {
+        el.classList.add("apex-inst--kpi-omitted", "is-kpi-empty");
+        el.hidden = true;
+        el.setAttribute("aria-hidden", "true");
+      }
+      if (this.spec.kpiOverBudget === true) {
+        el.classList.add("apex-inst--kpi-over-budget");
       }
       el.innerHTML = this.getTemplate();
       this.element = el;
@@ -6142,6 +6156,28 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         if (density !== "compact") return { ok: true, skipped: "comfortable" };
         const delta = Math.abs(document.documentElement.scrollHeight - window.innerHeight);
         return { ok: delta <= 5, delta, scrollHeight: document.documentElement.scrollHeight, innerHeight: window.innerHeight };
+      };
+      window.__nr2AssertKpiBudget = function assertKpiBudget(max) {
+        const cap = Number.isFinite(Number(max)) ? Number(max) : 4;
+        const stage = document.getElementById("apex-stage") || document.querySelector(".apex-stage");
+        if (!stage) return { ok: false, error: "no-stage", count: 0, max: cap };
+        const kpis = Array.from(stage.querySelectorAll(".apex-inst")).filter((el) => {
+          if (el.hidden || el.getAttribute("aria-hidden") === "true") return false;
+          if (el.classList.contains("apex-inst--kpi-omitted") || el.classList.contains("is-kpi-empty")) return false;
+          const wid = el.dataset.widgetId || "";
+          // Count standalone KPI tiles only (not executive-strip / status)
+          return el.classList.contains("apex-inst--s") || el.classList.contains("apex-inst--m") || el.classList.contains("apex-inst--xs")
+            ? Boolean(el.querySelector(".apex-kpi-value")) && !el.classList.contains("apex-inst--strip")
+            : false;
+        });
+        // Prefer instruments that look like KPI cards
+        const kpiCards = Array.from(stage.querySelectorAll("article.apex-inst")).filter((el) => {
+          if (el.hidden) return false;
+          if (el.classList.contains("apex-inst--strip") || el.classList.contains("apex-inst--kpi-omitted")) return false;
+          return Boolean(el.querySelector(".apex-kpi-value")) && !el.querySelector("canvas");
+        });
+        const count = kpiCards.length;
+        return { ok: count <= cap, count, max: cap, ids: kpiCards.map((el) => el.dataset.widgetId || "") };
       };
     }
     if (densityBtn) {

@@ -5,14 +5,18 @@ from __future__ import annotations
 import unittest
 
 from apex_compact_pages_pack import (
+    KPI_BUDGET_ABOVE_FOLD,
     MAX_PRIMARY_PX,
     MAX_SECONDARY_PX,
     TABLE_ROW_CAP,
     apply_collapse_empty_all,
+    apply_kpi_density_contract,
     apply_zero_scroll_contract,
+    build_kpi_micro_strip,
     claims_pipeline_summary_widget,
     claims_top_critical_widget,
     collapse_empty_large,
+    is_empty_kpi,
     normalize_first_viewport,
 )
 
@@ -125,6 +129,72 @@ class ClaimsPipelineTests(unittest.TestCase):
         self.assertEqual(len(w["rows"]), TABLE_ROW_CAP)
         self.assertEqual(w["maxHeight"], MAX_PRIMARY_PX)
         self.assertEqual(w["rowCap"], TABLE_ROW_CAP)
+
+
+class KpiDensityTests(unittest.TestCase):
+    def test_empty_kpi_detection(self) -> None:
+        self.assertTrue(is_empty_kpi({"type": "kpi", "status": "empty", "value": None}))
+        self.assertTrue(is_empty_kpi({"type": "kpi", "value": None}))
+        self.assertFalse(is_empty_kpi({"type": "kpi", "value": 12, "status": "ok"}))
+        self.assertFalse(is_empty_kpi({"type": "chart", "status": "empty"}))
+
+    def test_omit_empty_kpis_and_pending_chip(self) -> None:
+        widgets = [
+            {"id": "cmd", "type": "financial-command-strip", "status": "ok"},
+            {"id": "a", "type": "kpi", "label": "A", "status": "empty", "value": None, "omitWhenEmpty": True},
+            {"id": "b", "type": "kpi", "label": "B", "status": "empty", "value": None, "collapseWhenEmpty": True},
+            {"id": "c", "type": "kpi", "label": "C", "value": 10, "status": "ok"},
+        ]
+        out = apply_kpi_density_contract(widgets, page="taxes")
+        ids = [w.get("id") for w in out if isinstance(w, dict)]
+        self.assertNotIn("a", ids)
+        self.assertNotIn("b", ids)
+        self.assertIn("c", ids)
+        self.assertIn("kpi-data-pending", ids)
+
+    def test_budget_caps_standalone_kpis(self) -> None:
+        widgets = [
+            {"id": f"k{i}", "type": "kpi", "label": f"K{i}", "value": i + 1, "status": "ok"}
+            for i in range(6)
+        ]
+        out = apply_kpi_density_contract(widgets, page="softdent", budget=KPI_BUDGET_ABOVE_FOLD)
+        full = [w for w in out if w.get("type") == "kpi" and not w.get("kpiOverBudget")]
+        over = [w for w in out if w.get("kpiOverBudget")]
+        self.assertEqual(len(full), KPI_BUDGET_ABOVE_FOLD)
+        self.assertEqual(len(over), 2)
+        self.assertEqual(over[0]["size"], "xs")
+
+    def test_subpage_keeps_empty_when_keep_empty(self) -> None:
+        widgets = [
+            {
+                "id": "tax-book-net",
+                "type": "kpi",
+                "label": "Book",
+                "value": None,
+                "status": "empty",
+                "keepEmpty": True,
+                "omitWhenEmpty": False,
+            }
+        ]
+        out = apply_kpi_density_contract(widgets, page="taxes", sub="planning")
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["id"], "tax-book-net")
+
+    def test_micro_strip_packs_four(self) -> None:
+        w = build_kpi_micro_strip(
+            "x-strip",
+            "Vitals",
+            [
+                {"id": "a", "label": "A", "value": 1},
+                {"id": "b", "label": "B", "value": None},
+                {"id": "c", "label": "C", "value": 3},
+                {"id": "d", "label": "D", "value": 4},
+                {"id": "e", "label": "E", "value": 5},
+            ],
+        )
+        self.assertEqual(w["type"], "executive-strip")
+        self.assertEqual(len(w["pills"]), 4)
+        self.assertTrue(w.get("kpiBudgetExempt"))
 
 
 if __name__ == "__main__":
