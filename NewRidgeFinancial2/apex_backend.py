@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10569"
+BUILD_ID = "hal-10570"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -1923,6 +1923,13 @@ def _financial_widgets_from_reports(
         pass
 
     _apply_threshold_alerts(widgets, reports)
+    # Moonshot NICE: A/R aging Pareto on financial
+    try:
+        from apex_better_backend_widgets_pack import build_ar_aging_pareto
+
+        widgets.append(build_ar_aging_pareto(bundle, reports))
+    except Exception:
+        pass
     return widgets
 
 
@@ -2099,6 +2106,13 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
         planning_table = build_tax_planning_data_table(bundle)
         if planning_table:
             widgets.append(planning_table)
+    except Exception:
+        pass
+    # Moonshot NICE: Tax calendar on taxes MAIN
+    try:
+        from apex_better_backend_widgets_pack import build_tax_calendar_main
+
+        widgets.append(build_tax_calendar_main(bundle))
     except Exception:
         pass
     return widgets
@@ -2729,6 +2743,13 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
         widgets.append(build_ar_main_collection_task_list(bundle))
     except Exception:
         pass
+    # Moonshot NICE: A/R aging Pareto
+    try:
+        from apex_better_backend_widgets_pack import build_ar_aging_pareto
+
+        widgets.append(build_ar_aging_pareto(bundle, reports))
+    except Exception:
+        pass
     _apply_threshold_alerts(widgets, reports)
     return widgets
 
@@ -2997,6 +3018,13 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
         append_claims_hal_said(widgets)
     except Exception:
         pass
+    # Moonshot NICE: Claim status timeline lanes
+    try:
+        from apex_better_backend_widgets_pack import build_claim_status_lanes
+
+        widgets.append(build_claim_status_lanes(bundle))
+    except Exception:
+        pass
     _apply_threshold_alerts(widgets, reports, claims_summary=summary)
     return widgets
 
@@ -3094,7 +3122,7 @@ def _narratives_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list
 
 
 def _documents_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    del reports, bundle
+    del reports
     widgets: list[dict[str, Any]] = []
     state = _load_local_json("nr2:v2:documents") or {}
     queue = state.get("queue") if isinstance(state.get("queue"), list) else []
@@ -3178,6 +3206,13 @@ def _documents_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[
         )
 
     widgets.append(build_tax_library_widget())
+    # Moonshot NICE: Claim status lanes on documents workflow view
+    try:
+        from apex_better_backend_widgets_pack import build_claim_status_lanes
+
+        widgets.append(build_claim_status_lanes(bundle))
+    except Exception:
+        pass
     return widgets
 
 

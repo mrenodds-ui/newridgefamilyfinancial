@@ -1,4 +1,4 @@
-"""Moonshot DEF-001 period sync honesty — COLLECTIONS_FORMAT_REQUIRED (hal-10569)."""
+"""Moonshot DEF-001 period sync honesty — COLLECTIONS_FORMAT_REQUIRED (hal-10570)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def _bundle_pending() -> dict:
 
 class PeriodSyncFormatHal10565Tests(unittest.TestCase):
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10569")
+        self.assertEqual(BUILD_ID, "hal-10570")
 
     def test_classify_daysheet_may_period(self):
         with tempfile.TemporaryDirectory() as tmp:

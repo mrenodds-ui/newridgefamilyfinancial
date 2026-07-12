@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10569",
-  "BUILD_ID": "hal-10569",
-  "assetVersion": "hal-10569",
-  "builtAt": "2026-07-12T22:00:00.000Z",
-  "notes": "hal-10569: Moonshot TXN ledger surface \u2014 SoftDent/OM data-table from tx_parsed JSONL; /api/apex/softdent/ledger.",
+  "schemaVersion": "hal-10570",
+  "BUILD_ID": "hal-10570",
+  "assetVersion": "hal-10570",
+  "builtAt": "2026-07-12T22:15:00.000Z",
+  "notes": "hal-10570: Moonshot Better Backend Widgets NICE \u2014 A/R aging pareto, taxes main tax-calendar, claim status timeline-lanes.",
   "staffRenderMode": "apex"
 }

@@ -655,7 +655,7 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Moonshot NEXT after TXN XLS ingest — TXN ledger surface (hal-10569)
+# Moonshot NEXT after TXN XLS ingest — TXN ledger surface (hal-10570)
 # Read-only data-table from SoftDentFinancialExports/tx_parsed JSONL
 # ---------------------------------------------------------------------------
 
@@ -776,4 +776,263 @@ def build_transaction_ledger_table(
         "hint": hint,
         "filters": result.get("filters") or {},
         "matchCount": int(result.get("matchCount") or len(rows)),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Moonshot NICE wave (hal-10570)
+# Aging pareto / tax calendar main / claim status lanes
+# ---------------------------------------------------------------------------
+
+
+def _parse_int(value: Any) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    text = str(value).strip().replace(",", "")
+    try:
+        return int(float(text))
+    except ValueError:
+        return None
+
+
+def build_ar_aging_pareto(
+    bundle: dict[str, Any],
+    reports: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """A/R aging bucket Pareto (pareto-chart). Distinct from denial-pareto."""
+    from collections import defaultdict
+
+    reports = reports if isinstance(reports, dict) else {}
+    buckets: list[dict[str, Any]] = []
+
+    raw_buckets = reports.get("arAgingBuckets")
+    if isinstance(raw_buckets, list):
+        for b in raw_buckets:
+            if not isinstance(b, dict):
+                continue
+            buckets.append(
+                {
+                    "bucket": str(b.get("bucket") or b.get("label") or "—"),
+                    "amount": _parse_money(b.get("amount")),
+                    "count": _parse_int(b.get("count")) or 0,
+                }
+            )
+
+    if not buckets:
+        ar = bundle.get("ar") if isinstance(bundle.get("ar"), dict) else {}
+        ab = ar.get("aging_buckets") if isinstance(ar.get("aging_buckets"), list) else []
+        for b in ab:
+            if not isinstance(b, dict):
+                continue
+            buckets.append(
+                {
+                    "bucket": str(b.get("bucket") or b.get("code") or "—"),
+                    "amount": _parse_money(b.get("amount")),
+                    "count": _parse_int(b.get("count")) or 0,
+                }
+            )
+
+    if not buckets:
+        tally: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {"amount": 0.0, "count": 0, "has_amt": False}
+        )
+        for row in _section_rows(bundle, "softdent", "ar"):
+            label = str(row.get("Bucket") or row.get("Aging") or row.get("AgeBucket") or "").strip()
+            amt = _parse_money(row.get("Balance") or row.get("Outstanding") or row.get("Amount"))
+            if not label:
+                age = _parse_int(row.get("age_days") or row.get("Days") or row.get("Age")) or 0
+                if age <= 0:
+                    label = "Current"
+                elif age <= 30:
+                    label = "1-30"
+                elif age <= 60:
+                    label = "31-60"
+                elif age <= 90:
+                    label = "61-90"
+                elif age <= 120:
+                    label = "91-120"
+                else:
+                    label = "120+"
+            if amt is None:
+                continue
+            tally[label]["amount"] += amt
+            tally[label]["count"] += 1
+            tally[label]["has_amt"] = True
+        buckets = [
+            {
+                "bucket": k,
+                "amount": v["amount"] if v["has_amt"] else None,
+                "count": v["count"],
+            }
+            for k, v in tally.items()
+        ]
+
+    buckets.sort(key=lambda x: float(x.get("amount") or 0.0), reverse=True)
+    total_amt = sum(float(b.get("amount") or 0.0) for b in buckets if b.get("amount") is not None)
+
+    bars: list[dict[str, Any]] = []
+    cumulative: list[float] = []
+    running_pct = 0.0
+    for b in buckets:
+        amt = b.get("amount")
+        amt_f = float(amt) if isinstance(amt, (int, float)) else None
+        pct = round((amt_f / total_amt * 100), 1) if total_amt and amt_f is not None else 0.0
+        running_pct += pct
+        bars.append(
+            {
+                "code": str(b.get("bucket") or "—"),
+                "amount": amt_f,
+                "count": int(b.get("count") or 0),
+                "pct": pct,
+            }
+        )
+        cumulative.append(round(min(running_pct, 100.0), 1))
+
+    status = "empty" if not bars else "ok"
+    return {
+        "id": "ar-aging-pareto",
+        "type": "pareto-chart",
+        "label": "A/R Aging Pareto",
+        "size": "m",
+        "status": status,
+        "emptyMessage": "No A/R aging data",
+        "hint": "80/20 view of receivables by aging bucket — never invents dollars.",
+        "data": {
+            "bars": bars,
+            "cumulative": cumulative,
+            "threshold": 80,
+            "emptyMessage": "No A/R aging data",
+        },
+    }
+
+
+def build_tax_calendar_main(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Tax calendar for taxes MAIN (items on spec root)."""
+    try:
+        from tax_engine import build_tax_plan_from_bundle
+
+        plan = build_tax_plan_from_bundle(bundle) or {}
+        quarterly = plan.get("quarterlyEstimates") if isinstance(plan.get("quarterlyEstimates"), list) else []
+    except Exception:
+        quarterly = []
+
+    if not quarterly:
+        tax = bundle.get("taxes") if isinstance(bundle.get("taxes"), dict) else {}
+        quarterly = tax.get("deadlines") or tax.get("quarterly") or []
+        if not isinstance(quarterly, list):
+            quarterly = []
+
+    try:
+        from nr2_local_db import list_tax_payments
+
+        logged = {str(p.get("quarter") or ""): p for p in list_tax_payments()}
+    except Exception:
+        logged = {}
+
+    items: list[dict[str, Any]] = []
+    for q in quarterly[:8]:
+        if not isinstance(q, dict):
+            continue
+        lab = str(q.get("label") or q.get("quarter") or q.get("period") or q.get("Period") or "").strip()
+        fed = _parse_money(q.get("federal") or q.get("amount") or q.get("estimate"))
+        ks = _parse_money(q.get("kansas"))
+        amt = None
+        if fed is not None or ks is not None:
+            amt = float(fed or 0.0) + float(ks or 0.0)
+        due = str(q.get("due") or q.get("dueDate") or "")[:40]
+        items.append(
+            {
+                "label": lab or "Q?",
+                "amount": amt,
+                "due": due,
+                "logged": bool(logged.get(lab)),
+            }
+        )
+
+    status = "empty" if not items else "ok"
+    return {
+        "id": "tax-calendar-main",
+        "type": "tax-calendar",
+        "label": "Quarterly Tax Calendar",
+        "size": "full",
+        "status": status,
+        "items": items,
+        "emptyMessage": "No upcoming tax deadlines",
+        "hint": "Quarterly filing deadlines from tax_engine — planning only · CPA review.",
+    }
+
+
+def build_claim_status_lanes(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Claim status timeline-lanes by payer. Distinct from preauth aging lanes."""
+    from collections import defaultdict
+
+    claims = _section_rows(bundle, "softdent", "claims") or _section_rows(bundle, "softdent", "claimStatus")
+    if not claims:
+        claims_data = bundle.get("claims") if isinstance(bundle.get("claims"), dict) else {}
+        raw = claims_data.get("claims") or claims_data.get("rows") or []
+        claims = [c for c in raw if isinstance(c, dict)] if isinstance(raw, list) else []
+
+    lanes_data: dict[str, dict[str, int]] = defaultdict(
+        lambda: {"Submitted": 0, "Acknowledged": 0, "Pending": 0, "Paid": 0, "Denied": 0}
+    )
+
+    for c in claims:
+        if not isinstance(c, dict):
+            continue
+        payer = str(
+            c.get("payer")
+            or c.get("Payer")
+            or c.get("InsPlan")
+            or c.get("insurance")
+            or c.get("Carrier")
+            or "Unknown"
+        )[:12]
+        status = str(c.get("status") or c.get("Status") or c.get("ClaimStatus") or "").lower()
+        if "paid" in status:
+            bucket = "Paid"
+        elif "den" in status or "rej" in status:
+            bucket = "Denied"
+        elif "ack" in status or "received" in status:
+            bucket = "Acknowledged"
+        elif "pend" in status or "waiting" in status or "hold" in status or "review" in status:
+            bucket = "Pending"
+        else:
+            bucket = "Submitted"
+        lanes_data[payer][bucket] += 1
+
+    color_map = {
+        "Submitted": "cyan",
+        "Acknowledged": "blue",
+        "Pending": "amber",
+        "Paid": "green",
+        "Denied": "magenta",
+    }
+
+    lanes: list[dict[str, Any]] = []
+    for code, segs in sorted(lanes_data.items()):
+        total = sum(segs.values())
+        if total == 0:
+            continue
+        segments = [{"bucket": k, "count": v, "color": color_map[k]} for k, v in segs.items() if v > 0]
+        lanes.append({"code": code, "total": total, "segments": segments})
+
+    status = "empty" if not lanes else "ok"
+    return {
+        "id": "claim-status-lanes",
+        "type": "timeline-lanes",
+        "label": "Claim Status Timeline",
+        "size": "m",
+        "status": status,
+        "emptyMessage": "No claim status data",
+        "hint": "Claims by payer across status workflow — SoftDent import only.",
+        "data": {
+            "lanes": lanes,
+            "emptyMessage": "No claim status data",
+        },
     }
