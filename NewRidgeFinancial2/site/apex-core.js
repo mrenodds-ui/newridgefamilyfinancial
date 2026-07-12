@@ -3834,20 +3834,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       draft.addEventListener("click", () => {
         const claim = (spec && spec.claim) || {};
         const cid = String((claim && claim.claimId) || (spec && spec.claimId) || "");
-        try {
-          sessionStorage.setItem(
-            "nr2-apex-narrative-seed",
-            JSON.stringify({
-              claimId: cid,
-              patientName: "",
-              payer: (claim && claim.payer) || "",
-              date: (claim && claim.date) || "",
-            })
-          );
-          sessionStorage.setItem("nr2-apex-focused-claim", cid);
-        } catch (_err) {
-          /* ignore */
-        }
+        writeNarrativeVoiceSeed({
+          claimId: cid,
+          patientName: "",
+          payer: (claim && claim.payer) || "",
+          date: (claim && claim.date) || "",
+          page: "claims",
+          topic: "narrative_generation",
+        });
         loadPage("narratives");
       });
     }
@@ -4240,14 +4234,80 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     document.body.classList.remove("apex-claim-drawer-open");
   }
 
-  async function openClaimDrawer(claimId) {
+  /** REC-009: push focused claim into HAL session context (DesktopBridge or HTTP). */
+  function syncHalVoiceSessionContext(payload) {
+    const body = payload && typeof payload === "object" ? payload : {};
+    try {
+      const bridge = typeof DesktopBridge !== "undefined" ? DesktopBridge : null;
+      if (bridge && typeof bridge.updateHalSessionContext === "function") {
+        bridge.updateHalSessionContext(body).catch(() => {});
+        return;
+      }
+    } catch (_err) {
+      /* fall through to HTTP */
+    }
+    apexFetch("/api/hal-learning/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).catch(() => {});
+  }
+
+  /** REC-009: focus claim for voice/narrative carry without requiring manual lock. */
+  function setFocusedClaimForVoice(claimId, extras) {
     const id = String(claimId || "").trim();
     if (!id) return;
+    const extra = extras && typeof extras === "object" ? extras : {};
     try {
       sessionStorage.setItem("nr2-apex-focused-claim", id);
+      sessionStorage.setItem(
+        "nr2-apex-voice-carry",
+        JSON.stringify({
+          claimId: id,
+          voiceCarry: true,
+          timestamp: Date.now(),
+          payer: String(extra.payer || ""),
+          patientName: String(extra.patientName || ""),
+        })
+      );
     } catch (_err) {
       /* ignore */
     }
+    syncHalVoiceSessionContext({
+      claimId: id,
+      page: String(extra.page || currentPage || ""),
+      topic: String(extra.topic || "voice_carry"),
+      payer: String(extra.payer || ""),
+    });
+  }
+
+  function writeNarrativeVoiceSeed(seed) {
+    const base = seed && typeof seed === "object" ? seed : {};
+    const claimId = String(base.claimId || "").trim();
+    const payload = Object.assign({}, base, {
+      claimId,
+      voiceCarry: true,
+      timestamp: Date.now(),
+    });
+    try {
+      sessionStorage.setItem("nr2-apex-narrative-seed", JSON.stringify(payload));
+    } catch (_err) {
+      /* ignore */
+    }
+    if (claimId) {
+      setFocusedClaimForVoice(claimId, {
+        page: String(base.page || "claims"),
+        topic: String(base.topic || "narrative_generation"),
+        payer: String(base.payer || ""),
+        patientName: String(base.patientName || ""),
+      });
+    }
+  }
+
+  async function openClaimDrawer(claimId) {
+    const id = String(claimId || "").trim();
+    if (!id) return;
+    setFocusedClaimForVoice(id, { page: "claims", topic: "claim_focus" });
     closeClaimDrawer();
     const drawer = document.createElement("aside");
     drawer.id = "apex-claim-drawer";
@@ -4538,15 +4598,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           } catch (_err) {
             /* continue to narratives */
           }
-          try {
-            sessionStorage.setItem(
-              "nr2-apex-narrative-seed",
-              JSON.stringify({ claimId, patientName, voiceCarry: true })
-            );
-            sessionStorage.setItem("nr2-apex-focused-claim", claimId);
-          } catch (_err) {
-            /* ignore */
-          }
+          const payer = (card && card.getAttribute("data-payer")) || "";
+          writeNarrativeVoiceSeed({
+            claimId,
+            patientName,
+            payer,
+            page: "claims",
+            topic: "narrative_generation",
+          });
           loadPage("narratives");
           return;
         }
@@ -4780,11 +4839,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     if (!id) return;
     const tile = document.querySelector(`[data-claim-id="${CSS.escape ? CSS.escape(id) : id.replace(/"/g, "")}"]`);
     if (tile) {
-      try {
-        sessionStorage.setItem("nr2-apex-focused-claim", id);
-      } catch (_err) {
-        /* ignore */
-      }
+      setFocusedClaimForVoice(id, { page: "claims", topic: "focus_claim_tile" });
       tile.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
       tile.classList.add("apex-hal-highlight");
       setTimeout(() => tile.classList.remove("apex-hal-highlight"), 4000);
@@ -5180,14 +5235,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           const focused = document.querySelector(".apex-claim-card.apex-hal-highlight, [data-claim-card].is-focused");
           if (!cid && focused) cid = focused.getAttribute("data-claim-id") || "";
           if (cid) {
-            try {
-              sessionStorage.setItem(
-                "nr2-apex-narrative-seed",
-                JSON.stringify({ claimId: cid, voiceCarry: true })
-              );
-            } catch (_err) {
-              /* ignore */
-            }
+            writeNarrativeVoiceSeed({
+              claimId: cid,
+              page: "narratives",
+              topic: "voice_carry",
+            });
             if (currentPage !== "narratives") await loadPage("narratives");
             results.push(`narrative_carry:${cid}`);
           } else {

@@ -45,6 +45,9 @@
   let denialReasonDraft = "";
   let narrTypeDraft = "appeal";
   let activeBridge = false;
+  /** REC-009: claim carried from Claims click / HAL board into Narratives voice. */
+  let carriedClaimContext = null;
+  const CARRY_EXPIRY_MS = 300000;
 
   function escape(s) {
     return String(s == null ? "" : s)
@@ -326,14 +329,62 @@
     activeBridge = true;
   }
 
+  function loadVoiceCarryContext() {
+    try {
+      const raw = sessionStorage.getItem("nr2-apex-voice-carry");
+      if (!raw) return null;
+      const seed = JSON.parse(raw);
+      if (!seed || !seed.voiceCarry || !seed.claimId) return null;
+      const ts = Number(seed.timestamp || 0);
+      if (ts && Date.now() - ts > CARRY_EXPIRY_MS) {
+        sessionStorage.removeItem("nr2-apex-voice-carry");
+        return null;
+      }
+      return seed;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  function rememberVoiceCarry(seed) {
+    if (!seed || !seed.claimId) return;
+    carriedClaimContext = {
+      claimId: String(seed.claimId),
+      voiceCarry: true,
+      timestamp: Number(seed.timestamp) || Date.now(),
+      payer: String(seed.payer || ""),
+      patientName: String(seed.patientName || ""),
+    };
+    try {
+      sessionStorage.setItem("nr2-apex-voice-carry", JSON.stringify(carriedClaimContext));
+    } catch (_err) {
+      /* ignore */
+    }
+    lastStatusNote = `Carrying: Claim ${carriedClaimContext.claimId}`;
+  }
+
   function applySeed() {
     try {
       const raw = sessionStorage.getItem("nr2-apex-narrative-seed");
-      if (!raw) return;
+      if (!raw) {
+        const prior = loadVoiceCarryContext();
+        if (prior) {
+          rememberVoiceCarry(prior);
+          if (!selectedClaimId) selectedClaimId = String(prior.claimId);
+        }
+        return;
+      }
       sessionStorage.removeItem("nr2-apex-narrative-seed");
       const seed = JSON.parse(raw);
+      if (seed.voiceCarry && seed.timestamp && Date.now() - Number(seed.timestamp) > CARRY_EXPIRY_MS) {
+        sessionStorage.removeItem("nr2-apex-voice-carry");
+        return;
+      }
       if (seed.claimId) selectedClaimId = String(seed.claimId);
       if (seed.payer) selectedPayerId = String(seed.payer).trim().toLowerCase();
+      if (seed.voiceCarry && seed.claimId) {
+        rememberVoiceCarry(seed);
+      }
       if (Array.isArray(seed.claimIds) && seed.claimIds.length) {
         selectedClaimId = String(seed.claimIds[0]);
         activeId = "insurance";
@@ -370,7 +421,10 @@
             (seed.patientName ? ` · ${seed.patientName}` : "") +
             (seed.payer ? ` · ${seed.payer}` : "") +
             (seed.date ? ` · DOS ${seed.date}` : "") +
-            `\n\nLock context, check consent, then Generate Payer Draft — the letter will appear in this center box.\n`;
+            `\n\nLock context, check consent, then Generate Payer Draft — the letter will appear in this center box.\n` +
+            (seed.voiceCarry
+              ? `\nVoice carry active — say “draft appeal for this claim” without re-locking.\n`
+              : "");
         }
       }
     } catch (_err) {
@@ -653,10 +707,28 @@
     rec.onresult = (ev) => {
       const said = String((ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || "").trim();
       if (!said) return;
+      let finalText = said;
+      const lower = said.toLowerCase();
+      const contextualTriggers = [
+        "this claim",
+        "the claim i just clicked",
+        "that claim",
+        "for this",
+        "appeal for this",
+        "draft appeal",
+        "letter for this",
+      ];
+      const carry = carriedClaimContext || loadVoiceCarryContext();
+      if (carry && carry.claimId && contextualTriggers.some((t) => lower.includes(t))) {
+        carriedClaimContext = carry;
+        finalText = `[ClaimRef:${carry.claimId}] ${said}`;
+        const st = document.getElementById("composer-status");
+        if (st) st.textContent = `Resolved Claim ${carry.claimId} · Voice`;
+      }
       if (window.Apex && typeof window.Apex.askHalFromBridge === "function") {
-        window.Apex.askHalFromBridge(`dictate ${activeId}: ${said}`);
+        window.Apex.askHalFromBridge(`dictate ${activeId}: ${finalText}`);
       } else {
-        applyVoiceText(activeId, said, "append");
+        applyVoiceText(activeId, finalText, "append");
       }
     };
     rec.onerror = () => {
