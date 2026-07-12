@@ -71,6 +71,36 @@ class ImportCompletenessTests(unittest.TestCase):
         self.assertEqual(result["gaps"], [])
         self.assertEqual(len(result.get("softGaps") or []), 1)
 
+    def test_list_dataset_gaps_includes_optional_missing(self) -> None:
+        from import_diagnostics import STATUS_CONNECTED, STATUS_MISSING, list_dataset_gaps
+
+        diag = {
+            "datasets": [
+                {"severity": "critical", "automated": True, "status": STATUS_CONNECTED, "rowCount": 10, "datasetKey": "a"},
+                {
+                    "severity": "optional",
+                    "automated": True,
+                    "status": STATUS_MISSING,
+                    "rowCount": 0,
+                    "datasetKey": "quickbooks.payroll",
+                    "system": "quickbooks",
+                    "detail": "Dataset file not found in import cache.",
+                },
+                {
+                    "severity": "optional",
+                    "automated": True,
+                    "status": STATUS_MISSING,
+                    "rowCount": 0,
+                    "datasetKey": "quickbooks.ap",
+                    "system": "quickbooks",
+                },
+            ]
+        }
+        gaps = list_dataset_gaps(diag)
+        keys = {g["datasetKey"] for g in gaps}
+        self.assertEqual(keys, {"quickbooks.payroll", "quickbooks.ap"})
+        self.assertTrue(all(g["severity"] == "optional" for g in gaps))
+
     def test_stale_critical_with_rows_counts_connected(self) -> None:
         from import_diagnostics import STATUS_CONNECTED, STATUS_STALE, assess_import_completeness
 

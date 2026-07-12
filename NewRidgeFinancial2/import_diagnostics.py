@@ -390,6 +390,38 @@ def evaluate_bundle(
 IMPORT_COMPLETENESS_MIN_PCT = float(os.environ.get("NR2_IMPORT_COMPLETENESS_MIN_PCT", "85"))
 
 
+def list_dataset_gaps(diagnostics: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Named missing/stale datasets for HAL honesty (includes optional/warning).
+
+    Critical completeness may still be 100% while optional payroll/AP are missing —
+    staff replies must name those keys instead of inventing generic checklists.
+    """
+    if not isinstance(diagnostics, dict):
+        return []
+    gaps: list[dict[str, Any]] = []
+    for row in diagnostics.get("datasets") or []:
+        if not isinstance(row, dict):
+            continue
+        status = str(row.get("status") or "")
+        if status not in {STATUS_MISSING, STATUS_STALE}:
+            continue
+        key = str(row.get("datasetKey") or row.get("bundleKey") or "").strip()
+        if not key:
+            continue
+        gaps.append(
+            {
+                "datasetKey": key,
+                "system": row.get("system"),
+                "status": status,
+                "severity": str(row.get("severity") or "warning"),
+                "detail": row.get("detail"),
+                "rowCount": int(row.get("rowCount") or 0),
+            }
+        )
+    gaps.sort(key=lambda g: (str(g.get("severity") or ""), str(g.get("datasetKey") or "")))
+    return gaps
+
+
 def assess_import_completeness(diagnostics: dict[str, Any] | None) -> dict[str, Any]:
     """Score required datasets for row presence and connection status.
 
@@ -614,6 +646,7 @@ def assess_import_readiness(
     blocking = blocking_import_issues(diagnostics)
     summary = diagnostics.get("summary") or {}
     completeness = assess_import_completeness(diagnostics)
+    dataset_gaps = list_dataset_gaps(diagnostics)
 
     base = {
         "loadedAt": bundle.get("loadedAt"),
@@ -621,6 +654,7 @@ def assess_import_readiness(
         "summary": summary,
         "blocking": blocking,
         "completeness": completeness,
+        "datasetGaps": dataset_gaps,
         "thresholds": thresholds,
         "operationContext": operation_context,
         "syncState": sync_state,

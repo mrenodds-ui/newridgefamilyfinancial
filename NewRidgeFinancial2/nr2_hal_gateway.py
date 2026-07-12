@@ -352,11 +352,128 @@ def build_import_readiness_context(readiness: dict[str, Any]) -> str:
         f"AgeHours: {readiness.get('ageHours') if readiness.get('ageHours') is not None else 'unknown'}",
         f"Ok: {'yes' if readiness.get('ok') else 'no'}",
     ]
+    summary = readiness.get("summary") if isinstance(readiness.get("summary"), dict) else {}
+    if summary:
+        lines.append(
+            "Counts: connected={c} missing={m} stale={s} (missingOptional={mo})".format(
+                c=summary.get("connected"),
+                m=summary.get("missing"),
+                s=summary.get("stale"),
+                mo=summary.get("missingOptional"),
+            )
+        )
+    gaps = readiness.get("datasetGaps") if isinstance(readiness.get("datasetGaps"), list) else []
+    if gaps:
+        lines.append("Named gaps (use these exact keys — do not invent a generic checklist):")
+        for g in gaps[:12]:
+            if not isinstance(g, dict):
+                continue
+            lines.append(
+                f"- {g.get('datasetKey')} [{g.get('severity')}/{g.get('status')}]"
+                + (f" — {g.get('detail')}" if g.get("detail") else "")
+            )
+    else:
+        lines.append("Named gaps: none — do not claim datasets are missing.")
+    blocking = readiness.get("blocking") if isinstance(readiness.get("blocking"), list) else []
+    if blocking:
+        lines.append("Blocking critical gaps:")
+        for b in blocking[:8]:
+            if isinstance(b, dict):
+                lines.append(f"- {b.get('datasetKey') or b.get('detail') or b}")
+    comp = readiness.get("completeness") if isinstance(readiness.get("completeness"), dict) else {}
+    if comp:
+        lines.append(
+            f"Critical completeness: {comp.get('scorePct')}% "
+            f"(required={comp.get('required')} connected={comp.get('connected')} ok={comp.get('ok')})"
+        )
     if readiness.get("error"):
         lines.append(f"Error: {readiness['error']}")
     lines.append("You must not provide numeric projections or financial advice when Status is not FRESH.")
+    lines.append(
+        "When staff ask about missing imports or KPI reliability: name exact datasetKey values "
+        "from Named gaps; say optional gaps do not fail the money-read gate; never invent dollars."
+    )
     lines.append("[END_IMPORT_CONTEXT]")
     return "\n".join(lines)
+
+
+def try_import_gap_reply(query: str, readiness: dict[str, Any] | None) -> dict[str, str] | None:
+    """Deterministic import-gap answers — name live dataset keys, no generic checklists."""
+    raw = str(query or "").strip()
+    if not raw:
+        return None
+    q = re.sub(r"^hal[,:]\s+", "", raw, flags=re.IGNORECASE).lower().strip()
+    if not re.search(
+        r"\b("
+        r"missing\s+import|import\s+datasets?\s+missing|datasets?\s+missing|"
+        r"missing\s+datasets?|import\s+health|why\s+.*\bmissing\b|"
+        r"kpi[s]?\s+(are\s+)?reliable|reliable\s+kpi|widgets?\s+empty|"
+        r"which\s+(?:import\s+)?datasets?\s+(?:are\s+)?missing|"
+        r"which\s+imports?\s+(?:are\s+)?missing|"
+        r"address\s+the\s+issue\s+of\s+.*\bmissing\b"
+        r")\b",
+        q,
+    ):
+        return None
+
+    ready = readiness if isinstance(readiness, dict) else {}
+    gaps = [g for g in (ready.get("datasetGaps") or []) if isinstance(g, dict)]
+    summary = ready.get("summary") if isinstance(ready.get("summary"), dict) else {}
+    comp = ready.get("completeness") if isinstance(ready.get("completeness"), dict) else {}
+    level = str(ready.get("level") or "unknown")
+
+    if not gaps:
+        text = (
+            f"No named import gaps right now (readiness {level}). "
+            f"Connected={summary.get('connected')} missing={summary.get('missing') or 0}. "
+            "Critical completeness is fine — do not treat old sync log 'missing=4' lines as current."
+        )
+        if comp.get("ok") is True:
+            text += " Money-read KPIs are not blocked."
+        return {"text": text, "intent": "import:gaps-none"}
+
+    critical = [g for g in gaps if str(g.get("severity") or "") == "critical"]
+    warning = [g for g in gaps if str(g.get("severity") or "") == "warning"]
+    optional = [g for g in gaps if str(g.get("severity") or "") == "optional"]
+
+    def _fmt(items: list[dict[str, Any]]) -> str:
+        return ", ".join(
+            f"{g.get('datasetKey')} ({g.get('status')})" for g in items if g.get("datasetKey")
+        )
+
+    parts: list[str] = []
+    parts.append(
+        f"Live import gaps ({len(gaps)}): "
+        + "; ".join(
+            f"{g.get('datasetKey')} [{g.get('severity')}/{g.get('status')}]" for g in gaps[:12]
+        )
+        + "."
+    )
+    if critical:
+        parts.append(f"Critical (blocks money reads until fixed): {_fmt(critical)}.")
+    else:
+        parts.append("No critical gaps — money-read completeness is not failed by these.")
+    if warning:
+        parts.append(f"Warning (honesty chips only): {_fmt(warning)}.")
+    if optional:
+        parts.append(
+            f"Optional (widgets stay empty — not $0): {_fmt(optional)}. "
+            "Drop matching CSV/JSON into the QuickBooks/SoftDent import inbox and sync."
+        )
+    if optional and not critical:
+        # Concrete file hints for known optional QB gaps
+        hints: list[str] = []
+        keys = {str(g.get("datasetKey") or "") for g in optional}
+        if "quickbooks.payroll" in keys:
+            hints.append("quickbooks_payroll.csv (or payroll_detail.csv)")
+        if "quickbooks.ap" in keys:
+            hints.append("quickbooks_ap.csv (or unpaid_bills.csv)")
+        if hints:
+            parts.append("Expected filenames: " + "; ".join(hints) + ".")
+    parts.append(
+        "Ignore stale Jul-log 'missing=4' narratives unless those counts match live Named gaps."
+    )
+    return {"text": " ".join(parts), "intent": "import:gaps-named"}
 
 
 def is_financial_query(query: str) -> bool:
@@ -900,6 +1017,29 @@ def evaluate_query_stream(
             "streamed": False,
         }
 
+    import_gap = try_import_gap_reply(query, readiness)
+    if import_gap:
+        text = import_gap["text"]
+        append_lane_history(
+            store,
+            lane="local",
+            model="import-gaps",
+            query=query,
+            intent=import_gap.get("intent", "import:gaps"),
+        )
+        return {
+            "ok": True,
+            "text": text,
+            "message": {"content": text},
+            "model": "local-import-gaps",
+            "readinessLevel": level,
+            "intent": import_gap.get("intent", "import:gaps"),
+            "softStale": soft_stale,
+            "resolvedLane": "local",
+            "routingReason": "import_gap_policy",
+            "streamed": False,
+        }
+
     chat_messages, intent, soft_stale, level = build_chat_messages(
         query=query,
         readiness=readiness,
@@ -976,6 +1116,21 @@ def evaluate_query_sse_frames(
         yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
         return
 
+    import_gap = try_import_gap_reply(query, readiness)
+    if import_gap:
+        text = import_gap["text"]
+        append_lane_history(
+            store,
+            lane="local",
+            model="import-gaps",
+            query=query,
+            intent=import_gap.get("intent", "import:gaps"),
+        )
+        yield f"event: meta\ndata: {json.dumps({'lane': 'local', 'model': 'local-import-gaps', 'done': False})}\n\n"
+        yield f"data: {json.dumps({'token': text, 'done': False})}\n\n"
+        yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+        return
+
     chat_messages, intent, soft_stale, level = build_chat_messages(
         query=query,
         readiness=readiness,
@@ -1048,6 +1203,24 @@ def evaluate_query(
             "softStale": soft_stale,
             "resolvedLane": "local",
             "routingReason": "local_policy",
+        }
+
+    import_gap = try_import_gap_reply(query, readiness)
+    if import_gap:
+        text = import_gap["text"]
+        append_lane_history(
+            store, lane="local", model="import-gaps", query=query, intent=import_gap.get("intent", "import:gaps")
+        )
+        return {
+            "ok": True,
+            "text": text,
+            "message": {"content": text},
+            "model": "local-import-gaps",
+            "readinessLevel": level,
+            "intent": import_gap.get("intent", "import:gaps"),
+            "softStale": soft_stale,
+            "resolvedLane": "local",
+            "routingReason": "import_gap_policy",
         }
 
     chat_messages, intent, soft_stale, level = build_chat_messages(
