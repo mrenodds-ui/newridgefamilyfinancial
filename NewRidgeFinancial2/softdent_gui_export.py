@@ -207,6 +207,8 @@ _PRINTER_TITLE_HINTS = (
     "no printers",
     "select printer",
     "looking for",
+    "waiting for printer",
+    "printer connection",
     "device not ready",
     "not available",
     "offline",
@@ -256,59 +258,54 @@ def _is_printer_dialog(dlg) -> bool:
 
 
 def _keyboard_cancel_dialog(hwnd: int) -> bool:
-    """Cancel a dialog with keyboard only: Alt+C, then Tab+Enter fallback. Never Escape."""
-    from pywinauto import Application
+    """Cancel a printer dialog with keyboard only. Never Escape. Never mouse/BM_CLICK.
+
+    Order: Alt+C → Tab to Cancel + Enter/Space → more Tab+Enter.
+    """
     from pywinauto.keyboard import send_keys
+    import win32gui
 
     hwnd = int(hwnd)
-    if not _force_foreground(hwnd):
-        return False
+
+    def _gone() -> bool:
+        try:
+            return not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd)
+        except Exception:
+            return True
+
+    _force_foreground(hwnd)
     time.sleep(0.12)
 
-    # 1) Alt+C — standard Cancel accelerator on SoftDent / Windows #32770
+    # 1) Alt+C (Cancel accelerator)
     try:
         send_keys("%c")
-        time.sleep(0.35)
-        # If dialog gone, success
-        try:
-            import win32gui
-
-            if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
-                return True
-        except Exception:
+        time.sleep(0.45)
+        if _gone():
             return True
     except Exception:
         pass
 
-    # 2) If Cancel/No button exists, focus it then Enter (no mouse click)
-    try:
-        app = Application(backend="win32").connect(handle=hwnd)
-        dlg = app.window(handle=hwnd)
-        for name in ("Cancel", "&Cancel", "No", "&No"):
-            for b in dlg.descendants(class_name="Button"):
-                if b.window_text().replace("&", "") == name.replace("&", ""):
-                    try:
-                        b.set_focus()
-                        time.sleep(0.08)
-                        send_keys("{ENTER}")
-                        time.sleep(0.3)
-                        return True
-                    except Exception:
-                        continue
-    except Exception:
-        pass
-
-    # 3) Tab a few times then Enter — last resort when Cancel is not default
+    # 2) Tab through controls; when Cancel may be focused, Enter/Space
     try:
         _force_foreground(hwnd)
-        for _ in range(4):
+        for _ in range(8):
             send_keys("{TAB}")
-            time.sleep(0.08)
-        send_keys("{ENTER}")
-        time.sleep(0.3)
-        return True
+            time.sleep(0.07)
+            send_keys("{ENTER}")
+            time.sleep(0.2)
+            if _gone():
+                return True
+            send_keys("{SPACE}")
+            time.sleep(0.2)
+            if _gone():
+                return True
+            send_keys("%c")
+            time.sleep(0.25)
+            if _gone():
+                return True
     except Exception:
-        return False
+        pass
+    return _gone()
 
 
 def cancel_printer_dialogs(*, max_rounds: int = 10) -> int:
@@ -576,6 +573,27 @@ def _format_canonical(template: str, start: date, end: date) -> str:
     )
 
 
+def _escape_pywinauto_keys(text: str) -> str:
+    """Escape pywinauto special chars so paths like SOFTDE~1 type literally (~ is Enter)."""
+    out: list[str] = []
+    for ch in str(text):
+        if ch in {"+", "^", "%", "~", "(", ")", "{", "}", "[", "]"}:
+            out.append("{" + ch + "}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def _type_keys_clear_and_text(text: str, *, hwnd: int | None = None) -> None:
+    """Clear current field and type text via keyboard only."""
+    _send_softdent_keys("^a{BACKSPACE}", hwnd=hwnd)
+    time.sleep(0.05)
+    safe = _escape_pywinauto_keys(str(text))
+    if safe:
+        _send_softdent_keys(safe, hwnd=hwnd, pause=0.03)
+    time.sleep(0.08)
+
+
 def _complete_output_setup_and_save(
     *,
     start: date,
@@ -585,9 +603,10 @@ def _complete_output_setup_and_save(
     canonical_name: str,
     also_copy_as: list[str] | None = None,
 ) -> Path:
-    """Drive Output Options → Report Setup → Save with keyboard only (no Escape)."""
-    from pywinauto import Application
+    """Drive Output Options → Report Setup → Save with keyboard only.
 
+    No mouse, no set_edit_text, no Escape. Printer prompts → Alt+C cancel.
+    """
     dismiss_softdent_alerts()
     cancel_printer_dialogs()
     out = None
@@ -601,7 +620,7 @@ def _complete_output_setup_and_save(
         raise RuntimeError("Output Options dialog did not appear")
 
     _keyboard_activate_dialog(out)
-    # SoftDent Output Options: Excel radio often accelerated with E, then Enter=OK.
+    # Excel output via accelerator E, then Enter = OK
     _send_softdent_keys("e", hwnd=int(out.handle))
     time.sleep(0.2)
     _keyboard_press_ok(hwnd=int(out.handle))
@@ -620,25 +639,28 @@ def _complete_output_setup_and_save(
         raise RuntimeError("Report Setup dialog did not appear")
 
     _keyboard_activate_dialog(setup)
-    app_s = Application(backend="win32").connect(handle=setup.handle)
-    d_s = app_s.window(handle=setup.handle)
-    edits = d_s.descendants(class_name="Edit")
-    if len(edits) < 3:
-        raise RuntimeError("Report Setup missing date edits")
     start_txt = start.strftime("%m/%d/%y")
     end_txt = end.strftime("%m/%d/%y")
-    # Prefer set_edit_text (no mouse); fields are SoftDent-owned.
-    edits[1].set_edit_text(start_txt)
-    edits[2].set_edit_text(end_txt)
-    if len(edits) > 3:
-        edits[3].set_edit_text("999")  # all providers
-    time.sleep(0.2)
-    _keyboard_press_ok(hwnd=int(setup.handle))
+    # SoftDent Report Setup edits: Tab from first field → start → end → provider
+    # Typical order: title, start, end, provider — Tab once into start date.
+    h = int(setup.handle)
+    _send_softdent_keys("{TAB}", hwnd=h)
+    time.sleep(0.1)
+    _type_keys_clear_and_text(start_txt, hwnd=h)
+    _send_softdent_keys("{TAB}", hwnd=h)
+    time.sleep(0.1)
+    _type_keys_clear_and_text(end_txt, hwnd=h)
+    _send_softdent_keys("{TAB}", hwnd=h)
+    time.sleep(0.1)
+    _type_keys_clear_and_text("999", hwnd=h)  # all providers
+    time.sleep(0.15)
+    _keyboard_press_ok(hwnd=h)
     time.sleep(1.0)
+    cancel_printer_dialogs()
     dismiss_softdent_alerts()
 
     save = None
-    for _ in range(50):
+    for _ in range(60):
         cancel_printer_dialogs(max_rounds=2)
         dismiss_softdent_alerts(max_rounds=2)
         save = find_dialog("Select File Name")
@@ -650,13 +672,13 @@ def _complete_output_setup_and_save(
 
     short_path = rf"{EXPORT_ROOT_SHORT}\{short_stem}"
     _keyboard_activate_dialog(save)
-    app_save = Application(backend="win32").connect(handle=save.handle)
-    d_save = app_save.window(handle=save.handle)
-    edits = d_save.descendants(class_name="Edit")
-    edits[0].set_edit_text(short_path)
-    time.sleep(0.2)
-    _keyboard_press_ok(hwnd=int(save.handle))
+    sh = int(save.handle)
+    # Filename field is usually focused on open; clear and type short path
+    _type_keys_clear_and_text(short_path, hwnd=sh)
+    time.sleep(0.15)
+    _keyboard_press_ok(hwnd=sh)
     time.sleep(3.0)
+    cancel_printer_dialogs()
     dismiss_softdent_alerts()
 
     dest_root.mkdir(parents=True, exist_ok=True)

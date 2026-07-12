@@ -428,9 +428,14 @@ def ensure_softdent_signed_on(
                 main = app.window(title_re=".*SoftDent.*")
                 btn = main.child_window(title="Change Login", control_type="Button")
                 if btn.exists(timeout=0.5):
-                    btn.click_input()
+                    # Keyboard only — focus + Enter/Space (no mouse)
+                    btn.set_focus()
+                    time.sleep(0.1)
+                    from pywinauto.keyboard import send_keys
+
+                    send_keys("{ENTER}")
                     change_login_clicked = True
-                    result["steps"].append("clicked_change_login")
+                    result["steps"].append("keyboard_change_login")
                     time.sleep(1.0)
             except Exception:
                 pass
@@ -466,65 +471,31 @@ def ensure_softdent_signed_on(
         if not edits:
             result["error"] = "Sign On dialog has no edit fields"
             return result
-        # SoftDent Login: first edit = user id (COMPUTE), second = password (lowercase).
-        # Password fields often ignore set_edit_text — type keys after click/focus.
-        user_edit = edits[0]
-        pass_edit = edits[-1] if len(edits) > 1 else edits[0]
+        # SoftDent Login: keyboard only — type user, Tab, type password, Enter.
+        # Never mouse click_input / never Escape.
         password = password.lower()
+        from pywinauto.keyboard import send_keys
+        from softdent_gui_export import _force_foreground
+
+        _force_foreground(int(dialog.handle))
+        time.sleep(0.2)
+        # Focus first edit if possible without mouse
         try:
-            user_edit.set_edit_text("")
-            user_edit.set_edit_text(user)
+            edits[0].set_focus()
         except Exception:
-            user_edit.set_focus()
-            user_edit.type_keys("^a{BACKSPACE}" + user, with_spaces=True)
-        time.sleep(0.15)
-        try:
-            pass_edit.click_input()
-        except Exception:
-            pass_edit.set_focus()
+            pass
         time.sleep(0.1)
-        try:
-            from pywinauto.keyboard import send_keys
-
-            send_keys("^a{BACKSPACE}")
-            time.sleep(0.05)
-            send_keys(password, with_spaces=True, pause=0.04)
-        except Exception:
-            try:
-                pass_edit.set_edit_text("")
-                pass_edit.set_edit_text(password)
-            except Exception:
-                pass_edit.type_keys("^a{BACKSPACE}" + password, with_spaces=True)
-        result["steps"].append("filled_user_password")
-        clicked = False
-        # Prefer keyboard Enter on SoftDent Login (default OK). Avoid mouse (can hit AMD).
-        try:
-            from softdent_gui_export import _force_foreground
-            from pywinauto.keyboard import send_keys
-
-            _force_foreground(int(dialog.handle))
-            time.sleep(0.15)
-            send_keys("{ENTER}")
-            clicked = True
-            result["steps"].append("pressed_enter_ok")
-        except Exception:
-            clicked = False
-        if not clicked:
-            for title in ("OK", "&OK", "Sign On", "Login"):
-                try:
-                    for b in dialog.descendants(class_name="Button"):
-                        if b.window_text().replace("&", "") == title.replace("&", ""):
-                            b.click_input()
-                            clicked = True
-                            result["steps"].append("clicked_ok")
-                            break
-                    if clicked:
-                        break
-                except Exception:
-                    continue
-        if not clicked:
-            pass_edit.type_keys("{ENTER}")
-            result["steps"].append("pressed_enter")
+        send_keys("^a{BACKSPACE}")
+        send_keys(user, with_spaces=True, pause=0.04)
+        time.sleep(0.15)
+        send_keys("{TAB}")
+        time.sleep(0.15)
+        send_keys("^a{BACKSPACE}")
+        send_keys(password, with_spaces=True, pause=0.04)
+        result["steps"].append("filled_user_password_keyboard")
+        time.sleep(0.2)
+        send_keys("{ENTER}")
+        result["steps"].append("pressed_enter_ok")
         time.sleep(1.5)
         result["ok"] = True
         result["signedOn"] = True
