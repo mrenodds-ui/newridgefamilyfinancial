@@ -1,20 +1,55 @@
-"""Continue SoftDent Trans for a Period → Excel (Feb 2026), scan Donna Nickel."""
+"""SoftDent Trans for a Period Excel — TXN ingest (JSONL) or GUI continue.
+
+Default / --ingest: parse TXN*.xls → C:\\SoftDentFinancialExports\\tx_parsed\\
+--gui: legacy SoftDent desktop Excel continue (not used by TXN ingest package)
+"""
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
-import win32con
-import win32gui
-from pywinauto import Application, mouse
-from pywinauto.keyboard import send_keys
+REPO = Path(__file__).resolve().parents[1]
+NR2 = REPO / "NewRidgeFinancial2"
+if str(NR2) not in sys.path:
+    sys.path.insert(0, str(NR2))
 
 DEST = Path(r"C:\SoftDentReportExports")
 LOG = Path(r"C:\SoftDentFinancialExports\softdent_account_tx_excel_validation.json")
+DEFAULT_TXN = DEST / "TXN260201.xls"
+TX_PARSED = Path(r"C:\SoftDentFinancialExports\tx_parsed")
+
+
+def ingest_main(path: Path) -> None:
+    from softdent_transaction_extract import ingest_account_transactions_xls
+
+    result = ingest_account_transactions_xls(path, out_dir=TX_PARSED)
+    print(json.dumps(result, indent=2, default=str), flush=True)
+    prior: dict = {}
+    if LOG.is_file():
+        try:
+            prior = json.loads(LOG.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            prior = {}
+    prior.update(
+        {
+            "ok": bool(result.get("ok")),
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "mode": "ingest-txn-xls",
+            "ingest": result,
+        }
+    )
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    LOG.write_text(json.dumps(prior, indent=2), encoding="utf-8")
+    print("WROTE", LOG, flush=True)
+    raise SystemExit(0 if result.get("ok") else 4)
 
 
 def titles():
+    import win32gui
+
     out = []
 
     def cb(h, _):
@@ -29,6 +64,10 @@ def titles():
 
 
 def fg(h: int) -> None:
+    import win32con
+    import win32gui
+    from pywinauto.keyboard import send_keys
+
     try:
         win32gui.ShowWindow(h, win32con.SW_RESTORE)
         win32gui.SetForegroundWindow(h)
@@ -43,6 +82,8 @@ def fg(h: int) -> None:
 
 
 def cancel_print() -> int:
+    from pywinauto.keyboard import send_keys
+
     n = 0
     for h, t, _ in titles():
         low = t.lower()
@@ -55,6 +96,8 @@ def cancel_print() -> int:
 
 
 def click_button(dlg, label: str) -> bool:
+    from pywinauto import mouse
+
     want = label.lower()
     for b in dlg.descendants(class_name="Button"):
         lab = (b.window_text() or "").replace("&", "").strip().lower()
@@ -66,7 +109,10 @@ def click_button(dlg, label: str) -> bool:
     return False
 
 
-def main() -> None:
+def gui_main() -> None:
+    from pywinauto import Application
+    from pywinauto.keyboard import send_keys
+
     before = {p.name: p.stat().st_mtime for p in DEST.glob("*") if p.is_file()}
     print("tops", [(t, c) for _, t, c in titles() if "Soft" in t or c == "#32770"], flush=True)
     cancel_print()
@@ -117,7 +163,6 @@ def main() -> None:
     app = Application(backend="win32").connect(handle=setup)
     w = app.window(handle=setup)
     edits = w.descendants(class_name="Edit")
-    # title, start, end, format
     if len(edits) >= 4:
         if "TRANSACTION" not in (edits[0].window_text() or "").upper():
             edits[0].set_edit_text("TRANSACTIONS FOR A PERIOD")
@@ -182,6 +227,7 @@ def main() -> None:
     )
     result["ok"] = bool(produced)
     result["at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    result["mode"] = "gui"
     if produced:
         raw = produced.read_bytes().decode("latin-1", errors="ignore")
         low = raw.lower()
@@ -204,6 +250,34 @@ def main() -> None:
     print("RESULT ok=", result["ok"], "saved=", produced, flush=True)
     print("WROTE", LOG, flush=True)
     raise SystemExit(0 if produced else 4)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="SoftDent TXN Excel ingest or GUI continue")
+    parser.add_argument(
+        "--ingest",
+        nargs="?",
+        const=str(DEFAULT_TXN),
+        default=None,
+        help=f"Parse TXN XLS into {TX_PARSED} (default file: {DEFAULT_TXN})",
+    )
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Run SoftDent desktop GUI continue (not part of TXN ingest package)",
+    )
+    parser.add_argument(
+        "path",
+        nargs="?",
+        default=None,
+        help="Optional TXN*.xls path (implies ingest)",
+    )
+    args = parser.parse_args()
+    if args.gui:
+        gui_main()
+        return
+    target = Path(args.ingest or args.path or DEFAULT_TXN)
+    ingest_main(target)
 
 
 if __name__ == "__main__":

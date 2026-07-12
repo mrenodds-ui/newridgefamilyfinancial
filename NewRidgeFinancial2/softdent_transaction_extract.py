@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -714,8 +715,491 @@ def sync_softdent_transactions() -> dict[str, Any]:
     return extract_all_transactions(force=True)
 
 
+# ---------------------------------------------------------------------------
+# SoftDent Trans-for-a-Period Excel (TXN*.xls) — read-only parse / HAL ledger
+# Moonshot AFTER_ACCOUNT_TX_EXCEL (2026-07-12). empty ≠ $0; no SoftDent write-back.
+# ---------------------------------------------------------------------------
+
+DEFAULT_TXN_INBOX = Path(r"C:\SoftDentReportExports")
+DEFAULT_TX_PARSED_DIR = DEFAULT_EXPORTS / "tx_parsed"
+TXN_HEADER_MARKERS = {"date", "id", "name"}
+
+
+def resolve_tx_parsed_dir() -> Path:
+    configured = os.environ.get("SOFTDENT_TX_PARSED_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return DEFAULT_TX_PARSED_DIR
+
+
+def _load_account_tx_excel_rows(path: Path) -> list[list[Any]]:
+    """Load SoftDent Trans-for-a-Period .xls/.xlsx as row lists (no PHI logging)."""
+    suffix = path.suffix.lower()
+    if suffix == ".xls":
+        try:
+            import xlrd  # type: ignore
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("xlrd required to parse SoftDent TXN .xls exports") from exc
+        book = xlrd.open_workbook(str(path))
+        sheet = book.sheet_by_index(0)
+        return [[sheet.cell_value(r, c) for c in range(sheet.ncols)] for r in range(sheet.nrows)]
+    if suffix in {".xlsx", ".xlsm"}:
+        try:
+            from openpyxl import load_workbook  # type: ignore
+        except ImportError as exc:  # pragma: no cover
+            raise RuntimeError("openpyxl required to parse SoftDent TXN .xlsx exports") from exc
+        book = load_workbook(str(path), data_only=True, read_only=True)
+        try:
+            sheet = book.active
+            return [list(row) for row in sheet.iter_rows(values_only=True)]
+        finally:
+            book.close()
+    raise ValueError(f"unsupported excel suffix: {suffix}")
+
+
+def _excel_serial_to_iso(value: Any) -> str | None:
+    """Convert SoftDent Excel date cell to YYYY-MM-DD; never invent a date."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(text[:10], fmt).date().isoformat()
+            except ValueError:
+                continue
+        return None
+    if isinstance(value, (int, float)):
+        serial = float(value)
+        if serial < 20000 or serial > 80000:
+            return None
+        try:
+            import xlrd  # type: ignore
+
+            dt = xlrd.xldate_as_datetime(serial, 0)
+            return dt.date().isoformat()
+        except Exception:
+            try:
+                # Excel 1900-epoch fallback (SoftDent .xls)
+                from datetime import date, timedelta
+
+                base = date(1899, 12, 30)
+                return (base + timedelta(days=int(serial))).isoformat()
+            except Exception:
+                return None
+    return None
+
+
+def _cell_str(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value == int(value):
+        return str(int(value))
+    return str(value).strip()
+
+
+def _account_num_str(value: Any) -> str | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, float) and value == int(value):
+        return str(int(value))
+    if isinstance(value, int):
+        return str(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.endswith(".0") and text[:-2].isdigit():
+        return text[:-2]
+    return text
+
+
+def _first_money(*values: Any) -> float | None:
+    """First present money cell; empty stays None (never coerce to 0)."""
+    for value in values:
+        if value is None or value == "":
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        parsed = parse_money(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _is_header_row(row: list[Any]) -> bool:
+    labels = {_cell_str(c).lower() for c in (row or [])[:6]}
+    return TXN_HEADER_MARKERS.issubset(labels)
+
+
+def _is_data_row(row: list[Any]) -> bool:
+    if not row or len(row) < 3:
+        return False
+    if _is_header_row(row):
+        return False
+    date_iso = _excel_serial_to_iso(row[0] if row else None)
+    name = _cell_str(row[2] if len(row) > 2 else None)
+    account = _account_num_str(row[1] if len(row) > 1 else None)
+    return bool(date_iso and (name or account))
+
+
+def _row_to_account_tx_record(row: list[Any], *, row_number: int, source_file: str) -> dict[str, Any]:
+    # SoftDent header: Date | ID | Name | D$ | Dr | Code | (flag) | Prod | * | Charges |
+    # Prod Adj | Cash | Check | Credit | Pay Adj
+    cells = list(row or [])
+    while len(cells) < 15:
+        cells.append("")
+    amount = _first_money(
+        cells[7],  # Prod
+        cells[9],  # Charges
+        cells[10],  # Prod Adj
+        cells[11],  # Cash
+        cells[12],  # Check
+        cells[13],  # Credit
+        cells[14],  # Pay Adj
+    )
+    note_raw = cells[6]
+    note_flag = _cell_str(note_raw) or None
+    procedure = _normalize_code(cells[5]) or None
+    provider = _cell_str(cells[4]) or None
+    return {
+        "date": _excel_serial_to_iso(cells[0]),
+        "account_num": _account_num_str(cells[1]),
+        "patient_name": _cell_str(cells[2]) or None,
+        "provider": provider,
+        "procedure": procedure,
+        "amount": amount,
+        "note_flag": note_flag,
+        "row_number": row_number,
+        "source_file": source_file,
+        # Extra typed money legs (still empty≠$0) for HAL detail without inventing totals
+        "prod": parse_money(cells[7]),
+        "charges": parse_money(cells[9]),
+        "prod_adj": parse_money(cells[10]),
+        "cash": parse_money(cells[11]),
+        "check": parse_money(cells[12]),
+        "credit": parse_money(cells[13]),
+        "pay_adj": parse_money(cells[14]),
+    }
+
+
+def parse_account_transactions_xls(path: Path | str) -> dict[str, Any]:
+    """Parse SoftDent Trans-for-a-Period Excel into typed account-tx records.
+
+    Returns meta + records. ``rowCount`` is the sheet row count (matches TXN*.xls nrows).
+    ``amount`` is null when all money columns are empty — never invented $0.
+    """
+    target = Path(path)
+    result: dict[str, Any] = {
+        "ok": False,
+        "path": str(target),
+        "rowCount": 0,
+        "recordCount": 0,
+        "periodHint": None,
+        "records": [],
+        "warnings": [],
+    }
+    if not target.is_file():
+        result["warnings"].append("file missing")
+        return result
+    try:
+        rows = _load_account_tx_excel_rows(target)
+    except Exception as exc:  # noqa: BLE001
+        result["warnings"].append(f"excel_open_{type(exc).__name__}")
+        return result
+
+    result["rowCount"] = len(rows)
+    period_hint = None
+    for raw in rows[:20]:
+        joined = " ".join(_cell_str(c) for c in (raw or []) if c not in ("", None))
+        if not joined:
+            continue
+        # e.g. "02/01/26 TO 02/28/26"
+        m = re.search(
+            r"\b(\d{1,2})/(\d{1,2})/(\d{2,4})\s*TO\s*(\d{1,2})/(\d{1,2})/(\d{2,4})\b",
+            joined,
+            re.I,
+        )
+        if m:
+            def _y(yy: str) -> int:
+                n = int(yy)
+                if n < 100:
+                    return 2000 + n if n < 80 else 1900 + n
+                return n
+
+            period_hint = (
+                f"{_y(m.group(3)):04d}-{int(m.group(1)):02d}-01:"
+                f"{_y(m.group(6)):04d}-{int(m.group(4)):02d}-{int(m.group(5)):02d}"
+            )
+            break
+    result["periodHint"] = period_hint
+
+    records: list[dict[str, Any]] = []
+    for idx, raw in enumerate(rows):
+        if not _is_data_row(raw):
+            continue
+        records.append(
+            _row_to_account_tx_record(raw, row_number=idx, source_file=target.name)
+        )
+    result["records"] = records
+    result["recordCount"] = len(records)
+    result["ok"] = bool(records)
+    return result
+
+
+def write_account_transactions_jsonl(
+    parsed: dict[str, Any],
+    *,
+    out_dir: Path | None = None,
+    source_path: Path | str | None = None,
+) -> dict[str, Any]:
+    """Emit one JSONL file under SoftDentFinancialExports/tx_parsed/."""
+    dest_dir = out_dir or resolve_tx_parsed_dir()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    src = Path(source_path or parsed.get("path") or "TXN.xls")
+    out_path = dest_dir / f"{src.stem}.jsonl"
+    records = list(parsed.get("records") or [])
+    with out_path.open("w", encoding="utf-8", newline="\n") as handle:
+        meta = {
+            "_meta": True,
+            "sourcePath": str(src),
+            "rowCount": parsed.get("rowCount"),
+            "recordCount": parsed.get("recordCount"),
+            "periodHint": parsed.get("periodHint"),
+            "extractedAt": _utc_now(),
+            "honesty": "empty != $0; read-only SoftDent Excel parse",
+        }
+        handle.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        for rec in records:
+            handle.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+    return {
+        "ok": True,
+        "path": str(out_path),
+        "rowCount": parsed.get("rowCount"),
+        "recordCount": len(records),
+    }
+
+
+def ingest_account_transactions_xls(
+    path: Path | str | None = None,
+    *,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Parse TXN*.xls and write JSONL under tx_parsed/ (no SoftDent GUI)."""
+    target = Path(path) if path else DEFAULT_TXN_INBOX / "TXN260201.xls"
+    parsed = parse_account_transactions_xls(target)
+    if not parsed.get("ok"):
+        return {
+            "ok": False,
+            "path": str(target),
+            "warnings": parsed.get("warnings") or ["parse failed"],
+            "rowCount": parsed.get("rowCount"),
+            "recordCount": parsed.get("recordCount"),
+        }
+    written = write_account_transactions_jsonl(parsed, out_dir=out_dir, source_path=target)
+    return {
+        "ok": True,
+        "sourcePath": str(target),
+        "jsonlPath": written["path"],
+        "rowCount": parsed.get("rowCount"),
+        "recordCount": parsed.get("recordCount"),
+        "periodHint": parsed.get("periodHint"),
+        "donnaNickelLines": sum(
+            1
+            for r in (parsed.get("records") or [])
+            if str(r.get("account_num") or "") == "27002"
+            or "nickel, donna" in str(r.get("patient_name") or "").lower()
+        ),
+        "nickelMentions": sum(
+            1
+            for r in (parsed.get("records") or [])
+            if "nickel" in str(r.get("patient_name") or "").lower()
+        ),
+    }
+
+
+def load_parsed_account_transactions(
+    *,
+    parsed_dir: Path | None = None,
+    source_stem: str | None = None,
+) -> list[dict[str, Any]]:
+    """Load typed records from tx_parsed JSONL (skips _meta line)."""
+    dest = parsed_dir or resolve_tx_parsed_dir()
+    if not dest.is_dir():
+        return []
+    files = sorted(dest.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if source_stem:
+        files = [p for p in files if p.stem.lower() == source_stem.lower()] or files
+    if not files:
+        return []
+    records: list[dict[str, Any]] = []
+    for path in files:
+        try:
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                if isinstance(obj, dict) and obj.get("_meta"):
+                    continue
+                if isinstance(obj, dict):
+                    records.append(obj)
+        except (OSError, json.JSONDecodeError):
+            continue
+    return records
+
+
+def _parse_date_range(
+    date_range: Any,
+) -> tuple[str | None, str | None]:
+    """Accept '2026-02', '2026-02-01:2026-02-28', (start, end), or None."""
+    if date_range is None or date_range == "":
+        return None, None
+    if isinstance(date_range, (list, tuple)) and len(date_range) >= 2:
+        start = str(date_range[0] or "").strip() or None
+        end = str(date_range[1] or "").strip() or None
+        return start, end
+    text = str(date_range).strip()
+    if ":" in text:
+        left, right = text.split(":", 1)
+        return left.strip() or None, right.strip() or None
+    if len(text) == 7 and text[4] == "-":
+        # YYYY-MM → month bounds
+        year, month = text.split("-", 1)
+        try:
+            y, m = int(year), int(month)
+            if m == 12:
+                return f"{y:04d}-12-01", f"{y:04d}-12-31"
+            return f"{y:04d}-{m:02d}-01", f"{y:04d}-{m + 1:02d}-01"
+        except ValueError:
+            return text, text
+    return text, text
+
+
+def _date_in_range(date_iso: str | None, start: str | None, end: str | None) -> bool:
+    if not date_iso:
+        return False
+    d = date_iso[:10]
+    if start and d < start[:10]:
+        return False
+    if end:
+        end_s = end[:10]
+        # Exclusive end when caller passed next-month day from YYYY-MM expand
+        if len(end) == 10 and end.endswith("-01") and start and start.endswith("-01") and start[:7] != end[:7]:
+            if d >= end_s:
+                return False
+        elif d > end_s:
+            return False
+    return True
+
+
+def query_account_transactions(
+    account_num: str | int | None = None,
+    patient_name: str | None = None,
+    date_range: Any = None,
+    *,
+    parsed_dir: Path | None = None,
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Query parsed TXN Excel JSONL for HAL patient-ledger answers.
+
+    Falls back to ``data not yet exported`` when no parsed file exists.
+    """
+    records = load_parsed_account_transactions(parsed_dir=parsed_dir)
+    if not records:
+        # Best-effort: parse live inbox file if present but not yet ingested
+        inbox = DEFAULT_TXN_INBOX / "TXN260201.xls"
+        candidates = sorted(DEFAULT_TXN_INBOX.glob("TXN*.xls*"), key=lambda p: p.stat().st_mtime, reverse=True)
+        target = candidates[0] if candidates else inbox
+        if target.is_file():
+            parsed = parse_account_transactions_xls(target)
+            records = list(parsed.get("records") or [])
+        if not records:
+            return {
+                "ok": False,
+                "reason": "data not yet exported",
+                "message": (
+                    "Account transaction data not yet exported. "
+                    "Pull SoftDent Reports → Accounting → Trans for a Period → Excel "
+                    r"into C:\SoftDentReportExports, then ingest to "
+                    r"C:\SoftDentFinancialExports\tx_parsed\."
+                ),
+                "matches": [],
+                "matchCount": 0,
+            }
+
+    start, end = _parse_date_range(date_range)
+    acct = _account_num_str(account_num) if account_num not in (None, "") else None
+    name_q = str(patient_name or "").strip().lower()
+    name_tokens = [t for t in name_q.replace(",", " ").split() if t]
+
+    matches: list[dict[str, Any]] = []
+    for rec in records:
+        if acct and str(rec.get("account_num") or "") != acct:
+            continue
+        if name_tokens:
+            pname = str(rec.get("patient_name") or "").lower()
+            if not all(tok in pname for tok in name_tokens):
+                continue
+        if start or end:
+            if not _date_in_range(rec.get("date"), start, end):
+                continue
+        matches.append(rec)
+        if len(matches) >= max(1, int(limit)):
+            break
+
+    return {
+        "ok": True,
+        "reason": None,
+        "matchCount": len(matches),
+        "matches": matches,
+        "filters": {
+            "account_num": acct,
+            "patient_name": patient_name,
+            "date_range": date_range,
+        },
+    }
+
+
+def format_account_transactions_hal_reply(result: dict[str, Any], *, max_lines: int = 12) -> str:
+    """HAL-facing reply from query_account_transactions (honesty: empty ≠ $0)."""
+    if not result or not result.get("ok"):
+        return str(
+            (result or {}).get("message")
+            or "Account transaction data not yet exported."
+        )
+    matches = list(result.get("matches") or [])
+    if not matches:
+        filters = result.get("filters") or {}
+        return (
+            "No matching account transactions in the parsed SoftDent TXN Excel export "
+            f"(filters={filters}). Data source is read-only Excel ingest — empty != $0."
+        )
+    lines = [
+        f"SoftDent account transactions (parsed TXN Excel; {len(matches)} match(es); empty != $0):"
+    ]
+    for rec in matches[: max(1, int(max_lines))]:
+        amt = rec.get("amount")
+        amt_s = "null" if amt is None else f"{amt:g}"
+        lines.append(
+            f"- {rec.get('date') or '?'} | acct {rec.get('account_num') or '?'} | "
+            f"{(rec.get('patient_name') or '').strip()} | Dr {rec.get('provider') or '—'} | "
+            f"code {rec.get('procedure') or '—'} | amt {amt_s}"
+            + (f" | flag {rec.get('note_flag')}" if rec.get("note_flag") else "")
+        )
+    if len(matches) > max_lines:
+        lines.append(f"… +{len(matches) - max_lines} more")
+    return " ".join(lines) if len(lines) == 1 else "\n".join(lines)
+
+
 if __name__ == "__main__":
     import sys
 
-    db = Path(sys.argv[1]) if len(sys.argv) > 1 else None
-    print(json.dumps(extract_all_transactions(db_path=db, force=True), indent=2, default=str))
+    if len(sys.argv) > 1 and str(sys.argv[1]).lower().endswith((".xls", ".xlsx", ".xlsm")):
+        print(json.dumps(ingest_account_transactions_xls(sys.argv[1]), indent=2, default=str))
+    else:
+        db = Path(sys.argv[1]) if len(sys.argv) > 1 else None
+        print(json.dumps(extract_all_transactions(db_path=db, force=True), indent=2, default=str))

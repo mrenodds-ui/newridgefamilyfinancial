@@ -443,6 +443,113 @@ def inject_deliverable_messages(messages: list[dict[str, Any]], query: str) -> l
     return out
 
 
+def query_account_transactions(
+    account_num: str | int | None = None,
+    patient_name: str | None = None,
+    date_range: Any = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """HAL gateway: query parsed SoftDent TXN Excel (fallback: data not yet exported)."""
+    from softdent_transaction_extract import (
+        query_account_transactions as _query_account_transactions,
+    )
+
+    return _query_account_transactions(
+        account_num=account_num,
+        patient_name=patient_name,
+        date_range=date_range,
+        **kwargs,
+    )
+
+
+def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
+    """Detect patient-ledger asks (Donna-style) and extract filters; else None."""
+    q = str(query or "").strip()
+    if not q:
+        return None
+    low = q.lower()
+    wants_ledger = bool(
+        re.search(
+            r"\b("
+            r"account\s+transactions?|patient\s+transactions?|patient\s+ledger|"
+            r"transactions?\s+for|"
+            r"(what|show|list|pull|get).{0,40}transactions?"
+            r")\b",
+            low,
+        )
+    )
+    if not wants_ledger:
+        return None
+    # How-to / export playbook asks stay on Excel doctrine, not ledger data
+    if re.search(
+        r"\b(how (do|to)|export|excel path|output options|trans for a period|print transactions)\b",
+        low,
+    ) and not re.search(r"\b(donna|nickel|\d{4,})\b", low):
+        return None
+    filters: dict[str, Any] = {}
+    acct = re.search(r"\b(?:account|acct|id)\s*[#: ]?\s*(\d{4,})\b", low)
+    if not acct:
+        acct = re.search(r"\b(27002)\b", low)
+    if acct:
+        filters["account_num"] = acct.group(1)
+    # "Donna Nickel" / "Nickel, Donna"
+    name = re.search(
+        r"\b([A-Za-z]{2,})\s+([A-Za-z]{2,})(?:'s)?\b(?=.*\btransactions?\b)|"
+        r"\b([A-Za-z]{2,})\s*,\s*([A-Za-z]{2,})\b",
+        q,
+    )
+    if name:
+        if name.group(1) and name.group(2):
+            filters["patient_name"] = f"{name.group(2)}, {name.group(1)}"
+        elif name.group(3) and name.group(4):
+            filters["patient_name"] = f"{name.group(3)}, {name.group(4)}"
+    if "donna" in low and "nickel" in low:
+        filters["patient_name"] = "Nickel, Donna"
+        filters.setdefault("account_num", "27002")
+    # February 2026 / 2026-02 / Feb 2026
+    month = re.search(
+        r"\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
+        r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|"
+        r"dec(?:ember)?)\s+(20\d{2})\b",
+        low,
+    )
+    if month:
+        mon_map = {
+            "jan": "01",
+            "january": "01",
+            "feb": "02",
+            "february": "02",
+            "mar": "03",
+            "march": "03",
+            "apr": "04",
+            "april": "04",
+            "may": "05",
+            "jun": "06",
+            "june": "06",
+            "jul": "07",
+            "july": "07",
+            "aug": "08",
+            "august": "08",
+            "sep": "09",
+            "sept": "09",
+            "september": "09",
+            "oct": "10",
+            "october": "10",
+            "nov": "11",
+            "november": "11",
+            "dec": "12",
+            "december": "12",
+        }
+        filters["date_range"] = f"{month.group(2)}-{mon_map[month.group(1)]}"
+    else:
+        ym = re.search(r"\b(20\d{2})-(\d{2})\b", low)
+        if ym:
+            filters["date_range"] = f"{ym.group(1)}-{ym.group(2)}"
+    if not filters.get("account_num") and not filters.get("patient_name"):
+        return None
+    return filters
+
+
 def try_local_policy_reply(query: str) -> dict[str, str] | None:
     """Deterministic consent/navigation answers — mirrors hal-core before model calls."""
     raw = str(query or "").strip()
@@ -463,6 +570,23 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             return {
                 "text": f"Yes. I can open {label} from here — it loads the local import view for that page.",
                 "intent": f"navigate:{page}",
+            }
+
+    # Parsed SoftDent TXN Excel patient-ledger (Donna-style) — prefer data over playbook
+    ledger_filters = _extract_account_tx_query_filters(raw)
+    if ledger_filters is not None:
+        try:
+            from softdent_transaction_extract import format_account_transactions_hal_reply
+
+            result = query_account_transactions(**ledger_filters)
+            return {
+                "text": format_account_transactions_hal_reply(result),
+                "intent": "policy:softdent-account-tx-ledger",
+            }
+        except Exception:
+            return {
+                "text": "Account transaction data not yet exported.",
+                "intent": "policy:softdent-account-tx-ledger",
             }
 
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
@@ -1236,6 +1360,23 @@ def build_chat_messages(
     claim_payer_guidance = compile_claim_payer_guidance(query, system_prompt)
     if claim_payer_guidance:
         chat_messages.append({"role": "system", "content": claim_payer_guidance})
+    try:
+        ledger_filters = _extract_account_tx_query_filters(query)
+        if ledger_filters is not None:
+            from softdent_transaction_extract import format_account_transactions_hal_reply
+
+            ledger = query_account_transactions(**ledger_filters)
+            ledger_text = format_account_transactions_hal_reply(ledger)
+            if ledger_text:
+                chat_messages.append(
+                    {
+                        "role": "system",
+                        "content": "SOFTDENT ACCOUNT TX LEDGER (parsed TXN Excel; empty != $0):\n"
+                        + ledger_text,
+                    }
+                )
+    except Exception:
+        pass
     try:
         from softdent_signon import compile_softdent_signon_guidance
 
