@@ -206,6 +206,23 @@ _PRINTER_TITLE_HINTS = (
     "printer not",
     "no printers",
     "select printer",
+    "looking for",
+    "device not ready",
+    "not available",
+    "offline",
+    "out of paper",
+    "print setup",
+    "print to",
+)
+
+# Dialogs we must never cancel as "printer" (export flow).
+_EXPORT_DIALOG_TITLES = frozenset(
+    {
+        "Output Options",
+        "Report Setup",
+        "Select File Name",
+        "SoftDent Login",
+    }
 )
 
 
@@ -238,22 +255,74 @@ def _is_printer_dialog(dlg) -> bool:
     return any(h in blob for h in _PRINTER_TITLE_HINTS)
 
 
-def cancel_printer_dialogs(*, max_rounds: int = 8) -> int:
-    """Cancel SoftDent/Windows printer prompts when default printer is off.
+def _keyboard_cancel_dialog(hwnd: int) -> bool:
+    """Cancel a dialog with keyboard only: Alt+C, then Tab+Enter fallback. Never Escape."""
+    from pywinauto import Application
+    from pywinauto.keyboard import send_keys
 
-    Prefer Cancel / Alt+C / keyboard — never Escape on SoftDent main (quit).
-    Call this while waiting for Output Options / Report Setup / Save.
+    hwnd = int(hwnd)
+    if not _force_foreground(hwnd):
+        return False
+    time.sleep(0.12)
+
+    # 1) Alt+C — standard Cancel accelerator on SoftDent / Windows #32770
+    try:
+        send_keys("%c")
+        time.sleep(0.35)
+        # If dialog gone, success
+        try:
+            import win32gui
+
+            if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+                return True
+        except Exception:
+            return True
+    except Exception:
+        pass
+
+    # 2) If Cancel/No button exists, focus it then Enter (no mouse click)
+    try:
+        app = Application(backend="win32").connect(handle=hwnd)
+        dlg = app.window(handle=hwnd)
+        for name in ("Cancel", "&Cancel", "No", "&No"):
+            for b in dlg.descendants(class_name="Button"):
+                if b.window_text().replace("&", "") == name.replace("&", ""):
+                    try:
+                        b.set_focus()
+                        time.sleep(0.08)
+                        send_keys("{ENTER}")
+                        time.sleep(0.3)
+                        return True
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    # 3) Tab a few times then Enter — last resort when Cancel is not default
+    try:
+        _force_foreground(hwnd)
+        for _ in range(4):
+            send_keys("{TAB}")
+            time.sleep(0.08)
+        send_keys("{ENTER}")
+        time.sleep(0.3)
+        return True
+    except Exception:
+        return False
+
+
+def cancel_printer_dialogs(*, max_rounds: int = 10) -> int:
+    """Anytime SoftDent (or Windows) asks for a printer — cancel via keyboard.
+
+    Never Escape (SoftDent quit). Never mouse. Prefer Alt+C.
     """
-    from pywinauto import Application, Desktop
+    from pywinauto import Desktop
 
     cancelled = 0
-    pids = _softdent_pids()
     for _ in range(max_rounds):
         hit = False
         candidates = []
-        # SoftDent-owned dialogs
         candidates.extend(list(_desktop_dialogs()))
-        # Also common top-level print dialogs (may not be SoftDent PID)
         try:
             for w in Desktop(backend="win32").windows():
                 try:
@@ -262,7 +331,7 @@ def cancel_printer_dialogs(*, max_rounds: int = 8) -> int:
                     title = (w.window_text() or "").strip()
                     if _is_blocked_focus_title(title):
                         continue
-                    if title in {"Output Options", "Report Setup", "Select File Name", "SoftDent Login"}:
+                    if title in _EXPORT_DIALOG_TITLES:
                         continue
                     if _is_printer_dialog(w) or any(h in title.lower() for h in _PRINTER_TITLE_HINTS):
                         candidates.append(w)
@@ -285,48 +354,20 @@ def cancel_printer_dialogs(*, max_rounds: int = 8) -> int:
                 title = (w.window_text() or "").strip()
             except Exception:
                 pass
-            if title in {"Output Options", "Report Setup", "Select File Name", "SoftDent Login"}:
+            if title in _EXPORT_DIALOG_TITLES:
                 continue
-            if title == "SoftDent" and not _is_printer_dialog(w):
-                # Generic SoftDent alert — leave for dismiss_softdent_alerts (Enter/OK)
-                continue
-            if not (_is_printer_dialog(w) or any(h in title.lower() for h in _PRINTER_TITLE_HINTS)):
+            # SoftDent alert with printer body text → cancel (do not OK/retry print)
+            is_printer = _is_printer_dialog(w) or any(
+                hint in title.lower() for hint in _PRINTER_TITLE_HINTS
+            )
+            if not is_printer:
                 continue
             try:
-                _force_foreground(h)
-                time.sleep(0.15)
-                # Try Cancel button first (keyboard Alt+C often works on #32770)
-                canceled_this = False
-                try:
-                    app = Application(backend="win32").connect(handle=h)
-                    dlg = app.window(handle=h)
-                    for name in ("Cancel", "&Cancel", "No", "&No", "Close"):
-                        for b in dlg.descendants(class_name="Button"):
-                            if b.window_text().replace("&", "") == name.replace("&", ""):
-                                # Prefer keyboard: focus Cancel then Enter / Alt+C
-                                try:
-                                    b.set_focus()
-                                    _send_softdent_keys("{ENTER}", hwnd=h)
-                                except Exception:
-                                    _send_softdent_keys("%c", hwnd=h)
-                                canceled_this = True
-                                break
-                        if canceled_this:
-                            break
-                except Exception:
-                    pass
-                if not canceled_this:
-                    # SoftDent print prompt often has Cancel as non-default — Alt+C
-                    try:
-                        _send_softdent_keys("%c", hwnd=h)
-                        canceled_this = True
-                    except Exception:
-                        pass
-                if canceled_this:
+                if _keyboard_cancel_dialog(h):
                     cancelled += 1
                     hit = True
-                    logger.info("Cancelled printer dialog title=%r", title)
-                    time.sleep(0.4)
+                    logger.info("Keyboard-cancelled printer dialog title=%r", title)
+                    time.sleep(0.35)
                     break
             except Exception as exc:
                 logger.warning("Printer dialog cancel failed: %s", type(exc).__name__)
@@ -337,26 +378,31 @@ def cancel_printer_dialogs(*, max_rounds: int = 8) -> int:
 
 
 def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
-    """Dismiss SoftDent message boxes with Enter (keyboard only). Never Escape.
+    """Dismiss SoftDent alerts. Printer prompts → keyboard Cancel first; else Enter/OK.
 
-    Printer/offline prompts are cancelled separately via cancel_printer_dialogs().
+    Never Escape.
     """
-    cancelled_printers = cancel_printer_dialogs(max_rounds=max(2, max_rounds // 2))
-    dismissed = cancelled_printers
+    dismissed = cancel_printer_dialogs(max_rounds=max(3, max_rounds))
     pids = _softdent_pids()
     for _ in range(max_rounds):
         hit = False
-        # Always clear printer prompts first
-        if cancel_printer_dialogs(max_rounds=2):
+        # Always clear printer prompts before OK'ing anything else
+        n = cancel_printer_dialogs(max_rounds=3)
+        if n:
+            dismissed += n
             hit = True
-            dismissed += 1
             continue
         for w in list(_desktop_dialogs()):
             title = (w.window_text() or "").strip()
-            if title == "SoftDent Login":
+            if title == "SoftDent Login" or title in _EXPORT_DIALOG_TITLES:
                 continue
             if _is_printer_dialog(w):
-                continue  # handled by cancel_printer_dialogs
+                # Safety: cancel, never Enter (Enter may retry printer)
+                if _keyboard_cancel_dialog(int(w.handle)):
+                    dismissed += 1
+                    hit = True
+                    break
+                continue
             if title not in {"SoftDent", ""}:
                 continue
             pid = _window_pid(w.handle)
@@ -366,7 +412,6 @@ def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
                 if not _force_foreground(w.handle):
                     continue
                 time.sleep(0.15)
-                # Default button is OK — Enter confirms. Never Escape (quit prompt).
                 _send_softdent_keys("{ENTER}", hwnd=int(w.handle))
                 dismissed += 1
                 hit = True
@@ -456,6 +501,7 @@ def _focus_main():
     time.sleep(0.25)
     dismiss_softdent_alerts()
     # Re-assert SoftDent after dismissing alerts (never Escape — Escape asks to close).
+    cancel_printer_dialogs()
     _assert_softdent_foreground(hwnd)
     return hwnd
 
@@ -466,11 +512,14 @@ def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
     IMPORTANT: Do NOT send Alt+R — AMD Adrenalin Instant Replay steals Alt+R and
     launches/focuses AMD Software. Use F10 (menu bar) then R for Reports.
     Never send Escape after Sign On (SoftDent quit prompt).
+    Anytime a printer prompt appears, cancel it via keyboard (Alt+C).
     """
     _focus_main()
+    cancel_printer_dialogs()
     # F10 = menu bar (SoftDent-owned). Then R=Reports, A=Accounting, then report keys.
     _send_softdent_keys("{F10}")
     time.sleep(0.35)
+    cancel_printer_dialogs(max_rounds=2)
     _send_softdent_keys("r")
     time.sleep(0.35)
     _send_softdent_keys("a")
@@ -478,9 +527,11 @@ def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
     for ch in keys_after_reports_accounting:
         if ch.isspace():
             continue
+        cancel_printer_dialogs(max_rounds=1)
         _send_softdent_keys(ch)
         time.sleep(0.35)
     time.sleep(0.8)
+    cancel_printer_dialogs()
 
 
 def load_menu_map(path: Path | None = None) -> dict[str, Any]:
@@ -821,6 +872,7 @@ def run_catalog_exports(
             path = export_report_by_id(rid, start=start, end=end, menu_map=catalog)
             entry["ok"] = True
             entry["path"] = str(path)
+            cancel_printer_dialogs()
         except Exception as exc:  # noqa: BLE001
             msg = f"{rid}:{type(exc).__name__}:{exc}"
             entry["error"] = msg
@@ -830,6 +882,7 @@ def run_catalog_exports(
             logger.warning("SoftDent GUI export %s failed: %s", rid, type(exc).__name__)
             # Recover without Escape (Escape prompts SoftDent to close).
             try:
+                cancel_printer_dialogs()
                 dismiss_softdent_alerts()
             except Exception:
                 pass

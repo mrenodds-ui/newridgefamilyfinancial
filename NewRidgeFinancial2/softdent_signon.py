@@ -528,6 +528,15 @@ def ensure_softdent_signed_on(
         time.sleep(1.5)
         result["ok"] = True
         result["signedOn"] = True
+        # SoftDent may immediately prompt for a missing default printer after login.
+        try:
+            from softdent_gui_export import cancel_printer_dialogs, dismiss_softdent_alerts
+
+            cancel_printer_dialogs()
+            dismiss_softdent_alerts()
+            result["steps"].append("swept_printer_dialogs_after_signon")
+        except Exception:
+            pass
     except Exception as exc:  # noqa: BLE001
         result["error"] = f"sign_on_ui_{type(exc).__name__}"
         logger.warning("SoftDent Sign On UI assist failed: %s", type(exc).__name__)
