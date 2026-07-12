@@ -247,9 +247,25 @@ _EXPORT_DIALOG_TITLES = frozenset(
         "Output Options",
         "Report Setup",
         "Select File Name",
+        "Save As",
         "SoftDent Login",
+        "Transactions For A Period",
     }
 )
+
+
+def _is_export_flow_dialog(title: str) -> bool:
+    """True for SoftDent report setup / save dialogs that must never get Alt+C."""
+    t = (title or "").strip()
+    if t in _EXPORT_DIALOG_TITLES:
+        return True
+    low = t.lower()
+    return (
+        "transactions for a period" in low
+        or low.endswith(" setup")
+        or "report setup" in low
+        or low in {"select file name", "save as"}
+    )
 
 
 def _dialog_text_blob(dlg) -> str:
@@ -352,7 +368,7 @@ def cancel_printer_dialogs(*, max_rounds: int = 10) -> int:
                     title = (w.window_text() or "").strip()
                     if _is_blocked_focus_title(title):
                         continue
-                    if title in _EXPORT_DIALOG_TITLES:
+                    if _is_export_flow_dialog(title):
                         continue
                     if _is_printer_dialog(w) or any(h in title.lower() for h in _PRINTER_TITLE_HINTS):
                         candidates.append(w)
@@ -375,7 +391,7 @@ def cancel_printer_dialogs(*, max_rounds: int = 10) -> int:
                 title = (w.window_text() or "").strip()
             except Exception:
                 pass
-            if title in _EXPORT_DIALOG_TITLES:
+            if _is_export_flow_dialog(title):
                 continue
             # SoftDent alert with printer body text → cancel (do not OK/retry print)
             is_printer = _is_printer_dialog(w) or any(
@@ -415,7 +431,7 @@ def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
             continue
         for w in list(_desktop_dialogs()):
             title = (w.window_text() or "").strip()
-            if title == "SoftDent Login" or title in _EXPORT_DIALOG_TITLES:
+            if title == "SoftDent Login" or _is_export_flow_dialog(title):
                 continue
             if _is_printer_dialog(w):
                 # Safety: cancel, never Enter (Enter may retry printer)
