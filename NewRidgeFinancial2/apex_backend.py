@@ -4514,6 +4514,7 @@ def _build_hal_status_payload() -> dict[str, Any]:
             "envPasswordKey": st.get("envPasswordKey"),
             "knowledge": st.get("knowledge"),
             "dataAccessDoctrine": st.get("dataAccessDoctrine"),
+            "masterReports": st.get("masterReports"),
         }
     except Exception:
         softdent_signon = None
@@ -6236,6 +6237,18 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             from softdent_signon import format_softdent_signon_hal_reply, softdent_signon_status
 
             status = softdent_signon_status()
+            master_verify = None
+            try:
+                from softdent_master_reports import format_master_reports_hal_reply, verify_master_reports
+
+                master_verify = verify_master_reports(require_inbox_files=False)
+                reply = (
+                    format_softdent_signon_hal_reply(status)
+                    + " "
+                    + format_master_reports_hal_reply()
+                )
+            except Exception:
+                reply = format_softdent_signon_hal_reply(status)
             return json_response_fn(
                 {
                     "ok": True,
@@ -6248,9 +6261,18 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                         "envPasswordKey": status.get("envPasswordKey"),
                         "knowledge": status.get("knowledge"),
                         "dataAccessDoctrine": status.get("dataAccessDoctrine"),
+                        "masterReports": status.get("masterReports"),
                     },
                     "dataAccessDoctrine": status.get("dataAccessDoctrine"),
-                    "reply": format_softdent_signon_hal_reply(status),
+                    "masterVerify": {
+                        "ok": bool((master_verify or {}).get("ok")),
+                        "missingGuiPulls": (master_verify or {}).get("missingGuiPulls"),
+                        "missingDb": (master_verify or {}).get("missingDb"),
+                        "guiExportIds": (master_verify or {}).get("guiExportIds"),
+                    }
+                    if master_verify
+                    else None,
+                    "reply": reply,
                 }
             )
         except Exception as exc:  # noqa: BLE001

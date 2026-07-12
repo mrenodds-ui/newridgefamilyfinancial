@@ -83,13 +83,27 @@
       "phase": 1,
       "proven": false,
       "alt_menu_keys": ["g", "aa", "n"]
+    },
+    "writeoff_totals": {
+      "id": "writeoff_totals",
+      "label": "Writeoff Totals",
+      "menuPath": "Reports → Practice Management → Insurance Reports → Writeoff Totals",
+      "menu_keys": "iw",
+      "menu_keys_env": "SOFTDENT_WRITEOFF_MENU_KEYS",
+      "date_mode": "range",
+      "short_stem_template": "WOF{yy}{mm}",
+      "canonical_template": "writeoff_totals.xls",
+      "also_copy_as": ["writeoff_totals.csv"],
+      "required": false,
+      "phase": 2,
+      "proven": false
     }
   },
   "phase1_order": ["register", "collections", "transactions", "daysheet", "aging"],
   "phase2_reserved": [
+    "writeoff_totals",
     "production_by_provider",
     "production_by_ada_code",
-    "writeoff_totals",
-    "collection_summary"
+    "collection_reconciliation"
   ]
 }

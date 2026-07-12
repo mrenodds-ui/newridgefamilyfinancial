@@ -30,6 +30,10 @@ from softdent_gui_export import (  # noqa: E402
     run_catalog_exports,
     softdent_main_running,
 )
+from softdent_master_reports import (  # noqa: E402
+    gui_export_ids_required,
+    verify_master_reports,
+)
 from softdent_signon import softdent_signon_status  # noqa: E402
 
 DEFAULT_STATUS = STATUS_ROOT / "softdent_daily_gui_pull_status.json"
@@ -177,19 +181,27 @@ def main() -> int:
     parser.add_argument("--end", default=today.isoformat())
     parser.add_argument(
         "--reports",
-        default=",".join(PHASE1_IDS),
-        help="Comma list: register,collections,transactions,daysheet,aging",
+        default="",
+        help="Comma list of GUI report ids (default: master GUI required / Phase-1)",
     )
     parser.add_argument("--skip-signon", action="store_true")
     parser.add_argument("--skip-refresh", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--verify-only", action="store_true")
+    parser.add_argument("--require-inbox", action="store_true")
     parser.add_argument("--status-path", default=str(DEFAULT_STATUS))
     parser.add_argument("--refresh-ps1", default=str(DEFAULT_REFRESH_PS1))
     args = parser.parse_args()
 
     start = date.fromisoformat(args.start)
     end = date.fromisoformat(args.end)
-    report_ids = [x.strip() for x in str(args.reports).split(",") if x.strip()]
+    if str(args.reports).strip():
+        report_ids = [x.strip() for x in str(args.reports).split(",") if x.strip()]
+    else:
+        try:
+            report_ids = gui_export_ids_required() or list(PHASE1_IDS)
+        except Exception:
+            report_ids = list(PHASE1_IDS)
 
     payload: dict[str, Any] = {
         "ok": False,
@@ -197,7 +209,11 @@ def main() -> int:
         "start": start.isoformat(),
         "end": end.isoformat(),
         "reportIds": report_ids,
+        "dataAccessDoctrine": (
+            "Prefer SoftDent DB/ODBC/Sensei/sd_*; Sign On + UI Excel only when DB cannot supply."
+        ),
         "preflight": _preflight(),
+        "masterVerify": None,
         "exports": None,
         "refresh": None,
         "menuMapVersion": None,
@@ -207,6 +223,22 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         payload["preflight"]["menuMapError"] = f"{type(exc).__name__}:{exc}"
         payload["preflight"]["ok"] = False
+
+    try:
+        payload["masterVerify"] = verify_master_reports(
+            start=start,
+            end=end,
+            require_inbox_files=bool(args.require_inbox),
+        )
+    except Exception as exc:  # noqa: BLE001
+        payload["masterVerify"] = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
+
+    if args.verify_only:
+        payload["ok"] = bool((payload.get("masterVerify") or {}).get("ok"))
+        payload["finishedAt"] = _utc_now()
+        _write_status(Path(args.status_path), payload)
+        print(json.dumps(_scrub(payload), indent=2))
+        return 0 if payload["ok"] else 1
 
     if args.dry_run:
         exports = run_catalog_exports(
@@ -247,6 +279,15 @@ def main() -> int:
         refresh_ps1=Path(args.refresh_ps1),
     )
     payload["refresh"] = refresh
+    # Re-verify after pull so status shows which master reports are still missing
+    try:
+        payload["masterVerifyAfter"] = verify_master_reports(
+            start=start,
+            end=end,
+            require_inbox_files=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        payload["masterVerifyAfter"] = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
     payload["ok"] = bool(exports.get("ok")) and bool(refresh.get("ok"))
     payload["partialOk"] = bool(exports.get("partialOk") or (exports.get("ok") and not refresh.get("ok")))
     payload["finishedAt"] = _utc_now()

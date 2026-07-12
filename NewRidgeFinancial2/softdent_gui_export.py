@@ -602,6 +602,9 @@ def _open_accounting_report(report_id: str, menu_keys: str) -> None:
             "Reports->Practice Management->Collection Reports->Summary",
             "Reports->Practice Management->Collection Reports->Reconciliation",
         ],
+        "writeoff_totals": [
+            "Reports->Practice Management->Insurance Reports->Writeoff Totals",
+        ],
     }
     for path in win32_paths.get(report_id) or []:
         if _open_report_via_win32_menu(path):

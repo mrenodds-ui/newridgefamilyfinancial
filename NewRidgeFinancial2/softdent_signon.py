@@ -31,9 +31,10 @@ SOFTDENT_DATA_ACCESS_DOCTRINE = (
     "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed "
     "rows are available there. The only way to get SoftDent data that cannot be reached "
     "by the database is SoftDent Sign On (env credentials) and use the SoftDent UI "
-    "(Reports / Accounting → export Register, Collections, daysheet, etc.), then place "
-    "the file for NR2 ingest/Sync. No invented dollars, no SoftDent write-back, and no "
-    "fictional vendor CLI when the DB lane cannot supply the report."
+    "(Reports → Excel export — click Excel then Enter), then place the file for NR2 "
+    "ingest/Sync. Master report list: softdent_master_reports.json (verify via "
+    "softdent_master_reports.verify_master_reports). No invented dollars, no SoftDent "
+    "write-back, and no fictional vendor CLI when the DB lane cannot supply the report."
 )
 
 
@@ -125,6 +126,19 @@ def get_softdent_signon_password() -> str:
 def softdent_signon_status() -> dict[str, Any]:
     """Safe status for HAL / refresh steps (no secret material)."""
     creds = resolve_softdent_signon_credentials()
+    master: dict[str, Any] | None = None
+    try:
+        from softdent_master_reports import gui_export_ids_required, load_master_reports
+
+        cat = load_master_reports()
+        master = {
+            "version": cat.get("version"),
+            "masterOrder": list(cat.get("masterOrder") or []),
+            "guiExportIds": gui_export_ids_required(),
+            "path": "softdent_master_reports.json",
+        }
+    except Exception as exc:  # noqa: BLE001
+        master = {"error": f"{type(exc).__name__}:{exc}"}
     return {
         "ok": bool(creds.get("ok")),
         "user": creds.get("user"),
@@ -135,6 +149,7 @@ def softdent_signon_status() -> dict[str, Any]:
         "envPasswordAltKey": ENV_PASSWORD_ALT,
         "hint": creds.get("hint"),
         "dataAccessDoctrine": SOFTDENT_DATA_ACCESS_DOCTRINE,
+        "masterReports": master,
         "knowledge": (
             f"SoftDent GUI Sign On credentials live in environment variables "
             f"{ENV_USER} / {ENV_PASSWORD} (or {ENV_USER_ALT} / {ENV_PASSWORD_ALT}), "
@@ -171,6 +186,8 @@ def format_softdent_signon_hal_reply(status: dict[str, Any] | None = None) -> st
             else f"Password is NOT configured yet — set `{ENV_PASSWORD}` in local `.env` / User env."
         ),
         SOFTDENT_DATA_ACCESS_DOCTRINE,
+        "Master SoftDent report list: softdent_master_reports.json — verify with "
+        "`python -m softdent_master_reports` (DB first; missing GUI reports → Sign On + Excel).",
         "Ask HAL: Refresh SoftDent period — step `softdent_signon` uses these env vars for UI assist. "
         "HAL still will not write clinical/financial SoftDent data.",
     ]
@@ -199,7 +216,7 @@ def _query_touches_softdent_signon_or_ui_data(query: str) -> bool:
     ):
         return True
     if "softdent" in q and re.search(
-        r"\b(database|odbc|sqlite|ui|gui|export|report|daysheet|register)\b",
+        r"\b(database|odbc|sqlite|ui|gui|export|report|daysheet|register|master list|master report)\b",
         q,
     ):
         return True

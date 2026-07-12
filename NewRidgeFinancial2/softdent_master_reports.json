@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "updated": "2026-07-12",
+  "softdentVersionHint": "CS SoftDent Software v19.1.4",
+  "doctrine": [
+    "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed rows are available there.",
+    "The only way to get SoftDent data that cannot be reached by the database is SoftDent Sign On (env credentials) and SoftDent UI Excel export, then NR2 file ingest.",
+    "Never invent dollars, SoftDent write-back, or a fictional vendor CLI for UI-only reports.",
+    "Output Options: click Excel then Enter (never Printer)."
+  ],
+  "exportInbox": "C:\\SoftDentReportExports",
+  "dbTablesPreferred": [
+    "sd_providers",
+    "sd_patients",
+    "sd_procedures",
+    "sd_appointments",
+    "sd_claims",
+    "sd_payments",
+    "sd_adjustments",
+    "sd_patient_insurance"
+  ],
+  "masterOrder": [
+    "sd_odbc_core",
+    "register",
+    "collections",
+    "transactions",
+    "daysheet",
+    "aging",
+    "writeoff_totals"
+  ],
+  "reports": {
+    "sd_odbc_core": {
+      "id": "sd_odbc_core",
+      "label": "SoftDent ODBC / Sensei core tables",
+      "preferredSource": "database",
+      "guiRequiredWhenMissing": false,
+      "why": "Patient, procedure, payment, claim, appointment rows when ODBC/Sensei/sd_* are populated.",
+      "dbTables": [
+        "sd_providers",
+        "sd_patients",
+        "sd_procedures",
+        "sd_appointments",
+        "sd_claims",
+        "sd_payments",
+        "sd_adjustments",
+        "sd_patient_insurance"
+      ],
+      "guiMenuPath": null,
+      "guiExportId": null,
+      "canonicalPatterns": [],
+      "requiredForFinancialClose": true,
+      "phase": 0,
+      "nr2Uses": ["HAL SoftDent widgets", "claims/AR when tables populated", "Sensei sync"]
+    },
+    "register": {
+      "id": "register",
+      "label": "Register for a Period",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "Period production/collections and Ins Plan vs Patient split SoftDent exposes via Register Excel — not reliably available as a period row from ODBC alone.",
+      "dbTables": [],
+      "guiMenuPath": "Reports → Accounting → Registers → Period",
+      "guiWin32Path": "Reports->Accounting->Registers->Period",
+      "guiExportId": "register",
+      "canonicalPatterns": [
+        "register_for_period_*.xls",
+        "register_for_period_*.csv",
+        "REG????.XLS"
+      ],
+      "requiredForFinancialClose": true,
+      "phase": 1,
+      "nr2Uses": ["period production", "period collections", "Ins/Patient split when SoftDent reports it"]
+    },
+    "collections": {
+      "id": "collections",
+      "label": "Collection Reports — Summary",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "Collections Ins/Patient mix when Register Ins Plan is $0 or incomplete; SoftDent UI report only.",
+      "dbTables": [],
+      "guiMenuPath": "Reports → Practice Management → Collection Reports → Summary",
+      "guiWin32Path": "Reports->Practice Management->Collection Reports->Summary",
+      "guiExportId": "collections",
+      "canonicalPatterns": [
+        "collections_for_period_*.xls",
+        "collections_for_period_*.csv",
+        "COL????.XLS"
+      ],
+      "requiredForFinancialClose": true,
+      "phase": 1,
+      "nr2Uses": ["collections gap fill", "Ins vs Patient when Register lacks split"]
+    },
+    "transactions": {
+      "id": "transactions",
+      "label": "Trans for a Period",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "Period transaction detail SoftDent exports via Accounting → Trans for a Period Excel.",
+      "dbTables": ["sd_procedures", "sd_payments", "sd_adjustments"],
+      "dbNote": "Try sd_* first for line detail; GUI Trans Period when DB lane cannot supply the period export NR2 expects.",
+      "guiMenuPath": "Reports → Accounting → Trans for a Period",
+      "guiWin32Path": "Reports->Accounting->Trans for a Period",
+      "guiExportId": "transactions",
+      "canonicalPatterns": [
+        "transactions_for_period*.xls",
+        "transactions_for_period*.csv",
+        "TRN????.XLS"
+      ],
+      "requiredForFinancialClose": true,
+      "phase": 1,
+      "nr2Uses": ["period transaction ingest", "DEF-001 / period sync support"]
+    },
+    "daysheet": {
+      "id": "daysheet",
+      "label": "Daysheet",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "Day-close daysheet updates SoftDent RCVTOT.DAT and supplies daily production/collections for period stubs.",
+      "dbTables": [],
+      "guiMenuPath": "Reports → Accounting → Daysheet",
+      "guiWin32Path": "Reports->Accounting->Daysheet",
+      "guiExportId": "daysheet",
+      "canonicalPatterns": ["daysheet.xls", "daysheet.csv", "DAY*.XLS"],
+      "requiredForFinancialClose": true,
+      "phase": 1,
+      "nr2Uses": ["daysheet → period row", "receivables totals currency"]
+    },
+    "aging": {
+      "id": "aging",
+      "label": "Account Aging",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "A/R aging buckets SoftDent prints/exports via Account Aging; not a substitute from incomplete sd_claims alone.",
+      "dbTables": ["sd_claims"],
+      "dbNote": "sd_claims can support outstanding-claim views when populated; Account Aging Excel is the SoftDent AR aging report NR2 ingests.",
+      "guiMenuPath": "Reports → Accounting → Account Aging",
+      "guiWin32Path": "Reports->Accounting->Account Aging",
+      "guiExportId": "aging",
+      "canonicalPatterns": ["account_aging.xls", "account_aging.csv", "AGE*.XLS"],
+      "requiredForFinancialClose": true,
+      "phase": 1,
+      "nr2Uses": ["A/R aging widgets", "receivables health"]
+    },
+    "writeoff_totals": {
+      "id": "writeoff_totals",
+      "label": "Writeoff Totals",
+      "preferredSource": "gui",
+      "guiRequiredWhenMissing": true,
+      "why": "Insurance writeoff totals SoftDent reports under Practice Management → Insurance Reports.",
+      "dbTables": ["sd_adjustments"],
+      "dbNote": "Try sd_adjustments / writeoff codes first; GUI Writeoff Totals when DB cannot supply the report totals.",
+      "guiMenuPath": "Reports → Practice Management → Insurance Reports → Writeoff Totals",
+      "guiWin32Path": "Reports->Practice Management->Insurance Reports->Writeoff Totals",
+      "guiExportId": "writeoff_totals",
+      "canonicalPatterns": ["writeoff_totals.xls", "writeoff_totals.csv"],
+      "requiredForFinancialClose": false,
+      "phase": 2,
+      "nr2Uses": ["writeoff / contractual adjustment reporting"]
+    }
+  },
+  "phase2_reserved": [
+    "production_by_provider",
+    "production_by_ada_code",
+    "collection_reconciliation",
+    "deposit_slip",
+    "outstanding_claims_by_co"
+  ]
+}
