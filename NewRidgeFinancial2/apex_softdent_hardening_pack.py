@@ -18,10 +18,17 @@ GAP_COLLECTIONS_UNREPORTED = "COLLECTIONS_UNREPORTED"  # reported=false (past pe
 GAP_DAYSHEET_ZERO = "COLLECTIONS_ZERO_ON_DAYSHEET"
 GAP_REGISTER_ONLY = "REGISTER_ONLY"  # production without collections key
 GAP_NO_PERIOD = "NO_PERIOD_ROW"
+GAP_COLLECTIONS_FORMAT_REQUIRED = "COLLECTIONS_FORMAT_REQUIRED"  # files present but wrong period/split
 
 FIX_HINT = (
     "Import SoftDent daysheet / complete Register for a Period, then Sync "
     "(or ask HAL: refresh SoftDent period). Empty ≠ $0."
+)
+FORMAT_HINT = (
+    "Inbox has DaySheet/Collections-named files, but they are not a usable "
+    "insurance/patient split for the open period. Export SoftDent → Reports → "
+    "Accounting → Register for a Period (open month) or Collections/Daysheet "
+    r"with a real Ins/Patient split to C:\SoftDentReportExports, then Sync. Empty ≠ $0."
 )
 
 # SoftDent export inbox roots (same family as import_sync upstream)
@@ -145,6 +152,72 @@ def _latest_period_from_bundle(bundle: dict[str, Any] | None) -> dict[str, Any] 
         return None
 
 
+def classify_daysheet_inbox_periods(matches: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Best-effort period labels from daysheet CSV/JSONL names and content (no $ invent)."""
+    from pathlib import Path
+
+    items = matches if isinstance(matches, list) else []
+    periods: list[str] = []
+    notes: list[str] = []
+    for item in items[:8]:
+        if not isinstance(item, dict):
+            continue
+        path = Path(str(item.get("path") or ""))
+        name = str(item.get("name") or path.name)
+        found: set[str] = set()
+        for m in re.finditer(r"(20\d{2})[-_/]?(\d{2})", name):
+            found.add(f"{m.group(1)}-{m.group(2)}")
+        if path.is_file() and path.suffix.lower() in {".csv", ".jsonl", ".txt"}:
+            try:
+                text = path.read_text(encoding="utf-8-sig", errors="ignore")[:8000]
+            except OSError:
+                text = ""
+            for m in re.finditer(
+                r"(?i)\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|"
+                r"Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|"
+                r"Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b",
+                text,
+            ):
+                mon = {
+                    "jan": "01",
+                    "january": "01",
+                    "feb": "02",
+                    "february": "02",
+                    "mar": "03",
+                    "march": "03",
+                    "apr": "04",
+                    "april": "04",
+                    "may": "05",
+                    "jun": "06",
+                    "june": "06",
+                    "jul": "07",
+                    "july": "07",
+                    "aug": "08",
+                    "august": "08",
+                    "sep": "09",
+                    "sept": "09",
+                    "september": "09",
+                    "oct": "10",
+                    "october": "10",
+                    "nov": "11",
+                    "november": "11",
+                    "dec": "12",
+                    "december": "12",
+                }.get(m.group(1).lower())
+                if mon:
+                    found.add(f"{m.group(3)}-{mon}")
+            for m in re.finditer(r"\b(20\d{2})[-/](\d{2})[-/](\d{2})\b", text):
+                found.add(f"{m.group(1)}-{m.group(2)}")
+            for m in re.finditer(r"\b(\d{1,2})/(\d{1,2})/(20\d{2})\b", text):
+                found.add(f"{m.group(3)}-{int(m.group(1)):02d}")
+        if found:
+            periods.extend(sorted(found))
+            notes.append(f"{name}: periods={','.join(sorted(found))}")
+        else:
+            notes.append(f"{name}: period unknown (DaySheet presence ≠ open-month Collections)")
+    return {"periods": sorted(set(periods)), "notes": notes[:8]}
+
+
 def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, Any]:
     """
     Single source of truth for DEF-001 Collections/Daysheet gap.
@@ -158,11 +231,13 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     pending = False
     reported: bool | None = None
     has_collections_key = False
+    format_required = False
     production = None
     collections = None
 
     if latest:
         pending = bool(latest.get("collectionsPending"))
+        format_required = bool(latest.get("collectionsFormatRequired"))
         if "collectionsReported" in latest:
             reported = bool(latest.get("collectionsReported"))
         has_collections_key = "collections" in latest
@@ -174,8 +249,31 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             collections = float(latest.get("collections")) if has_collections_key else None
         except (TypeError, ValueError):
             collections = None
+        try:
+            ins = float(latest.get("insurance") or 0)
+        except (TypeError, ValueError):
+            ins = 0.0
+        try:
+            pat = float(latest.get("patient") or 0)
+        except (TypeError, ValueError):
+            pat = 0.0
+        if (
+            has_collections_key
+            and collections
+            and collections > 0
+            and ins <= 0
+            and pat > 0
+            and abs(pat - collections) < 0.02
+        ):
+            format_required = True
 
-        if pending:
+        if format_required and not pending:
+            gap = GAP_COLLECTIONS_FORMAT_REQUIRED
+            issues.append(
+                f"{period or 'latest'}: collections total may exist but insurance/patient split "
+                "is missing or all-patient dump — Collections format required."
+            )
+        elif pending:
             gap = GAP_COLLECTIONS_PENDING
             issues.append(
                 f"{period or 'latest'}: collectionsPending — daysheet/collections not reported for this period."
@@ -224,18 +322,23 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         "period": period,
         "collectionsPending": pending,
         "collectionsReported": reported,
+        "collectionsFormatRequired": format_required or gap == GAP_COLLECTIONS_FORMAT_REQUIRED,
         "hasCollectionsKey": has_collections_key,
         "production": production,
         "collections": collections if gap == GAP_OK else None,  # never surface unverified $ as truth
         "honesty": "empty_not_zero" if not healthy else "reported",
-        "fixHint": None if healthy else FIX_HINT,
+        "fixHint": None if healthy else (FORMAT_HINT if format_required else FIX_HINT),
         "issues": issues[:12],
         "def": "DEF-001",
         "checkedAt": _utc_now(),
     }
-    # Ops inbox scan — file presence only; never invents dollars
+    # Ops inbox scan — file presence + period classify; never invents dollars
     try:
         inbox = scan_collections_export_inbox()
+        classified = classify_daysheet_inbox_periods(inbox.get("matches") or [])
+        open_period = (period or datetime.now(timezone.utc).strftime("%Y-%m"))[:7]
+        covers = open_period in set(classified.get("periods") or [])
+        classified["coversOpenMonth"] = covers
         result["exportInbox"] = {
             "matchCount": inbox.get("matchCount"),
             "hasCollectionsLikeFile": inbox.get("hasCollectionsLikeFile"),
@@ -244,6 +347,9 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             "matches": (inbox.get("matches") or [])[:6],
             "hint": inbox.get("hint"),
             "roots": inbox.get("roots"),
+            "classifiedPeriods": classified.get("periods"),
+            "coversOpenMonth": covers,
+            "classifyNotes": classified.get("notes"),
         }
         if not healthy and not inbox.get("matchCount"):
             issues.append("No Collections/Daysheet-named files in SoftDent export inbox.")
@@ -254,7 +360,23 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             )
         elif not healthy and inbox.get("matchCount"):
             names = ", ".join(str(m.get("name")) for m in (inbox.get("matches") or [])[:3] if m.get("name"))
-            issues.append(f"Export inbox has matching file(s): {names}. Refresh SoftDent period if still pending.")
+            if not covers:
+                # Files exist but do not cover open month → format/period required
+                result["gapCode"] = GAP_COLLECTIONS_FORMAT_REQUIRED
+                result["collectionsGapCode"] = GAP_COLLECTIONS_FORMAT_REQUIRED
+                result["collectionsFormatRequired"] = True
+                result["fixHint"] = FORMAT_HINT
+                issues.append(
+                    f"Export inbox has {names}, but classified periods "
+                    f"{classified.get('periods') or []} do not cover open month {open_period}."
+                )
+                for note in (classified.get("notes") or [])[:3]:
+                    issues.append(str(note))
+            else:
+                issues.append(
+                    f"Export inbox has matching file(s) for {open_period}: {names}. "
+                    "Refresh SoftDent period if dashboard still pending."
+                )
             result["issues"] = issues[:12]
     except Exception:
         pass
@@ -357,6 +479,11 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
         lines.append(
             f"Export inbox: {inbox.get('matchCount') or 0} Collections/Daysheet/Register-like file(s)."
         )
+        if inbox.get("classifiedPeriods") is not None:
+            lines.append(
+                f"Classified file periods: {inbox.get('classifiedPeriods') or []} · "
+                f"covers open month={inbox.get('coversOpenMonth')}."
+            )
         hint = inbox.get("hint")
         if hint:
             lines.append(str(hint))

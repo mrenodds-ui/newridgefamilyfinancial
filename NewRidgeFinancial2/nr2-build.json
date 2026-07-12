@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10564",
-  "BUILD_ID": "hal-10564",
-  "assetVersion": "hal-10564",
-  "builtAt": "2026-07-12T13:03:18.263Z",
-  "notes": "hal-10564: Moonshot DEF-001 Collections/Daysheet — period-aware empty revenue-composition, export inbox scan, HAL local policy.",
+  "schemaVersion": "hal-10565",
+  "BUILD_ID": "hal-10565",
+  "assetVersion": "hal-10565",
+  "builtAt": "2026-07-12T13:11:24.304Z",
+  "notes": "hal-10565: DEF-001 period sync honesty — COLLECTIONS_FORMAT_REQUIRED, no invented patient=collections dumps, inbox period classify.",
   "staffRenderMode": "apex"
 }

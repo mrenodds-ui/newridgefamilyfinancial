@@ -1,4 +1,4 @@
-"""Moonshot DEF-001 Collections/Daysheet after Phase 5 (hal-10564)."""
+"""Moonshot DEF-001 Collections/Daysheet after Phase 5 (hal-10565)."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ from apex_softdent_hardening_pack import (
 from nr2_hal_gateway import try_local_policy_reply
 
 # ERA enrich may upgrade pending → ERA_835_AVAILABLE when live 835s exist
-_PENDING_CODES = {GAP_COLLECTIONS_PENDING, "ERA_835_AVAILABLE"}
+_PENDING_CODES = {GAP_COLLECTIONS_PENDING, "ERA_835_AVAILABLE", "COLLECTIONS_FORMAT_REQUIRED"}
 
 
 def _bundle_pending() -> dict:
@@ -44,7 +44,7 @@ def _bundle_pending() -> dict:
 
 class CollectionsDaysheetHal10564Tests(unittest.TestCase):
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10564")
+        self.assertEqual(BUILD_ID, "hal-10565")
 
     def test_inbox_scan_finds_collections_named_file(self):
         with tempfile.TemporaryDirectory() as tmp:

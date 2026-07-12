@@ -67,11 +67,16 @@ def _aggregate_daysheet(db_path: Path, periods: list[str]) -> dict[str, dict[str
         production = float(gross or net or 0)
         coll = float(collections or 0)
         ins = float(insurance or 0)
+        # Honesty: do not invent patient = collections when insurance is 0/null
+        # (that paints a false 0/100 all-patient mix). Split stays empty until
+        # insurance_payment_total or sd_payments remap provides a real side.
+        split_ok = ins > 0
         out[str(year_month)] = {
             "production": production,
             "collections": coll,
-            "insurance": ins,
-            "patient": max(0.0, coll - ins),
+            "insurance": ins if split_ok else 0.0,
+            "patient": max(0.0, coll - ins) if split_ok else 0.0,
+            "insuranceSplitReported": split_ok,
         }
     # Honest insurance remap: when daysheet footer insurance is 0/null but sd_payments
     # has Insurance Check Payment rows for that month, use those (never invent).
@@ -102,6 +107,7 @@ def _aggregate_daysheet(db_path: Path, periods: list[str]) -> dict[str, dict[str
                     coll = float(out[ym].get("collections") or 0)
                     out[ym]["insurance"] = ins_amt
                     out[ym]["patient"] = max(0.0, coll - ins_amt)
+                    out[ym]["insuranceSplitReported"] = True
     conn.close()
     return out
 
@@ -248,24 +254,48 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
     collections_reported = False
     insurance = 0.0
     patient = 0.0
+    split_reported = False
     for source in sources:
         production = _merge_metric(production, float(source.get("production") or 0))
         candidate, reported = _include_collections_from_source(source)
         collections, collections_reported = _merge_collections(collections, candidate, reported=reported)
-        insurance = _merge_metric(insurance, float(source.get("insurance") or 0))
-        patient = _merge_metric(patient, float(source.get("patient") or 0))
-    if patient <= 0 and collections is not None and collections > 0:
+        src_ins = float(source.get("insurance") or 0)
+        src_pat = float(source.get("patient") or 0)
+        if source.get("insuranceSplitReported") is True or (src_ins > 0 and src_pat >= 0):
+            split_reported = True
+            insurance = _merge_metric(insurance, src_ins)
+            patient = _merge_metric(patient, src_pat)
+        elif src_ins > 0:
+            split_reported = True
+            insurance = _merge_metric(insurance, src_ins)
+            if src_pat > 0:
+                patient = _merge_metric(patient, src_pat)
+    # Only derive patient from collections−insurance when insurance side is real (>0).
+    # Never invent all-patient dumps (ins=0, patient=collections).
+    if split_reported and patient <= 0 and collections is not None and collections > 0 and insurance > 0:
         patient = max(0.0, collections - insurance)
+    # Collapse false prior dumps: collections≈patient with insurance=0 is not a mix.
+    if (
+        collections is not None
+        and collections > 0
+        and insurance <= 0
+        and patient > 0
+        and abs(patient - collections) < 0.02
+    ):
+        patient = 0.0
+        split_reported = False
     row: dict[str, Any] = {
         "provider": PRACTICE_NAME,
         "period": period,
         "production": production,
-        "insurance": insurance,
-        "patient": patient,
+        "insurance": insurance if split_reported else 0.0,
+        "patient": patient if split_reported else 0.0,
     }
     if collections is not None:
         row["collections"] = collections
         row["collectionsReported"] = True
+    if collections_reported and collections is not None and collections > 0 and not split_reported:
+        row["collectionsFormatRequired"] = True
     if production > 0 and not collections_reported:
         has_daysheet = any(_collections_source_kind(source) == "daysheet" for source in sources)
         if _explicit_collections_failure(sources):
@@ -336,7 +366,142 @@ def diagnose_collections_gap(db_path: Path | None, periods: list[str] | None = N
     }
 
 
-def sync_dashboard_period_rows() -> dict[str, Any]:
+def _stub_source_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Convert export summary into a period-row source (no invented $)."""
+    production = float(summary.get("production") or 0)
+    source: dict[str, Any] = {
+        "_source": "inbox_export",
+        "production": production,
+        "insurance": float(summary.get("insurance") or 0),
+        "patient": float(summary.get("patient") or 0),
+    }
+    if summary.get("insuranceSplitReported") is True:
+        source["insuranceSplitReported"] = True
+    collections = summary.get("collections")
+    if collections is not None:
+        try:
+            coll = float(collections)
+        except (TypeError, ValueError):
+            coll = None
+        if coll is not None and coll > 0:
+            source["collections"] = coll
+            source["collectionsReported"] = True
+    if summary.get("daysheetWithoutSplit") and production > 0 and "collections" not in source:
+        # Production-only daysheet → honest pending, never $0 collections.
+        source.pop("collections", None)
+        source.pop("collectionsReported", None)
+    return source
+
+
+def ingest_daysheet_to_period(*, force_reimport: bool = False) -> dict[str, Any]:
+    """Create/update dashboard period stubs from SoftDent export inbox CSV/JSONL.
+
+    Triggered when inbox has daysheet/register files. Never invents insurance/patient
+    dollars. Production-only daysheet → collectionsPending / daysheetWithoutSplit.
+    """
+    from apex_softdent_hardening_pack import scan_collections_export_inbox
+    from softdent_practice_exports import summarize_daysheet_export
+
+    periods = relevant_period_labels()
+    inbox = scan_collections_export_inbox(limit=20)
+    matches = inbox.get("matches") if isinstance(inbox.get("matches"), list) else []
+    summaries: list[dict[str, Any]] = []
+    for item in matches:
+        if not isinstance(item, dict):
+            continue
+        path = Path(str(item.get("path") or ""))
+        if not path.is_file():
+            continue
+        try:
+            summary = summarize_daysheet_export(path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("inbox export summarize failed for %s: %s", path, exc)
+            continue
+        if not summary or not summary.get("period"):
+            continue
+        summaries.append(summary)
+
+    dest = softdent_import_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    path = dest / "softdent_dashboard_data.json"
+    existing: list[dict[str, Any]] = []
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+            if isinstance(payload, list):
+                existing = [row for row in payload if isinstance(row, dict)]
+        except json.JSONDecodeError:
+            existing = []
+    by_period = {str(row.get("period")): row for row in existing if row.get("period")}
+    had_any_period = bool(by_period)
+    created: list[str] = []
+    updated: list[str] = []
+    skipped: list[str] = []
+
+    for summary in summaries:
+        period = str(summary["period"])[:7]
+        # Prefer relevant open/prior months; when dashboard is empty, still ingest
+        # any parseable period so gap assess is never stuck on NO_PERIOD_ROW.
+        if period not in periods and had_any_period and not force_reimport:
+            skipped.append(period)
+            continue
+        prior = by_period.get(period)
+        if prior and not force_reimport and not (
+            prior.get("collectionsPending") is True and float(prior.get("production") or 0) <= 0
+        ):
+            # Keep richer existing rows unless force or empty pending stub.
+            if float(prior.get("production") or 0) > 0 or prior.get("collectionsReported") is True:
+                skipped.append(period)
+                continue
+        source = _stub_source_from_summary(summary)
+        row = _build_period_row(period, [source] if not prior else [_prior_source_dict(prior), source])
+        if summary.get("daysheetWithoutSplit") and not summary.get("hasInsurancePatientSplit"):
+            if float(row.get("production") or 0) > 0 and row.get("collectionsReported") is not True:
+                row["collectionsPending"] = True
+                row.pop("collections", None)
+                row.pop("collectionsReported", None)
+            row["daysheetWithoutSplit"] = True
+            if row.get("collectionsReported") is True and not (
+                float(row.get("insurance") or 0) > 0
+            ):
+                row["collectionsFormatRequired"] = True
+        if prior:
+            updated.append(period)
+        else:
+            created.append(period)
+        by_period[period] = row
+        had_any_period = True
+
+    merged = [by_period[p] for p in sorted(by_period.keys())]
+    from import_cache_ttl import write_text_if_changed
+
+    changed = False
+    if created or updated:
+        changed = write_text_if_changed(path, json.dumps(merged, indent=2))
+    return {
+        "ok": True,
+        "forceReimport": force_reimport,
+        "path": str(path),
+        "changed": changed,
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "summaries": [
+            {
+                "period": s.get("period"),
+                "sourceKind": s.get("sourceKind"),
+                "production": s.get("production"),
+                "hasInsurancePatientSplit": s.get("hasInsurancePatientSplit"),
+                "daysheetWithoutSplit": s.get("daysheetWithoutSplit"),
+            }
+            for s in summaries
+        ],
+        "inboxMatchCount": inbox.get("matchCount"),
+    }
+
+
+def sync_dashboard_period_rows(*, force_reimport: bool = False) -> dict[str, Any]:
+    inbox_ingest = ingest_daysheet_to_period(force_reimport=force_reimport)
     periods = relevant_period_labels()
     db_path = resolve_analytics_db()
     generated = _month_rows(db_path, periods)
@@ -358,6 +523,15 @@ def sync_dashboard_period_rows() -> dict[str, Any]:
         prior = by_period.get(period)
         if prior:
             merged = _build_period_row(period, [_prior_source_dict(prior), row])
+            # Preserve honesty flags from inbox stubs when DB still lacks split.
+            if prior.get("daysheetWithoutSplit") and not (
+                float(merged.get("insurance") or 0) > 0
+            ):
+                merged["daysheetWithoutSplit"] = True
+            if prior.get("collectionsFormatRequired") and not (
+                float(merged.get("insurance") or 0) > 0
+            ):
+                merged["collectionsFormatRequired"] = True
             merge_log.append(
                 {
                     "period": period,
@@ -389,11 +563,13 @@ def sync_dashboard_period_rows() -> dict[str, Any]:
         "ok": bool(merged),
         "path": str(path),
         "changed": changed,
+        "forceReimport": force_reimport,
         "periods": [row.get("period") for row in merged if row.get("period") in periods],
         "rowCount": len(merged),
         "source": str(db_path) if db_path else None,
         "mergeLog": merge_log,
         "collectionsDiagnostic": diagnostic,
+        "inboxIngest": inbox_ingest,
     }
 
 

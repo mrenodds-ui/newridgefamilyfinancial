@@ -174,7 +174,13 @@ def enrich_collections_gap_with_era(
     """
     out = dict(gap) if isinstance(gap, dict) else {}
     code = str(out.get("gapCode") or "")
-    if code not in {"COLLECTIONS_PENDING", "COLLECTIONS_UNREPORTED", "REGISTER_ONLY", "NO_PERIOD_ROW"}:
+    if code not in {
+        "COLLECTIONS_PENDING",
+        "COLLECTIONS_UNREPORTED",
+        "REGISTER_ONLY",
+        "NO_PERIOD_ROW",
+        "COLLECTIONS_FORMAT_REQUIRED",
+    }:
         return out
     period = out.get("period")
     era = era_available_for_period(str(period) if period else None, db_path=db_path)

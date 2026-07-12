@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10564"
+BUILD_ID = "hal-10565"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4265,19 +4265,55 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
     result["ok"] = any(bool(s.get("ok")) for s in result["steps"])
     result["completedAt"] = _utc_now()
     inbox = result.get("exportInbox") if isinstance(result.get("exportInbox"), dict) else {}
-    if inbox.get("matchCount"):
-        result["nextStep"] = (
-            "Matching Collections/Daysheet/Register file(s) found in export inbox. "
-            "If revenue-composition is still empty, Sync imports again or re-run Refresh SoftDent period. "
-            "Honesty: empty ≠ $0 — do not invent insurance/patient dollars."
-        )
-    else:
-        result["nextStep"] = (
-            "DEF-001: SoftDent → Reports → Accounting → Collections or Daysheet "
-            "(or Register for a Period for the open month) → export CSV to "
-            r"C:\SoftDentReportExports, then Sync / Refresh SoftDent period. "
-            "Empty revenue-composition is not $0."
-        )
+    try:
+        from apex_softdent_hardening_pack import assess_collections_gap, FORMAT_HINT
+
+        _reports, bundle, _err = _load_reports_and_bundle()
+        gap = assess_collections_gap(bundle)
+        result["collectionsGap"] = {
+            "gapCode": gap.get("gapCode"),
+            "collectionsGapCode": gap.get("collectionsGapCode"),
+            "period": gap.get("period"),
+            "healthy": gap.get("healthy"),
+            "coversOpenMonth": (gap.get("exportInbox") or {}).get("coversOpenMonth"),
+            "classifiedPeriods": (gap.get("exportInbox") or {}).get("classifiedPeriods"),
+        }
+        if gap.get("collectionsFormatRequired") or gap.get("gapCode") == "COLLECTIONS_FORMAT_REQUIRED":
+            result["nextStep"] = FORMAT_HINT
+        elif gap.get("collectionsPending"):
+            result["nextStep"] = (
+                f"DEF-001: period {gap.get('period') or 'open'} still collectionsPending. "
+                "SoftDent → Reports → Accounting → Register for a Period (open month start → today) "
+                r"or Collections/Daysheet with Ins/Patient split → C:\SoftDentReportExports → Sync. "
+                "DaySheet presence alone is not enough. Empty ≠ $0."
+            )
+        elif inbox.get("matchCount"):
+            result["nextStep"] = (
+                "Matching Collections/Daysheet/Register file(s) found in export inbox. "
+                "If revenue-composition is still empty, Sync imports again or re-run Refresh SoftDent period. "
+                "Honesty: empty ≠ $0 — do not invent insurance/patient dollars."
+            )
+        else:
+            result["nextStep"] = (
+                "DEF-001: SoftDent → Reports → Accounting → Collections or Daysheet "
+                "(or Register for a Period for the open month) → export CSV to "
+                r"C:\SoftDentReportExports, then Sync / Refresh SoftDent period. "
+                "Empty revenue-composition is not $0."
+            )
+    except Exception:
+        if inbox.get("matchCount"):
+            result["nextStep"] = (
+                "Matching Collections/Daysheet/Register file(s) found in export inbox. "
+                "If revenue-composition is still empty, Sync imports again or re-run Refresh SoftDent period. "
+                "Honesty: empty ≠ $0 — do not invent insurance/patient dollars."
+            )
+        else:
+            result["nextStep"] = (
+                "DEF-001: SoftDent → Reports → Accounting → Collections or Daysheet "
+                "(or Register for a Period for the open month) → export CSV to "
+                r"C:\SoftDentReportExports, then Sync / Refresh SoftDent period. "
+                "Empty revenue-composition is not $0."
+            )
     return result
 
 

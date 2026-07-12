@@ -18,7 +18,8 @@ from apex_softdent_hardening_pack import (
 )
 
 # Live ERA enrich may upgrade COLLECTIONS_PENDING → ERA_835_AVAILABLE
-_PENDING_CODES = {GAP_COLLECTIONS_PENDING, "ERA_835_AVAILABLE"}
+# Inbox wrong-period daysheet may stamp COLLECTIONS_FORMAT_REQUIRED
+_PENDING_CODES = {GAP_COLLECTIONS_PENDING, "ERA_835_AVAILABLE", "COLLECTIONS_FORMAT_REQUIRED"}
 
 
 def _bundle_pending() -> dict:
@@ -95,8 +96,11 @@ class SoftDentHardeningPhaseI2Tests(unittest.TestCase):
 
     def test_register_only(self):
         gap = assess_collections_gap(_bundle_register_only())
-        # ERA enrich may also upgrade REGISTER_ONLY
-        self.assertIn(gap.get("gapCode"), {GAP_REGISTER_ONLY, "ERA_835_AVAILABLE"})
+        # ERA enrich / inbox wrong-period may upgrade REGISTER_ONLY
+        self.assertIn(
+            gap.get("gapCode"),
+            {GAP_REGISTER_ONLY, "ERA_835_AVAILABLE", "COLLECTIONS_FORMAT_REQUIRED"},
+        )
         self.assertFalse(gap.get("healthy"))
 
     def test_widget_empty_when_pending(self):
