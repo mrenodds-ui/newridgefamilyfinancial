@@ -53,6 +53,14 @@ class HalLocalPolicyTests(unittest.TestCase):
         assert reply is not None
         self.assertEqual(reply["intent"], "policy:carc-unknown")
         self.assertIn("will not invent", reply["text"].lower())
+        self.assertIn("escalate to posting supervisor", reply["text"].lower())
+
+    def test_known_carc_co45_from_whitelist(self) -> None:
+        reply = try_local_policy_reply("What does CARC CO-45 mean?")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply["text"], "Contractual obligation; do not bill patient.")
+        self.assertEqual(reply["intent"], "policy:carc-co-45")
 
     def test_write_softdent_preflight(self) -> None:
         reply = try_local_policy_reply("Can you modify the SoftDent fee schedule?")

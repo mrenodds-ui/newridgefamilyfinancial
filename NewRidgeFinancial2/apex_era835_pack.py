@@ -457,6 +457,9 @@ def ingest_era835_to_unified(
         "rowsInserted": inserted,
         "format": parsed.get("format"),
         "adjustmentReasons": parsed.get("adjustment_reasons"),
+        "carcBriefs": _enrich_adjustment_reasons_for_hal(
+            parsed.get("adjustment_reasons") if isinstance(parsed.get("adjustment_reasons"), dict) else {}
+        ),
         "phiNote": parsed.get("phiNote"),
         "localOnly": True,
         "softDentWriteBack": False,
@@ -488,6 +491,24 @@ def attach_u1_to_era_ingest(
     return out
 
 
+def _enrich_adjustment_reasons_for_hal(reasons: dict[str, Any] | None) -> dict[str, Any]:
+    """Inject whitelist CARC briefs into ERA pack context; absent codes hard-refuse."""
+    from era835_parser import enrich_codes_with_briefs
+
+    counts: dict[str, Any] = {}
+    if isinstance(reasons, dict):
+        counts = {str(k): v for k, v in reasons.items() if k}
+    pack = enrich_codes_with_briefs(list(counts.keys()))
+    return {
+        "counts": counts,
+        "briefs": pack.get("briefs") or {},
+        "refused": pack.get("refused") or [],
+        "refuseNote": pack.get("refuseNote"),
+        "knownOnly": True,
+        "emptyNotZero": True,
+    }
+
+
 def list_era835_payments(*, limit: int = 24, db_path: Path | None = None) -> list[dict[str, Any]]:
     from apex_unified_db_pack import open_unified
 
@@ -509,6 +530,7 @@ def list_era835_payments(*, limit: int = 24, db_path: Path | None = None) -> lis
                 reasons = json.loads(r["adjustment_reasons"] or "{}")
             except Exception:
                 reasons = {}
+            enriched = _enrich_adjustment_reasons_for_hal(reasons if isinstance(reasons, dict) else {})
             out.append(
                 {
                     "period": r["period"],
@@ -517,6 +539,7 @@ def list_era835_payments(*, limit: int = 24, db_path: Path | None = None) -> lis
                     "totalPaid": r["total_paid"],
                     "claimCount": r["claim_count"],
                     "adjustmentReasons": reasons,
+                    "carcBriefs": enriched,
                     "sourceFile": r["source_file"],
                     "ingestedAt": r["ingested_at"],
                 }

@@ -4909,6 +4909,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     const content = document.createElement("div");
     content.className = "apex-hal-chat__msg-text";
     content.textContent = text == null ? "" : String(text);
+    if (
+      typeof HalCore !== "undefined" &&
+      typeof HalCore.applyCarcBriefDomStyle === "function" &&
+      HalCore.applyCarcBriefDomStyle(content, text, opts && opts.intent)
+    ) {
+      /* monospace CARC brief applied */
+    }
     row.appendChild(content);
 
     if (role === "hal" || role === "system") {

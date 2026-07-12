@@ -11,6 +11,158 @@ import re
 from difflib import SequenceMatcher
 from typing import Any
 
+# Moonshot HAL 190Q Phase 4 — curated CARC/CAS briefs (CMS X12 835 plain language).
+# ≤140 chars; no PHI; no invented dollars. Staff Action when patient responsibility.
+# Unknown codes must hard-refuse (no model speculation).
+
+CARC_BRIEFS: dict[str, str] = {
+    "CO-45": "Contractual obligation; do not bill patient.",
+    "CO-97": "Benefit for this service included in payment for another service. Staff Action: check bundling on EOB.",
+    "CO-16": "Claim lacks information needed for adjudication. Staff Action: supply missing data; do not invent.",
+    "CO-18": "Exact duplicate claim/service. Staff Action: verify prior paid claim before resubmit.",
+    "CO-22": "Care may be covered by another payer per coordination of benefits.",
+    "CO-29": "Time limit for filing has expired. Staff Action: confirm timely-filing proof before appeal.",
+    "CO-50": "Non-covered service because not deemed medically necessary by payer.",
+    "CO-96": "Non-covered charge(s). Staff Action: confirm benefit exclusion on EOB; empty ≠ $0.",
+    "CO-167": "Diagnosis inconsistent with procedure. Staff Action: verify CDT/ICD pairing on claim.",
+    "CO-4": "Procedure code inconsistent with modifier or required modifier missing.",
+    "CO-11": "Diagnosis inconsistent with procedure code billed.",
+    "CO-15": "Authorization number missing or invalid. Staff Action: attach valid auth; no SoftDent write-back.",
+    "CO-23": "Impact of prior payer adjudication including payments and adjustments.",
+    "CO-24": "Charges covered under capitation agreement.",
+    "CO-26": "Expenses incurred before coverage effective. Staff Action: confirm eligibility dates.",
+    "CO-27": "Expenses incurred after coverage terminated. Staff Action: confirm eligibility dates.",
+    "CO-31": "Patient cannot be identified as insured. Staff Action: verify member ID on EOB only.",
+    "CO-39": "Services denied at time of authorization/pre-certification request.",
+    "CO-42": "Charges exceed contracted/legislated fee arrangement.",
+    "CO-94": "Processed in excess of coverage limitations.",
+    "CO-119": "Benefit maximum for this period has been reached.",
+    "CO-131": "Claim-specific negotiated discount.",
+    "CO-B7": "Provider not eligible to bill this service. Staff Action: verify provider enrollment.",
+    "CO-B13": "Payment previously made for this claim or service.",
+    "CO-204": "Service not authorized. Staff Action: obtain auth before resubmit; no invented dollars.",
+}
+
+CAS_BRIEFS: dict[str, str] = {
+    "PR-1": "Patient deductible. Staff Action: confirm amount on EOB; empty ≠ $0.",
+    "PR-2": "Patient coinsurance. Staff Action: confirm amount on EOB; empty ≠ $0.",
+    "PR-3": "Patient copayment. Staff Action: confirm amount on EOB; empty ≠ $0.",
+    "PR-45": "Patient charge exceeds fee schedule/maximum. Staff Action: review contract vs patient bill.",
+    "PR-96": "Non-covered charge(s) — patient may be responsible per plan. Staff Action: verify EOB.",
+    "OA-23": "Impact of prior payer adjudication (payment/adjustment). Staff Action: use prior EOB only.",
+    "OA-18": "Exact duplicate claim/service (other adjustment). Staff Action: verify prior remittance.",
+    "OA-94": "Processed in excess of coverage limitations (other adjustment).",
+    "PI-204": "Service not authorized (payer initiated). Staff Action: obtain auth; do not invent dollars.",
+    "PI-96": "Non-covered charge(s) (payer initiated). Staff Action: confirm exclusion on EOB.",
+}
+
+_CARC_CODE_NORMALIZE_RE = re.compile(
+    r"\b(?:CARC|CAS|adjustment\s+code|denial\s+code)\s*(?:code\s*)?([A-Z]{2})[-\s]?(\d{1,4}|[A-Z]\d{1,3})\b|"
+    r"\b([A-Z]{2})-(\d{1,4}|[A-Z]\d{1,3})\b",
+    re.IGNORECASE,
+)
+
+CARC_UNKNOWN_REFUSAL = (
+    "I cannot interpret this code; escalate to posting supervisor."
+)
+
+
+def all_carc_briefs() -> dict[str, str]:
+    """Merged CARC + CAS whitelist (known codes only)."""
+    merged = dict(CARC_BRIEFS)
+    merged.update(CAS_BRIEFS)
+    return merged
+
+
+def normalize_carc_code(raw: str) -> str:
+    text = str(raw or "").strip().upper().replace(" ", "")
+    text = text.replace("_", "-")
+    if re.fullmatch(r"[A-Z]{2}-[A-Z0-9]+", text):
+        return text
+    m = re.fullmatch(r"([A-Z]{2})(\d{1,4}|[A-Z]\d{1,3})", text)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}"
+    return text
+
+
+def lookup_carc_brief(code: str) -> str | None:
+    """Return curated brief for a known code, else None (caller must refuse)."""
+    key = normalize_carc_code(code)
+    return all_carc_briefs().get(key)
+
+
+def is_known_carc_code(code: str) -> bool:
+    return lookup_carc_brief(code) is not None
+
+
+def extract_carc_codes_from_text(text: str) -> list[str]:
+    codes: list[str] = []
+    raw = str(text or "")
+    for m in _CARC_CODE_NORMALIZE_RE.finditer(raw):
+        g1, g2, g3, g4 = m.groups()
+        if g1 and g2:
+            codes.append(normalize_carc_code(f"{g1}-{g2}"))
+        elif g3 and g4:
+            codes.append(normalize_carc_code(f"{g3}-{g4}"))
+    # Staff shorthand: "CARC 45" / "CAS 45" → CO-45 (common dental EOB talk)
+    for m in re.finditer(
+        r"\b(?:CARC|CAS)\s*(?:code\s*)?(?<![A-Z]-)(\d{1,4}|[A-Z]\d{1,3})\b",
+        raw,
+        re.IGNORECASE,
+    ):
+        codes.append(normalize_carc_code(f"CO-{m.group(1)}"))
+    # de-dupe preserve order
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in codes:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def carc_unknown_refusal(codes: list[str] | None = None) -> str:
+    unknown = [normalize_carc_code(c) for c in (codes or []) if c]
+    if unknown:
+        return (
+            f"{CARC_UNKNOWN_REFUSAL} "
+            f"No governed definition for {', '.join(unknown)}. I will not invent CARC/CAS meanings."
+        )
+    return f"{CARC_UNKNOWN_REFUSAL} I will not invent CARC/CAS meanings."
+
+
+def format_carc_brief_reply(code: str) -> str | None:
+    brief = lookup_carc_brief(code)
+    if not brief:
+        return None
+    key = normalize_carc_code(code)
+    # Keep CO-45 exact validation string available as the brief body.
+    if key == "CO-45":
+        return brief
+    return f"{key}: {brief}"
+
+
+def enrich_codes_with_briefs(codes: list[str] | None) -> dict[str, Any]:
+    """HAL context pack: known → brief; absent → hard refuse note (no model fallback)."""
+    briefs: dict[str, str] = {}
+    refused: list[str] = []
+    for raw in codes or []:
+        key = normalize_carc_code(raw)
+        if not key:
+            continue
+        brief = lookup_carc_brief(key)
+        if brief:
+            briefs[key] = brief
+        else:
+            refused.append(key)
+    return {
+        "briefs": briefs,
+        "refused": refused,
+        "refuseNote": carc_unknown_refusal(refused) if refused else None,
+        "knownOnly": True,
+        "emptyNotZero": True,
+    }
+
 
 def _parse_money(value: Any) -> float:
     raw = str(value or "").replace("$", "").replace(",", "").strip()
@@ -287,6 +439,7 @@ def summarize_835_for_hal(parsed: dict[str, Any] | None = None, *, content: str 
                 "rarcCodes": rarc,
                 "denialCode": seg.get("denialCode"),
                 "denialFlag": bool(seg.get("denialFlag")),
+                "carcBriefs": enrich_codes_with_briefs(cas),
                 "serviceLineCount": len(seg.get("serviceLines") or []),
                 "serviceLines": [
                     {
@@ -296,12 +449,24 @@ def summarize_835_for_hal(parsed: dict[str, Any] | None = None, *, content: str 
                         "casCodes": list(sl.get("casCodes") or []),
                         "rarcCodes": list(sl.get("rarcCodes") or []),
                         "denialCode": sl.get("denialCode"),
+                        "carcBriefs": enrich_codes_with_briefs(
+                            [str(c) for c in (sl.get("casCodes") or []) if c]
+                        ),
                     }
                     for sl in (seg.get("serviceLines") or [])
                     if isinstance(sl, dict)
                 ],
             }
         )
+    all_codes: list[str] = []
+    for row in claim_summaries:
+        all_codes.extend(str(c) for c in (row.get("casCodes") or []) if c)
+    pack = enrich_codes_with_briefs(all_codes)
+    brief_lines: list[str] = []
+    for code, brief in (pack.get("briefs") or {}).items():
+        brief_lines.append(f"{code}: {brief}")
+    if pack.get("refused"):
+        brief_lines.append(str(pack.get("refuseNote") or CARC_UNKNOWN_REFUSAL))
     summary_text = (
         f"ERA 835 depth summary: claims={len(segments)} denials_or_adj={denial_count} "
         f"total_charged={total_charged if total_charged else 'missing'} "
@@ -309,6 +474,8 @@ def summarize_835_for_hal(parsed: dict[str, Any] | None = None, *, content: str 
         "Amounts only when present on the file — empty ≠ $0.\n"
         + ("\n".join(lines_out) if lines_out else "(no CLP segments)")
     )
+    if brief_lines:
+        summary_text += "\nCARC whitelist briefs (known only; unknown refused):\n" + "\n".join(brief_lines)
     return {
         "ok": True,
         "claimCount": len(segments),
@@ -316,6 +483,7 @@ def summarize_835_for_hal(parsed: dict[str, Any] | None = None, *, content: str 
         "totalCharged": total_charged if total_charged else None,
         "totalPaid": total_paid if total_paid else None,
         "claims": claim_summaries,
+        "carcBriefs": pack,
         "summaryText": summary_text,
         "phiNote": "Patient names omitted from HAL remittance summary.",
     }

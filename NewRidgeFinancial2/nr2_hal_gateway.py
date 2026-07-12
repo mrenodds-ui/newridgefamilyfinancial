@@ -162,28 +162,9 @@ _WRITE_INTENT_RE = re.compile(
 )
 _CARC_CODE_RE = re.compile(
     r"\b(?:CARC|CAS|adjustment\s+code|denial\s+code)\s*"
-    r"(?:code\s*)?([A-Z]{2})[-\s]?(\d{1,4})\b|"
-    r"\b([A-Z]{2})-(\d{1,4})\b",
+    r"(?:code\s*)?([A-Z]{2})[-\s]?(\d{1,4}|[A-Z]\d{1,3})\b|"
+    r"\b([A-Z]{2})-(\d{1,4}|[A-Z]\d{1,3})\b",
     re.IGNORECASE,
-)
-# Codes we may explain without inventing — others refuse speculation.
-_KNOWN_CAS_CODES = frozenset(
-    {
-        "CO-45",
-        "CO-97",
-        "CO-16",
-        "CO-18",
-        "CO-22",
-        "CO-29",
-        "CO-50",
-        "CO-96",
-        "CO-167",
-        "PR-1",
-        "PR-2",
-        "PR-3",
-        "OA-23",
-        "PI-204",
-    }
 )
 _WORD_TO_N = {"one": 1, "two": 2, "three": 3, "1": 1, "2": 2, "3": 3}
 _MEMORY_GUIDANCE_MARKERS = (
@@ -484,43 +465,34 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": f"navigate:{page}",
             }
 
-    # Unknown CARC/CAS — refuse speculation (no invented meanings).
+    # CARC/CAS whitelist (Phase 4) — known briefs only; unknown hard-refuse (no LLM).
     if re.search(r"\b(what|signify|mean|explain)\b", q) and (
         "carc" in q or "cas" in q or "adjustment code" in q or "denial code" in q
     ):
-        codes: list[str] = []
-        for m in _CARC_CODE_RE.finditer(raw):
-            g1, g2, g3, g4 = m.groups()
-            if g1 and g2:
-                codes.append(f"{g1.upper()}-{g2}")
-            elif g3 and g4:
-                codes.append(f"{g3.upper()}-{g4}")
-        unknown = [c for c in codes if c not in _KNOWN_CAS_CODES]
-        if unknown:
-            known_hint = ", ".join(sorted(_KNOWN_CAS_CODES)[:6])
+        from era835_parser import (
+            carc_unknown_refusal,
+            extract_carc_codes_from_text,
+            format_carc_brief_reply,
+            is_known_carc_code,
+            lookup_carc_brief,
+        )
+
+        codes = extract_carc_codes_from_text(raw)
+        if codes:
+            unknown = [c for c in codes if not is_known_carc_code(c)]
+            if unknown:
+                return {
+                    "text": carc_unknown_refusal(unknown),
+                    "intent": "policy:carc-unknown",
+                }
+            code = codes[0]
+            brief = format_carc_brief_reply(code) or lookup_carc_brief(code)
+            if brief:
+                return {"text": brief, "intent": f"policy:carc-{code.lower()}"}
             return {
-                "text": (
-                    f"No — I do not have a governed definition for {', '.join(unknown)}. "
-                    "I will not invent CARC/CAS meanings. Verify on the payer EOB/remark text or "
-                    f"ask about a known code such as {known_hint}."
-                ),
+                "text": carc_unknown_refusal([code]),
                 "intent": "policy:carc-unknown",
             }
-        if codes and all(c in _KNOWN_CAS_CODES for c in codes):
-            code = codes[0]
-            briefs = {
-                "CO-45": (
-                    "CO-45 is a contractual adjustment (charged amount exceeds fee schedule/contract). "
-                    "Do not invent dollars — compare the EOB line to the imported fee schedule."
-                ),
-                "PR-1": (
-                    "PR-1 is a patient responsibility adjustment (deductible/copay/coinsurance style). "
-                    "Confirm the amount on the EOB — empty ≠ $0."
-                ),
-            }
-            if code in briefs:
-                return {"text": briefs[code], "intent": f"policy:carc-{code.lower()}"}
-
     # Empty payroll/AP honesty
     if re.search(r"\bempty\b", q) and re.search(r"\b(payroll|wages|ap\b|unpaid bills)\b", q):
         if re.search(r"\b(\$0|0\$|zero|same as)\b", q) or "empty" in q:
