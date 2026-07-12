@@ -83,7 +83,7 @@ def format_master_reports_hal_reply() -> str:
         "Database / ODBC / Sensei / sd_* is faster for operational detail when populated.",
         "Excel path: click the Excel prompt, then Enter — NR2 parses the file.",
         "Print Preview path: click the Print Preview prompt, then Enter — go to the LAST page and visually read exact totals (do not invent dollars from page 1).",
-        "Never select Printer (offline hang).",
+        "Never select Printer (offline hang). Output Options: Excel prompt or Print Preview prompt only.",
         "Master reports:",
     ]
     for rid in catalog.get("masterOrder") or []:

@@ -36,7 +36,7 @@ SOFTDENT_DATA_ACCESS_DOCTRINE = (
     "procedures, claims, payments) when populated, but is not the primary for period close "
     "until it is proven to match SoftDent desktop Register totals side-by-side. "
     "Never select Printer. Never invent dollars. No SoftDent write-back. "
-    "Master list: softdent_master_reports.json."
+    "Output Options: Excel prompt or Print Preview prompt only — never the Printer prompt."
 )
 
 
@@ -225,14 +225,51 @@ def _query_touches_softdent_signon_or_ui_data(query: str) -> bool:
     return False
 
 
+def format_softdent_widget_path_hal_reply() -> str:
+    """HAL-facing: how SoftDent widgets get their data (desktop Excel vs sd_*)."""
+    return (
+        "SoftDent widgets never talk to SoftDent UI directly. "
+        "Period money widgets (Vital Signs, Ins/Patient split, collection efficiency, "
+        "DEF-001 collections gap, production trends) read analytics dashboard / "
+        "daysheet_totals rows that are filled by SoftDent desktop Excel "
+        "(Register/Daysheet → C:\\SoftDentReportExports → refresh_softdent_period_imports). "
+        "Register Excel is the source of truth for period $ — if it drifts from "
+        "daysheet_totals, re-export Register and refresh. "
+        "Claims / A/R aging / provider production charts read SoftDent CSV/JSON inbox imports. "
+        "Schedule / operatory util widgets prefer sd_* / Sensei (fast DB). "
+        "Details: softdent_master_reports.json + docs/SOFTDENT_WIDGET_DATA_PATHS_2026-07-12.md."
+    )
+
+
+def _query_touches_softdent_widgets_or_drift(query: str) -> bool:
+    q = str(query or "").lower()
+    if re.search(
+        r"\b("
+        r"widget.{0,40}(softdent|data|path|source|get)|"
+        r"(where|how).{0,40}(vital signs|ins.?patient|collections gap|def-?001).{0,40}(data|from|get)|"
+        r"softdent.{0,30}(widget|vital|dashboard).{0,30}(data|source|path)|"
+        r"(register|daysheet).{0,30}(drift|disagree|mismatch|vs|versus).{0,30}(dashboard|daysheet|widget)|"
+        r"period money|money widget"
+        r")\b",
+        q,
+    ):
+        return True
+    if "softdent" in q and re.search(r"\b(widget|vital signs|payer mix|ar aging)\b", q):
+        return True
+    return False
+
+
 def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str:
     """Inject Sign On + UI-only data-path knowledge into HAL LLM context when relevant."""
     prompt = str(system_prompt or "")
     if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
         # Still append master list if missing from prompt
         if "softdent_master_reports" in prompt.lower() or "master reports:" in prompt.lower():
-            return ""
-    if not _query_touches_softdent_signon_or_ui_data(query):
+            if not _query_touches_softdent_widgets_or_drift(query):
+                return ""
+    touches_signon = _query_touches_softdent_signon_or_ui_data(query)
+    touches_widgets = _query_touches_softdent_widgets_or_drift(query)
+    if not touches_signon and not touches_widgets:
         return ""
     try:
         from softdent_master_reports import format_master_reports_hal_reply
@@ -241,21 +278,24 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
     except Exception:
         master = (
             "Master SoftDent reports live in softdent_master_reports.json "
-            "(DB first; GUI Excel when DB cannot supply)."
+            "(desktop Excel for period $; sd_* for ops detail)."
         )
-    if "SOFTDENT_SIGNON_USER" in prompt:
-        return (
-            "SOFTDENT DATA ACCESS: "
-            + format_softdent_data_access_hal_reply()
-            + " "
-            + master
-        )
-    return (
-        "SOFTDENT SIGN ON + DATA ACCESS: "
-        + format_softdent_signon_hal_reply()
-        + " "
-        + master
-    )
+    parts: list[str] = []
+    if touches_signon:
+        if "SOFTDENT_SIGNON_USER" in prompt:
+            parts.append("SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply())
+        else:
+            parts.append("SOFTDENT SIGN ON + DATA ACCESS: " + format_softdent_signon_hal_reply())
+        parts.append(master)
+    if touches_widgets:
+        parts.append("SOFTDENT WIDGET PATHS: " + format_softdent_widget_path_hal_reply())
+        try:
+            from softdent_period_money_drift import compare_register_to_daysheet_totals, format_drift_hal_reply
+
+            parts.append("SOFTDENT PERIOD $ DRIFT: " + format_drift_hal_reply(compare_register_to_daysheet_totals()))
+        except Exception:
+            pass
+    return " ".join(parts)
 
 
 # Preferred SoftDent launchers (desktop / Start Menu shortcuts — NOT bare SDWIN.EXE).

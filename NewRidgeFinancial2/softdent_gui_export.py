@@ -685,11 +685,23 @@ def _type_keys_clear_and_text(text: str, *, hwnd: int | None = None) -> None:
 
 
 def _select_output_option_prompt(kind: str = "excel") -> None:
-    """SoftDent Output Options: click Excel or Print Preview prompt, then Enter.
+    """SoftDent Output Options: click Excel or Print Preview prompt only, then Enter.
 
-    Never leave Printer selected (offline printer hang). User-confirmed flow matches
-    Excel and Preview the same way: click the prompt, then Enter.
+    HARD RULE (user): never use Printer — only the Excel prompt or the Print Preview
+    prompt. Printer causes offline hang ("Waiting for printer connection…").
+    Same click pattern for both: click the prompt, then Enter.
     """
+    raw = str(kind or "excel").strip().lower()
+    if raw in {"printer", "print", "lpt", "spool"}:
+        raise RuntimeError(
+            "Refusing SoftDent Output Options 'Printer' — use Excel or Print Preview only."
+        )
+    want = "excel" if raw in {"excel", "xls", "file", "xlsx"} else "print preview"
+    if want not in {"excel", "print preview"}:
+        raise RuntimeError(
+            f"SoftDent Output Options kind must be excel or print_preview (got {kind!r})"
+        )
+
     out = None
     for _ in range(40):
         cancel_printer_dialogs(max_rounds=2)
@@ -700,7 +712,6 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
     if not out:
         raise RuntimeError("Output Options dialog did not appear")
 
-    want = "excel" if str(kind).strip().lower() in {"excel", "xls", "file"} else "print preview"
     _keyboard_activate_dialog(out)
     clicked = False
     try:
@@ -709,28 +720,38 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
         app_out = Application(backend="win32").connect(handle=out.handle)
         d_out = app_out.window(handle=out.handle)
         for b in d_out.descendants(class_name="Button"):
-            label = (b.window_text() or "").replace("&", "").strip().lower()
-            if want == "excel" and label == "excel":
+            label = (b.window_text() or "").replace("&", "").strip()
+            lab = label.lower()
+            # Never click Printer (exact label) — even if searching preview
+            if lab == "printer":
+                continue
+            if want == "excel" and lab == "excel":
                 _softdent_click(b)
                 clicked = True
                 break
-            if want == "print preview" and "preview" in label:
+            if want == "print preview" and "preview" in lab:
                 _softdent_click(b)
                 clicked = True
                 break
     except Exception as exc:
         logger.warning("Output Options %s click failed: %s", want, type(exc).__name__)
     if not clicked:
-        # Accelerator fallback: E=Excel, often V/P for preview depending on build
+        # Accelerators: E=Excel. Never send P (hits Printer). V ≈ Pre&view when available.
         if want == "excel":
             _send_softdent_keys("e", hwnd=int(out.handle))
         else:
-            _send_softdent_keys("v", hwnd=int(out.handle))  # Pre&view / common SoftDent accel
+            _send_softdent_keys("v", hwnd=int(out.handle))
         time.sleep(0.2)
     time.sleep(0.25)
     _send_softdent_keys("{ENTER}", hwnd=int(out.handle))
     time.sleep(1.0)
-    cancel_printer_dialogs()
+    # If SoftDent still went to printer wait, cancel and fail loudly
+    cancelled = cancel_printer_dialogs(max_rounds=4)
+    if cancelled:
+        raise RuntimeError(
+            "SoftDent opened a printer-wait dialog after Output Options — "
+            "Printer must not be used. Click Excel or Print Preview only, then Enter."
+        )
 
 
 def _complete_output_setup_and_save(

@@ -7,7 +7,8 @@
     "Database / ODBC / Sensei / sd_* is faster for operational detail when populated — use it for patients/procedures/claims/payments, not as primary period-close until it matches desktop Register side-by-side.",
     "Desktop Excel path: click Excel prompt → Enter → Setup → save C:\\SoftDentReportExports → NR2 parses (never invent dollars).",
     "Desktop Print Preview path: click Print Preview prompt → Enter → go to LAST page for exact totals (visual read).",
-    "Never leave Printer selected. No SoftDent write-back."
+    "HARD RULE: Output Options = Excel prompt OR Print Preview prompt only — never click Printer.",
+    "No SoftDent write-back."
   ],
   "outputOptionsVerified": {
     "probedAt": "2026-07-12T15:04:00Z",

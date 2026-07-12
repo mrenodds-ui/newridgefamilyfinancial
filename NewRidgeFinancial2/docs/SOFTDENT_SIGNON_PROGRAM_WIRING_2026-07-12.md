@@ -15,7 +15,8 @@
 1. **Financial close / master reports** → SoftDent desktop (Sign On → Output Options → **Excel** → Enter → save → NR2 parse).  
 2. **Operational detail** → DB/Sensei/`sd_*` when populated (fast).  
 3. **Do not** promote DB to period-close primary until a side-by-side matches SoftDent Register.  
-4. **Never** invent dollars, SoftDent write-back, or leave **Printer** selected.
+4. **HARD RULE:** Output Options = **Excel** prompt or **Print Preview** prompt only — **never** click **Printer**.  
+5. **Never** invent dollars or SoftDent write-back.
 
 Constant: `SOFTDENT_DATA_ACCESS_DOCTRINE` in `softdent_signon.py` (also on HAL status / Sign On API).
 

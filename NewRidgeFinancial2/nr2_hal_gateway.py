@@ -466,7 +466,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             }
 
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
-    # Also: data not in DB → Sign On + UI only
+    # Also: data not in DB → Sign On + UI; widget data paths; period $ drift
     if re.search(
         r"\b("
         r"sign\s*on|sign-on|change login|"
@@ -477,15 +477,38 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
         r"(cannot be reached|can'?t (be )?reach|not in (the )?(database|db|odbc)|"
         r"only (way|via|through).{0,24}(ui|gui|sign\s*on)|"
         r"softdent.{0,40}(ui|gui).{0,20}(export|report)|"
-        r"how.{0,40}softdent.{0,40}(not|without).{0,20}(database|odbc|db))"
+        r"how.{0,40}softdent.{0,40}(not|without).{0,20}(database|odbc|db)|"
+        r"source of truth|"
+        r"(where|how).{0,40}(vital signs|ins.?patient|collections gap|widget).{0,40}(data|from|get)|"
+        r"softdent.{0,30}widget.{0,30}(data|path|source)|"
+        r"(register|daysheet).{0,24}(drift|disagree|mismatch))"
         r")\b",
         q,
     ):
         try:
-            from softdent_signon import format_softdent_signon_hal_reply, softdent_signon_status
+            from softdent_signon import (
+                format_softdent_signon_hal_reply,
+                format_softdent_widget_path_hal_reply,
+                softdent_signon_status,
+            )
 
+            text = format_softdent_signon_hal_reply(softdent_signon_status())
+            if re.search(
+                r"\b(widget|vital signs|ins.?patient|drift|mismatch|data path|where.{0,20}data)\b",
+                q,
+            ):
+                text = text + " " + format_softdent_widget_path_hal_reply()
+                try:
+                    from softdent_period_money_drift import (
+                        compare_register_to_daysheet_totals,
+                        format_drift_hal_reply,
+                    )
+
+                    text = text + " " + format_drift_hal_reply(compare_register_to_daysheet_totals())
+                except Exception:
+                    pass
             return {
-                "text": format_softdent_signon_hal_reply(softdent_signon_status()),
+                "text": text,
                 "intent": "policy:softdent-signon-env",
             }
         except Exception:
@@ -494,9 +517,8 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                     "SoftDent GUI Sign On credentials live in environment variables "
                     "SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD "
                     r"(also C:\New folder\.env). "
-                    "Prefer the SoftDent database/ODBC lane when data is there; "
-                    "the only way to get SoftDent data that cannot be reached by the database "
-                    "is Sign On and use the SoftDent UI to export, then Sync. "
+                    "Desktop SoftDent Excel is the source of truth for period financial totals; "
+                    "sd_*/Sensei is faster for operational detail. "
                     "HAL will not print the password."
                 ),
                 "intent": "policy:softdent-signon-env",
