@@ -194,16 +194,169 @@ def find_dialog(title: str):
     return None
 
 
-def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
-    """Dismiss SoftDent message boxes with Enter (keyboard only). Never Escape."""
-    dismissed = 0
+_PRINTER_TITLE_HINTS = (
+    "print",
+    "printer",
+    "printing",
+    "spooler",
+    "default printer",
+    "cannot print",
+    "unable to print",
+    "printer offline",
+    "printer not",
+    "no printers",
+    "select printer",
+)
+
+
+def _dialog_text_blob(dlg) -> str:
+    """Title + static labels for printer-detection (best-effort)."""
+    parts: list[str] = []
+    try:
+        parts.append(dlg.window_text() or "")
+    except Exception:
+        pass
+    try:
+        for c in dlg.descendants():
+            try:
+                cls = (c.class_name() or "").lower()
+                if cls in {"static", "button"} or "static" in cls:
+                    t = (c.window_text() or "").strip()
+                    if t:
+                        parts.append(t)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return " ".join(parts).lower()
+
+
+def _is_printer_dialog(dlg) -> bool:
+    blob = _dialog_text_blob(dlg)
+    if not blob:
+        return False
+    return any(h in blob for h in _PRINTER_TITLE_HINTS)
+
+
+def cancel_printer_dialogs(*, max_rounds: int = 8) -> int:
+    """Cancel SoftDent/Windows printer prompts when default printer is off.
+
+    Prefer Cancel / Alt+C / keyboard — never Escape on SoftDent main (quit).
+    Call this while waiting for Output Options / Report Setup / Save.
+    """
+    from pywinauto import Application, Desktop
+
+    cancelled = 0
     pids = _softdent_pids()
     for _ in range(max_rounds):
         hit = False
+        candidates = []
+        # SoftDent-owned dialogs
+        candidates.extend(list(_desktop_dialogs()))
+        # Also common top-level print dialogs (may not be SoftDent PID)
+        try:
+            for w in Desktop(backend="win32").windows():
+                try:
+                    if not w.is_visible() or w.class_name() != "#32770":
+                        continue
+                    title = (w.window_text() or "").strip()
+                    if _is_blocked_focus_title(title):
+                        continue
+                    if title in {"Output Options", "Report Setup", "Select File Name", "SoftDent Login"}:
+                        continue
+                    if _is_printer_dialog(w) or any(h in title.lower() for h in _PRINTER_TITLE_HINTS):
+                        candidates.append(w)
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        seen: set[int] = set()
+        for w in candidates:
+            try:
+                h = int(w.handle)
+            except Exception:
+                continue
+            if h in seen:
+                continue
+            seen.add(h)
+            title = ""
+            try:
+                title = (w.window_text() or "").strip()
+            except Exception:
+                pass
+            if title in {"Output Options", "Report Setup", "Select File Name", "SoftDent Login"}:
+                continue
+            if title == "SoftDent" and not _is_printer_dialog(w):
+                # Generic SoftDent alert — leave for dismiss_softdent_alerts (Enter/OK)
+                continue
+            if not (_is_printer_dialog(w) or any(h in title.lower() for h in _PRINTER_TITLE_HINTS)):
+                continue
+            try:
+                _force_foreground(h)
+                time.sleep(0.15)
+                # Try Cancel button first (keyboard Alt+C often works on #32770)
+                canceled_this = False
+                try:
+                    app = Application(backend="win32").connect(handle=h)
+                    dlg = app.window(handle=h)
+                    for name in ("Cancel", "&Cancel", "No", "&No", "Close"):
+                        for b in dlg.descendants(class_name="Button"):
+                            if b.window_text().replace("&", "") == name.replace("&", ""):
+                                # Prefer keyboard: focus Cancel then Enter / Alt+C
+                                try:
+                                    b.set_focus()
+                                    _send_softdent_keys("{ENTER}", hwnd=h)
+                                except Exception:
+                                    _send_softdent_keys("%c", hwnd=h)
+                                canceled_this = True
+                                break
+                        if canceled_this:
+                            break
+                except Exception:
+                    pass
+                if not canceled_this:
+                    # SoftDent print prompt often has Cancel as non-default — Alt+C
+                    try:
+                        _send_softdent_keys("%c", hwnd=h)
+                        canceled_this = True
+                    except Exception:
+                        pass
+                if canceled_this:
+                    cancelled += 1
+                    hit = True
+                    logger.info("Cancelled printer dialog title=%r", title)
+                    time.sleep(0.4)
+                    break
+            except Exception as exc:
+                logger.warning("Printer dialog cancel failed: %s", type(exc).__name__)
+                continue
+        if not hit:
+            break
+    return cancelled
+
+
+def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
+    """Dismiss SoftDent message boxes with Enter (keyboard only). Never Escape.
+
+    Printer/offline prompts are cancelled separately via cancel_printer_dialogs().
+    """
+    cancelled_printers = cancel_printer_dialogs(max_rounds=max(2, max_rounds // 2))
+    dismissed = cancelled_printers
+    pids = _softdent_pids()
+    for _ in range(max_rounds):
+        hit = False
+        # Always clear printer prompts first
+        if cancel_printer_dialogs(max_rounds=2):
+            hit = True
+            dismissed += 1
+            continue
         for w in list(_desktop_dialogs()):
             title = (w.window_text() or "").strip()
             if title == "SoftDent Login":
                 continue
+            if _is_printer_dialog(w):
+                continue  # handled by cancel_printer_dialogs
             if title not in {"SoftDent", ""}:
                 continue
             pid = _window_pid(w.handle)
@@ -385,8 +538,10 @@ def _complete_output_setup_and_save(
     from pywinauto import Application
 
     dismiss_softdent_alerts()
+    cancel_printer_dialogs()
     out = None
     for _ in range(40):
+        cancel_printer_dialogs(max_rounds=2)
         out = find_dialog("Output Options")
         if out:
             break
@@ -400,9 +555,12 @@ def _complete_output_setup_and_save(
     time.sleep(0.2)
     _keyboard_press_ok(hwnd=int(out.handle))
     time.sleep(1.0)
+    cancel_printer_dialogs()
 
     setup = None
     for _ in range(50):
+        cancel_printer_dialogs(max_rounds=2)
+        dismiss_softdent_alerts(max_rounds=2)
         setup = find_dialog("Report Setup")
         if setup:
             break
@@ -430,7 +588,8 @@ def _complete_output_setup_and_save(
 
     save = None
     for _ in range(50):
-        dismiss_softdent_alerts()
+        cancel_printer_dialogs(max_rounds=2)
+        dismiss_softdent_alerts(max_rounds=2)
         save = find_dialog("Select File Name")
         if save:
             break
