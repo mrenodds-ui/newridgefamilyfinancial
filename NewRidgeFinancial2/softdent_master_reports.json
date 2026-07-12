@@ -11,7 +11,8 @@
     "Never leave Printer selected (offline hang). Never SoftDent write-back."
   ],
   "outputOptionsVerified": {
-    "probedAt": "2026-07-12T15:01:00Z",
+    "probedAt": "2026-07-12T15:04:00Z",
+    "source": "scripts/run_softdent_master_learn.py → softdent_master_report_learn.json",
     "commonButtons": [
       "Printer",
       "Print Preview",
@@ -23,9 +24,22 @@
       "OK",
       "Cancel"
     ],
+    "verifiedReports": [
+      "register",
+      "collections",
+      "transactions",
+      "daysheet",
+      "aging",
+      "writeoff_totals"
+    ],
+    "howToGetInfo": {
+      "database": "Prefer sd_* / ODBC / Sensei when rows exist.",
+      "excel": "Click Excel prompt → Enter → Setup (dates, provider 999) → save C:\\SoftDentReportExports → NR2 parses XLS.",
+      "printPreview": "Click Print Preview prompt → Enter → Setup if shown → go to LAST page for exact totals (visual read).",
+      "avoid": "Never leave Printer selected."
+    },
     "notes": [
-      "collections, daysheet, aging, writeoff_totals all showed Excel + Print Preview in Output Options.",
-      "register/transactions probes were interrupted by focus theft; same Output Options pattern expected."
+      "All Phase-1 GUI master reports on v19.1.4 expose both Excel and Print Preview in Output Options."
     ]
   },
   "exportInbox": "C:\\SoftDentReportExports",
@@ -104,7 +118,7 @@
       ],
       "requiredForFinancialClose": true,
       "phase": 1,
-      "verifiedOutputOptions": "pending_reprobe",
+      "verifiedOutputOptions": true,
       "nr2Uses": ["period production", "period collections", "Ins/Patient split when SoftDent reports it"]
     },
     "collections": {
@@ -156,7 +170,7 @@
       ],
       "requiredForFinancialClose": true,
       "phase": 1,
-      "verifiedOutputOptions": "pending_reprobe",
+      "verifiedOutputOptions": true,
       "nr2Uses": ["period transaction ingest", "DEF-001 / period sync support"]
     },
     "daysheet": {
