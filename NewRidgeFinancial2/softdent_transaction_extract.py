@@ -1052,6 +1052,14 @@ def load_parsed_account_transactions(
     return records
 
 
+def load_txn_jsonl(
+    *,
+    parsed_dir: Path | None = None,
+    source_stem: str | None = None,
+) -> list[dict[str, Any]]:
+    """Moonshot alias — stream typed TXN rows from SoftDentFinancialExports/tx_parsed."""
+    return load_parsed_account_transactions(parsed_dir=parsed_dir, source_stem=source_stem)
+
 def _parse_date_range(
     date_range: Any,
 ) -> tuple[str | None, str | None]:
