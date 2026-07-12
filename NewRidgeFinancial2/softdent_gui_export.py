@@ -41,28 +41,42 @@ _FOCUS_BLOCKLIST_SUBSTR = (
 
 
 def _softdent_pids() -> set[int]:
-    """PIDs for SDWIN.EXE only."""
-    import subprocess
+    """PIDs for SDWIN.EXE only (Toolhelp — no nested PowerShell)."""
+    import ctypes
+    from ctypes import wintypes
 
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    TH32CS_SNAPPROCESS = 0x00000002
+    kernel32 = ctypes.windll.kernel32
+    snap = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snap in (0, -1, ctypes.c_void_p(-1).value):
+        return set()
+    pe = PROCESSENTRY32W()
+    pe.dwSize = ctypes.sizeof(PROCESSENTRY32W)
     out: set[int] = set()
     try:
-        raw = subprocess.check_output(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                "(Get-Process -Name SDWIN -ErrorAction SilentlyContinue).Id",
-            ],
-            text=True,
-            timeout=15,
-        )
-    except Exception:
-        return out
-    for tok in raw.split():
-        try:
-            out.add(int(tok))
-        except ValueError:
-            continue
+        if kernel32.Process32FirstW(snap, ctypes.byref(pe)):
+            while True:
+                name = (pe.szExeFile or "").upper()
+                if name.startswith("SDWIN"):
+                    out.add(int(pe.th32ProcessID))
+                if not kernel32.Process32NextW(snap, ctypes.byref(pe)):
+                    break
+    finally:
+        kernel32.CloseHandle(snap)
     return out
 
 
@@ -139,21 +153,31 @@ def _assert_softdent_foreground(hwnd: int | None = None) -> int:
     import win32gui
 
     target = int(hwnd or _main_softdent_hwnd())
-    _force_foreground(target)
-    time.sleep(0.15)
-    fg = win32gui.GetForegroundWindow()
-    fg_title = win32gui.GetWindowText(fg) or ""
-    if _is_blocked_focus_title(fg_title):
-        raise RuntimeError(
-            f"Refusing SoftDent keys — AMD/other thief owns foreground: {fg_title!r}. "
-            "Close or leave AMD alone; do not Alt+R (AMD Instant Replay)."
-        )
-    fg_pid = _window_pid(fg)
-    sd_pids = _softdent_pids()
-    if sd_pids and fg_pid is not None and fg_pid not in sd_pids and fg != target:
-        raise RuntimeError(
-            f"Refusing SoftDent keys — foreground not SoftDent: {fg_title!r}"
-        )
+    for attempt in range(6):
+        _force_foreground(target)
+        time.sleep(0.12 + 0.05 * attempt)
+        fg = win32gui.GetForegroundWindow()
+        fg_title = win32gui.GetWindowText(fg) or ""
+        if _is_blocked_focus_title(fg_title):
+            raise RuntimeError(
+                f"Refusing SoftDent keys — AMD/other thief owns foreground: {fg_title!r}. "
+                "Close or leave AMD alone; do not Alt+R (AMD Instant Replay)."
+            )
+        fg_pid = _window_pid(fg)
+        sd_pids = _softdent_pids()
+        if not sd_pids:
+            raise RuntimeError("SoftDent (SDWIN) is not running")
+        if fg_pid is not None and fg_pid in sd_pids:
+            return target
+        if fg == target:
+            return target
+        # Cursor / IDE often steals focus mid-automation — retry SoftDent only
+        if "cursor" in fg_title.lower():
+            continue
+        if attempt == 5:
+            raise RuntimeError(
+                f"Refusing SoftDent keys — foreground not SoftDent: {fg_title!r}"
+            )
     return target
 
 

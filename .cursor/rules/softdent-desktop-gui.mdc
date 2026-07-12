@@ -1,0 +1,13 @@
+---
+description: SoftDent desktop GUI — keyboard or mouse only; Sign On COMPUTE/computer; Excel or Preview never Printer
+alwaysApply: true
+---
+
+# SoftDent desktop (hard rules)
+
+- Pull SoftDent financial/account data through the **desktop SoftDent app**, not the database/ODBC/`sd_*` lane, when the user asks for desktop/app pulls or period-close truth.
+- SoftDent UI: **keyboard or mouse only** (SoftDent windows). Never Esc on SoftDent main (quit prompt).
+- Sign On: user **`COMPUTE`**, password **`computer`** (lowercase, case-sensitive). Prefer env/`SOFTDENT_SIGNON_*` when set; same values.
+- Launch only via desktop/Start Menu **CS SoftDent Software.lnk** (`-sus`), never bare `SDWIN.EXE`.
+- Output Options: **Excel** or **Print Preview** only — **never Printer**. Excel → click Excel → Enter → Setup → save. Preview → last page for totals. Printer wait → Cancel (Alt+C).
+- SoftDent is **32-bit**; prefer keyboard F10 menus when 64-bit `menu_select` fails (`ElementNotEnabled`).
