@@ -41,6 +41,23 @@ Constant: `SOFTDENT_DATA_ACCESS_DOCTRINE` in `softdent_signon.py` (also on HAL s
 | `aging` | GUI (DB assist) | Excel + Preview (verified) | Click Excel→Enter; Preview last page if visual |
 | `writeoff_totals` | GUI (DB assist) | Excel + Preview (verified) | Click Excel→Enter; Preview last page if visual |
 
+## How to get data (live validated 2026-07-12)
+
+Ran `scripts/validate_softdent_report_howto.py` → **7/7 PASS**  
+Log: `C:\SoftDentFinancialExports\softdent_report_howto_validation.json`
+
+| Report | Preferred how | Steps |
+|--------|---------------|-------|
+| `sd_odbc_core` | Database | Sensei / ODBC / `sd_*` when populated |
+| `register` | **Excel** (also Preview) | Menu → click **Excel** → Enter → Setup → save → refresh |
+| `collections` | **Excel** (also Preview) | Same; never Printer |
+| `transactions` | **Excel** (also Preview) | Same |
+| `daysheet` | **Excel** (also Preview) | Same |
+| `aging` | **Excel** (also Preview) | Same |
+| `writeoff_totals` | **Excel** (also Preview) | Same |
+
+**HARD RULE:** Output Options = **Excel** or **Print Preview** only — never **Printer**. Preview path: last page for exact totals.
+
 Verify:
 
 ```text
