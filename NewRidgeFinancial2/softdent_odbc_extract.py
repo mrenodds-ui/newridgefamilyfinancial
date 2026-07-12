@@ -4,6 +4,10 @@ When ``SOFTDENT_ODBC_DSN`` / ``NR2_SOFTDENT_ODBC_DSN`` is configured and optiona
 env SQL queries are present, rows are pulled via pyodbc. When Sensei Gateway DataSync
 JSON is present on the SoftDent server, ``sensei-datasync`` populates sd_* from live
 Carestream sync files. Otherwise the JSON/daysheet/claims fallback lane fills gaps.
+
+Program doctrine: prefer this database/extract lane when the needed SoftDent data is
+reachable here. SoftDent data that cannot be reached by the database requires SoftDent
+Sign On + SoftDent UI export (see softdent_signon / softdent_gui_export), then file ingest.
 """
 
 from __future__ import annotations

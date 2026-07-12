@@ -465,6 +465,43 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": f"navigate:{page}",
             }
 
+    # SoftDent GUI Sign On — credentials in env vars (never echo password)
+    # Also: data not in DB → Sign On + UI only
+    if re.search(
+        r"\b("
+        r"sign\s*on|sign-on|change login|"
+        r"softdent\s+(login|password|credential|sign\s*on)|"
+        r"log\s*in\s+(to\s+)?softdent|"
+        r"where.{0,30}(softdent|sign\s*on).{0,30}(password|credential|env)|"
+        r"(password|credential).{0,30}softdent|"
+        r"(cannot be reached|can'?t (be )?reach|not in (the )?(database|db|odbc)|"
+        r"only (way|via|through).{0,24}(ui|gui|sign\s*on)|"
+        r"softdent.{0,40}(ui|gui).{0,20}(export|report)|"
+        r"how.{0,40}softdent.{0,40}(not|without).{0,20}(database|odbc|db))"
+        r")\b",
+        q,
+    ):
+        try:
+            from softdent_signon import format_softdent_signon_hal_reply, softdent_signon_status
+
+            return {
+                "text": format_softdent_signon_hal_reply(softdent_signon_status()),
+                "intent": "policy:softdent-signon-env",
+            }
+        except Exception:
+            return {
+                "text": (
+                    "SoftDent GUI Sign On credentials live in environment variables "
+                    "SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD "
+                    r"(also C:\New folder\.env). "
+                    "Prefer the SoftDent database/ODBC lane when data is there; "
+                    "the only way to get SoftDent data that cannot be reached by the database "
+                    "is Sign On and use the SoftDent UI to export, then Sync. "
+                    "HAL will not print the password."
+                ),
+                "intent": "policy:softdent-signon-env",
+            }
+
     # CARC/CAS whitelist (Phase 4) — known briefs only; unknown hard-refuse (no LLM).
     if re.search(r"\b(what|signify|mean|explain)\b", q) and (
         "carc" in q or "cas" in q or "adjustment code" in q or "denial code" in q
@@ -1154,6 +1191,14 @@ def build_chat_messages(
     claim_payer_guidance = compile_claim_payer_guidance(query, system_prompt)
     if claim_payer_guidance:
         chat_messages.append({"role": "system", "content": claim_payer_guidance})
+    try:
+        from softdent_signon import compile_softdent_signon_guidance
+
+        signon_guidance = compile_softdent_signon_guidance(query, system_prompt)
+        if signon_guidance:
+            chat_messages.append({"role": "system", "content": signon_guidance})
+    except ImportError:
+        pass
     if level != "fresh":
         chat_messages.append({"role": "system", "content": build_import_readiness_context(readiness)})
         if soft_stale and intent in ("analytical", "clinical", "insurance_ops"):

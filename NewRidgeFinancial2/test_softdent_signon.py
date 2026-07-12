@@ -39,6 +39,67 @@ class SoftDentSignOnTests(unittest.TestCase):
         self.assertFalse(status.get("ok"))
         self.assertFalse(status.get("passwordConfigured"))
 
+    def test_hal_reply_mentions_env_keys_not_password(self):
+        with mock.patch.dict(
+            os.environ,
+            {ENV_USER: "Dr", ENV_PASSWORD: "test-secret-not-real"},
+            clear=False,
+        ):
+            from softdent_signon import format_softdent_signon_hal_reply
+
+            text = format_softdent_signon_hal_reply()
+        self.assertIn("SOFTDENT_SIGNON_USER", text)
+        self.assertIn("SOFTDENT_SIGNON_PASSWORD", text)
+        self.assertIn("environment", text.lower())
+        self.assertNotIn("test-secret-not-real", text)
+
+    def test_local_policy_signon(self):
+        from nr2_hal_gateway import try_local_policy_reply
+
+        with mock.patch.dict(
+            os.environ,
+            {ENV_USER: "Dr", ENV_PASSWORD: "test-secret-not-real"},
+            clear=False,
+        ):
+            hit = try_local_policy_reply("Where is the SoftDent Sign On password?")
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit.get("intent"), "policy:softdent-signon-env")
+        self.assertIn("SOFTDENT_SIGNON_PASSWORD", hit.get("text") or "")
+        self.assertNotIn("test-secret-not-real", hit.get("text") or "")
+
+    def test_hal_reply_includes_ui_only_data_doctrine(self):
+        from softdent_signon import SOFTDENT_DATA_ACCESS_DOCTRINE, format_softdent_signon_hal_reply
+
+        text = format_softdent_signon_hal_reply(
+            {
+                "user": "Dr",
+                "passwordConfigured": True,
+            }
+        )
+        self.assertIn("cannot be reached by the database", text)
+        self.assertIn("Sign On", text)
+        self.assertIn("UI", text)
+        self.assertIn(SOFTDENT_DATA_ACCESS_DOCTRINE[:40], text)
+
+    def test_local_policy_ui_only_data_path(self):
+        from nr2_hal_gateway import try_local_policy_reply
+        from softdent_signon import SOFTDENT_DATA_ACCESS_DOCTRINE
+
+        with mock.patch.dict(
+            os.environ,
+            {ENV_USER: "Dr", ENV_PASSWORD: "test-secret-not-real"},
+            clear=False,
+        ):
+            hit = try_local_policy_reply(
+                "How do I get SoftDent data that cannot be reached by the database?"
+            )
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit.get("intent"), "policy:softdent-signon-env")
+        self.assertIn("cannot be reached by the database", hit.get("text") or "")
+        self.assertIn("UI", hit.get("text") or "")
+        self.assertNotIn("test-secret-not-real", hit.get("text") or "")
+        self.assertIn("Sign On", SOFTDENT_DATA_ACCESS_DOCTRINE)
+
 
 if __name__ == "__main__":
     unittest.main()

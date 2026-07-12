@@ -1,12 +1,17 @@
 """SoftDent GUI Sign On credentials + optional UI assist (read-only; no SoftDent write-back).
 
 Credentials come from environment / local .env only — never invent defaults in source.
+
+Program doctrine: prefer SoftDent database / ODBC / Sensei extract when the data is
+there. The only way to obtain SoftDent data that cannot be reached via the database
+is SoftDent Sign On + SoftDent UI (Reports / Accounting export), then file ingest.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -20,6 +25,16 @@ ENV_USER_ALT = "SOFTDENT_GUI_USER"
 ENV_PASSWORD_ALT = "SOFTDENT_GUI_PASSWORD"
 
 _DEFAULT_USER_HINT = "Dr"  # SoftDent Sign On user id for provider/owner login
+
+# Whole-program SoftDent data-access rule (HAL + refresh + playbook).
+SOFTDENT_DATA_ACCESS_DOCTRINE = (
+    "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed "
+    "rows are available there. The only way to get SoftDent data that cannot be reached "
+    "by the database is SoftDent Sign On (env credentials) and use the SoftDent UI "
+    "(Reports / Accounting → export Register, Collections, daysheet, etc.), then place "
+    "the file for NR2 ingest/Sync. No invented dollars, no SoftDent write-back, and no "
+    "fictional vendor CLI when the DB lane cannot supply the report."
+)
 
 
 def _candidate_env_files() -> list[Path]:
@@ -113,14 +128,103 @@ def softdent_signon_status() -> dict[str, Any]:
         "passwordConfigured": bool(creds.get("passwordConfigured")),
         "envUserKey": ENV_USER,
         "envPasswordKey": ENV_PASSWORD,
+        "envUserAltKey": ENV_USER_ALT,
+        "envPasswordAltKey": ENV_PASSWORD_ALT,
         "hint": creds.get("hint"),
+        "dataAccessDoctrine": SOFTDENT_DATA_ACCESS_DOCTRINE,
+        "knowledge": (
+            f"SoftDent GUI Sign On credentials live in environment variables "
+            f"{ENV_USER} / {ENV_PASSWORD} (or {ENV_USER_ALT} / {ENV_PASSWORD_ALT}), "
+            r"also loadable from C:\New folder\.env and NewRidgeFinancial2\.env. "
+            "HAL and refresh never echo the password. "
+            + SOFTDENT_DATA_ACCESS_DOCTRINE
+        ),
     }
 
 
-def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
+def format_softdent_data_access_hal_reply() -> str:
+    """HAL-facing SoftDent data-access rule (DB first; else Sign On + UI only)."""
+    return SOFTDENT_DATA_ACCESS_DOCTRINE
+
+
+def format_softdent_signon_hal_reply(status: dict[str, Any] | None = None) -> str:
+    """HAL-facing answer: where Sign On lives (env vars) — never includes the password."""
+    st = status if isinstance(status, dict) else softdent_signon_status()
+    user = str(st.get("user") or _DEFAULT_USER_HINT)
+    configured = bool(st.get("passwordConfigured"))
+    lines = [
+        "SoftDent GUI Sign On (Change Login / Sign On dialog) uses environment variables — "
+        f"`{ENV_USER}` and `{ENV_PASSWORD}` "
+        f"(aliases `{ENV_USER_ALT}` / `{ENV_PASSWORD_ALT}`).",
+        r"Also loaded from local gitignored `.env` (`C:\New folder\.env`, `NewRidgeFinancial2\.env`) "
+        "and Windows User env when set.",
+        f"Configured Sign On user id: `{user}`.",
+        (
+            "Password is configured in the environment (HAL will not print it)."
+            if configured
+            else f"Password is NOT configured yet — set `{ENV_PASSWORD}` in local `.env` / User env."
+        ),
+        SOFTDENT_DATA_ACCESS_DOCTRINE,
+        "Ask HAL: Refresh SoftDent period — step `softdent_signon` uses these env vars for UI assist. "
+        "HAL still will not write clinical/financial SoftDent data.",
+    ]
+    return " ".join(lines)
+
+
+def _query_touches_softdent_signon_or_ui_data(query: str) -> bool:
+    q = str(query or "").lower()
+    if re.search(
+        r"\b(sign\s*on|sign-on|change login|softdent\s+(login|password|credential)|"
+        r"log\s*in\s+to\s+softdent|softdent\s+gui)\b",
+        q,
+    ):
+        return True
+    if "softdent" in q and re.search(r"\b(password|credential|login|sign\s*on|env)\b", q):
+        return True
+    # Data that cannot be reached by DB → Sign On + UI
+    if re.search(
+        r"\b("
+        r"cannot be reached|can'?t (be )?reach|not in (the )?(database|db|odbc|sqlite)|"
+        r"outside (the )?(database|db|odbc)|only (way|via|through).{0,20}(ui|gui|sign\s*on)|"
+        r"(ui|gui).{0,20}(export|report)|register for (a )?period|collections (report|export)|"
+        r"how (do i |to )?(get|pull|export).{0,40}(softdent|register|collections)"
+        r")\b",
+        q,
+    ):
+        return True
+    if "softdent" in q and re.search(
+        r"\b(database|odbc|sqlite|ui|gui|export|report|daysheet|register)\b",
+        q,
+    ):
+        return True
+    return False
+
+
+def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str:
+    """Inject Sign On + UI-only data-path knowledge into HAL LLM context when relevant."""
+    prompt = str(system_prompt or "")
+    if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
+        return ""
+    if not _query_touches_softdent_signon_or_ui_data(query):
+        return ""
+    if "SOFTDENT_SIGNON_USER" in prompt:
+        return "SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply()
+    return (
+        "SOFTDENT SIGN ON + DATA ACCESS: "
+        + format_softdent_signon_hal_reply()
+    )
+
+
+def ensure_softdent_signed_on(
+    *,
+    timeout_s: float = 25.0,
+    force_change_login: bool = False,
+) -> dict[str, Any]:
     """If SoftDent Sign On / Change Login dialog is present, fill Dr credentials.
 
     SoftDent read-only assist — does not post clinical/financial data.
+    Never logs the password. By default does not open Change Login when already
+    signed in (main SoftDent Software window present).
     """
     status = softdent_signon_status()
     password = get_softdent_signon_password()
@@ -139,14 +243,43 @@ def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
 
     try:
         from pywinauto import Application, Desktop
+        from pywinauto.findwindows import find_windows
+        import win32gui
     except ImportError as exc:
         result["error"] = f"pywinauto missing: {exc}"
         return result
 
     result["attempted"] = True
     exe = Path(r"C:\SoftDent\SDWIN.EXE")
+
+    def _main_hwnd() -> int | None:
+        try:
+            hwnds = find_windows(title_re=r".*SoftDent.*", backend="win32")
+        except Exception:
+            return None
+        for h in hwnds:
+            try:
+                cls = win32gui.GetClassName(h)
+                title = win32gui.GetWindowText(h)
+            except Exception:
+                continue
+            if "SOFTDENT" in cls.upper() or "SoftDent Software" in title:
+                return int(h)
+        return int(hwnds[0]) if hwnds else None
+
+    main_hwnd = _main_hwnd()
+    if main_hwnd and not force_change_login:
+        # Already at SoftDent main UI — treat as signed on (do not spam Change Login).
+        result["ok"] = True
+        result["signedOn"] = True
+        result["steps"].append("already_signed_on_main_window")
+        return result
+
     try:
-        app = Application(backend="uia").connect(path=str(exe), timeout=8)
+        if main_hwnd:
+            app = Application(backend="uia").connect(handle=main_hwnd)
+        else:
+            app = Application(backend="uia").connect(path=str(exe), timeout=8)
     except Exception:
         if exe.is_file():
             try:
@@ -162,6 +295,7 @@ def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
 
     deadline = time.time() + max(5.0, float(timeout_s))
     dialog = None
+    change_login_clicked = False
     while time.time() < deadline and dialog is None:
         for win in Desktop(backend="uia").windows():
             title = (win.window_text() or "").strip()
@@ -169,7 +303,6 @@ def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
             if "sign on" in lower or "sign-on" in lower or "change login" in lower:
                 dialog = win
                 break
-            # SoftDent sometimes titles the login dialog "SoftDent" with password edit.
             if title == "SoftDent" or lower.startswith("softdent"):
                 try:
                     edits = [c for c in win.descendants() if c.element_info.control_type == "Edit"]
@@ -178,30 +311,27 @@ def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
                         break
                 except Exception:
                     pass
-        if dialog is None:
-            # Open Change Login from main window toolbar if present.
+        if dialog is None and force_change_login and not change_login_clicked:
             try:
                 main = app.window(title_re=".*SoftDent.*")
                 btn = main.child_window(title="Change Login", control_type="Button")
                 if btn.exists(timeout=0.5):
                     btn.click_input()
+                    change_login_clicked = True
                     result["steps"].append("clicked_change_login")
                     time.sleep(1.0)
             except Exception:
                 pass
             time.sleep(0.4)
+        elif dialog is None:
+            time.sleep(0.4)
 
     if dialog is None:
-        # Already signed in — SoftDent main UI is up without a Sign On dialog.
-        try:
-            main = app.window(title_re=".*SoftDent.*")
-            if main.exists(timeout=1):
-                result["ok"] = True
-                result["signedOn"] = True
-                result["steps"].append("already_signed_on_or_no_dialog")
-                return result
-        except Exception:
-            pass
+        if _main_hwnd():
+            result["ok"] = True
+            result["signedOn"] = True
+            result["steps"].append("already_signed_on_or_no_dialog")
+            return result
         result["error"] = "Sign On dialog not found"
         return result
 
@@ -219,7 +349,6 @@ def ensure_softdent_signed_on(*, timeout_s: float = 25.0) -> dict[str, Any]:
         pass_edit.set_focus()
         pass_edit.type_keys("^a{BACKSPACE}" + password, with_spaces=True)
         result["steps"].append("filled_user_password")
-        # Prefer OK / Sign On button
         clicked = False
         for title in ("OK", "Sign On", "Login", "&OK"):
             try:

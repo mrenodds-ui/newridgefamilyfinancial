@@ -736,6 +736,40 @@ const HalAgent = (function () {
         return { ok: true, summary: HalSkills.formatSoftdentExtractStatus(resp).slice(0, 2800), status: resp };
       },
     },
+    softdent_signon_status: {
+      label: "SoftDent Sign On env status",
+      run: async () => {
+        try {
+          const bridge = window.HalBridge || window.NR2Bridge;
+          const data =
+            bridge && typeof bridge.loopbackJson === "function"
+              ? await bridge.loopbackJson("/api/apex/hal/softdent-signon", { method: "GET" })
+              : typeof Services !== "undefined" && typeof Services.fetchSoftdentSignOnStatus === "function"
+                ? await Services.fetchSoftdentSignOnStatus()
+                : null;
+          if (!data || data.ok === false) {
+            return {
+              ok: false,
+              summary:
+                "SoftDent Sign On uses env SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD. Prefer DB/ODBC; data that cannot be reached by the database requires Sign On + SoftDent UI export (HAL never prints the password).",
+            };
+          }
+          const doctrine = String(data.dataAccessDoctrine || data.softdentSignOn?.dataAccessDoctrine || "").slice(0, 500);
+          const reply = String(data.reply || data.softdentSignOn?.knowledge || "").slice(0, 1200);
+          return {
+            ok: true,
+            summary: (reply || doctrine || "SoftDent Sign On credentials are in environment variables.").slice(0, 1600),
+            status: data,
+          };
+        } catch {
+          return {
+            ok: false,
+            summary:
+              "Prefer SoftDent DB/ODBC when available. SoftDent data that cannot be reached by the database requires Sign On + SoftDent UI export. Credentials: SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD.",
+          };
+        }
+      },
+    },
     read_tasks: {
       label: "Read local office tasks",
       run: async (ctx) => {
@@ -3276,6 +3310,13 @@ const HalAgent = (function () {
       /\bsoftdent\b.*\b(odbc|extract|sd_|sqlite)\b|\bodbc\b.*\bsoftdent\b|\bsd_\w+\b|\bextract status\b/i.test(query)
     ) {
       tools.push("softdent_extract_status");
+    }
+    if (
+      /\b(sign\s*on|sign-on|change login|softdent\s+(login|password|credential)|SOFTDENT_SIGNON)\b/i.test(query) ||
+      (/\bsoftdent\b/i.test(query) && /\b(password|credential|login|env)\b/i.test(query)) ||
+      /\b(cannot be reached|not in (the )?(database|db|odbc)|only (way|via).{0,20}(ui|gui)|sign on and use (the )?ui)\b/i.test(query)
+    ) {
+      if (!tools.includes("softdent_signon_status")) tools.push("softdent_signon_status");
     }
     if (/\b(shift|tier|employee level|standing consent)\b/i.test(query)) {
       tools.push("read_shift_context");

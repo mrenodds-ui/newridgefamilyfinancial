@@ -3863,7 +3863,8 @@ def _widget_has_data(w: dict[str, Any]) -> bool:
 
 
 COLLECTIONS_PENDING_FIX = (
-    "Fix: Import SoftDent daysheet or complete Register for a Period, then Sync imports "
+    "Fix: SoftDent data not in the DB for this Collections KPI — Sign On and use SoftDent UI "
+    "to export daysheet / Register for a Period / Collections, then Sync imports "
     "(or ask HAL to refresh SoftDent period). Collections stay empty until reported — not $0."
 )
 
@@ -4055,8 +4056,16 @@ def build_export_playbook() -> dict[str, Any]:
             "At least daily for SoftDent operational pages; weekly (or after books close) for QuickBooks P&L.",
         ],
         "howSoftDent": [
-            "Preferred: Direct-First / ODBC lane (Sensei DataSync or SoftDent ODBC) — HAL Sync reloads the live extract cache.",
-            "File path: export SoftDent CSVs (claims, claim status, A/R aging, procedures, dashboard/daysheet, clinical notes) into app_data/nr2/document_inbox/softdent/ (or configured SoftDent import dir).",
+            "Preferred: Direct-First / ODBC lane (Sensei DataSync or SoftDent ODBC) — HAL Sync reloads the live extract cache "
+            "when the needed SoftDent rows are reachable in the database.",
+            "Doctrine: the only way to get SoftDent data that cannot be reached by the database is SoftDent Sign On "
+            "(SOFTDENT_SIGNON_* env vars) and use the SoftDent UI (Reports / Accounting → export), then place the file "
+            "for NR2 ingest/Sync. No invented dollars, no SoftDent write-back, no fictional vendor CLI.",
+            "SoftDent GUI Sign On: credentials are in environment variables SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD "
+            r"(aliases SOFTDENT_GUI_USER / SOFTDENT_GUI_PASSWORD; also C:\New folder\.env). "
+            "Ask HAL about SoftDent Sign On, or Refresh SoftDent period (step softdent_signon). HAL never prints the password.",
+            "File path: export SoftDent CSVs/XLS (claims, claim status, A/R aging, procedures, dashboard/daysheet, "
+            "Register for a Period, Collections) into app_data/nr2/document_inbox/softdent/ (or configured SoftDent import dir).",
             "Claims aging shelves need ClaimId, PatientName, ServiceDate, and Age/Days (or DOS so age can be computed).",
             "Then tell HAL: Sync imports and populate the widgets — or click Apex Sync.",
         ],
@@ -4071,9 +4080,18 @@ def build_export_playbook() -> dict[str, Any]:
             "Verify SoftDent and QuickBooks import status",
             "Which widgets are empty on this page?",
             "How do I get SoftDent exports?",
+            "How do I get SoftDent data not in the database?",
             "How do I get QuickBooks exports?",
+            "How does SoftDent Sign On work?",
+            "Where is the SoftDent Sign On password?",
         ],
-        "honesty": "HAL syncs/refreshes from imports only — it does not log into SoftDent or QuickBooks UI for you.",
+        "honesty": (
+            "Prefer SoftDent DB/ODBC when available. "
+            "Data that cannot be reached by the database requires Sign On + SoftDent UI export only. "
+            "SoftDent Sign On user/password live in env vars (SOFTDENT_SIGNON_*); "
+            "HAL/refresh may use them for GUI Sign On assist only. "
+            "HAL never invents dollars and never writes SoftDent clinical/financial data."
+        ),
     }
 
 
@@ -4169,7 +4187,7 @@ def refresh_softdent_period_imports() -> dict[str, Any]:
         from softdent_signon import ensure_softdent_signed_on, softdent_signon_status
 
         sign_status = softdent_signon_status()
-        sign_assist = ensure_softdent_signed_on(timeout_s=20.0)
+        sign_assist = ensure_softdent_signed_on(timeout_s=20.0, force_change_login=False)
         result["steps"].append(
             {
                 "step": "softdent_signon",
@@ -4483,6 +4501,23 @@ def _build_hal_status_payload() -> dict[str, Any]:
             "summary": readiness.get("summary"),
         }
 
+    softdent_signon: dict[str, Any] | None = None
+    try:
+        from softdent_signon import softdent_signon_status
+
+        st = softdent_signon_status()
+        softdent_signon = {
+            "ok": bool(st.get("ok")),
+            "user": st.get("user"),
+            "passwordConfigured": bool(st.get("passwordConfigured")),
+            "envUserKey": st.get("envUserKey"),
+            "envPasswordKey": st.get("envPasswordKey"),
+            "knowledge": st.get("knowledge"),
+            "dataAccessDoctrine": st.get("dataAccessDoctrine"),
+        }
+    except Exception:
+        softdent_signon = None
+
     return {
         "status": status,
         "statusLabel": status_label,
@@ -4494,6 +4529,7 @@ def _build_hal_status_payload() -> dict[str, Any]:
         "readiness": readiness_public,
         "importDegraded": import_degraded,
         "orchestrator": _orchestrator_status_safe(),
+        "softdentSignOn": softdent_signon,
     }
 
 
@@ -5370,6 +5406,10 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         re.search(r"\b(how|when).{0,40}\b(softdent|soft dent)\b.{0,40}\b(export|sync|import|grab|pull|get)\b", q)
         or re.search(r"\b(softdent|soft dent).{0,30}\b(export|csv|odbc|inbox)\b", q)
         or re.search(r"\bhow (do i |to )?(get|grab|pull|export).{0,20}softdent\b", q)
+        or re.search(
+            r"\b(softdent|soft dent).{0,50}(cannot be reached|not in (the )?(database|db|odbc)|sign on and use|ui export)\b",
+            q,
+        )
     )
     export_qb = bool(
         re.search(r"\b(how|when).{0,40}\b(quickbooks|\bqb\b)\b.{0,40}\b(export|sync|import|grab|pull|get)\b", q)
@@ -5392,7 +5432,10 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             {
                 "type": "set_status_banner",
                 "message": "Export playbook: SoftDent + QuickBooks → inbox → Sync",
-                "hint": "HAL can sync/refill after files land; does not log into SoftDent/QB for you.",
+                "hint": (
+                    "DB/ODBC first; else Sign On + SoftDent UI export. "
+                    "SOFTDENT_SIGNON_* env vars; HAL never prints the password."
+                ),
                 "tone": "ok",
             }
         )
@@ -6183,6 +6226,33 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             result = assess_collections_gap(bundle)
             result["buildId"] = BUILD_ID
             return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/hal/softdent-signon")
+    def apex_hal_softdent_signon():
+        """HAL/program SoftDent Sign On status — env keys only; never returns password."""
+        try:
+            from softdent_signon import format_softdent_signon_hal_reply, softdent_signon_status
+
+            status = softdent_signon_status()
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "buildId": BUILD_ID,
+                    "softdentSignOn": {
+                        "ok": bool(status.get("ok")),
+                        "user": status.get("user"),
+                        "passwordConfigured": bool(status.get("passwordConfigured")),
+                        "envUserKey": status.get("envUserKey"),
+                        "envPasswordKey": status.get("envPasswordKey"),
+                        "knowledge": status.get("knowledge"),
+                        "dataAccessDoctrine": status.get("dataAccessDoctrine"),
+                    },
+                    "dataAccessDoctrine": status.get("dataAccessDoctrine"),
+                    "reply": format_softdent_signon_hal_reply(status),
+                }
+            )
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
