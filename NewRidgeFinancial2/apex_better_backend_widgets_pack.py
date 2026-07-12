@@ -652,3 +652,128 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
         "data": payload,
         "hint": "PHI-safe hashes/initials · empty until patient selected.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Moonshot NEXT after TXN XLS ingest — TXN ledger surface (hal-10569)
+# Read-only data-table from SoftDentFinancialExports/tx_parsed JSONL
+# ---------------------------------------------------------------------------
+
+_LEDGER_COLUMNS = ["Date", "Account", "Patient", "Provider", "Procedure", "Amount", "Flag"]
+
+
+def build_transaction_ledger_table(
+    bundle: dict[str, Any] | None = None,
+    *,
+    page: str = "softdent",
+    account_num: str | int | None = None,
+    patient_name: str | None = None,
+    date_range: Any = None,
+    limit: int = 40,
+) -> dict[str, Any]:
+    """
+    TXN ledger data-table for SoftDent / Office Manager.
+    Source: tx_parsed JSONL (read-only). empty ≠ $0.
+    """
+    del bundle  # reserved; ledger is file-backed, not import-bundle
+    try:
+        from softdent_transaction_extract import query_account_transactions
+    except Exception:
+        return {
+            "id": f"{page}-transaction-ledger",
+            "type": "data-table",
+            "label": "Account Transaction Ledger",
+            "size": "full",
+            "status": "empty",
+            "emptyMessage": "Transaction extract unavailable.",
+            "columns": list(_LEDGER_COLUMNS),
+            "rows": [],
+            "hint": "SoftDent TXN Excel ingest required.",
+        }
+
+    # Default mosaic: recent rows (no filter). Filtered when account/patient/date set.
+    filtered = any(
+        [
+            account_num not in (None, ""),
+            str(patient_name or "").strip(),
+            date_range not in (None, ""),
+        ]
+    )
+    result = query_account_transactions(
+        account_num=account_num if filtered else None,
+        patient_name=patient_name if filtered else None,
+        date_range=date_range if filtered else None,
+        limit=max(1, int(limit)),
+    )
+
+    if not result.get("ok") and result.get("reason") == "data not yet exported":
+        return {
+            "id": f"{page}-transaction-ledger",
+            "type": "data-table",
+            "label": "Account Transaction Ledger",
+            "size": "full",
+            "status": "empty",
+            "emptyMessage": "No transactions found — ingest SoftDent Trans-for-Period Excel first.",
+            "columns": list(_LEDGER_COLUMNS),
+            "rows": [],
+            "emptyState": True,
+            "hint": r"Pull TXN*.xls → C:\SoftDentReportExports then ingest to tx_parsed\.",
+        }
+
+    matches = list(result.get("matches") or [])
+    if not filtered and matches:
+        # Unfiltered mosaic: newest-first sample already limited by query
+        pass
+    elif filtered and not matches:
+        return {
+            "id": f"{page}-transaction-ledger",
+            "type": "data-table",
+            "label": "Account Transaction Ledger",
+            "size": "full",
+            "status": "empty",
+            "emptyMessage": "No transactions found",
+            "columns": list(_LEDGER_COLUMNS),
+            "rows": [],
+            "emptyState": True,
+            "hint": "No matching rows for the requested account/patient/date filter.",
+            "filters": result.get("filters") or {},
+        }
+
+    rows: list[dict[str, Any]] = []
+    for rec in matches:
+        amt = rec.get("amount")
+        rows.append(
+            {
+                "Date": rec.get("date") or "-",
+                "Account": rec.get("account_num") or "-",
+                "Patient": (rec.get("patient_name") or "").strip() or "-",
+                "Provider": rec.get("provider") or "-",
+                "Procedure": rec.get("procedure") or "-",
+                # Keep null as null so FE shows empty (never invent $0)
+                "Amount": amt if isinstance(amt, (int, float)) else None,
+                "Flag": rec.get("note_flag") or "",
+            }
+        )
+
+    hint = (
+        f"{len(rows)} row(s) from SoftDent TXN Excel JSONL (read-only; empty != $0)."
+        if rows
+        else "No transactions found."
+    )
+    if filtered:
+        hint += f" Filters: {result.get('filters') or {}}."
+
+    return {
+        "id": f"{page}-transaction-ledger",
+        "type": "data-table",
+        "label": "Account Transaction Ledger",
+        "size": "full",
+        "status": "ok" if rows else "empty",
+        "emptyMessage": "No transactions found",
+        "columns": list(_LEDGER_COLUMNS),
+        "rows": rows,
+        "emptyState": not bool(rows),
+        "hint": hint,
+        "filters": result.get("filters") or {},
+        "matchCount": int(result.get("matchCount") or len(rows)),
+    }

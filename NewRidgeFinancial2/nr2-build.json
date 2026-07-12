@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10568",
-  "BUILD_ID": "hal-10568",
-  "assetVersion": "hal-10568",
-  "builtAt": "2026-07-12T21:45:00.000Z",
-  "notes": "hal-10568: Moonshot Better Backend Widgets SHOULD \u2014 HAL action-list, A/R collection-task-list, narratives ai-insight, SoftDent patient-dossier.",
+  "schemaVersion": "hal-10569",
+  "BUILD_ID": "hal-10569",
+  "assetVersion": "hal-10569",
+  "builtAt": "2026-07-12T22:00:00.000Z",
+  "notes": "hal-10569: Moonshot TXN ledger surface \u2014 SoftDent/OM data-table from tx_parsed JSONL; /api/apex/softdent/ledger.",
   "staffRenderMode": "apex"
 }

@@ -78,7 +78,7 @@ def _normalize_code(code: Any) -> str:
     if text.replace(".", "", 1).isdigit() and "." in text:
         try:
             as_float = float(text)
-            if as_float == int(as_float) and as_float < 1000:
+            if as_float == int(as_float):
                 return str(int(as_float))
         except ValueError:
             pass

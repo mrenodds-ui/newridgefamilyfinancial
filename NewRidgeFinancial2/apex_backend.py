@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10568"
+BUILD_ID = "hal-10569"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2305,6 +2305,13 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         widgets.append(build_softdent_patient_dossier(bundle))
     except Exception:
         pass
+    # Moonshot NEXT: TXN ledger surface (read-only JSONL)
+    try:
+        from apex_better_backend_widgets_pack import build_transaction_ledger_table
+
+        widgets.append(build_transaction_ledger_table(bundle, page="softdent", limit=25))
+    except Exception:
+        pass
 
     return widgets
 
@@ -3460,6 +3467,13 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         health_matrix = build_system_health_status_matrix(bundle)
         if health_matrix:
             widgets.append(health_matrix)
+    except Exception:
+        pass
+    # Moonshot NEXT: TXN ledger surface on Office Manager
+    try:
+        from apex_better_backend_widgets_pack import build_transaction_ledger_table
+
+        widgets.append(build_transaction_ledger_table(bundle, page="office-manager", limit=25))
     except Exception:
         pass
     return widgets
@@ -6916,6 +6930,43 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                     "result": est,
                     "reply": format_treatment_estimate_reply(est),
                     "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.get("/api/apex/softdent/ledger")
+    def apex_softdent_ledger_api():
+        """Read-only TXN Excel JSONL ledger — empty≠$0; filters: account_num, patient_name, date_range."""
+        try:
+            import bottle
+
+            from apex_better_backend_widgets_pack import build_transaction_ledger_table
+
+            q = bottle.request.query
+            account_num = str(q.get("account_num") or q.get("account") or "").strip() or None
+            patient_name = str(q.get("patient_name") or q.get("patient") or "").strip() or None
+            date_range = str(q.get("date_range") or q.get("period") or "").strip() or None
+            try:
+                limit = int(q.get("limit") or 40)
+            except (TypeError, ValueError):
+                limit = 40
+            widget = build_transaction_ledger_table(
+                {},
+                page="softdent",
+                account_num=account_num,
+                patient_name=patient_name,
+                date_range=date_range,
+                limit=limit,
+            )
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "buildId": BUILD_ID,
+                    "widget": widget,
+                    "emptyState": bool(widget.get("emptyState") or widget.get("status") == "empty"),
+                    "matchCount": widget.get("matchCount") or 0,
+                    "filters": widget.get("filters") or {},
                 }
             )
         except Exception as exc:  # noqa: BLE001
