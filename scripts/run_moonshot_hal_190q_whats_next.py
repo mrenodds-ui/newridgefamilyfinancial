@@ -39,7 +39,7 @@ HAL 190Q Phase 1 was APPLIED. CONSULT ONLY — DO NOT claim you applied code.
 Prefer additive Apex/HAL fixes. Avoid GitHub/PR as the primary package.
 Do not invent fictional file trees — only real paths listed below.
 
-JUST SHIPPED (Phase 1 — APPLIED):
+JUST SHIPPED (Phase 1 — APPLIED + pushed as 325d24a on fix/main-validate-ci):
 - Post-gen sentence caps / plain-language strip in nr2_hal_gateway.py
 - Write-intent SoftDent/QB preflight; unknown CARC refuse; empty ≠ $0
 - Short-ask num_predict caps on evaluate/stream/SSE
@@ -49,8 +49,11 @@ JUST SHIPPED (Phase 1 — APPLIED):
 - Offline re-score of stored 190Q previews: quality ~50→181; local policy
   now hits ~25 of those queries. Live 190Q re-run NOT yet done.
 
+PHASE 2 STATUS: Already recommended in WHATS_NEXT but NOT YET APPLIED
+(operator has not said proceed). If Phase 2 is still correct, say so bluntly.
+
 PRIOR 190Q FIX PHASES STILL OPEN (from MOONSHOT_HAL_190Q_FIX_CONSULT):
-- Phase 2: Structured deliverables (steps/paths → bullets/JSON schema)
+- Phase 2: Structured deliverables (steps/paths → bullets/JSON schema) — PENDING
 - Phase 3: Streaming / TTFT UX (SSE already exists; polish perceived latency)
 - Phase 4: CARC whitelist hardening (partially done in Phase 1)
 
