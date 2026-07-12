@@ -5,9 +5,10 @@
 ## SoftDent data-access doctrine (whole program)
 
 1. **Prefer the database lane** — SoftDent ODBC / Sensei DataSync / `sd_*` SQLite when the needed rows are there.  
-2. **If the database cannot reach it** — SoftDent **Sign On** + SoftDent UI.  
-   - **Excel** in Output Options → click Excel → Enter → NR2 parses the file.  
-   - **Print Preview only** (no Excel) → SoftDent pops preview → **visually read** the figures; do not invent dollars.  
+2. **If the database cannot reach it** — SoftDent **Sign On** + SoftDent UI **Output Options**.  
+   - **Excel:** click the **Excel** prompt → **Enter** → NR2 parses the file.  
+   - **Print Preview:** click the **Print Preview** prompt → **Enter** → go to the **last page** and visually read exact totals (do not invent from page 1).  
+   - Never leave **Printer** selected.  
 3. **Never** invent dollars, SoftDent write-back, or a fictional vendor CLI for those reports.
 
 Constant: `SOFTDENT_DATA_ACCESS_DOCTRINE` in `softdent_signon.py` (also on HAL status / Sign On API).
@@ -23,15 +24,15 @@ Constant: `SOFTDENT_DATA_ACCESS_DOCTRINE` in `softdent_signon.py` (also on HAL s
 
 ### Master reports
 
-| Id | Preferred | Output | When DB cannot supply |
-|----|-----------|--------|------------------------|
+| Id | Preferred | Output Options | When DB cannot supply |
+|----|-----------|----------------|------------------------|
 | `sd_odbc_core` | Database (`sd_*`) | DB | Sensei/ODBC extract first |
-| `register` | GUI | **Excel** (NR2 parses) | Sign On → Registers → Period → Excel → Enter |
-| `collections` | GUI | **Print Preview only** | Open SoftDent preview and **visually read** (no file ingest) |
-| `transactions` | GUI (DB assist) | Excel when offered | Sign On → Trans for a Period → Excel |
-| `daysheet` | GUI | Excel when offered | Sign On → Daysheet → Excel |
-| `aging` | GUI (DB assist) | Excel or preview | Excel if offered; else visual read |
-| `writeoff_totals` | GUI (DB assist) | Excel or preview | Excel if offered; else visual read |
+| `register` | GUI | Excel (prefer) / Preview | Click Excel→Enter; or Preview→Enter + **last page** |
+| `collections` | GUI | Excel + Preview (verified) | Click Excel→Enter; or Preview→Enter + **last page** |
+| `transactions` | GUI (DB assist) | Excel / Preview | Click Excel→Enter; Preview last page if visual |
+| `daysheet` | GUI | Excel + Preview (verified) | Click Excel→Enter; Preview last page if visual |
+| `aging` | GUI (DB assist) | Excel + Preview (verified) | Click Excel→Enter; Preview last page if visual |
+| `writeoff_totals` | GUI (DB assist) | Excel + Preview (verified) | Click Excel→Enter; Preview last page if visual |
 
 Verify:
 

@@ -30,12 +30,12 @@ _DEFAULT_USER_HINT = "COMPUTE"  # SoftDent Sign On user id (workstation/computer
 SOFTDENT_DATA_ACCESS_DOCTRINE = (
     "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed "
     "rows are available there. The only way to get SoftDent data that cannot be reached "
-    "by the database is SoftDent Sign On (env credentials) and the SoftDent UI. "
-    "If SoftDent offers Excel: click Excel then Enter and NR2 parses the file "
+    "by the database is SoftDent Sign On and the SoftDent UI Output Options. "
+    "Excel: click the Excel prompt, then Enter — NR2 parses the file "
     "(Register: Productions, Collections, Ins Plan, Regular). "
-    "If SoftDent only offers Print Preview (e.g. Collection Summary on this build): "
-    "open Print Preview and visually read the figures — no file ingest, no invented dollars. "
-    "Master list: softdent_master_reports.json / verify_master_reports. "
+    "Print Preview: click the Print Preview prompt, then Enter — go to the LAST page "
+    "and visually read exact totals (do not invent dollars from page 1). "
+    "Never select Printer. Master list: softdent_master_reports.json. "
     "No SoftDent write-back and no fictional vendor CLI."
 )
 

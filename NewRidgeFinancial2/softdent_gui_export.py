@@ -684,6 +684,55 @@ def _type_keys_clear_and_text(text: str, *, hwnd: int | None = None) -> None:
     time.sleep(0.08)
 
 
+def _select_output_option_prompt(kind: str = "excel") -> None:
+    """SoftDent Output Options: click Excel or Print Preview prompt, then Enter.
+
+    Never leave Printer selected (offline printer hang). User-confirmed flow matches
+    Excel and Preview the same way: click the prompt, then Enter.
+    """
+    out = None
+    for _ in range(40):
+        cancel_printer_dialogs(max_rounds=2)
+        out = find_dialog("Output Options")
+        if out:
+            break
+        time.sleep(0.25)
+    if not out:
+        raise RuntimeError("Output Options dialog did not appear")
+
+    want = "excel" if str(kind).strip().lower() in {"excel", "xls", "file"} else "print preview"
+    _keyboard_activate_dialog(out)
+    clicked = False
+    try:
+        from pywinauto import Application
+
+        app_out = Application(backend="win32").connect(handle=out.handle)
+        d_out = app_out.window(handle=out.handle)
+        for b in d_out.descendants(class_name="Button"):
+            label = (b.window_text() or "").replace("&", "").strip().lower()
+            if want == "excel" and label == "excel":
+                _softdent_click(b)
+                clicked = True
+                break
+            if want == "print preview" and "preview" in label:
+                _softdent_click(b)
+                clicked = True
+                break
+    except Exception as exc:
+        logger.warning("Output Options %s click failed: %s", want, type(exc).__name__)
+    if not clicked:
+        # Accelerator fallback: E=Excel, often V/P for preview depending on build
+        if want == "excel":
+            _send_softdent_keys("e", hwnd=int(out.handle))
+        else:
+            _send_softdent_keys("v", hwnd=int(out.handle))  # Pre&view / common SoftDent accel
+        time.sleep(0.2)
+    time.sleep(0.25)
+    _send_softdent_keys("{ENTER}", hwnd=int(out.handle))
+    time.sleep(1.0)
+    cancel_printer_dialogs()
+
+
 def _complete_output_setup_and_save(
     *,
     start: date,
@@ -695,51 +744,37 @@ def _complete_output_setup_and_save(
 ) -> Path:
     """Drive Output Options → Report Setup → Save (SoftDent keyboard/mouse only).
 
-    Output Options: click Excel prompt, then Enter (never leave Printer selected).
+    Output Options: click Excel prompt, then Enter (never Printer).
+    For visual-only review use open_report_print_preview (click Print Preview, then Enter;
+    read last page for totals).
     No Escape on SoftDent main. Printer wait → Alt+C cancel.
     """
     dismiss_softdent_alerts()
     cancel_printer_dialogs()
-    out = None
-    for _ in range(40):
-        cancel_printer_dialogs(max_rounds=2)
-        out = find_dialog("Output Options")
-        if out:
-            break
-        time.sleep(0.25)
-    if not out:
-        raise RuntimeError("Output Options dialog did not appear")
-
-    _keyboard_activate_dialog(out)
-    # SoftDent Output Options: click Excel radio/prompt, then Enter (not Printer).
-    excel_clicked = False
-    try:
-        from pywinauto import Application
-
-        app_out = Application(backend="win32").connect(handle=out.handle)
-        d_out = app_out.window(handle=out.handle)
-        for b in d_out.descendants(class_name="Button"):
-            label = (b.window_text() or "").replace("&", "")
-            if "Excel" in label:
-                _softdent_click(b)
-                excel_clicked = True
-                break
-    except Exception as exc:
-        logger.warning("Excel radio click failed: %s", type(exc).__name__)
-    if not excel_clicked:
-        _send_softdent_keys("e", hwnd=int(out.handle))
-        time.sleep(0.2)
-    time.sleep(0.25)
-    # User-confirmed SoftDent flow: Excel selected → Enter (do not click OK / Printer)
-    _send_softdent_keys("{ENTER}", hwnd=int(out.handle))
-    time.sleep(1.0)
-    cancel_printer_dialogs()
+    _select_output_option_prompt("excel")
 
     setup = None
     for _ in range(50):
         cancel_printer_dialogs(max_rounds=2)
         dismiss_softdent_alerts(max_rounds=2)
         setup = find_dialog("Report Setup")
+        if not setup:
+            # SoftDent titles vary: "Collection Summary Report Setup", "Register Setup", …
+            from pywinauto import Desktop
+
+            pids = _softdent_pids()
+            for w in Desktop(backend="win32").windows():
+                try:
+                    t = (w.window_text() or "").strip()
+                    if not t or "softdent software" in t.lower():
+                        continue
+                    if pids and _window_pid(int(w.handle)) not in pids:
+                        continue
+                    if "setup" in t.lower():
+                        setup = w
+                        break
+                except Exception:
+                    continue
         if setup:
             break
         time.sleep(0.25)
@@ -832,25 +867,24 @@ def export_report_by_id(
     if not isinstance(report, dict):
         raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
 
-    # Print Preview–only reports have no Excel file path — do not force Excel automation
+    # Prefer Excel file ingest when SoftDent offers it. Print Preview path is separate
+    # (click Print Preview prompt → Enter → visually read; last page for totals).
     try:
         from softdent_master_reports import load_master_reports
 
         master = ((load_master_reports().get("reports") or {}).get(report_id) or {})
-        if master.get("outputMode") == "print_preview" or (
-            bool(master.get("visualReadRequired")) and not bool(master.get("excelExport"))
-        ):
+        if bool(master.get("visualReadRequired")) and not bool(master.get("excelExport")):
             raise RuntimeError(
-                f"{report_id} is SoftDent Print Preview only (no Excel file). "
-                "Open the report in SoftDent, use Print Preview, and visually read the data. "
-                "Do not invent dollars. Prefer Register Excel when it already has the totals."
+                f"{report_id} requires SoftDent Print Preview (click Print Preview, then Enter). "
+                "Visually read the report — go to the LAST page for exact totals. "
+                "Do not invent dollars."
             )
     except ImportError:
         pass
-    if str(report.get("outputMode") or "").strip().lower() == "print_preview":
+    if str(report.get("outputMode") or "").strip().lower() == "print_preview_only":
         raise RuntimeError(
-            f"{report_id} is SoftDent Print Preview only (no Excel file). "
-            "Open Print Preview and visually read the figures."
+            f"{report_id} is SoftDent Print Preview only — click Print Preview then Enter; "
+            "read the last page for totals."
         )
 
     dest = dest_root or EXPORT_ROOT
@@ -877,6 +911,94 @@ def export_report_by_id(
         canonical_name=canonical,
         also_copy_as=also,
     )
+
+
+def open_report_print_preview(
+    report_id: str,
+    *,
+    start: date,
+    end: date,
+    menu_keys: str | None = None,
+) -> dict[str, Any]:
+    """Open SoftDent report via Print Preview for visual read (no file ingest).
+
+    Output Options: click **Print Preview** prompt, then Enter (same pattern as Excel).
+    After SoftDent shows the preview, navigate to the **last page** for exact totals.
+    Never invent dollars from a partial first page.
+    """
+    catalog = load_menu_map()
+    report = (catalog.get("reports") or {}).get(report_id)
+    if not isinstance(report, dict):
+        raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
+    keys = resolve_menu_keys(report, menu_keys)
+    _open_accounting_report(report_id, keys)
+    _select_output_option_prompt("print_preview")
+    # Setup if it appears — fill dates then OK into preview
+    setup = None
+    for _ in range(40):
+        cancel_printer_dialogs(max_rounds=2)
+        from pywinauto import Desktop
+
+        pids = _softdent_pids()
+        for w in Desktop(backend="win32").windows():
+            try:
+                t = (w.window_text() or "").strip()
+                if pids and _window_pid(int(w.handle)) not in pids:
+                    continue
+                if "setup" in t.lower() and "softdent software" not in t.lower():
+                    setup = w
+                    break
+            except Exception:
+                continue
+        if setup or find_dialog("Print Preview"):
+            break
+        time.sleep(0.25)
+    if setup:
+        _keyboard_activate_dialog(setup)
+        h = int(setup.handle)
+        start_txt = start.strftime("%m/%d/%y")
+        end_txt = end.strftime("%m/%d/%y")
+        _send_softdent_keys("{TAB}", hwnd=h)
+        time.sleep(0.1)
+        _type_keys_clear_and_text(start_txt, hwnd=h)
+        _send_softdent_keys("{TAB}", hwnd=h)
+        time.sleep(0.1)
+        _type_keys_clear_and_text(end_txt, hwnd=h)
+        _send_softdent_keys("{TAB}", hwnd=h)
+        time.sleep(0.1)
+        _type_keys_clear_and_text("999", hwnd=h)
+        time.sleep(0.15)
+        _keyboard_press_ok(hwnd=h)
+        time.sleep(1.2)
+        cancel_printer_dialogs()
+    preview = bool(find_dialog("Print Preview")) or any(
+        "print preview" in t.lower()
+        for t in []
+    )
+    # Best-effort: SoftDent preview may use a different title
+    from pywinauto import Desktop
+
+    titles = []
+    pids = _softdent_pids()
+    for w in Desktop(backend="win32").windows():
+        try:
+            t = (w.window_text() or "").strip()
+            if t and (not pids or _window_pid(int(w.handle)) in pids):
+                titles.append(t)
+        except Exception:
+            continue
+    preview = any("preview" in t.lower() for t in titles)
+    return {
+        "ok": True,
+        "reportId": report_id,
+        "outputMode": "print_preview",
+        "printPreviewOpen": preview,
+        "titles": titles[:12],
+        "nextStep": (
+            "SoftDent Print Preview is open (or pending). Go to the LAST page of the "
+            "report to read exact totals. Do not invent dollars from the first page."
+        ),
+    }
 
 
 def export_register_for_period(
@@ -1017,8 +1139,8 @@ def run_catalog_exports(
             entry["dryRun"] = True
             result["reports"][rid] = entry
             continue
-        # Print Preview–only: do not attempt Excel save automation
-        if str(meta.get("outputMode") or "").strip().lower() == "print_preview" or (
+        # Print Preview–only (no Excel): skip Excel save automation
+        if str(meta.get("outputMode") or "").strip().lower() == "print_preview_only" or (
             meta.get("excelExport") is False and meta.get("visualReadRequired")
         ):
             entry["ok"] = True
@@ -1026,8 +1148,9 @@ def run_catalog_exports(
             entry["outputMode"] = "print_preview"
             entry["visualReadRequired"] = True
             entry["nextStep"] = (
-                "SoftDent Print Preview only — open report in SoftDent and visually read; "
-                "no Excel file ingest; do not invent dollars."
+                "Click Print Preview in Output Options, then Enter. "
+                "Go to the LAST page and visually read totals; do not invent dollars. "
+                "Prefer Excel when SoftDent offers it for file ingest."
             )
             result["reports"][rid] = entry
             continue

@@ -50,8 +50,10 @@ Carestream documents many Ctrl shortcuts for Lists/Scheduler/Chart — **none** 
 - Drive menus with **keyboard and/or mouse**, but **only SoftDent-owned windows** (SDWIN PID).  
 - Never click/focus AMD / Radeon / other apps.  
 - SoftDent v19 uses a classic Win32 `HMENU`: UIA only sees the top bar; use SoftDent `menu_select("Reports->Accounting->Registers->Period")` (or F10+letters).  
-- **Output Options:** if **Excel** is available → click **Excel**, then **Enter**.  
-- If SoftDent only offers **Printer / Print Preview** (e.g. Collection Summary on this build) → open Print Preview and **visually read** — no Excel file for NR2 to parse; do not invent dollars.  
+- **Output Options:** same click pattern for both paths:  
+  - **Excel** prompt → **Enter** → file save → NR2 parses.  
+  - **Print Preview** prompt → **Enter** → SoftDent preview → go to the **last page** for exact totals (visual read).  
+- Never leave **Printer** selected.  
 - Prefer Register Excel for period production/collections/Ins Plan when SoftDent reports those labels.  
 - Fallback: F10 / SoftDent-local menu keys (not global Alt+R).  
 - After any report: sweep printer dialogs and cancel them.
