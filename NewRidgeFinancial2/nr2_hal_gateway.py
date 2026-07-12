@@ -712,15 +712,22 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             }
 
     # DEF-001 — empty revenue-composition / collections ≠ $0 (local, no LLM)
+    # Also: Register Ins Plan $0 → ERA-835 honesty (hal-10571)
     if re.search(
         r"\b("
         r"revenue.?composition|payer mix|insurance.?patient|"
         r"collections?\s+(empty|pending|missing|gap)|"
         r"why .{0,40}(collections|revenue.?composition)|"
-        r"def-?001|daysheet"
+        r"def-?001|daysheet|"
+        r"(july|open.?month).{0,30}(insurance|ins.?plan).{0,20}collections?|"
+        r"ins.?plan\s+collections?|"
+        r"era.?835"
         r")\b",
         q,
-    ) and re.search(r"\b(empty|pending|missing|gap|\$0|zero|why)\b", q):
+    ) and re.search(
+        r"\b(empty|pending|missing|gap|\$0|zero|why|july|insurance|ins.?plan|era|collections?)\b",
+        q,
+    ):
         try:
             from apex_softdent_hardening_pack import assess_collections_gap, format_collections_gap_reply
 
@@ -739,9 +746,8 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
         except Exception:
             return {
                 "text": (
-                    "DEF-001: Empty revenue-composition / Collections is not $0. "
-                    r"Export SoftDent Collections/Daysheet to C:\SoftDentReportExports, then Sync. "
-                    "HAL will not invent insurance or patient dollars."
+                    "SoftDent Register reports Ins Plan Collections $0.00; proceed with ERA-835 "
+                    "for insurance detail. Empty ≠ $0; do not re-export Register hoping Ins Plan > 0."
                 ),
                 "intent": "policy:def-001-collections",
             }

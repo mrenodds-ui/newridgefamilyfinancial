@@ -21,6 +21,7 @@ GAP_NO_PERIOD = "NO_PERIOD_ROW"
 GAP_COLLECTIONS_FORMAT_REQUIRED = "COLLECTIONS_FORMAT_REQUIRED"  # files present but wrong period/split
 GAP_DAYSHEET_WITHOUT_SPLIT = "DAYSHEET_WITHOUT_SPLIT"  # period from daysheet; Collections export needed
 GAP_COLLECTIONS_EXPORT_REQUIRED = "COLLECTIONS_EXPORT_REQUIRED"  # ops synonym for format/split gap
+GAP_ERA_835_REQUIRED = "ERA_835_REQUIRED"  # Register Ins Plan $0 truth → ERA path (no re-export loop)
 
 FIX_HINT = (
     "Import SoftDent daysheet / complete Register for a Period, then Sync "
@@ -36,6 +37,11 @@ SPLIT_HINT = (
     "Collections export required for ins/patient split. SoftDent → Reports → "
     "Accounting → Collections (or Register for a Period with Ins Plan / Regular "
     r"Collections) → C:\SoftDentReportExports, then Sync. Empty ≠ $0."
+)
+ERA_REGISTER_ZERO_HINT = (
+    "SoftDent Register reports Ins Plan Collections $0.00 for this period — that is SoftDent truth, "
+    "not a missing export. Do not re-export Register hoping Ins Plan > 0. "
+    "Proceed with ERA-835 for insurance detail (read-only; empty ≠ $0; no SoftDent write-back)."
 )
 
 # SoftDent export inbox roots (same family as import_sync upstream)
@@ -268,6 +274,8 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     daysheet_without_split = False
     production = None
     collections = None
+    insurance = None
+    patient = None
 
     if latest:
         pending = bool(latest.get("collectionsPending"))
@@ -285,13 +293,21 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         except (TypeError, ValueError):
             collections = None
         try:
-            ins = float(latest.get("insurance") or 0)
+            if latest.get("insurance") is None or latest.get("insurance") == "":
+                insurance = None
+            else:
+                insurance = float(latest.get("insurance"))
         except (TypeError, ValueError):
-            ins = 0.0
+            insurance = None
         try:
-            pat = float(latest.get("patient") or 0)
+            if latest.get("patient") is None or latest.get("patient") == "":
+                patient = None
+            else:
+                patient = float(latest.get("patient"))
         except (TypeError, ValueError):
-            pat = 0.0
+            patient = None
+        ins = float(insurance or 0)
+        pat = float(patient or 0)
         if (
             has_collections_key
             and collections
@@ -445,6 +461,38 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             result["issues"] = issues[:12]
     except Exception:
         pass
+
+    # Moonshot hal-10571 — SoftDent Register Ins Plan $0 is truth → ERA honesty path
+    # Only when collections were reported (Register totals present) but Ins Plan is $0.
+    # Do not hijack COLLECTIONS_PENDING / wrong-period inbox format gaps.
+    register_ins_zero = bool(
+        (format_required or result.get("collectionsFormatRequired"))
+        and (insurance is None or float(insurance or 0) <= 0)
+        and production is not None
+        and float(production or 0) > 0
+        and not result.get("healthy")
+        and not pending
+        and (
+            reported is True
+            or (collections is not None and float(collections or 0) > 0)
+        )
+    )
+    result["insurance"] = insurance
+    result["patient"] = patient
+    if register_ins_zero:
+        result["registerInsPlanZero"] = True
+        result["collectionsGapCode"] = GAP_ERA_835_REQUIRED
+        result["gapCode"] = GAP_ERA_835_REQUIRED
+        result["collectionsExportRequired"] = False
+        result["fixHint"] = ERA_REGISTER_ZERO_HINT
+        issues = list(result.get("issues") or [])
+        issues.insert(
+            0,
+            f"{period or 'period'}: SoftDent Register Ins Plan Collections $0.00 (truth) — "
+            "proceed with ERA-835 for insurance detail; do not re-export Register hoping Ins Plan > 0.",
+        )
+        result["issues"] = issues[:12]
+
     # Phase S1 — ERA aggregate proposal when collections still empty
     try:
         from apex_softdent_era_pack import enrich_collections_gap_with_era
@@ -531,6 +579,21 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
             f"Collections look reported for period `{g.get('period') or 'latest'}` "
             f"(gapCode={g.get('gapCode')}). Revenue split can populate from import — not invented."
         )
+    code = str(g.get("collectionsGapCode") or g.get("gapCode") or "")
+    if g.get("registerInsPlanZero") or code in {GAP_ERA_835_REQUIRED, "ERA_835_AVAILABLE"}:
+        period = g.get("period") or "—"
+        lines = [
+            f"SoftDent Register reports Ins Plan Collections $0.00; proceed with ERA-835 for insurance detail.",
+            f"Period `{period}` · collectionsGapCode=`{code}` · empty ≠ $0 · no SoftDent write-back.",
+            "Do not re-export July Register hoping Ins Plan > 0 — SoftDent already printed $0.",
+            str(g.get("fixHint") or ERA_REGISTER_ZERO_HINT),
+        ]
+        if g.get("eraAvailable"):
+            lines.append(
+                f"ERA aggregate available: claims={g.get('eraClaimCount')} "
+                f"total={g.get('eraPaymentTotal')} (proposal only — staff post in SoftDent)."
+            )
+        return "\n".join(lines)
     issues = g.get("issues") if isinstance(g.get("issues"), list) else []
     lines = [
         f"DEF-001 SoftDent collections gap: `{g.get('gapCode')}` · period `{g.get('period') or '—'}`.",

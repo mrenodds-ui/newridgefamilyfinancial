@@ -1438,6 +1438,44 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
 
 from softdent_odbc_extract import ensure_softdent_odbc_fresh, extract_softdent_odbc, read_extract_status, run_odbc_lane
 
+def stub_era835_ingestion_path() -> dict[str, Any]:
+    """Read-only stub for ERA-835 insurance detail path (Moonshot hal-10571).
+
+    Does not invent dollars or write SoftDent. Points staff/HAL at existing ERA ingest.
+    """
+    import os
+    from pathlib import Path
+
+    candidates = [
+        Path(r"C:\SoftDentFinancialExports\era"),
+        Path(r"C:\SoftDentReportExports\era"),
+    ]
+    env_inbox = str(os.environ.get("NR2_ERA835_INBOX") or "").strip()
+    if env_inbox:
+        candidates.append(Path(env_inbox).expanduser())
+    roots = [str(p) for p in candidates]
+    existing = [str(p) for p in candidates if p.is_dir()]
+    return {
+        "ok": True,
+        "mode": "stub",
+        "readOnly": True,
+        "localOnly": True,
+        "writeBack": False,
+        "honesty": "empty_not_zero",
+        "hint": (
+            "SoftDent Register Ins Plan Collections $0.00 is SoftDent truth — "
+            "proceed with ERA-835 for insurance detail. Drop 835 files into the ERA inbox; "
+            "Apex never invents insurance/patient dollars or posts SoftDent."
+        ),
+        "candidateRoots": roots,
+        "existingRoots": existing,
+        "ingestHooks": [
+            "apex_era835_pack.ingest_era835_to_unified",
+            "apex_softdent_era_pack.attach_era_to_ingest",
+        ],
+    }
+
+
 __all__ = [
     "ensure_softdent_odbc_fresh",
     "extract_softdent_odbc",
@@ -1449,6 +1487,7 @@ __all__ = [
     "detect_daysheet_export_schema",
     "summarize_daysheet_export",
     "parse_softdent_register_xls",
+    "stub_era835_ingestion_path",
 ]
 
 

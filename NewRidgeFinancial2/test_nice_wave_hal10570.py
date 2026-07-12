@@ -1,4 +1,4 @@
-"""Moonshot Better Backend Widgets NICE (hal-10570)."""
+"""Moonshot Better Backend Widgets NICE (hal-10571)."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from apex_better_backend_widgets_pack import (
 
 class NiceWaveHal10570Tests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10570")
+        self.assertEqual(BUILD_ID, "hal-10571")
 
     def test_aging_pareto_empty(self) -> None:
         w = build_ar_aging_pareto({"ar": {}})

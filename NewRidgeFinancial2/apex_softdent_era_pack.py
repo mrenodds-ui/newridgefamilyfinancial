@@ -180,6 +180,8 @@ def enrich_collections_gap_with_era(
         "REGISTER_ONLY",
         "NO_PERIOD_ROW",
         "COLLECTIONS_FORMAT_REQUIRED",
+        "ERA_835_REQUIRED",
+        "COLLECTIONS_EXPORT_REQUIRED",
     }:
         return out
     period = out.get("period")
@@ -191,6 +193,9 @@ def enrich_collections_gap_with_era(
     out["eraClaimCount"] = era.get("claimCount")
     out["eraGapCode"] = GAP_ERA_835_AVAILABLE
     out["gapCode"] = GAP_ERA_835_AVAILABLE
+    # Keep Register-Ins-Plan-$0 honesty code on collectionsGapCode when set
+    if out.get("registerInsPlanZero") or str(out.get("collectionsGapCode") or "") == "ERA_835_REQUIRED":
+        out["collectionsGapCode"] = "ERA_835_REQUIRED"
     issues = list(out.get("issues") or [])
     issues.insert(
         0,
@@ -199,7 +204,13 @@ def enrich_collections_gap_with_era(
         "proposal only; post in SoftDent.",
     )
     out["issues"] = issues[:12]
-    out["fixHint"] = FIX_HINT_ERA
+    if out.get("registerInsPlanZero"):
+        out["fixHint"] = (
+            "SoftDent Register reports Ins Plan Collections $0.00; proceed with ERA-835 for insurance detail. "
+            "ERA aggregate is proposal-only — staff post in SoftDent. Empty ≠ $0; no SoftDent write-back."
+        )
+    else:
+        out["fixHint"] = FIX_HINT_ERA
     out["honesty"] = "empty_not_zero"
     out["healthy"] = False
     # Never invent SoftDent collections from ERA

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10570",
-  "BUILD_ID": "hal-10570",
-  "assetVersion": "hal-10570",
-  "builtAt": "2026-07-12T22:15:00.000Z",
-  "notes": "hal-10570: Moonshot Better Backend Widgets NICE \u2014 A/R aging pareto, taxes main tax-calendar, claim status timeline-lanes.",
+  "schemaVersion": "hal-10571",
+  "BUILD_ID": "hal-10571",
+  "assetVersion": "hal-10571",
+  "builtAt": "2026-07-12T22:20:00.000Z",
+  "notes": "hal-10571: Moonshot ERA-835 Collections Honesty UX Bridge — Register Ins Plan `"notes": "hal-10571: Moonshot Better Backend Widgets NICE \u2014 A/R aging pareto, taxes main tax-calendar, claim status timeline-lanes." truth redirects to ERA path.",
   "staffRenderMode": "apex"
 }
