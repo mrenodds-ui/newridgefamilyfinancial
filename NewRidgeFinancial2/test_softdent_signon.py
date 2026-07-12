@@ -76,9 +76,9 @@ class SoftDentSignOnTests(unittest.TestCase):
                 "passwordConfigured": True,
             }
         )
-        self.assertIn("cannot be reached by the database", text)
+        self.assertIn("source of truth", text.lower())
         self.assertIn("Sign On", text)
-        self.assertIn("UI", text)
+        self.assertIn("Excel", text)
         self.assertIn(SOFTDENT_DATA_ACCESS_DOCTRINE[:40], text)
 
     def test_local_policy_ui_only_data_path(self):
@@ -95,8 +95,8 @@ class SoftDentSignOnTests(unittest.TestCase):
             )
         self.assertIsNotNone(hit)
         self.assertEqual(hit.get("intent"), "policy:softdent-signon-env")
-        self.assertIn("cannot be reached by the database", hit.get("text") or "")
-        self.assertIn("UI", hit.get("text") or "")
+        self.assertIn("source of truth", (hit.get("text") or "").lower())
+        self.assertIn("Excel", hit.get("text") or "")
         self.assertNotIn("test-secret-not-real", hit.get("text") or "")
         self.assertIn("Sign On", SOFTDENT_DATA_ACCESS_DOCTRINE)
 

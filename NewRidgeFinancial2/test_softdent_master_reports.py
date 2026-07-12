@@ -49,10 +49,10 @@ class SoftDentMasterReportsTests(unittest.TestCase):
         self.assertIn("database", result)
         self.assertIn("register", result["reports"])
         text = format_master_reports_hal_reply()
-        self.assertIn("prefer database", text.lower())
-        self.assertIn("Sign On", text)
+        self.assertIn("source of truth", text.lower())
         self.assertIn("Print Preview", text)
         self.assertIn("LAST page", text)
+        self.assertIn("Excel", text)
 
     def test_verify_never_leaks_password(self):
         blob = str(

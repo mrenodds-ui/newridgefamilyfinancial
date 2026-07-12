@@ -3,12 +3,11 @@
   "updated": "2026-07-12",
   "softdentVersionHint": "CS SoftDent Software v19.1.4",
   "doctrine": [
-    "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed rows are available there.",
-    "The only way to get SoftDent data that cannot be reached by the database is SoftDent Sign On and the SoftDent UI.",
-    "Output Options (verified on this build for Register/Collections/Daysheet/Aging/Writeoff/Trans): Printer | Print Preview | File | Excel | …",
-    "Excel path: click the Excel prompt, then Enter → save under C:\\SoftDentReportExports → NR2 parses the file (never invent dollars).",
-    "Print Preview path: click the Print Preview prompt, then Enter → SoftDent shows preview → go to the LAST page for exact totals and visually read (never invent dollars from page 1).",
-    "Never leave Printer selected (offline hang). Never SoftDent write-back."
+    "Hybrid: SoftDent desktop app is the source of truth for period financial totals (you can get all correct data there).",
+    "Database / ODBC / Sensei / sd_* is faster for operational detail when populated — use it for patients/procedures/claims/payments, not as primary period-close until it matches desktop Register side-by-side.",
+    "Desktop Excel path: click Excel prompt → Enter → Setup → save C:\\SoftDentReportExports → NR2 parses (never invent dollars).",
+    "Desktop Print Preview path: click Print Preview prompt → Enter → go to LAST page for exact totals (visual read).",
+    "Never leave Printer selected. No SoftDent write-back."
   ],
   "outputOptionsVerified": {
     "probedAt": "2026-07-12T15:04:00Z",

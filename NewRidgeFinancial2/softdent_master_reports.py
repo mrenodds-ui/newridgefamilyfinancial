@@ -79,8 +79,8 @@ def print_preview_report_ids() -> list[str]:
 def format_master_reports_hal_reply() -> str:
     catalog = load_master_reports()
     lines = [
-        "SoftDent master retrieval: prefer database / ODBC / Sensei / sd_* when available.",
-        "If that info cannot be reached by the database, Sign On and use SoftDent UI Output Options.",
+        "SoftDent hybrid retrieval: desktop SoftDent is the source of truth for period financial totals.",
+        "Database / ODBC / Sensei / sd_* is faster for operational detail when populated.",
         "Excel path: click the Excel prompt, then Enter — NR2 parses the file.",
         "Print Preview path: click the Print Preview prompt, then Enter — go to the LAST page and visually read exact totals (do not invent dollars from page 1).",
         "Never select Printer (offline hang).",

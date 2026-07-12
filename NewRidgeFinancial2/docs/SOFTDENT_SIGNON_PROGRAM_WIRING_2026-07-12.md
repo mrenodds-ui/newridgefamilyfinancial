@@ -4,12 +4,18 @@
 
 ## SoftDent data-access doctrine (whole program)
 
-1. **Prefer the database lane** — SoftDent ODBC / Sensei DataSync / `sd_*` SQLite when the needed rows are there.  
-2. **If the database cannot reach it** — SoftDent **Sign On** + SoftDent UI **Output Options**.  
-   - **Excel:** click the **Excel** prompt → **Enter** → NR2 parses the file.  
-   - **Print Preview:** click the **Print Preview** prompt → **Enter** → go to the **last page** and visually read exact totals (do not invent from page 1).  
-   - Never leave **Printer** selected.  
-3. **Never** invent dollars, SoftDent write-back, or a fictional vendor CLI for those reports.
+**Hybrid (measured on this workstation):**
+
+| Need | Better path | Why |
+|------|-------------|-----|
+| Period financial totals (prod/collections/Ins Plan) | **Desktop SoftDent Excel** | Source of truth — complete correct SoftDent figures; ODBC not configured here for live extract |
+| Patients / procedures / claims / payments lists | **Database / Sensei / `sd_*`** | Much faster (~ms) when tables are populated |
+| Visual confirmation | **Desktop Print Preview** | Click Preview → Enter → **last page** for totals |
+
+1. **Financial close / master reports** → SoftDent desktop (Sign On → Output Options → **Excel** → Enter → save → NR2 parse).  
+2. **Operational detail** → DB/Sensei/`sd_*` when populated (fast).  
+3. **Do not** promote DB to period-close primary until a side-by-side matches SoftDent Register.  
+4. **Never** invent dollars, SoftDent write-back, or leave **Printer** selected.
 
 Constant: `SOFTDENT_DATA_ACCESS_DOCTRINE` in `softdent_signon.py` (also on HAL status / Sign On API).
 

@@ -28,15 +28,15 @@ _DEFAULT_USER_HINT = "COMPUTE"  # SoftDent Sign On user id (workstation/computer
 
 # Whole-program SoftDent data-access rule (HAL + refresh + playbook).
 SOFTDENT_DATA_ACCESS_DOCTRINE = (
-    "Prefer SoftDent database / ODBC / Sensei DataSync / sd_* SQLite when the needed "
-    "rows are available there. The only way to get SoftDent data that cannot be reached "
-    "by the database is SoftDent Sign On and the SoftDent UI Output Options. "
-    "Excel: click the Excel prompt, then Enter — NR2 parses the file "
-    "(Register: Productions, Collections, Ins Plan, Regular). "
-    "Print Preview: click the Print Preview prompt, then Enter — go to the LAST page "
-    "and visually read exact totals (do not invent dollars from page 1). "
-    "Never select Printer. Master list: softdent_master_reports.json. "
-    "No SoftDent write-back and no fictional vendor CLI."
+    "Hybrid SoftDent retrieval: the desktop SoftDent app (Sign On → Output Options → "
+    "Excel click then Enter, or Print Preview click then Enter and read the LAST page) "
+    "is the source of truth for period financial totals (Register Productions/Collections/"
+    "Ins Plan/Regular, Daysheet, Aging, etc.) — that path can supply all correct figures. "
+    "The database / ODBC / Sensei / sd_* lane is faster for operational detail (patients, "
+    "procedures, claims, payments) when populated, but is not the primary for period close "
+    "until it is proven to match SoftDent desktop Register totals side-by-side. "
+    "Never select Printer. Never invent dollars. No SoftDent write-back. "
+    "Master list: softdent_master_reports.json."
 )
 
 
