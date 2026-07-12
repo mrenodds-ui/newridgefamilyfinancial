@@ -466,7 +466,8 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             }
 
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
-    # Also: data not in DB → Sign On + UI; widget data paths; period $ drift
+    # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
+    # account transactions → Excel playbook
     if re.search(
         r"\b("
         r"sign\s*on|sign-on|change login|"
@@ -481,12 +482,20 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
         r"source of truth|"
         r"(where|how).{0,40}(vital signs|ins.?patient|collections gap|widget).{0,40}(data|from|get)|"
         r"softdent.{0,30}widget.{0,30}(data|path|source)|"
-        r"(register|daysheet).{0,24}(drift|disagree|mismatch))"
+        r"(register|daysheet).{0,24}(drift|disagree|mismatch)|"
+        r"account\s+transactions?|patient\s+transactions?|"
+        r"trans(actions?)?\s+for\s+(a\s+)?period|"
+        r"print\s+transactions?|"
+        r"(pull|export|get).{0,40}(account|patient|transaction).{0,30}(excel|softdent|ledger)|"
+        r"softdent.{0,40}(transaction|ledger).{0,30}(excel|export|pull)|"
+        r"list\s+each\s+transaction\s+separately|"
+        r"account\s+(mode|transaction)\s+tab)"
         r")\b",
         q,
     ):
         try:
             from softdent_signon import (
+                format_softdent_account_tx_excel_hal_reply,
                 format_softdent_signon_hal_reply,
                 format_softdent_widget_path_hal_reply,
                 softdent_signon_status,
@@ -507,6 +516,17 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                     text = text + " " + format_drift_hal_reply(compare_register_to_daysheet_totals())
                 except Exception:
                     pass
+            if re.search(
+                r"\b("
+                r"account\s+transactions?|patient\s+transactions?|"
+                r"trans(actions?)?\s+for\s+(a\s+)?period|print\s+transactions?|"
+                r"(pull|export|get).{0,40}(account|patient|transaction).{0,30}(excel|softdent|ledger)|"
+                r"softdent.{0,40}(transaction|ledger).{0,30}(excel|export|pull)|"
+                r"list\s+each\s+transaction|account\s+(mode|transaction)\s+tab"
+                r")\b",
+                q,
+            ):
+                text = text + " " + format_softdent_account_tx_excel_hal_reply()
             return {
                 "text": text,
                 "intent": "policy:softdent-signon-env",
@@ -519,6 +539,9 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                     r"(also C:\New folder\.env). "
                     "Desktop SoftDent Excel is the source of truth for period financial totals; "
                     "sd_*/Sensei is faster for operational detail. "
+                    "Account txs: Reports → Accounting → Trans for a Period → Excel "
+                    "(Format 1 = List Each Transaction Separately); save into "
+                    r"C:\SoftDentReportExports (SoftDent may open temp SDWIN*.csv in Excel). "
                     "HAL will not print the password."
                 ),
                 "intent": "policy:softdent-signon-env",

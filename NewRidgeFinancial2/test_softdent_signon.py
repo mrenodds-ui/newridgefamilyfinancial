@@ -100,6 +100,47 @@ class SoftDentSignOnTests(unittest.TestCase):
         self.assertNotIn("test-secret-not-real", hit.get("text") or "")
         self.assertIn("Sign On", SOFTDENT_DATA_ACCESS_DOCTRINE)
 
+    def test_account_tx_excel_hal_reply(self):
+        from softdent_signon import (
+            format_softdent_account_tx_excel_hal_reply,
+            _query_touches_softdent_account_tx,
+            compile_softdent_signon_guidance,
+        )
+
+        text = format_softdent_account_tx_excel_hal_reply()
+        self.assertIn("Trans for a Period", text)
+        self.assertIn("List Each Transaction Separately", text)
+        self.assertIn("Excel", text)
+        self.assertIn("SDWIN", text)
+        self.assertIn(r"C:\SoftDentReportExports", text)
+        self.assertIn("Printer", text)
+        self.assertTrue(_query_touches_softdent_account_tx("How do I pull SoftDent account transactions to Excel?"))
+        self.assertTrue(_query_touches_softdent_account_tx("export transactions for a period"))
+        guided = compile_softdent_signon_guidance(
+            "How do I pull SoftDent account transactions via Excel?"
+        )
+        self.assertIn("Trans for a Period", guided)
+        self.assertIn("List Each Transaction Separately", guided)
+
+    def test_local_policy_account_tx_excel(self):
+        from nr2_hal_gateway import try_local_policy_reply
+
+        with mock.patch.dict(
+            os.environ,
+            {ENV_USER: "Dr", ENV_PASSWORD: "test-secret-not-real"},
+            clear=False,
+        ):
+            hit = try_local_policy_reply(
+                "How do I pull SoftDent account transactions to Excel?"
+            )
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit.get("intent"), "policy:softdent-signon-env")
+        text = hit.get("text") or ""
+        self.assertIn("Trans for a Period", text)
+        self.assertIn("List Each Transaction Separately", text)
+        self.assertIn("SoftDentReportExports", text)
+        self.assertNotIn("test-secret-not-real", text)
+
 
 if __name__ == "__main__":
     unittest.main()

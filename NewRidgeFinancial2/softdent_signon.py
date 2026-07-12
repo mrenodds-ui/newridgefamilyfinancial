@@ -241,6 +241,55 @@ def format_softdent_widget_path_hal_reply() -> str:
     )
 
 
+def format_softdent_account_tx_excel_hal_reply() -> str:
+    """HAL-facing playbook: pull SoftDent account transactions via desktop Excel.
+
+    Validated live on SoftDent v19.1.4 (2026-07-12). Desktop UI only — not DB/sd_*.
+    """
+    return (
+        "SOFTDENT ACCOUNT TRANSACTIONS → EXCEL (desktop SoftDent only; not database/sd_*): "
+        "Sign On with COMPUTE / computer (keyboard or mouse). Never Printer. Never Esc on SoftDent main. "
+        "ALL PATIENTS / PERIOD (preferred bulk path): Reports → Accounting → Trans for a Period → "
+        "Output Options → click Excel then Enter → Transactions For A Period setup: set Start/End dates, "
+        "Format 1 = List Each Transaction Separately (line-level), Doctors 999 for all, then OK. "
+        "Live note: SoftDent often skips Select File Name and opens Excel on a temp file "
+        r"(%LOCALAPPDATA%\Temp\SDWIN*.csv, window title like SDWIN3 - Excel) — SaveCopyAs / save a copy "
+        r"into C:\SoftDentReportExports (short path C:\SOFTDE~1). "
+        "ONE ACCOUNT / PATIENT: F3 or Ctrl+A List Account (or F5 Patient) → find the patient → "
+        "Transactions (Account Mode / Account Transaction tab) → Print Transactions → Output Options → "
+        "Excel if offered (else Print Preview; never Printer). "
+        "Program export helper: softdent_gui_export.export_transactions_for_period; "
+        "ops scripts under scripts/validate_softdent_account_tx_excel.py / continue_softdent_txn_excel.py. "
+        "Doc: docs/SOFTDENT_ACCOUNT_TX_EXCEL_WEB_VALIDATE_2026-07-12.md. "
+        "After inbox file lands, refresh SoftDent period imports if widgets need the new txs."
+    )
+
+
+def _query_touches_softdent_account_tx(query: str) -> bool:
+    """True when the user asks how to pull SoftDent account / patient transactions via Excel/UI."""
+    q = str(query or "").lower()
+    if re.search(
+        r"\b("
+        r"account\s+transactions?|patient\s+transactions?|"
+        r"trans(actions?)?\s+for\s+(a\s+)?period|"
+        r"print\s+transactions?|"
+        r"(pull|export|get|download).{0,40}(account|patient).{0,20}(transaction|ledger|tx)|"
+        r"(pull|export|get).{0,40}(transaction|tx).{0,40}(excel|softdent)|"
+        r"softdent.{0,40}(transaction|ledger).{0,30}(excel|export|pull)|"
+        r"list\s+each\s+transaction\s+separately|"
+        r"account\s+(mode|transaction)\s+tab"
+        r")\b",
+        q,
+    ):
+        return True
+    if "softdent" in q and re.search(
+        r"\b(transaction|ledger|txn|account mode|print transactions)\b",
+        q,
+    ):
+        return True
+    return False
+
+
 def _query_touches_softdent_widgets_or_drift(query: str) -> bool:
     q = str(query or "").lower()
     if re.search(
@@ -265,11 +314,15 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
     if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
         # Still append master list if missing from prompt
         if "softdent_master_reports" in prompt.lower() or "master reports:" in prompt.lower():
-            if not _query_touches_softdent_widgets_or_drift(query):
+            if (
+                not _query_touches_softdent_widgets_or_drift(query)
+                and not _query_touches_softdent_account_tx(query)
+            ):
                 return ""
     touches_signon = _query_touches_softdent_signon_or_ui_data(query)
     touches_widgets = _query_touches_softdent_widgets_or_drift(query)
-    if not touches_signon and not touches_widgets:
+    touches_account_tx = _query_touches_softdent_account_tx(query)
+    if not touches_signon and not touches_widgets and not touches_account_tx:
         return ""
     try:
         from softdent_master_reports import format_master_reports_hal_reply
@@ -281,12 +334,17 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
             "(desktop Excel for period $; sd_* for ops detail)."
         )
     parts: list[str] = []
-    if touches_signon:
-        if "SOFTDENT_SIGNON_USER" in prompt:
+    if touches_signon or touches_account_tx:
+        if "SOFTDENT_SIGNON_USER" in prompt and not touches_account_tx:
             parts.append("SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply())
-        else:
+        elif touches_signon:
             parts.append("SOFTDENT SIGN ON + DATA ACCESS: " + format_softdent_signon_hal_reply())
+        else:
+            # Account-tx questions still need Sign On + Excel doctrine briefly
+            parts.append("SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply())
         parts.append(master)
+    if touches_account_tx:
+        parts.append(format_softdent_account_tx_excel_hal_reply())
     if touches_widgets:
         parts.append("SOFTDENT WIDGET PATHS: " + format_softdent_widget_path_hal_reply())
         try:

@@ -34,6 +34,18 @@ Carestream [Account Transactions List options](https://help.carestreamdental.com
 
 Sign On: **COMPUTE** / **computer** (keyboard or mouse). Never **Printer**. Never Esc on SoftDent main.
 
+Launch SoftDent only via **CS SoftDent Software.lnk** (not bare `SDWIN.EXE`).
+
+SoftDent Excel often opens a temp `%LOCALAPPDATA%\Temp\SDWIN*.csv` in Excel — copy/SaveCopyAs into `C:\SoftDentReportExports`.
+
+## HAL
+
+Playbook is injected when staff ask about SoftDent account/patient transactions / Trans for a Period / Excel export:
+
+- `format_softdent_account_tx_excel_hal_reply()` in `softdent_signon.py`
+- LLM context via `compile_softdent_signon_guidance`
+- Local policy via `nr2_hal_gateway.try_local_policy_reply` (intent `policy:softdent-signon-env`)
+
 ## Live validation (this PC — SoftDent v19.1.4)
 
 | Check | Result |
