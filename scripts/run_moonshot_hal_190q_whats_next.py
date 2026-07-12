@@ -52,12 +52,11 @@ JUST SHIPPED (Phase 2 — APPLIED + pushed as f225b2b):
 - Live full 190Q re-run still NOT done
 
 PRIOR 190Q FIX PHASES STILL OPEN:
-- Phase 3: Streaming / TTFT UX polish (SSE exists; short-ask caps exist;
-  deliverable path aggregates — remaining is perceived latency / token stream UX)
+- Phase 3: Streaming / TTFT UX polish — RECOMMENDED in WHATS_NEXT after Phase 2
+  but NOT YET APPLIED (operator has not said proceed). If still correct, say so bluntly.
 - Phase 4: CARC whitelist hardening (unknown refuse done; known-code briefs sparse)
-- Optional: live 190Q subset/full re-run to measure Phase 1+2 lift (eval action,
-  only recommend as NEXT if quality code packages are exhausted or measurement
-  is the highest-leverage next step)
+- Optional: live 190Q subset/full re-run AFTER Phase 3 (do not recommend re-run as
+  NEXT unless Phase 3 is done or measurement is clearly higher leverage)
 
 ALSO RECENTLY SHIPPED (context, do not redo):
 - REC-005 ERA 835 depth, REC-007 HAL keep-alive/warm, REC-008 batch narratives,
