@@ -35,10 +35,20 @@ class HalEvalScoringTests(unittest.TestCase):
         self.assertTrue(plain["qualityPass"])
         steps = score_answer(
             "What are the next steps to reconcile deposits?",
-            "Yes. Next step: reconcile SoftDent deposits to QuickBooks bank feed.",
+            "1. Reconcile SoftDent deposits to QuickBooks bank feed.\n"
+            "2. Verify unmatched deposits on the EOB.\n"
+            "Caution: NR2 stays read-only.",
         )
         self.assertTrue(steps["hasDeliverable"])
         self.assertTrue(steps["qualityPass"])
+
+    def test_json_deliverable_scored_after_normalize_shape(self) -> None:
+        score = score_answer(
+            "Provide steps to refresh imports.",
+            "1. Open Imports.\n2. Drop the SoftDent export.\n3. Refresh and verify readiness.",
+        )
+        self.assertTrue(score["hasDeliverable"])
+        self.assertTrue(score["qualityPass"])
 
     def test_cot_and_plan_opener_fail(self) -> None:
         score = score_answer(

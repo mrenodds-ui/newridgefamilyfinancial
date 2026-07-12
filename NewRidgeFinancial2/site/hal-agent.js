@@ -4569,6 +4569,9 @@ const HalAgent = (function () {
 
   function finalizeOutcome(outcome, trimmed, route, plan, ctx, toolResults) {
     if (!outcome || !outcome.text || !HalCore.polishChatReply) return outcome;
+    if (typeof HalCore.formatStructuredDeliverable === "function" && isDeliverableRequest(trimmed)) {
+      outcome.text = HalCore.formatStructuredDeliverable(outcome.text) || outcome.text;
+    }
     const toolSummary = summarizeToolEvidenceOnly(toolResults || {});
     let actionLabel = "";
     const navMatch = route && route.intent ? String(route.intent).match(/^navigate:\s*(.+)$/) : null;
@@ -4588,6 +4591,7 @@ const HalAgent = (function () {
       actionLabel,
       toolsUsed: plan && plan.tools ? plan.tools : [],
       hadSourceTools: !!(plan && plan.tools && plan.tools.some((t) => /grep_program|read_program_file|list_program_files|explain_route/.test(t))),
+      allowMarkdown: isDeliverableRequest(trimmed),
     });
     outcome.followUpChips = HalCore.buildFollowUpChips(
       Object.assign({}, outcome, { _pages: ctx.pages }),
@@ -5118,6 +5122,22 @@ const HalAgent = (function () {
     });
   }
 
+  function isDeliverableRequest(query) {
+    if (typeof HalCore !== "undefined" && typeof HalCore.isDeliverableRequest === "function") {
+      return HalCore.isDeliverableRequest(query);
+    }
+    return /\b(next\s+steps?|ordered\s+steps?|step[\s-]?by[\s-]?step|checklist|procedure|how\s+(?:do|to|can)\s+(?:i|we)|walk\s+me\s+through|what\s+(?:are|is)\s+the\s+(?:steps?|path)|provide\s+(?:the\s+)?(?:steps?|path|checklist)|action\s+items?|paths?\s+to\b)\b/i.test(
+      String(query || ""),
+    );
+  }
+
+  function renderStructuredDeliverable(text) {
+    if (typeof HalCore !== "undefined" && typeof HalCore.formatStructuredDeliverable === "function") {
+      return HalCore.formatStructuredDeliverable(text);
+    }
+    return String(text || "");
+  }
+
   function updatePreferences(patch, persistFn) {
     longTermMemory.preferences = Object.assign({}, longTermMemory.preferences, patch || {});
     longTermMemory.updatedAt = new Date().toISOString();
@@ -5181,6 +5201,8 @@ const HalAgent = (function () {
     expandGatherToolsForRound,
     toolResultLooksEmpty,
     needsMoreGather,
+    isDeliverableRequest,
+    renderStructuredDeliverable,
   };
 })();
 

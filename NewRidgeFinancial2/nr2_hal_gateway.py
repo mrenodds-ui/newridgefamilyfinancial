@@ -129,6 +129,27 @@ _SENTENCE_LIMIT_RE = re.compile(
     re.IGNORECASE,
 )
 _PLAIN_LANGUAGE_RE = re.compile(r"\bplain(?:\s|-)?language\b|\bin plain english\b", re.IGNORECASE)
+_DELIVERABLE_REQUEST_RE = re.compile(
+    r"(?i)\b("
+    r"next\s+steps?|ordered\s+steps?|step[\s-]?by[\s-]?step|"
+    r"checklist|procedure|"
+    r"how\s+(?:do|to|can)\s+(?:i|we)|"
+    r"walk\s+me\s+through|"
+    r"what\s+(?:are|is)\s+the\s+(?:steps?|path)|"
+    r"provide\s+(?:the\s+)?(?:steps?|path|checklist)|"
+    r"action\s+items?|"
+    r"paths?\s+to\b"
+    r")\b"
+)
+_DELIVERABLE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "steps": {"type": "array", "items": {"type": "string"}},
+        "caution": {"type": "string"},
+        "references": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["steps"],
+}
 _WRITE_INTENT_RE = re.compile(
     r"(?i)\b("
     r"(?:can|could|will|would|may|should)\s+(?:hal|you)\s+(?:please\s+)?"
@@ -289,6 +310,11 @@ def apply_response_constraints(query: str | None, text: str) -> str:
     if not out:
         return out
     q = str(query or "")
+    # Structured deliverables keep list shape — do not collapse to a sentence cap.
+    if is_deliverable_request(q):
+        if not _WANTS_PLAN_RE.search(q):
+            out = _STRUCTURED_PLAN_OPENER_RE.sub("", out).strip()
+        return out.strip()
     limit = sentence_limit_from_query(q)
     if limit:
         # Drop markdown headings that inflate "sentence" dumps
@@ -308,6 +334,67 @@ def apply_response_constraints(query: str | None, text: str) -> str:
     return out.strip()
 
 
+def is_deliverable_request(query: str) -> bool:
+    """True when staff asked for actionable steps/paths (Phase 2 structured output)."""
+    return bool(_DELIVERABLE_REQUEST_RE.search(str(query or "")))
+
+
+def deliverable_system_instruction() -> str:
+    return (
+        "Staff asked for actionable steps. Reply with JSON only using keys: "
+        'steps (array of short action strings), caution (read-only/consent warning when relevant), '
+        "references (optional existing page/file names — never invent paths or dollars). "
+        "Do not invent CARC meanings or PHI. Empty ≠ $0. One sentence per step."
+    )
+
+
+def format_deliverable_markdown(data: dict[str, Any]) -> str:
+    steps_raw = data.get("steps") if isinstance(data, dict) else None
+    steps: list[str] = []
+    if isinstance(steps_raw, list):
+        steps = [str(s).strip() for s in steps_raw if str(s).strip()]
+    elif isinstance(steps_raw, str) and steps_raw.strip():
+        steps = [steps_raw.strip()]
+    lines: list[str] = [f"{i}. {step}" for i, step in enumerate(steps[:12], 1)]
+    caution = str((data or {}).get("caution") or "").strip()
+    if caution:
+        lines.append(f"Caution: {caution}")
+    refs = (data or {}).get("references") if isinstance(data, dict) else None
+    if isinstance(refs, list):
+        cleaned = [str(r).strip() for r in refs if str(r).strip()]
+        if cleaned:
+            lines.append("References: " + "; ".join(cleaned[:6]))
+    return "\n".join(lines).strip()
+
+
+def normalize_deliverable_reply(query: str | None, text: str) -> str:
+    """JSON schema → numbered steps; prose fallback to bullets when ask is deliverable."""
+    q = str(query or "")
+    out = str(text or "").strip()
+    if not out or not is_deliverable_request(q):
+        return out
+    candidate = out
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)```", out, re.IGNORECASE)
+    if fenced:
+        candidate = fenced.group(1).strip()
+    blob = re.search(r"\{[\s\S]*\}", candidate)
+    if blob:
+        try:
+            obj = json.loads(blob.group(0))
+            if isinstance(obj, dict) and obj.get("steps") is not None:
+                formatted = format_deliverable_markdown(obj)
+                if formatted:
+                    return formatted
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+    if re.search(r"(?m)^\s*(?:\d+\.|[-*•])\s+\S", out):
+        return out
+    sents = _split_sentences(out)
+    if len(sents) >= 2:
+        return "\n".join(f"{i}. {s}" for i, s in enumerate(sents[:8], 1))
+    return out
+
+
 def clean_gateway_text(text: str, *, query: str | None = None) -> str:
     out = str(text or "").strip()
     out = re.sub(r"<think>[\s\S]*?</think>", "", out, flags=re.IGNORECASE)
@@ -325,6 +412,7 @@ def clean_gateway_text(text: str, *, query: str | None = None) -> str:
         flags=re.IGNORECASE,
     )
     out = apply_response_constraints(query, out)
+    out = normalize_deliverable_reply(query, out)
     return out.strip()
 
 
@@ -350,13 +438,28 @@ def options_for_query(query: str, options: dict[str, Any] | None = None) -> dict
             q.strip(),
         )
     )
-    if limit is not None and limit <= 2:
+    if is_deliverable_request(q):
+        opts.setdefault("num_predict", 384)
+    elif limit is not None and limit <= 2:
         opts.setdefault("num_predict", 96)
     elif yes_no or _WRITE_INTENT_RE.search(q):
         opts.setdefault("num_predict", 128)
     elif len(q) < 80 and not _WANTS_PLAN_RE.search(q):
         opts.setdefault("num_predict", 160)
     return opts
+
+
+def inject_deliverable_messages(messages: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    if not is_deliverable_request(query):
+        return messages
+    out = list(messages or [])
+    instruction = {"role": "system", "content": deliverable_system_instruction()}
+    # Insert after the first system prompt when present.
+    if out and out[0].get("role") == "system":
+        out.insert(1, instruction)
+    else:
+        out.insert(0, instruction)
+    return out
 
 
 def try_local_policy_reply(query: str) -> dict[str, str] | None:
@@ -1062,6 +1165,7 @@ def iter_ollama_sse_tokens(
     lane: str,
     options: dict[str, Any] | None = None,
     timeout: float = 120.0,
+    format: Any | None = None,
 ):
     """Yield SSE frames: meta event first, then token data events."""
     yield f"event: meta\ndata: {json.dumps({'lane': lane, 'model': model, 'done': False})}\n\n"
@@ -1071,6 +1175,8 @@ def iter_ollama_sse_tokens(
         payload["think"] = think
     if options:
         payload["options"] = options
+    if format is not None:
+        payload["format"] = format
     req = urllib.request.Request(
         OLLAMA_CHAT,
         data=json.dumps(payload).encode("utf-8"),
@@ -1112,6 +1218,7 @@ def call_ollama_chat(
     options: dict[str, Any] | None = None,
     timeout: float = 120.0,
     keep_alive: int | str | None = None,
+    format: Any | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {"model": model, "messages": messages, "stream": bool(stream)}
     think = _ollama_think_flag(model)
@@ -1119,6 +1226,8 @@ def call_ollama_chat(
         payload["think"] = think
     if options:
         payload["options"] = options
+    if format is not None:
+        payload["format"] = format
     # REC-007 HAL keep-alive: default forever (-1) so qwen3:32b stays GPU-resident.
     if keep_alive is None:
         raw = str(os.environ.get("NR2_OLLAMA_KEEP_ALIVE") or "-1").strip()
@@ -1247,8 +1356,12 @@ def evaluate_query_stream(
         messages=messages,
     )
 
+    chat_messages = inject_deliverable_messages(chat_messages, query)
     opts = options_for_query(query, options)
-    result = call_ollama_chat(model=model, messages=chat_messages, stream=True, options=opts)
+    fmt = _DELIVERABLE_JSON_SCHEMA if is_deliverable_request(query) else None
+    result = call_ollama_chat(
+        model=model, messages=chat_messages, stream=True, options=opts, format=fmt
+    )
     if not result.get("ok"):
         return {
             "ok": False,
@@ -1338,6 +1451,28 @@ def evaluate_query_sse_frames(
         system_prompt=system_prompt,
         messages=messages,
     )
+    # Deliverable asks: aggregate first so JSON→markdown normalize runs before SSE emit.
+    if is_deliverable_request(query):
+        result = evaluate_query(
+            query=query,
+            readiness=readiness,
+            model=model,
+            system_prompt=system_prompt,
+            messages=messages,
+            options=options,
+            shift_context=shift_context,
+            requested_lane=requested_lane,
+            store=store,
+        )
+        if not result.get("ok"):
+            yield f"event: error\ndata: {json.dumps({'error': result.get('error'), 'done': True})}\n\n"
+            return
+        text = str(result.get("text") or "")
+        yield f"event: meta\ndata: {json.dumps({'lane': result.get('resolvedLane') or resolved['lane'], 'model': result.get('model') or model, 'done': False, 'deliverable': True})}\n\n"
+        yield f"data: {json.dumps({'token': text, 'done': False})}\n\n"
+        yield f"data: {json.dumps({'token': '', 'done': True})}\n\n"
+        return
+
     append_lane_history(store, lane=resolved["lane"], model=model, query=query, intent=intent)
     yield from iter_ollama_sse_tokens(
         model=model,
@@ -1431,8 +1566,12 @@ def evaluate_query(
         messages=messages,
     )
 
+    chat_messages = inject_deliverable_messages(chat_messages, query)
     opts = options_for_query(query, options)
-    result = call_ollama_chat(model=model, messages=chat_messages, stream=False, options=opts)
+    fmt = _DELIVERABLE_JSON_SCHEMA if is_deliverable_request(query) else None
+    result = call_ollama_chat(
+        model=model, messages=chat_messages, stream=False, options=opts, format=fmt
+    )
     if not result.get("ok"):
         return {
             "ok": False,

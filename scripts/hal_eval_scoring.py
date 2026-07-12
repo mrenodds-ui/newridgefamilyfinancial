@@ -39,12 +39,14 @@ _DIRECT_ANSWER_RE = re.compile(
 _DELIVERABLE_RE = re.compile(
     r"("
     r"\*\*Direct Answer:\*\*|Direct answer:|"
+    r"^\s*\d+\.\s+\S|"
+    r"^\s*[-*•]\s+\S|"
     r"\b(next step|safe next|priority order|ordered steps|journal entry|"
     r"risk flag|verified basis|staff should|staff (?:update|post|clicks|verify)|"
     r"verify (?:on|the|SoftDent|EOB)|draft locally|escalate|"
-    r"empty\s*[≠!=]+\s*\$?0|do not invent)\b"
+    r"empty\s*[≠!=]+\s*\$?0|do not invent|Caution:)\b"
     r")",
-    re.IGNORECASE,
+    re.IGNORECASE | re.MULTILINE,
 )
 _STRUCTURED_PLAN_OPENER_RE = re.compile(
     r"^\s*(here(?:'s| is) a structured plan|here is a (?:brief )?(?:numbered )?plan|structured plan:)\b",
@@ -207,6 +209,9 @@ def has_direct_answer(text: str) -> bool:
         return False
     if _DIRECT_ANSWER_RE.search(body):
         return True
+    # Numbered/bulleted deliverables count as a direct actionable answer.
+    if re.search(r"(?m)^\s*(?:\d+\.|[-*•])\s+\S", body):
+        return True
     # Staff-facing prose that leads with a clear claim counts as a direct answer.
     first = re.split(r"[.!?]\s+", body, maxsplit=1)[0]
     return len(first) >= 12 and not _COT_LEAK_RE.search(first)
@@ -302,13 +307,20 @@ def score_grounding(query: str, text: str) -> dict[str, Any]:
 
 
 def _needs_deliverable(query: str) -> bool:
-    """Only require an actionable deliverable when the ask implies steps/paths/how-to."""
+    """Align with gateway is_deliverable_request — steps/paths/how-to asks."""
     return bool(
         re.search(
-            r"\b(steps?|path|procedure|how to|what should i|next step|plan|checklist|"
-            r"priority|order(?:ed)?|walk me through)\b",
+            r"(?i)\b("
+            r"next\s+steps?|ordered\s+steps?|step[\s-]?by[\s-]?step|"
+            r"checklist|procedure|"
+            r"how\s+(?:do|to|can)\s+(?:i|we)|"
+            r"walk\s+me\s+through|"
+            r"what\s+(?:are|is)\s+the\s+(?:steps?|path)|"
+            r"provide\s+(?:the\s+)?(?:steps?|path|checklist)|"
+            r"action\s+items?|"
+            r"paths?\s+to\b"
+            r")\b",
             str(query or ""),
-            re.IGNORECASE,
         )
     )
 

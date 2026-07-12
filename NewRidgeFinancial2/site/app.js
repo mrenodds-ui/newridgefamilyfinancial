@@ -3470,6 +3470,9 @@ function formatHalMessageHtml(text) {
     let s = escapeHtml(segment);
     s = s.replace(/`([^`\n]+)`/g, "<code class=\"hal-msg__code\">$1</code>");
     s = s.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+    s = s.replace(/^\s*Caution:\s*(.+)$/gim, '<div class="hal-msg__caution"><strong>Caution:</strong> $1</div>');
+    s = s.replace(/^\s*References:\s*(.+)$/gim, '<div class="hal-msg__refs"><strong>References:</strong> $1</div>');
+    s = s.replace(/^\s*(\d+)\.\s+(.+)$/gm, '<div class="hal-msg__step"><span class="hal-msg__step-n">$1.</span> $2</div>');
     s = s.replace(/^\s*[-*•]\s+(.+)$/gm, "<span class=\"hal-msg__bullet\">• $1</span>");
     return s;
   }

@@ -392,8 +392,43 @@ const HalCore = (function () {
     if (isCodeDiscussionQuery(query, route, meta)) return true;
     if (route && (route.useReasoning || route.useEscalation || route.useOss)) return true;
     if (wantsDetailedReply(query)) return true;
+    if (isDeliverableRequest(query)) return true;
     if (/\b(list|steps|checklist|bullet)\b/i.test(String(query || ""))) return true;
     return false;
+  }
+
+  function isDeliverableRequest(query) {
+    return /\b(next\s+steps?|ordered\s+steps?|step[\s-]?by[\s-]?step|checklist|procedure|how\s+(?:do|to|can)\s+(?:i|we)|walk\s+me\s+through|what\s+(?:are|is)\s+the\s+(?:steps?|path)|provide\s+(?:the\s+)?(?:steps?|path|checklist)|action\s+items?|paths?\s+to\b)\b/i.test(
+      String(query || ""),
+    );
+  }
+
+  function formatStructuredDeliverable(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    let candidate = raw;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) candidate = fenced[1].trim();
+    const blob = candidate.match(/\{[\s\S]*\}/);
+    if (!blob) return raw;
+    try {
+      const obj = JSON.parse(blob[0]);
+      if (!obj || !Array.isArray(obj.steps) || !obj.steps.length) return raw;
+      const lines = obj.steps
+        .map((s) => String(s || "").trim())
+        .filter(Boolean)
+        .slice(0, 12)
+        .map((s, i) => `${i + 1}. ${s}`);
+      const caution = String(obj.caution || "").trim();
+      if (caution) lines.push(`Caution: ${caution}`);
+      const refs = Array.isArray(obj.references)
+        ? obj.references.map((r) => String(r || "").trim()).filter(Boolean).slice(0, 6)
+        : [];
+      if (refs.length) lines.push(`References: ${refs.join("; ")}`);
+      return lines.join("\n");
+    } catch (_exc) {
+      return raw;
+    }
   }
 
   function compressThreadForPrompt(turns, maxRecent) {
@@ -642,6 +677,7 @@ const HalCore = (function () {
   }
 
   function hasUnrequestedList(text, query) {
+    if (isDeliverableRequest(query)) return false;
     if (/\b(list|step-by-step|numbered|bullet|checklist|show all|full briefing|everything)\b/i.test(String(query || ""))) {
       return false;
     }
@@ -1360,6 +1396,10 @@ const HalCore = (function () {
       meta = HalCursorParity.enrichPolishMeta(meta, query, route, meta.halModels);
     }
     let out = cleanModelText(String(text || "").trim());
+    if (isDeliverableRequest(query)) {
+      out = formatStructuredDeliverable(out) || out;
+      meta = Object.assign({}, meta, { allowMarkdown: true, skipMinSentences: true });
+    }
     if (!wantsStructuredPlan(query)) out = stripStructuredPlanOpener(out);
     out = stripInstructionLeaks(stripChainOfThoughtProse(out));
     const intent = route && route.intent ? String(route.intent) : "";
@@ -4310,6 +4350,8 @@ const HalCore = (function () {
     isFollowUpQuery,
     isCorrectionQuery,
     wantsBriefReply,
+    isDeliverableRequest,
+    formatStructuredDeliverable,
     textSimilarity,
     buildThreadContextBlock,
     pageAwareClause,

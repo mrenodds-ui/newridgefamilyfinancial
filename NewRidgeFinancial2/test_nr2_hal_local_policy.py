@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 
 from nr2_hal_gateway import clean_gateway_text, extract_ollama_message_text, try_local_policy_reply
@@ -82,6 +83,37 @@ class HalLocalPolicyTests(unittest.TestCase):
 
         opts = options_for_query("Yes or no: can you post to QuickBooks?")
         self.assertLessEqual(int(opts.get("num_predict") or 999), 128)
+
+    def test_deliverable_request_detect(self) -> None:
+        from nr2_hal_gateway import is_deliverable_request
+
+        self.assertTrue(is_deliverable_request("What are the next steps to reconcile deposits?"))
+        self.assertTrue(is_deliverable_request("How do I refresh SoftDent imports?"))
+        self.assertFalse(is_deliverable_request("What is insurance lag?"))
+        self.assertFalse(is_deliverable_request("Is step therapy common?"))
+
+    def test_normalize_deliverable_json(self) -> None:
+        from nr2_hal_gateway import normalize_deliverable_reply
+
+        raw = json.dumps(
+            {
+                "steps": ["Open Claims.", "Verify the EOB line.", "Draft locally — do not invent dollars."],
+                "caution": "NR2 stays read-only; staff posts in SoftDent.",
+                "references": ["Claims"],
+            }
+        )
+        out = normalize_deliverable_reply("What are the next steps for this denial?", raw)
+        self.assertIn("1. Open Claims.", out)
+        self.assertIn("Caution:", out)
+        self.assertIn("References:", out)
+
+    def test_normalize_deliverable_prose_fallback(self) -> None:
+        from nr2_hal_gateway import normalize_deliverable_reply
+
+        prose = "Open Claims. Verify the EOB. Draft the narrative locally."
+        out = normalize_deliverable_reply("Walk me through the next steps.", prose)
+        self.assertIn("1. Open Claims.", out)
+        self.assertIn("2. Verify the EOB.", out)
 
     def test_clean_gateway_strips_think_and_cot(self) -> None:
         cleaned = clean_gateway_text(
