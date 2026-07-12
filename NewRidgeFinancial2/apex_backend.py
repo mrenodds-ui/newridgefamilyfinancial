@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10566"
+BUILD_ID = "hal-10567"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -1686,6 +1686,15 @@ def _financial_widgets_from_reports(
             vitals["alert"] = True
             vitals["alertReason"] = f"90+ share {float(ninety_pct):.1f}% exceeds 20%"
         widgets.append(vitals)
+        # Moonshot MUST: Collections Radial-Gauge alongside existing vitals
+        try:
+            from apex_better_backend_widgets_pack import build_collections_radial_gauge
+
+            coll_gauge = build_collections_radial_gauge(bundle, reports)
+            if coll_gauge:
+                widgets.append(coll_gauge)
+        except Exception:
+            pass
         # Level 3 — Chart row: dual-trend + provider + A/R (all size m for tight pack)
         widgets.append(build_dual_axis_trend(bundle))
         provider = build_provider_horizontal_bars(bundle)
@@ -2080,6 +2089,16 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
         if variance.get("status") == "empty":
             variance = collapse_empty_large(variance)
         widgets.append(variance)
+    except Exception:
+        pass
+
+    # Moonshot MUST: Tax Planning Data-Table
+    try:
+        from apex_better_backend_widgets_pack import build_tax_planning_data_table
+
+        planning_table = build_tax_planning_data_table(bundle)
+        if planning_table:
+            widgets.append(planning_table)
     except Exception:
         pass
     return widgets
@@ -2673,6 +2692,15 @@ def _ar_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[st
     except Exception:
         pass
     widgets.append(build_collection_bullet(bundle))
+    # Moonshot MUST: Collections Radial-Gauge on A/R page too
+    try:
+        from apex_better_backend_widgets_pack import build_collections_radial_gauge
+
+        coll_gauge_ar = build_collections_radial_gauge(bundle, reports)
+        if coll_gauge_ar:
+            widgets.append(coll_gauge_ar)
+    except Exception:
+        pass
     try:
         from apex_missing_widgets_pack import append_ar_missing
 
@@ -3400,6 +3428,15 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         from apex_missing_widgets_pack import append_office_manager_missing
 
         append_office_manager_missing(widgets, bundle)
+    except Exception:
+        pass
+    # Moonshot MUST: System Health Status-Matrix
+    try:
+        from apex_better_backend_widgets_pack import build_system_health_status_matrix
+
+        health_matrix = build_system_health_status_matrix(bundle)
+        if health_matrix:
+            widgets.append(health_matrix)
     except Exception:
         pass
     return widgets

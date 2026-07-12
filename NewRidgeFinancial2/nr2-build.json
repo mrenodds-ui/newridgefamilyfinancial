@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10566",
-  "BUILD_ID": "hal-10566",
-  "assetVersion": "hal-10566",
-  "builtAt": "2026-07-12T13:25:00.000Z",
-  "notes": "hal-10566: DEF-001 Register XLS/XLSX ingest — content period wins over filename; Ins Plan $0 → COLLECTIONS_FORMAT_REQUIRED; empty ≠ $0.",
+  "schemaVersion": "hal-10567",
+  "BUILD_ID": "hal-10567",
+  "assetVersion": "hal-10567",
+  "builtAt": "2026-07-12T21:20:00.000Z",
+  "notes": "hal-10567: Moonshot Better Backend Widgets MUST — tax planning data-table, collections radial-gauge (mode=collections), system health status-matrix; FE target/headers patches.",
   "staffRenderMode": "apex"
 }

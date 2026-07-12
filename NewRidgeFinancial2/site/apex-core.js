@@ -2077,6 +2077,11 @@
           if (s === "failed" || s === "fail" || s === "no") return "failed";
           return "unknown";
         };
+        const headers =
+          Array.isArray(data.headers) && data.headers.length >= 4
+            ? data.headers
+            : ["", "Elig", "Ben", "Break"];
+        const headHtml = headers.map((h) => `<span>${this.escape(h)}</span>`).join("");
         const rows = patients
           .map((p) => {
             return `<div class="apex-matrix-row">
@@ -2100,7 +2105,7 @@
               : ""
           }
           <div class="apex-matrix${empty ? " apex-matrix--empty" : ""}">
-            <div class="apex-matrix-head"><span></span><span>Elig</span><span>Ben</span><span>Break</span></div>
+            <div class="apex-matrix-head">${headHtml}</div>
             ${rows}
             <div class="apex-matrix-legend">●Verified ○Pending ◉Failed</div>
           </div>
@@ -2340,19 +2345,30 @@
       if (this.type === "radial-gauge") {
         const data = this.spec.data && typeof this.spec.data === "object" ? this.spec.data : {};
         const empty = this.spec.status === "empty" || data.due == null;
+        const isCollections = data.mode === "collections" || (data.production != null && data.target === 98);
         const pct = data.pctScheduled != null && Number.isFinite(Number(data.pctScheduled))
           ? Math.max(0, Math.min(100, Number(data.pctScheduled)))
           : null;
-        const target = 80;
+        // Support configurable target (default 80 for recall, 98 for collections)
+        const target = Number.isFinite(Number(data.target)) ? Number(data.target) : 80;
         const r = 42;
         const c = 2 * Math.PI * r;
         const fill = pct == null ? 0 : (pct / 100) * c * 0.75;
         const track = c * 0.75;
-        // Amber target marker at 80% along 270° arc (starts at 135°)
+        // Target marker angle calculation (135° start, 270° sweep)
         const targetAngle = 135 + (target / 100) * 270;
         const rad = (targetAngle * Math.PI) / 180;
         const tx = 60 + r * Math.cos(rad);
         const ty = 58 + r * Math.sin(rad);
+
+        // Label sets based on mode
+        const labelDue = isCollections ? "Target" : "Due";
+        const labelSched = isCollections ? "Collected" : "Sch";
+        const labelContact = isCollections ? "Production" : "Contacted";
+        const metaDue = isCollections ? `${target}%` : (data.due != null ? String(data.due) : "—");
+        const metaSched = data.scheduled != null ? String(data.scheduled) : "—";
+        const metaContact = data.contacted != null ? String(data.contacted) : "—";
+
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
@@ -2361,7 +2377,7 @@
           ${
             empty
               ? `<div class="apex-kpi-value is-empty">${this.escape(
-                  data.emptyMessage || "Recall tracking unavailable"
+                  data.emptyMessage || (isCollections ? "Collections data unavailable" : "Recall tracking unavailable")
                 )}</div>
                  <div class="apex-gauge apex-gauge--empty">
                    <svg viewBox="0 0 120 100" class="apex-gauge-svg" aria-hidden="true">
@@ -2381,12 +2397,8 @@
                        pct != null ? `${pct}%` : "—%"
                      )}</text>
                    </svg>
-                   <div class="apex-gauge-meta">Due: ${this.escape(
-                     data.due != null ? String(data.due) : "—"
-                   )} · Target: 80% · Sch: ${this.escape(
-                     data.scheduled != null ? String(data.scheduled) : "—"
-                   )}${
-                     data.contacted != null ? ` · Contacted: ${this.escape(String(data.contacted))}` : ""
+                   <div class="apex-gauge-meta">${labelDue}: ${this.escape(metaDue)} · Target: ${target}% · ${labelSched}: ${this.escape(metaSched)}${
+                     data.contacted != null ? ` · ${labelContact}: ${this.escape(metaContact)}` : ""
                    }</div>
                  </div>`
           }

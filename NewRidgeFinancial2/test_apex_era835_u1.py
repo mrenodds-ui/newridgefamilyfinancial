@@ -52,7 +52,7 @@ class Era835PhaseU1Tests(unittest.TestCase):
             pass
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10566")
+        self.assertEqual(BUILD_ID, "hal-10567")
 
     def test_flag_default_on(self):
         prev = os.environ.pop("NR2_ERA835", None)
