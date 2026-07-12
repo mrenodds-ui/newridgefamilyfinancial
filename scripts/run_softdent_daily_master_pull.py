@@ -65,15 +65,28 @@ def _preflight() -> dict[str, Any]:
     exe = Path(r"C:\SoftDent\SDWIN.EXE")
     signon = softdent_signon_status()
     session = _interactive_session_ok()
+    try:
+        from softdent_signon import resolve_softdent_launch_shortcut
+
+        shortcut = resolve_softdent_launch_shortcut()
+    except Exception:
+        shortcut = None
     return {
         "softdentExePresent": exe.is_file(),
         "softdentExe": str(exe),
+        "softdentShortcut": str(shortcut) if shortcut else None,
+        "softdentShortcutPresent": bool(shortcut),
+        "launchPolicy": "desktop_or_programs_shortcut_only",
         "softdentMainRunning": softdent_main_running(),
         "exportRootWritable": EXPORT_ROOT.exists() or True,
         "passwordConfigured": bool(signon.get("passwordConfigured")),
         "signOnUser": signon.get("user"),
         "interactiveSession": session,
-        "ok": bool(exe.is_file() and signon.get("passwordConfigured") and session.get("ok")),
+        "ok": bool(
+            (shortcut or softdent_main_running())
+            and signon.get("passwordConfigured")
+            and session.get("ok")
+        ),
     }
 
 

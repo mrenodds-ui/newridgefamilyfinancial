@@ -2,12 +2,15 @@
   "version": 1,
   "softdentVersionHint": "CS SoftDent Software v19.1.4",
   "notes": [
-    "Keys are typed after Reports (Alt+R) then Accounting (a).",
-    "register_period 'rp' is proven on this workstation.",
+    "Keys are typed after F10 (menu bar) then R (Reports) then A (Accounting).",
+    "NEVER use Alt+R — AMD Adrenalin Instant Replay steals Alt+R and focuses AMD Software.",
+    "NEVER send Escape after Sign On — SoftDent interprets Escape as quit/close prompt.",
+    "register_period 'rp' is proven on this workstation (Registers → Period).",
     "Other keys are SoftDent v19 Accounting accelerators; override via env or menu_keys.",
-    "SoftDent save dialog rejects long paths — use 8.3 short stem under C:\\SOFTDE~1."
+    "SoftDent save dialog rejects long paths — use 8.3 short stem under C:\\SOFTDE~1.",
+    "Launch SoftDent only from desktop/Programs shortcut (CS SoftDent Software.lnk), never bare SDWIN.EXE."
   ],
-  "pathPrefix": "%r a",
+  "pathPrefix": "{F10} r a",
   "reports": {
     "register": {
       "id": "register",

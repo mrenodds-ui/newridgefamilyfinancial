@@ -24,7 +24,7 @@ ENV_PASSWORD = "SOFTDENT_SIGNON_PASSWORD"
 ENV_USER_ALT = "SOFTDENT_GUI_USER"
 ENV_PASSWORD_ALT = "SOFTDENT_GUI_PASSWORD"
 
-_DEFAULT_USER_HINT = "Dr"  # SoftDent Sign On user id for provider/owner login
+_DEFAULT_USER_HINT = "COMPUTE"  # SoftDent Sign On user id (workstation/computer login)
 
 # Whole-program SoftDent data-access rule (HAL + refresh + playbook).
 SOFTDENT_DATA_ACCESS_DOCTRINE = (
@@ -114,9 +114,12 @@ def resolve_softdent_signon_credentials() -> dict[str, Any]:
 
 
 def get_softdent_signon_password() -> str:
-    """Password for SoftDent Sign On only — do not log or put in HAL replies."""
+    """Password for SoftDent Sign On only — do not log or put in HAL replies.
+
+    SoftDent passwords are case-sensitive; this practice uses lowercase.
+    """
     load_softdent_signon_env_files()
-    return str(os.environ.get(ENV_PASSWORD) or os.environ.get(ENV_PASSWORD_ALT) or "").strip()
+    return str(os.environ.get(ENV_PASSWORD) or os.environ.get(ENV_PASSWORD_ALT) or "").strip().lower()
 
 
 def softdent_signon_status() -> dict[str, Any]:
@@ -137,6 +140,9 @@ def softdent_signon_status() -> dict[str, Any]:
             f"{ENV_USER} / {ENV_PASSWORD} (or {ENV_USER_ALT} / {ENV_PASSWORD_ALT}), "
             r"also loadable from C:\New folder\.env and NewRidgeFinancial2\.env. "
             "HAL and refresh never echo the password. "
+            "Launch SoftDent only from the desktop or Start Menu shortcut "
+            "('CS SoftDent Software.lnk' — includes WorkingDirectory C:\\SoftDent and -sus); "
+            "never start SDWIN.EXE bare. "
             + SOFTDENT_DATA_ACCESS_DOCTRINE
         ),
     }
@@ -215,6 +221,70 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
     )
 
 
+# Preferred SoftDent launchers (desktop / Start Menu shortcuts — NOT bare SDWIN.EXE).
+# Desktop shortcut includes WorkingDirectory=C:\SoftDent and Arguments=-sus.
+SOFTDENT_SHORTCUT_CANDIDATES = (
+    Path(r"C:\Users\Public\Desktop\CS SoftDent Software.lnk"),
+    Path(os.path.expandvars(r"%PUBLIC%\Desktop\CS SoftDent Software.lnk")),
+    Path(os.path.expandvars(r"%USERPROFILE%\Desktop\CS SoftDent Software.lnk")),
+    Path(
+        r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+        r"\CS SoftDent Software\CS SoftDent Software.lnk"
+    ),
+)
+
+
+def resolve_softdent_launch_shortcut() -> Path | None:
+    """Return desktop or Programs SoftDent .lnk (never invent a bare EXE launch)."""
+    seen: set[str] = set()
+    for path in SOFTDENT_SHORTCUT_CANDIDATES:
+        try:
+            resolved = path.resolve() if path.exists() else path
+        except OSError:
+            resolved = path
+        key = str(resolved).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        if path.is_file():
+            return path
+    return None
+
+
+def launch_softdent_via_shortcut() -> dict[str, Any]:
+    """Start SoftDent from desktop/Programs shortcut only (os.startfile on .lnk)."""
+    out: dict[str, Any] = {"ok": False, "shortcut": None, "method": None}
+    shortcut = resolve_softdent_launch_shortcut()
+    if shortcut is None:
+        out["error"] = (
+            "SoftDent desktop/Programs shortcut not found "
+            "(expected 'CS SoftDent Software.lnk' on Public Desktop or Start Menu)."
+        )
+        return out
+    out["shortcut"] = str(shortcut)
+    try:
+        # startfile on .lnk preserves Target, WorkingDirectory, and Arguments (-sus).
+        os.startfile(str(shortcut))  # noqa: S606 — intentional SoftDent launch
+        out["ok"] = True
+        out["method"] = "os.startfile_shortcut"
+    except OSError as exc:
+        out["error"] = f"startfile_failed:{type(exc).__name__}"
+        try:
+            import subprocess
+
+            subprocess.Popen(  # noqa: S603
+                ["cmd", "/c", "start", "", str(shortcut)],
+                cwd=str(shortcut.parent),
+                shell=False,
+            )
+            out["ok"] = True
+            out["method"] = "cmd_start_shortcut"
+            out.pop("error", None)
+        except Exception as exc2:  # noqa: BLE001
+            out["error"] = f"launch_failed:{type(exc).__name__}/{type(exc2).__name__}"
+    return out
+
+
 def ensure_softdent_signed_on(
     *,
     timeout_s: float = 25.0,
@@ -225,6 +295,9 @@ def ensure_softdent_signed_on(
     SoftDent read-only assist — does not post clinical/financial data.
     Never logs the password. By default does not open Change Login when already
     signed in (main SoftDent Software window present).
+
+    Launch rule: SoftDent is started only via desktop / Programs shortcut
+    (CS SoftDent Software.lnk), never by invoking SDWIN.EXE bare.
     """
     status = softdent_signon_status()
     password = get_softdent_signon_password()
@@ -250,7 +323,6 @@ def ensure_softdent_signed_on(
         return result
 
     result["attempted"] = True
-    exe = Path(r"C:\SoftDent\SDWIN.EXE")
 
     def _main_hwnd() -> int | None:
         try:
@@ -263,55 +335,95 @@ def ensure_softdent_signed_on(
                 title = win32gui.GetWindowText(h)
             except Exception:
                 continue
-            if "SOFTDENT" in cls.upper() or "SoftDent Software" in title:
+            # Prefer the SoftDent Software main frame (not Login / message boxes).
+            if "SoftDent Software" in title or (
+                "SOFTDENT" in cls.upper() and "login" not in title.lower()
+            ):
                 return int(h)
-        return int(hwnds[0]) if hwnds else None
+        for h in hwnds:
+            try:
+                title = win32gui.GetWindowText(h)
+            except Exception:
+                continue
+            if "login" in title.lower() or title.strip() in {"SoftDent", "Sign On"}:
+                continue
+            return int(h)
+        return None
 
+    def _find_login_dialog():
+        """Locate SoftDent Login / Sign On / Change Login (UIA then win32)."""
+        for backend in ("uia", "win32"):
+            try:
+                desk = Desktop(backend=backend)
+            except Exception:
+                continue
+            for win in desk.windows():
+                try:
+                    title = (win.window_text() or "").strip()
+                except Exception:
+                    continue
+                lower = title.lower()
+                if (
+                    "sign on" in lower
+                    or "sign-on" in lower
+                    or "change login" in lower
+                    or lower == "softdent login"
+                    or (lower.startswith("softdent") and "login" in lower)
+                ):
+                    return win
+                if title == "SoftDent" or lower.startswith("softdent"):
+                    try:
+                        edits = [
+                            c
+                            for c in win.descendants()
+                            if getattr(getattr(c, "element_info", None), "control_type", None) == "Edit"
+                            or c.class_name() == "Edit"
+                        ]
+                        if len(edits) >= 2:
+                            return win
+                    except Exception:
+                        pass
+        return None
+
+    # If Login is open, do NOT treat main frame as already signed on.
+    login_open = _find_login_dialog()
     main_hwnd = _main_hwnd()
-    if main_hwnd and not force_change_login:
-        # Already at SoftDent main UI — treat as signed on (do not spam Change Login).
+    if main_hwnd and login_open is None and not force_change_login:
         result["ok"] = True
         result["signedOn"] = True
         result["steps"].append("already_signed_on_main_window")
         return result
 
+    app = None
     try:
         if main_hwnd:
             app = Application(backend="uia").connect(handle=main_hwnd)
         else:
-            app = Application(backend="uia").connect(path=str(exe), timeout=8)
+            app = Application(backend="uia").connect(path=r"C:\SoftDent\SDWIN.EXE", timeout=3)
     except Exception:
-        if exe.is_file():
-            try:
-                app = Application(backend="uia").start(str(exe), timeout=20)
-                result["steps"].append("launched_sdwin")
-                time.sleep(3.0)
-            except Exception as exc:  # noqa: BLE001
-                result["error"] = f"could not start SoftDent: {type(exc).__name__}"
-                return result
-        else:
-            result["error"] = "SoftDent SDWIN.EXE not found"
+        launch = launch_softdent_via_shortcut()
+        result["steps"].append(
+            f"launched_via_shortcut:{launch.get('method') or launch.get('error')}"
+        )
+        result["launchShortcut"] = launch.get("shortcut")
+        if not launch.get("ok"):
+            result["error"] = launch.get("error") or "SoftDent shortcut launch failed"
             return result
+        time.sleep(4.0)
+        try:
+            app = Application(backend="uia").connect(path=r"C:\SoftDent\SDWIN.EXE", timeout=30)
+        except Exception as exc:  # noqa: BLE001
+            result["steps"].append(f"connect_after_shortcut:{type(exc).__name__}")
+            app = None
 
     deadline = time.time() + max(5.0, float(timeout_s))
-    dialog = None
+    dialog = login_open
     change_login_clicked = False
     while time.time() < deadline and dialog is None:
-        for win in Desktop(backend="uia").windows():
-            title = (win.window_text() or "").strip()
-            lower = title.lower()
-            if "sign on" in lower or "sign-on" in lower or "change login" in lower:
-                dialog = win
-                break
-            if title == "SoftDent" or lower.startswith("softdent"):
-                try:
-                    edits = [c for c in win.descendants() if c.element_info.control_type == "Edit"]
-                    if len(edits) >= 2:
-                        dialog = win
-                        break
-                except Exception:
-                    pass
-        if dialog is None and force_change_login and not change_login_clicked:
+        dialog = _find_login_dialog()
+        if dialog is not None:
+            break
+        if force_change_login and not change_login_clicked and app is not None:
             try:
                 main = app.window(title_re=".*SoftDent.*")
                 btn = main.child_window(title="Change Login", control_type="Button")
@@ -323,7 +435,7 @@ def ensure_softdent_signed_on(
             except Exception:
                 pass
             time.sleep(0.4)
-        elif dialog is None:
+        else:
             time.sleep(0.4)
 
     if dialog is None:
@@ -336,30 +448,80 @@ def ensure_softdent_signed_on(
         return result
 
     try:
-        edits = [c for c in dialog.descendants() if c.element_info.control_type == "Edit"]
+        # SoftDent Login is often win32 Edit (no UIA control_type).
+        edits = []
+        try:
+            edits = [
+                c
+                for c in dialog.descendants()
+                if getattr(getattr(c, "element_info", None), "control_type", None) == "Edit"
+            ]
+        except Exception:
+            edits = []
+        if not edits:
+            try:
+                edits = list(dialog.descendants(class_name="Edit"))
+            except Exception:
+                edits = []
         if not edits:
             result["error"] = "Sign On dialog has no edit fields"
             return result
-        # SoftDent Sign On: first edit = user, last edit = password (typical).
+        # SoftDent Login: first edit = user id (COMPUTE), second = password (lowercase).
+        # Password fields often ignore set_edit_text — type keys after click/focus.
         user_edit = edits[0]
         pass_edit = edits[-1] if len(edits) > 1 else edits[0]
-        user_edit.set_focus()
-        user_edit.type_keys("^a{BACKSPACE}" + user, with_spaces=True)
-        time.sleep(0.2)
-        pass_edit.set_focus()
-        pass_edit.type_keys("^a{BACKSPACE}" + password, with_spaces=True)
+        password = password.lower()
+        try:
+            user_edit.set_edit_text("")
+            user_edit.set_edit_text(user)
+        except Exception:
+            user_edit.set_focus()
+            user_edit.type_keys("^a{BACKSPACE}" + user, with_spaces=True)
+        time.sleep(0.15)
+        try:
+            pass_edit.click_input()
+        except Exception:
+            pass_edit.set_focus()
+        time.sleep(0.1)
+        try:
+            from pywinauto.keyboard import send_keys
+
+            send_keys("^a{BACKSPACE}")
+            time.sleep(0.05)
+            send_keys(password, with_spaces=True, pause=0.04)
+        except Exception:
+            try:
+                pass_edit.set_edit_text("")
+                pass_edit.set_edit_text(password)
+            except Exception:
+                pass_edit.type_keys("^a{BACKSPACE}" + password, with_spaces=True)
         result["steps"].append("filled_user_password")
         clicked = False
-        for title in ("OK", "Sign On", "Login", "&OK"):
-            try:
-                btn = dialog.child_window(title=title, control_type="Button")
-                if btn.exists(timeout=0.3):
-                    btn.click_input()
-                    clicked = True
-                    result["steps"].append(f"clicked_{title.replace(' ', '_').lower()}")
-                    break
-            except Exception:
-                continue
+        # Prefer keyboard Enter on SoftDent Login (default OK). Avoid mouse (can hit AMD).
+        try:
+            from softdent_gui_export import _force_foreground
+            from pywinauto.keyboard import send_keys
+
+            _force_foreground(int(dialog.handle))
+            time.sleep(0.15)
+            send_keys("{ENTER}")
+            clicked = True
+            result["steps"].append("pressed_enter_ok")
+        except Exception:
+            clicked = False
+        if not clicked:
+            for title in ("OK", "&OK", "Sign On", "Login"):
+                try:
+                    for b in dialog.descendants(class_name="Button"):
+                        if b.window_text().replace("&", "") == title.replace("&", ""):
+                            b.click_input()
+                            clicked = True
+                            result["steps"].append("clicked_ok")
+                            break
+                    if clicked:
+                        break
+                except Exception:
+                    continue
         if not clicked:
             pass_edit.type_keys("{ENTER}")
             result["steps"].append("pressed_enter")

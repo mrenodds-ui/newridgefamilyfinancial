@@ -29,14 +29,160 @@ MENU_MAP_PATH = Path(__file__).resolve().parent / "softdent_gui_menu_map.json"
 
 PHASE1_IDS = ("register", "collections", "transactions", "daysheet", "aging")
 
+# Never send SoftDent hotkeys / clicks to these (AMD Adrenalin steals focus on this PC).
+_FOCUS_BLOCKLIST_SUBSTR = (
+    "amd software",
+    "adrenalin",
+    "radeonsoftware",
+    "radeon software",
+    "intel® graphics",
+    "intel graphics",
+)
+
+
+def _softdent_pids() -> set[int]:
+    """PIDs for SDWIN.EXE only."""
+    import subprocess
+
+    out: set[int] = set()
+    try:
+        raw = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-Process -Name SDWIN -ErrorAction SilentlyContinue).Id",
+            ],
+            text=True,
+            timeout=15,
+        )
+    except Exception:
+        return out
+    for tok in raw.split():
+        try:
+            out.add(int(tok))
+        except ValueError:
+            continue
+    return out
+
+
+def _window_pid(hwnd: int) -> int | None:
+    import win32process
+
+    try:
+        _, pid = win32process.GetWindowThreadProcessId(int(hwnd))
+        return int(pid)
+    except Exception:
+        return None
+
+
+def _is_blocked_focus_title(title: str) -> bool:
+    lower = (title or "").strip().lower()
+    return any(s in lower for s in _FOCUS_BLOCKLIST_SUBSTR)
+
+
+def _minimize_focus_thieves() -> int:
+    """Do NOT touch AMD windows (minimizing/activating can launch Adrenalin).
+
+    SoftDent Reports must not use Alt+R — AMD Instant Replay steals that chord.
+    Return 0 always; callers rely on SoftDent-only foreground + F10 menus.
+    """
+    return 0
+
+
+def _force_foreground(hwnd: int) -> bool:
+    """Reliable foreground activation (AttachThreadInput) for SoftDent only."""
+    import ctypes
+    import win32con
+    import win32gui
+    import win32process
+
+    hwnd = int(hwnd)
+    try:
+        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+    except Exception:
+        pass
+    try:
+        fg = win32gui.GetForegroundWindow()
+        if fg == hwnd:
+            return True
+        # Never steal focus from / interact with AMD — wait and retry SoftDent only.
+        fg_title = ""
+        try:
+            fg_title = win32gui.GetWindowText(fg) or ""
+        except Exception:
+            pass
+        if _is_blocked_focus_title(fg_title):
+            logger.warning("Foreground is focus thief %r — activating SoftDent without touching it", fg_title)
+        cur_tid = win32process.GetWindowThreadProcessId(fg)[0] if fg else 0
+        tgt_tid = win32process.GetWindowThreadProcessId(hwnd)[0]
+        attached = False
+        if cur_tid and tgt_tid and cur_tid != tgt_tid:
+            attached = bool(ctypes.windll.user32.AttachThreadInput(cur_tid, tgt_tid, True))
+        try:
+            win32gui.BringWindowToTop(hwnd)
+            win32gui.SetForegroundWindow(hwnd)
+        finally:
+            if attached:
+                ctypes.windll.user32.AttachThreadInput(cur_tid, tgt_tid, False)
+        return win32gui.GetForegroundWindow() == hwnd
+    except Exception:
+        try:
+            win32gui.SetForegroundWindow(hwnd)
+            return win32gui.GetForegroundWindow() == hwnd
+        except Exception:
+            return False
+
+
+def _assert_softdent_foreground(hwnd: int | None = None) -> int:
+    """Ensure SoftDent owns keyboard focus; refuse if AMD/other thief is foreground."""
+    import win32gui
+
+    target = int(hwnd or _main_softdent_hwnd())
+    _force_foreground(target)
+    time.sleep(0.15)
+    fg = win32gui.GetForegroundWindow()
+    fg_title = win32gui.GetWindowText(fg) or ""
+    if _is_blocked_focus_title(fg_title):
+        raise RuntimeError(
+            f"Refusing SoftDent keys — AMD/other thief owns foreground: {fg_title!r}. "
+            "Close or leave AMD alone; do not Alt+R (AMD Instant Replay)."
+        )
+    fg_pid = _window_pid(fg)
+    sd_pids = _softdent_pids()
+    if sd_pids and fg_pid is not None and fg_pid not in sd_pids and fg != target:
+        raise RuntimeError(
+            f"Refusing SoftDent keys — foreground not SoftDent: {fg_title!r}"
+        )
+    return target
+
+
+def _send_softdent_keys(keys: str, *, pause: float = 0.05, hwnd: int | None = None) -> None:
+    """Type keys only while a SoftDent window is foreground. Never sends Escape."""
+    from pywinauto.keyboard import send_keys
+
+    if "{ESC}" in keys.upper() or "{ESCAPE}" in keys.upper():
+        raise RuntimeError("Escape is forbidden — it prompts SoftDent to close")
+    _assert_softdent_foreground(hwnd)
+    send_keys(keys, pause=pause)
+
 
 def _desktop_dialogs() -> Iterable[Any]:
+    """SoftDent-owned #32770 dialogs only (never AMD / other apps)."""
     from pywinauto import Desktop
 
+    pids = _softdent_pids()
     for w in Desktop(backend="win32").windows():
         try:
-            if w.is_visible() and w.class_name() == "#32770":
-                yield w
+            if not w.is_visible() or w.class_name() != "#32770":
+                continue
+            title = (w.window_text() or "").strip()
+            if _is_blocked_focus_title(title):
+                continue
+            pid = _window_pid(w.handle)
+            if pids and pid not in pids:
+                continue
+            yield w
         except Exception:
             continue
 
@@ -49,30 +195,30 @@ def find_dialog(title: str):
 
 
 def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
-    """Click OK/Cancel on SoftDent message boxes. Returns dismiss count."""
-    from pywinauto import Application
-
+    """Dismiss SoftDent message boxes with Enter (keyboard only). Never Escape."""
     dismissed = 0
+    pids = _softdent_pids()
     for _ in range(max_rounds):
         hit = False
         for w in list(_desktop_dialogs()):
             title = (w.window_text() or "").strip()
+            if title == "SoftDent Login":
+                continue
             if title not in {"SoftDent", ""}:
                 continue
+            pid = _window_pid(w.handle)
+            if pids and pid not in pids:
+                continue
             try:
-                app = Application(backend="win32").connect(handle=w.handle)
-                dlg = app.window(handle=w.handle)
-                for name in ("OK", "&OK", "Cancel", "&Cancel", "Close"):
-                    try:
-                        btn = dlg.child_window(title=name, class_name="Button")
-                        if btn.exists(timeout=0.15):
-                            btn.click_input()
-                            dismissed += 1
-                            hit = True
-                            time.sleep(0.25)
-                            break
-                    except Exception:
-                        continue
+                if not _force_foreground(w.handle):
+                    continue
+                time.sleep(0.15)
+                # Default button is OK — Enter confirms. Never Escape (quit prompt).
+                _send_softdent_keys("{ENTER}", hwnd=int(w.handle))
+                dismissed += 1
+                hit = True
+                time.sleep(0.3)
+                break
             except Exception:
                 continue
         if not hit:
@@ -89,81 +235,97 @@ def softdent_main_running() -> bool:
 
 
 def _main_softdent_hwnd() -> int:
-    from pywinauto.findwindows import find_windows
+    """Main SoftDent frame owned by SDWIN — never AMD / Login dialog."""
     import win32gui
+    import win32process
 
-    hwnds = find_windows(title_re=r".*SoftDent.*", backend="win32")
-    if not hwnds:
+    pids = _softdent_pids()
+    if not pids:
         raise RuntimeError("SoftDent (SDWIN) is not running")
-    for h in hwnds:
-        cls = win32gui.GetClassName(h)
-        title = win32gui.GetWindowText(h)
-        if "SOFTDENT" in cls.upper() or "SoftDent Software" in title:
-            return int(h)
-    return int(hwnds[0])
+
+    candidates: list[tuple[int, str, str]] = []
+
+    def _cb(hwnd, _):
+        try:
+            if not win32gui.IsWindowVisible(hwnd):
+                return True
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            if int(pid) not in pids:
+                return True
+            title = win32gui.GetWindowText(hwnd) or ""
+            cls = win32gui.GetClassName(hwnd) or ""
+            if _is_blocked_focus_title(title):
+                return True
+            if "login" in title.lower():
+                return True
+            candidates.append((int(hwnd), title, cls))
+        except Exception:
+            pass
+        return True
+
+    win32gui.EnumWindows(_cb, None)
+    for hwnd, title, cls in candidates:
+        if "SoftDent Software" in title or "SOFTDENT" in cls.upper():
+            return hwnd
+    if candidates:
+        return candidates[0][0]
+    raise RuntimeError("SoftDent main window not found (SDWIN running but no main UI)")
 
 
-def _click_named_button(dlg, name: str) -> None:
-    from pywinauto import Application
+def _keyboard_activate_dialog(dlg) -> None:
+    """Bring a SoftDent dialog to foreground for keyboard input (no mouse)."""
+    _force_foreground(int(dlg.handle))
+    time.sleep(0.15)
+    _assert_softdent_foreground(int(dlg.handle))
 
-    app = Application(backend="win32").connect(handle=dlg.handle)
-    d = app.window(handle=dlg.handle)
-    want = name.replace("&", "")
-    for b in d.descendants(class_name="Button"):
-        if b.window_text().replace("&", "") == want:
-            b.click_input()
-            return
-    raise RuntimeError(f"Button not found: {name}")
+
+def _keyboard_press_ok(hwnd: int | None = None) -> None:
+    """Press default OK via Enter (keyboard only)."""
+    _send_softdent_keys("{ENTER}", hwnd=hwnd)
 
 
 def _focus_main():
-    from pywinauto import Application
-    from pywinauto.keyboard import send_keys
-    import win32con
+    """Focus SoftDent main frame for keyboard menus. No Escape. No mouse clicks."""
     import win32gui
 
     hwnd = _main_softdent_hwnd()
+    if not _force_foreground(hwnd):
+        time.sleep(0.25)
+        _force_foreground(hwnd)
+    _assert_softdent_foreground(hwnd)
+    # set_focus via win32 only — avoid click_input (can hit AMD/other windows)
     try:
-        win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+        from pywinauto import Application
+
+        Application(backend="win32").connect(handle=hwnd).window(handle=hwnd).set_focus()
     except Exception:
         pass
-    try:
-        win32gui.SetForegroundWindow(hwnd)
-    except Exception:
-        try:
-            win32gui.BringWindowToTop(hwnd)
-            win32gui.SetForegroundWindow(hwnd)
-        except Exception:
-            pass
-    app = Application(backend="win32").connect(handle=hwnd)
-    win = app.window(handle=hwnd)
-    try:
-        win.set_focus()
-    except Exception:
-        try:
-            win.click_input()
-        except Exception:
-            pass
-    time.sleep(0.35)
+    time.sleep(0.25)
     dismiss_softdent_alerts()
-    send_keys("{ESC}{ESC}")
-    time.sleep(0.2)
-    return win
+    # Re-assert SoftDent after dismissing alerts (never Escape — Escape asks to close).
+    _assert_softdent_foreground(hwnd)
+    return hwnd
 
 
 def _open_report_via_keys(keys_after_reports_accounting: str) -> None:
-    """Alt+R, A, then caller keys (e.g. 'rp' = Registers→Period, 'c' = Collections)."""
-    from pywinauto.keyboard import send_keys
+    """Open SoftDent report via keyboard only.
 
+    IMPORTANT: Do NOT send Alt+R — AMD Adrenalin Instant Replay steals Alt+R and
+    launches/focuses AMD Software. Use F10 (menu bar) then R for Reports.
+    Never send Escape after Sign On (SoftDent quit prompt).
+    """
     _focus_main()
-    send_keys("%r")
-    time.sleep(0.4)
-    send_keys("a")
-    time.sleep(0.4)
+    # F10 = menu bar (SoftDent-owned). Then R=Reports, A=Accounting, then report keys.
+    _send_softdent_keys("{F10}")
+    time.sleep(0.35)
+    _send_softdent_keys("r")
+    time.sleep(0.35)
+    _send_softdent_keys("a")
+    time.sleep(0.35)
     for ch in keys_after_reports_accounting:
         if ch.isspace():
             continue
-        send_keys(ch)
+        _send_softdent_keys(ch)
         time.sleep(0.35)
     time.sleep(0.8)
 
@@ -219,6 +381,7 @@ def _complete_output_setup_and_save(
     canonical_name: str,
     also_copy_as: list[str] | None = None,
 ) -> Path:
+    """Drive Output Options → Report Setup → Save with keyboard only (no Escape)."""
     from pywinauto import Application
 
     dismiss_softdent_alerts()
@@ -231,14 +394,11 @@ def _complete_output_setup_and_save(
     if not out:
         raise RuntimeError("Output Options dialog did not appear")
 
-    app_out = Application(backend="win32").connect(handle=out.handle)
-    d_out = app_out.window(handle=out.handle)
-    excel_btns = [b for b in d_out.descendants(class_name="Button") if "Excel" in b.window_text()]
-    if not excel_btns:
-        raise RuntimeError("Excel output option not found")
-    excel_btns[0].click_input()
+    _keyboard_activate_dialog(out)
+    # SoftDent Output Options: Excel radio often accelerated with E, then Enter=OK.
+    _send_softdent_keys("e", hwnd=int(out.handle))
     time.sleep(0.2)
-    _click_named_button(out, "OK")
+    _keyboard_press_ok(hwnd=int(out.handle))
     time.sleep(1.0)
 
     setup = None
@@ -250,6 +410,7 @@ def _complete_output_setup_and_save(
     if not setup:
         raise RuntimeError("Report Setup dialog did not appear")
 
+    _keyboard_activate_dialog(setup)
     app_s = Application(backend="win32").connect(handle=setup.handle)
     d_s = app_s.window(handle=setup.handle)
     edits = d_s.descendants(class_name="Edit")
@@ -257,13 +418,13 @@ def _complete_output_setup_and_save(
         raise RuntimeError("Report Setup missing date edits")
     start_txt = start.strftime("%m/%d/%y")
     end_txt = end.strftime("%m/%d/%y")
+    # Prefer set_edit_text (no mouse); fields are SoftDent-owned.
     edits[1].set_edit_text(start_txt)
     edits[2].set_edit_text(end_txt)
     if len(edits) > 3:
         edits[3].set_edit_text("999")  # all providers
     time.sleep(0.2)
-    ok = [b for b in d_s.descendants(class_name="Button") if b.window_text().replace("&", "") == "OK"][0]
-    ok.click_input()
+    _keyboard_press_ok(hwnd=int(setup.handle))
     time.sleep(1.0)
     dismiss_softdent_alerts()
 
@@ -278,13 +439,13 @@ def _complete_output_setup_and_save(
         raise RuntimeError("Select File Name dialog did not appear")
 
     short_path = rf"{EXPORT_ROOT_SHORT}\{short_stem}"
+    _keyboard_activate_dialog(save)
     app_save = Application(backend="win32").connect(handle=save.handle)
     d_save = app_save.window(handle=save.handle)
     edits = d_save.descendants(class_name="Edit")
     edits[0].set_edit_text(short_path)
     time.sleep(0.2)
-    ok = [b for b in d_save.descendants(class_name="Button") if b.window_text().replace("&", "") == "OK"][0]
-    ok.click_input()
+    _keyboard_press_ok(hwnd=int(save.handle))
     time.sleep(3.0)
     dismiss_softdent_alerts()
 
@@ -508,12 +669,9 @@ def run_catalog_exports(
             if required:
                 result["requiredFailed"].append(rid)
             logger.warning("SoftDent GUI export %s failed: %s", rid, type(exc).__name__)
-            # Clear stuck dialogs before next report
+            # Recover without Escape (Escape prompts SoftDent to close).
             try:
-                from pywinauto.keyboard import send_keys
-
                 dismiss_softdent_alerts()
-                send_keys("{ESC}{ESC}{ESC}")
             except Exception:
                 pass
         result["reports"][rid] = entry
