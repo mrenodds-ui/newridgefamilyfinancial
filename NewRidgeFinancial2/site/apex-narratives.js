@@ -339,14 +339,29 @@
         activeId = "insurance";
         const sec = sections.find((s) => s.id === "insurance");
         if (sec) {
-          sec.content =
-            (sec.content || "") +
-            `\n\nBulk appeal seed (import-backed claim IDs):\n` +
-            seed.claimIds.map((id) => `- ${id}`).join("\n") +
-            "\n\nGenerate one appeal per claim with consent, or compose a combined packet manually.\n";
+          const results = Array.isArray(seed.batchResults) ? seed.batchResults : [];
+          if (results.length) {
+            const blocks = results.map((r) => {
+              const id = String((r && r.claimId) || "—");
+              if (r && r.ok && r.draftText) {
+                return `===== ${id} (ok) =====\n${String(r.draftText).trim()}\n`;
+              }
+              return `===== ${id} (failed) =====\n${String((r && r.error) || "generate failed")}\n`;
+            });
+            sec.content =
+              `REC-008 batch appeal drafts (${results.length} claim(s)) — human review required before payer submit.\n` +
+              (seed.packetUrl ? `Print packet: ${seed.packetUrl}\n\n` : "\n") +
+              blocks.join("\n");
+          } else {
+            sec.content =
+              (sec.content || "") +
+              `\n\nBulk appeal seed (import-backed claim IDs):\n` +
+              seed.claimIds.map((id) => `- ${id}`).join("\n") +
+              "\n\nUse Batch Generate on Claims (with Consent) or generate one appeal per claim here.\n";
+          }
         }
       }
-      if (seed.claimId) {
+      if (seed.claimId && !(Array.isArray(seed.batchResults) && seed.batchResults.length)) {
         activeId = "insurance";
         const sec = sections.find((s) => s.id === "insurance");
         if (sec && !String(sec.content || "").trim()) {

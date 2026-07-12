@@ -669,13 +669,17 @@ def build_daily_huddle_widget(reports: dict[str, Any], bundle: dict[str, Any]) -
     }
 
 
-# ——— IMP-008 Batch narratives ———
+# ——— IMP-008 / REC-008 Batch narratives ———
+
+BATCH_NARRATIVE_MAX = 20
 
 
 def batch_narrative_seed(claim_ids: list[str], *, payer: str | None = None) -> dict[str, Any]:
     ids = [str(x).strip() for x in claim_ids if str(x).strip()]
     if not ids:
         return {"ok": False, "error": "Select at least one claim ID"}
+    if len(ids) > BATCH_NARRATIVE_MAX:
+        return {"ok": False, "error": f"Select at most {BATCH_NARRATIVE_MAX} claims for one batch."}
     return {
         "ok": True,
         "seed": {
@@ -686,6 +690,32 @@ def batch_narrative_seed(claim_ids: list[str], *, payer: str | None = None) -> d
             "batchNarrative": True,
         },
         "count": len(ids),
+    }
+
+
+def shared_batch_context(body: dict[str, Any] | None) -> dict[str, Any]:
+    """Shared denial/payer/note context applied to every claim in a batch."""
+    raw = body if isinstance(body, dict) else {}
+    shared = raw.get("sharedContext") if isinstance(raw.get("sharedContext"), dict) else {}
+    note_ids = raw.get("clinicalNoteIds")
+    if note_ids is None:
+        note_ids = shared.get("clinicalNoteIds")
+    if not isinstance(note_ids, list):
+        note_ids = []
+    return {
+        "type": str(raw.get("type") or raw.get("narrativeType") or shared.get("type") or "appeal").strip().lower()
+        or "appeal",
+        "denialReason": str(
+            raw.get("denialReason") or shared.get("denialReason") or ""
+        ).strip()
+        or None,
+        "payerId": str(raw.get("payerId") or raw.get("payerName") or shared.get("payerId") or "").strip()
+        or None,
+        "templateId": str(raw.get("templateId") or shared.get("templateId") or "").strip() or None,
+        "clinicalNoteIds": [str(x).strip() for x in note_ids if str(x).strip()],
+        "attachments": raw.get("attachments")
+        if isinstance(raw.get("attachments"), list)
+        else (shared.get("attachments") if isinstance(shared.get("attachments"), list) else None),
     }
 
 

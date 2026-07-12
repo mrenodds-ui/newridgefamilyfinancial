@@ -1272,7 +1272,11 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-btn apex-btn--primary" data-batch-seed>Seed Narratives</button>
+              <label class="apex-claim-act apex-claim-act--check" title="Required for batch generate">
+                <input type="checkbox" data-batch-consent /> Consent
+              </label>
+              <button type="button" class="apex-btn" data-batch-seed>Seed Narratives</button>
+              <button type="button" class="apex-btn apex-btn--primary" data-batch-generate>Batch Generate</button>
               ${printBtn}
             </div>
           </header>
@@ -3946,34 +3950,99 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
   function wireBatchSelector(root) {
     if (!root || root.dataset.wiredBatch === "1") return;
     root.dataset.wiredBatch = "1";
+    const selectedIds = () =>
+      Array.from(root.querySelectorAll("[data-batch-claim]:checked")).map((el) => el.value).filter(Boolean);
+
     const seedBtn = root.querySelector("[data-batch-seed]");
-    if (!seedBtn) return;
-    seedBtn.addEventListener("click", async () => {
-      const ids = Array.from(root.querySelectorAll("[data-batch-claim]:checked")).map((el) => el.value);
-      if (!ids.length) {
-        window.alert("Select at least one claim.");
-        return;
-      }
-      try {
-        const res = await apexFetch(`${config.apiBase}/narratives/batch-seed`, {
-          method: "POST",
-          body: JSON.stringify({ claimIds: ids }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.ok === false) {
-          window.alert(data.error || `Batch seed failed (HTTP ${res.status})`);
+    if (seedBtn) {
+      seedBtn.addEventListener("click", async () => {
+        const ids = selectedIds();
+        if (!ids.length) {
+          window.alert("Select at least one claim.");
           return;
         }
         try {
-          sessionStorage.setItem("nr2-apex-narrative-seed", JSON.stringify(data.seed || { claimIds: ids }));
-        } catch (_err) {
-          /* ignore */
+          const res = await apexFetch(`${config.apiBase}/narratives/batch-seed`, {
+            method: "POST",
+            body: JSON.stringify({ claimIds: ids }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Batch seed failed (HTTP ${res.status})`);
+            return;
+          }
+          try {
+            sessionStorage.setItem("nr2-apex-narrative-seed", JSON.stringify(data.seed || { claimIds: ids }));
+          } catch (_err) {
+            /* ignore */
+          }
+          loadPage("narratives");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
         }
-        loadPage("narratives");
-      } catch (err) {
-        window.alert(String((err && err.message) || err));
-      }
-    });
+      });
+    }
+
+    const genBtn = root.querySelector("[data-batch-generate]");
+    if (genBtn) {
+      genBtn.addEventListener("click", async () => {
+        const ids = selectedIds();
+        if (!ids.length) {
+          window.alert("Select at least one claim.");
+          return;
+        }
+        const consentEl = root.querySelector("[data-batch-consent]");
+        if (!consentEl || !consentEl.checked) {
+          window.alert("Check Consent before batch generating appeal drafts.");
+          return;
+        }
+        genBtn.disabled = true;
+        try {
+          const res = await apexFetch(`${config.apiBase}/narratives/batch-generate`, {
+            method: "POST",
+            body: JSON.stringify({
+              claimIds: ids,
+              type: "appeal",
+              operatorConsent: true,
+            }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Batch generate failed (HTTP ${res.status})`);
+            return;
+          }
+          const okN = Number(data.successCount || 0);
+          const failN = Number(data.failCount || 0);
+          const packetUrl = data.packet && data.packet.url ? String(data.packet.url) : "";
+          window.alert(
+            `Batch narratives: ${okN} draft(s) ok, ${failN} failed. Drafts need human review before payer submit.`
+          );
+          try {
+            sessionStorage.setItem(
+              "nr2-apex-narrative-seed",
+              JSON.stringify({
+                claimIds: ids,
+                claimId: ids[0],
+                bulkAppeal: true,
+                batchNarrative: true,
+                batchResults: data.results || [],
+                packetUrl,
+              })
+            );
+          } catch (_err) {
+            /* ignore */
+          }
+          if (packetUrl) {
+            window.open(packetUrl, "_blank", "noopener");
+          }
+          loadPage("narratives");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
+        } finally {
+          genBtn.disabled = false;
+        }
+      });
+    }
   }
 
   function wireAttachmentDropzone(root) {
@@ -4510,19 +4579,48 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     });
     const batch = root.querySelector('[data-action="batch-narratives"]');
     if (batch) {
-      batch.addEventListener("click", () => {
+      batch.addEventListener("click", async () => {
         const ids = Array.from(root.querySelectorAll("[data-batch-claim]:checked")).map((el) => el.value);
-        if (ids.length) {
+        if (!ids.length) {
+          window.alert("Select at least one claim.");
+          return;
+        }
+        const consent = window.confirm(
+          `Generate appeal drafts for ${ids.length} selected claim(s)? Requires operator consent. Drafts need human review — no SoftDent write-back.`
+        );
+        if (!consent) return;
+        try {
+          const res = await apexFetch(`${config.apiBase}/narratives/batch-generate`, {
+            method: "POST",
+            body: JSON.stringify({ claimIds: ids, type: "appeal", operatorConsent: true }),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.ok === false) {
+            window.alert(data.error || `Batch generate failed (HTTP ${res.status})`);
+            return;
+          }
           try {
             sessionStorage.setItem(
               "nr2-apex-narrative-seed",
-              JSON.stringify({ claimIds: ids, claimId: ids[0], bulkAppeal: true, batchNarrative: true })
+              JSON.stringify({
+                claimIds: ids,
+                claimId: ids[0],
+                bulkAppeal: true,
+                batchNarrative: true,
+                batchResults: data.results || [],
+                packetUrl: (data.packet && data.packet.url) || "",
+              })
             );
           } catch (_err) {
             /* ignore */
           }
+          if (data.packet && data.packet.url) {
+            window.open(String(data.packet.url), "_blank", "noopener");
+          }
+          loadPage("narratives");
+        } catch (err) {
+          window.alert(String((err && err.message) || err));
         }
-        loadPage("claims/batch");
       });
     }
   }

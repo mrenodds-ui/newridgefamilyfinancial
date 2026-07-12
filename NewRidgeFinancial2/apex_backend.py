@@ -5623,6 +5623,88 @@ def narrative_insurance_generate(payload: dict[str, Any] | None = None) -> dict[
     return result
 
 
+def narrative_batch_generate(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """REC-008: generate appeal drafts for multiple claim IDs with shared context."""
+    body = payload if isinstance(payload, dict) else {}
+    from apex_program_improve_pack import (
+        BATCH_NARRATIVE_MAX,
+        batch_narrative_seed,
+        record_claim_action,
+        shared_batch_context,
+    )
+
+    consent = bool(body.get("operatorConsent") or body.get("consent"))
+    if not consent:
+        return {"ok": False, "error": "Operator consent required before batch narrative generation.", "buildId": BUILD_ID}
+
+    raw_ids = body.get("claimIds") if isinstance(body.get("claimIds"), list) else []
+    seed = batch_narrative_seed([str(x) for x in raw_ids])
+    if not seed.get("ok"):
+        return {**seed, "buildId": BUILD_ID}
+    ids = list((seed.get("seed") or {}).get("claimIds") or [])
+    shared = shared_batch_context(body)
+
+    results: list[dict[str, Any]] = []
+    sections: list[dict[str, Any]] = []
+    ok_count = 0
+    for claim_id in ids:
+        one = narrative_insurance_generate(
+            {
+                "claimId": claim_id,
+                "type": shared["type"],
+                "denialReason": shared.get("denialReason"),
+                "payerId": shared.get("payerId"),
+                "templateId": shared.get("templateId"),
+                "clinicalNoteIds": shared.get("clinicalNoteIds") or [],
+                "attachments": shared.get("attachments"),
+                "operatorConsent": True,
+            }
+        )
+        entry: dict[str, Any] = {
+            "claimId": claim_id,
+            "ok": bool(one.get("ok")),
+            "error": one.get("error"),
+            "draftText": one.get("draftText") if one.get("ok") else None,
+            "sourcesCited": one.get("sourcesCited") if one.get("ok") else None,
+        }
+        results.append(entry)
+        if one.get("ok"):
+            ok_count += 1
+            sections.append(
+                {
+                    "title": f"Appeal draft · {claim_id}",
+                    "content": str(one.get("draftText") or ""),
+                }
+            )
+            try:
+                record_claim_action(
+                    {
+                        "action": "generate-narrative",
+                        "claimId": claim_id,
+                        "note": f"REC-008 batch ({shared['type']})",
+                    }
+                )
+            except Exception:
+                pass
+
+    packet = None
+    if sections:
+        packet = narrative_print_packet({"sections": sections})
+
+    return {
+        "ok": ok_count > 0,
+        "count": len(ids),
+        "successCount": ok_count,
+        "failCount": len(ids) - ok_count,
+        "maxBatch": BATCH_NARRATIVE_MAX,
+        "sharedContext": {k: v for k, v in shared.items() if k != "attachments" or v},
+        "results": results,
+        "packet": packet,
+        "buildId": BUILD_ID,
+        "hint": "Drafts require human review before payer submission. Empty clinical notes stay empty — not invented.",
+    }
+
+
 def narrative_generate(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     body = payload if isinstance(payload, dict) else {}
     # Insurance narrative path when type is set
@@ -6735,6 +6817,33 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
             payload = json.loads(raw or "{}")
             return json_response_fn(narrative_generate(payload))
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.post("/api/apex/narratives/batch-seed")
+    def apex_narratives_batch_seed_api():
+        try:
+            import bottle
+            from apex_program_improve_pack import batch_narrative_seed
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            ids = payload.get("claimIds") if isinstance(payload.get("claimIds"), list) else []
+            result = batch_narrative_seed(ids, payer=str(payload.get("payer") or "") or None)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.post("/api/apex/narratives/batch-generate")
+    def apex_narratives_batch_generate_api():
+        """REC-008: multi-claim appeal drafts + optional print packet."""
+        try:
+            import bottle
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            return json_response_fn(narrative_batch_generate(payload))
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 
