@@ -5825,6 +5825,32 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 
+    @app.post("/api/apex/sync/qb-payroll-ap-export")
+    def apex_qb_payroll_ap_export_api():
+        """Drop QB payroll/AP CSVs into document-inbox (optional gap). No invented dollars."""
+        try:
+            import bottle
+            from apex_qb_export_inbox_pack import write_qb_payroll_ap_exports
+            from apex_qb_payroll_pack import assess_payroll_ap_gap
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            try:
+                payload = json.loads(raw or "{}")
+            except Exception:
+                payload = {}
+            result = write_qb_payroll_ap_exports(
+                payroll_rows=list(payload.get("payrollRows") or [])[:500],
+                ap_rows=list(payload.get("apRows") or [])[:500],
+                empty_payroll=bool(payload.get("emptyPayroll") or payload.get("empty_payroll")),
+                empty_ap=bool(payload.get("emptyAp") or payload.get("empty_ap")),
+                period=str(payload.get("period") or "") or None,
+            )
+            result["gap"] = assess_payroll_ap_gap()
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=200 if result.get("ok") else 400)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
     @app.get("/api/apex/hal/status")
     def apex_hal_status_api():
         try:

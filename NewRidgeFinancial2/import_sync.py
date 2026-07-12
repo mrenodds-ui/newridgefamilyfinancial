@@ -16,9 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from import_contract import (
+    QUICKBOOKS_AP_NAMES,
     QUICKBOOKS_AR_NAMES,
     QUICKBOOKS_EXPENSE_CATEGORY_NAMES,
     QUICKBOOKS_EXPENSE_NAMES,
+    QUICKBOOKS_PAYROLL_NAMES,
     QUICKBOOKS_REVENUE_NAMES,
     SOFTDENT_AR_NAMES,
     SOFTDENT_CASE_ACCEPTANCE_NAMES,
@@ -1070,6 +1072,13 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
     result["quickbooks"]["copied"].extend(_sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_EXPENSE_NAMES))
     result["quickbooks"]["copied"].extend(_sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_EXPENSE_CATEGORY_NAMES))
     result["quickbooks"]["copied"].extend(_sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_AR_NAMES))
+    # Optional payroll/AP — close live gap when upstream exports exist
+    result["quickbooks"]["copied"].extend(
+        _sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_PAYROLL_NAMES)
+    )
+    result["quickbooks"]["copied"].extend(
+        _sync_named_exports(quickbooks_external, quickbooks_dest, QUICKBOOKS_AP_NAMES)
+    )
     probe_payload = _resolve_qb_probe_payload(quickbooks_dest)
     probe_dict = probe_payload if isinstance(probe_payload, dict) else None
     qb_fresh = ensure_quickbooks_fresh(quickbooks_dest, probe_payload=probe_dict)
