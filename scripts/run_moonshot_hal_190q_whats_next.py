@@ -35,28 +35,30 @@ SYSTEM = """You are Moonshot AI — principal engineer for NR2 Apex HAL
 (hal-10561 + hal-local:32b / qwen3:32b Q4_K_M on R9700).
 
 Operator said "next" — produce the SINGLE best next local work package after
-HAL 190Q Phase 1 + Phase 2 were APPLIED. CONSULT ONLY — DO NOT claim you applied code.
+HAL 190Q Phase 1 + Phase 2 + Phase 3 were APPLIED. CONSULT ONLY — DO NOT claim you applied code.
 Prefer additive Apex/HAL fixes. Avoid GitHub/PR as the primary package.
 Do not invent fictional file trees — only real paths listed below.
 
-JUST SHIPPED (Phase 1 — APPLIED + pushed as 325d24a):
-- Post-gen sentence caps / plain-language strip; write/CARC/empty≠$0 preflight
-- Short-ask num_predict caps; rubric recalibration
-- MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md
+JUST SHIPPED (Phase 1 — 325d24a):
+- Post-gen constraints; write/CARC/empty≠$0 preflight; rubric recalibration
 
-JUST SHIPPED (Phase 2 — APPLIED + pushed as f225b2b):
-- is_deliverable_request + Ollama JSON schema (steps/caution/references)
-- normalize JSON→numbered markdown; SSE aggregates deliverable replies
-- UI: hal-core/hal-agent preserve lists; app.js step/caution render
-- MOONSHOT_HAL_190Q_FIX_PHASE2_APPLIED_2026-07-12.md
+JUST SHIPPED (Phase 2 — f225b2b):
+- Structured deliverables (JSON steps/caution/references → numbered markdown + UI)
+
+JUST SHIPPED (Phase 3 — faa3113):
+- Early SSE typing/ttft meta; X-Accel-Buffering: no on stream-sse
+- onToken accumulates text; Apex askHal streams via DesktopBridge
+- Skip fake typewriter after live stream; test_hal_stream_ttft.py
+- MOONSHOT_HAL_190Q_FIX_PHASE3_APPLIED_2026-07-12.md
 - Live full 190Q re-run still NOT done
 
 PRIOR 190Q FIX PHASES STILL OPEN:
-- Phase 3: Streaming / TTFT UX polish — RECOMMENDED in WHATS_NEXT after Phase 2
-  but NOT YET APPLIED (operator has not said proceed). If still correct, say so bluntly.
 - Phase 4: CARC whitelist hardening (unknown refuse done; known-code briefs sparse)
-- Optional: live 190Q subset/full re-run AFTER Phase 3 (do not recommend re-run as
-  NEXT unless Phase 3 is done or measurement is clearly higher leverage)
+- Live 190Q subset/full re-run to measure Phase 1–3 lift (eval action — recommend
+  as NEXT if measurement is now the highest-leverage step vs more code)
+- Other additive HAL/ops packages only if clearly higher ROI than Phase 4 / re-run
+
+Do NOT redo Phases 1–3. Prefer one clear next.
 
 ALSO RECENTLY SHIPPED (context, do not redo):
 - REC-005 ERA 835 depth, REC-007 HAL keep-alive/warm, REC-008 batch narratives,
@@ -97,14 +99,15 @@ def main() -> int:
 
     phase1 = DOCS / "MOONSHOT_HAL_190Q_FIX_PHASE1_APPLIED_2026-07-12.md"
     phase2 = DOCS / "MOONSHOT_HAL_190Q_FIX_PHASE2_APPLIED_2026-07-12.md"
+    phase3 = DOCS / "MOONSHOT_HAL_190Q_FIX_PHASE3_APPLIED_2026-07-12.md"
     fix = DOCS / "MOONSHOT_HAL_190Q_FIX_CONSULT_2026-07-12.md"
     excerpts = []
-    for p in (phase2, phase1, fix):
+    for p in (phase3, phase2, phase1, fix):
         if p.is_file():
-            excerpts.append(f"--- {p.name} ---\n{p.read_text(encoding='utf-8')[:4000]}")
+            excerpts.append(f"--- {p.name} ---\n{p.read_text(encoding='utf-8')[:3500]}")
     user = (
         f"OPERATOR REQUEST (VERBATIM):\n{OPERATOR_REQUEST_VERBATIM}\n\n"
-        "Phase 1+2 APPLIED. Pick THE next local package. CONSULT ONLY.\n\n"
+        "Phase 1+2+3 APPLIED. Pick THE next local package. CONSULT ONLY.\n\n"
         + "\n\n".join(excerpts)
     )
     payload = {
@@ -136,7 +139,7 @@ def main() -> int:
         f"# Moonshot AI — What's Next After HAL 190Q Phase 1 (CONSULT ONLY)\n\n"
         f"**Date:** {DATE}  \n**Model:** {model}  \n**Key:** {key_name}  \n"
         f"**Status:** {status}  \n**Build:** hal-10561 + hal-local:32b  \n"
-        f"**Prior applied:** Phase 1 (`325d24a`) + Phase 2 (`f225b2b`)  \n"
+        f"**Prior applied:** Phase 1 (`325d24a`) + Phase 2 (`f225b2b`) + Phase 3 (`faa3113`)  \n"
         f"**Script:** `scripts/run_moonshot_hal_190q_whats_next.py`  \n"
         f"**Apply:** DO NOT APPLY until operator approves.\n\n"
         f"## Operator request (verbatim)\n\n> {OPERATOR_REQUEST_VERBATIM}\n\n---\n\n"

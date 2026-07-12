@@ -5,7 +5,7 @@
 **Key:** OPENROUTER_API_KEY  
 **Status:** ok  
 **Build:** hal-10561 + hal-local:32b  
-**Prior applied:** Phase 1 (`325d24a`) + Phase 2 (`f225b2b`)  
+**Prior applied:** Phase 1 (`325d24a`) + Phase 2 (`f225b2b`) + Phase 3 (`faa3113`)  
 **Script:** `scripts/run_moonshot_hal_190q_whats_next.py`  
 **Apply:** DO NOT APPLY until operator approves.
 
@@ -16,55 +16,52 @@
 ---
 
 # Verdict
-Apply Phase 3: Streaming / TTFT UX polish to cut perceived latency from ~53s to <2s TTFT via true SSE streaming with progressive UI render, building on the Phase 2 SSE foundation.
+Execute a live 190Q subset re-run to measure Phase 1–3 lift before committing engineering cycles to Phase 4.
 
-## 0. Operator Intent (verbatim)
-next
+## 0. Operator Intent (verbatim: next)
 
 ## 1. Recommended NEXT (name, why now, effort, REAL files, validation gate)
-**Phase 3: Streaming / TTFT UX Polish**
+**Name:** 190Q Phase 1–3 Validation Re-run (Subset)  
+**Why now:** Three consecutive constraint, structure, and latency fixes just shipped; we must validate actual quality/read-only/deliverable rate improvement on R9700 hardware before building Phase 4 (CARC whitelist hardening). If Phase 1–3 already lifted quality to ≥75% and read-only OK to ≥90%, Phase 4 priority drops; if metrics are still poor, we target Phase 4 with fresh failure logs rather than speculative code. Measurement is higher-leverage than additional engineering while the baseline is unverified.  
+**Effort:** Low (ops/eval only; zero code changes).  
+**REAL files:**  
+- `scripts/run_moonshot_hal_190q_eval.py` (execution harness)  
+- `scripts/hal_eval_scoring.py` (scoring rubric calibrated in Phase 1)  
+- `NewRidgeFinancial2/apex_hal_cache_warm_pack.py` (ensure warm state before eval)  
+- `NewRidgeFinancial2/nr2_hal_gateway.py` (read-only for config verification)  
 
-**Why now:** Phases 1–2 fixed quality (26% → target 85%+) and deliverable structure, but the 190Q baseline shows 53s average latency—unacceptable for interactive staff workflows. Phase 2 added SSE aggregation for deliverables; Phase 3 completes the loop by enabling true token/chunk streaming to drive TTFT under 2 seconds. This is the last major UX blocker before production release.
-
-**Effort:** Medium (3–4 days). Extends existing SSE plumbing; no model changes.
-
-**REAL files:**
-- `NewRidgeFinancial2/nr2_hal_gateway.py`: `evaluate_query_stream()` — replace blocking `requests.post` with `stream=True` iterator; buffer partial JSON for schema validation without breaking TTFT; emit `data: {"chunk": "..."}` frames immediately on first token.
-- `NewRidgeFinancial2/site/hal-core.js`: `streamHalReply()` — refactor from “wait-for-full-SSE” to progressive `MarkdownIt` incremental render; maintain Phase 2 list-preservation logic during streaming.
-- `NewRidgeFinancial2/site/hal-agent.js`: `handleStreamChunk()` — accumulate steps/caution JSON fields progressively; flush to DOM per chunk to avoid 50s blank screen.
-- `NewRidgeFinancial2/site/apex-core.js`: Connection watchdog — detect stalled streams (>5s gap) and fallback to non-streaming path.
-
-**Validation gate:**
-1. Synthetic latency test: 20 warm queries → 90th percentile TTFT < 2s.
-2. 190Q subset (n=30) run: deliverable rate ≥ Phase 2 baseline (no regression), perceived latency (staff stopwatch) < 3s median.
-3. UI inspection: numbered steps render progressively without “jump” or list corruption.
+**Validation gate:**  
+- Run n=50 subset through `run_moonshot_hal_190q_eval.py`.  
+- Compare against baseline `HAL_190Q_EVAL_2026-07-12.json` (26.3% quality, 25% read-only OK, 53s avg latency).  
+- Success = quality ≥75%, read-only OK ≥90%, avg TTFT <2s, full response <45s.  
+- Deliver comparison table to operator; go/no-go on Phase 4 depends on read-only OK <90% or quality <75%.
 
 ## 2. Runner-ups (2–3, why not now)
-- **Phase 4: CARC whitelist hardening** — Defers known-code briefs and deep CARC ontology. Not now because latency UX is the current production blocker; CARC accuracy is already “acceptable” via Phase 1 unknown-code refusal.
-- **Live full 190Q re-run** — Measurement is premature. Re-run only after Phase 3 lands to capture final latency/quality metrics; otherwise you’re benchmarking a known-slow path.
-- **SoftDent write-back atomicity** — REC-005/009 context suggests inbox export is working; write-back risks are mitigated by Phase 1 preflight. Lower priority than TTFT.
+1. **Phase 4: CARC Whitelist Hardening (known-code briefs)** — Important for sparse known-code briefs, but blocked until we confirm Phase 1–3 compliance fixes didn’t already resolve the refusal patterns; building whitelist on unvalidated base risks wasted effort if the model now correctly refuses unknown codes but still fails on known-code formatting.  
+2. **Apex Orchestrator Path Streaming** — Convert orchestrator JSON aggregate to progressive SSE; Phase 3 already delivered perceived TTFT wins for chat, and further latency work is lower ROI than confirming baseline quality metrics.  
+3. **Full 190Q Re-run (n=190)** — Higher statistical confidence but 4× compute/RAM time on R9700; defer full run until subset proves directional improvement and no regressions.
 
 ## 3. What NOT to redo
-- Phase 1 constraints (sentence caps, plain-language strip, empty ≠ $0) — already applied 325d24a.
-- Phase 2 structured deliverables (JSON schema, numbered markdown, SSE aggregate) — already applied f225b2b; do not strip or replace, only stream-enable.
-- CARC “unknown” hard refusal — already in Phase 1; do not reimplement.
-- QB payroll/AP CSV export — REC-009 shipped; no delta needed.
+- Do not re-apply Phase 1 (post-generation sentence constraints, write/CARC/empty≠$0 preflight, rubric recalibration).  
+- Do not re-apply Phase 2 (JSON schema deliverables → numbered markdown + UI).  
+- Do not re-apply Phase 3 (SSE typing/ttft meta, `X-Accel-Buffering: no`, DesktopBridge streaming, fake-typewriter skip).  
+- Do not modify CARC handling logic (Phase 4) or add new HAL/Apex features until measurement validates current state.
 
 ## 4. Acceptance criteria
-- [ ] TTFT (time to first token/chunk) < 2 seconds on warm `hal-local:32b` (R9700).
-- [ ] Full response completes without truncation; Phase 2 JSON schema deliverables parse correctly when streamed.
-- [ ] UI renders markdown lists progressively (no “flash of unformatted text” or list collapse).
-- [ ] Fallback to non-streaming path functional if Ollama stream fails mid-generation.
-- [ ] No regression on `test_nr2_hal_local_policy.py` or `test_hal_eval_scoring.py`.
+- Subset eval JSON generated with new timestamp (e.g., `HAL_190Q_EVAL_2026-07-13_subset.json`).  
+- `hal_eval_scoring.py` reports: quality pass %, read-only OK %, deliverable rate, avg end-to-end latency, TTFT p50/p95.  
+- Side-by-side comparison vs baseline (26.3% / 25% / 53s) posted for operator review.  
+- Explicit go/no-go decision recorded for Phase 4 based on read-only OK rate threshold (<90% triggers Phase 4; ≥90% deprioritizes).
 
 ## 5. Executive Summary (5 bullets)
-- Phase 1+2 are live; quality and deliverable structure are now enforced, but 53s latency remains the primary adoption blocker.
-- Phase 3 targets <2s TTFT by completing the SSE streaming pipeline started in Phase 2 (aggregation → progressive render).
-- Work is localized to gateway streaming iterator and client-side incremental markdown parser; no model retraining or schema changes.
-- Validation requires warm-cache TTFT testing and a 190Q subset to confirm zero regression on deliverable rate.
-- After Phase 3 ships, conduct live 190Q full re-run to certify production readiness; defer Phase 4 (CARC depth) if metrics meet targets.
+- Phases 1–3 (constraints, structured deliverables, streaming UX) just landed on `hal-local:32b` R9700.  
+- Unknown if fixes moved the 190Q baseline (26.3% quality, 25% read-only OK) to production-ready levels.  
+- Proposed next step is empirical measurement using existing harness, not additional code commits.  
+- Outcome directly gates Phase 4 (CARC whitelist) engineering priority and resource allocation.  
+- Low-risk, high-information validation that prevents over-engineering against an already-fixed baseline.
 
 ## 6. Approval checklist
-- [ ] Confirm Ollama `/api/chat` with `stream: true` and `format: json` simultaneously supported on `hal-local:32b` Q4_K_M.
-- [ ] Verify R9700 network buffers can sustain 50 concurrent SSE connections without TTFT degradation.
-- [ ] Staff UX sign-off on progressive list rendering (no “jitter” during numbered step display).
+- [ ] Operator confirms subset size (recommend n=50 for speed, or full n=190 if cluster idle).  
+- [ ] Confirm `hal-local:32b` is warm (execute `apex_hal_cache_warm_pack.py` preflight).  
+- [ ] Confirm baseline JSON `HAL_190Q_EVAL_2026-07-12.json` archived for comparison.  
+- [ ] Review comparison table before proceeding to Phase 4 or stopping.
