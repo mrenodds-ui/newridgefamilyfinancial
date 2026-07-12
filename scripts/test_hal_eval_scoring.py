@@ -18,6 +18,28 @@ class HalEvalScoringTests(unittest.TestCase):
         self.assertTrue(score["hasDirectAnswer"])
         self.assertTrue(score["qualityPass"])
 
+    def test_readonly_without_literal_token(self) -> None:
+        score = score_answer(
+            "Can you post to QuickBooks?",
+            "No — I cannot post inside QuickBooks from NR2. Staff must post after review.",
+        )
+        self.assertTrue(score["hasReadOnlyMention"])
+        self.assertTrue(score["qualityPass"])
+
+    def test_deliverable_only_when_requested(self) -> None:
+        plain = score_answer(
+            "Can you post to QuickBooks?",
+            "No — I cannot post to QuickBooks from here; this stays read-only.",
+        )
+        self.assertIsNone(plain["hasDeliverable"])
+        self.assertTrue(plain["qualityPass"])
+        steps = score_answer(
+            "What are the next steps to reconcile deposits?",
+            "Yes. Next step: reconcile SoftDent deposits to QuickBooks bank feed.",
+        )
+        self.assertTrue(steps["hasDeliverable"])
+        self.assertTrue(steps["qualityPass"])
+
     def test_cot_and_plan_opener_fail(self) -> None:
         score = score_answer(
             "Why might deposits disagree?",

@@ -122,6 +122,49 @@ _WANTS_PLAN_RE = re.compile(
     r"\b(step[\s-]?by[\s-]?step plan|numbered plan|work plan|action plan)\b",
     re.IGNORECASE,
 )
+_SENTENCE_LIMIT_RE = re.compile(
+    r"\b(?:in|with|using)?\s*(one|two|three|1|2|3)\s+sentences?\b|"
+    r"\b(one|two|three|1|2|3)\s+sentences?\b|"
+    r"\bin one sentence\b|\bin two sentences\b|\ba single sentence\b",
+    re.IGNORECASE,
+)
+_PLAIN_LANGUAGE_RE = re.compile(r"\bplain(?:\s|-)?language\b|\bin plain english\b", re.IGNORECASE)
+_WRITE_INTENT_RE = re.compile(
+    r"(?i)\b("
+    r"(?:can|could|will|would|may|should)\s+(?:hal|you)\s+(?:please\s+)?"
+    r"(?:post|write|write[\s-]?back|modify|delete|update|change|edit|submit)|"
+    r"(?:post|write|write[\s-]?back|modify|delete|update)\b.{0,40}\b"
+    r"(?:quickbooks|qb\b|softdent|fee\s*schedule|patient\s*record|ledger|journal)|"
+    r"(?:quickbooks|softdent|fee\s*schedule).{0,40}\b"
+    r"(?:post|write|write[\s-]?back|modify|delete|update)\b"
+    r")\b"
+)
+_CARC_CODE_RE = re.compile(
+    r"\b(?:CARC|CAS|adjustment\s+code|denial\s+code)\s*"
+    r"(?:code\s*)?([A-Z]{2})[-\s]?(\d{1,4})\b|"
+    r"\b([A-Z]{2})-(\d{1,4})\b",
+    re.IGNORECASE,
+)
+# Codes we may explain without inventing — others refuse speculation.
+_KNOWN_CAS_CODES = frozenset(
+    {
+        "CO-45",
+        "CO-97",
+        "CO-16",
+        "CO-18",
+        "CO-22",
+        "CO-29",
+        "CO-50",
+        "CO-96",
+        "CO-167",
+        "PR-1",
+        "PR-2",
+        "PR-3",
+        "OA-23",
+        "PI-204",
+    }
+)
+_WORD_TO_N = {"one": 1, "two": 2, "three": 3, "1": 1, "2": 2, "3": 3}
 _MEMORY_GUIDANCE_MARKERS = (
     "Governed memory matches:",
     "Durable HAL knowledge (guidance only",
@@ -221,6 +264,50 @@ def strip_chain_of_thought_prose(text: str) -> str:
     return out.strip()
 
 
+def sentence_limit_from_query(query: str) -> int | None:
+    m = _SENTENCE_LIMIT_RE.search(str(query or ""))
+    if not m:
+        return None
+    raw = next((g for g in m.groups() if g), None)
+    if not raw:
+        return None
+    return _WORD_TO_N.get(str(raw).lower())
+
+
+def _split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+", str(text or "").strip())
+    parts = [p.strip() for p in parts if p.strip()]
+    # Keep leading Yes./No. attached so a 1–2 sentence cap is not "No." alone.
+    if len(parts) >= 2 and re.fullmatch(r"(?i)(?:yes|no)\.?", parts[0]):
+        parts = [f"{parts[0]} {parts[1]}"] + parts[2:]
+    return parts
+
+
+def apply_response_constraints(query: str | None, text: str) -> str:
+    """Post-generation hard filters: sentence caps, plain-language strip, no plan openers."""
+    out = str(text or "").strip()
+    if not out:
+        return out
+    q = str(query or "")
+    limit = sentence_limit_from_query(q)
+    if limit:
+        # Drop markdown headings that inflate "sentence" dumps
+        out = re.sub(r"(?m)^\s{0,3}#{1,6}\s+", "", out)
+        out = re.sub(r"(?m)^\s*[-*]\s+", "", out)
+        sents = _split_sentences(out)
+        if len(sents) > limit:
+            out = " ".join(sents[:limit])
+            if out and out[-1] not in ".!?":
+                out += "."
+    elif _PLAIN_LANGUAGE_RE.search(q):
+        out = re.sub(r"(?m)^\s{0,3}#{1,6}\s+.*$", "", out)
+        out = re.sub(r"(?m)^\s*\d+\.\s+", "", out)
+        out = re.sub(r"\n{3,}", "\n\n", out).strip()
+    if not (q and _WANTS_PLAN_RE.search(q)):
+        out = _STRUCTURED_PLAN_OPENER_RE.sub("", out).strip()
+    return out.strip()
+
+
 def clean_gateway_text(text: str, *, query: str | None = None) -> str:
     out = str(text or "").strip()
     out = re.sub(r"<think>[\s\S]*?</think>", "", out, flags=re.IGNORECASE)
@@ -237,18 +324,39 @@ def clean_gateway_text(text: str, *, query: str | None = None) -> str:
         out,
         flags=re.IGNORECASE,
     )
+    out = apply_response_constraints(query, out)
     return out.strip()
 
 
-def extract_ollama_message_text(message: dict[str, Any] | None) -> str:
+def extract_ollama_message_text(message: dict[str, Any] | None, *, query: str | None = None) -> str:
     msg = message or {}
     content = str(msg.get("content") or "").strip()
     # Prefer visible content only — never surface raw thinking as the staff reply.
     # DeepSeek-R1 often fills `thinking` and leaves `content` empty; CoT strip then
     # yields "" — callers should fall back to try_local_policy_reply, not thinking.
     if content:
-        return clean_gateway_text(content)
+        return clean_gateway_text(content, query=query)
     return ""
+
+
+def options_for_query(query: str, options: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Cap generation for short / constrained asks to cut cold latency."""
+    opts = dict(options or {})
+    q = str(query or "")
+    limit = sentence_limit_from_query(q)
+    yes_no = bool(
+        re.match(
+            r"(?i)^(can you|are you|do you|does |is |yes or no|short answer:|short:)\b",
+            q.strip(),
+        )
+    )
+    if limit is not None and limit <= 2:
+        opts.setdefault("num_predict", 96)
+    elif yes_no or _WRITE_INTENT_RE.search(q):
+        opts.setdefault("num_predict", 128)
+    elif len(q) < 80 and not _WANTS_PLAN_RE.search(q):
+        opts.setdefault("num_predict", 160)
+    return opts
 
 
 def try_local_policy_reply(query: str) -> dict[str, str] | None:
@@ -273,6 +381,87 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": f"navigate:{page}",
             }
 
+    # Unknown CARC/CAS — refuse speculation (no invented meanings).
+    if re.search(r"\b(what|signify|mean|explain)\b", q) and (
+        "carc" in q or "cas" in q or "adjustment code" in q or "denial code" in q
+    ):
+        codes: list[str] = []
+        for m in _CARC_CODE_RE.finditer(raw):
+            g1, g2, g3, g4 = m.groups()
+            if g1 and g2:
+                codes.append(f"{g1.upper()}-{g2}")
+            elif g3 and g4:
+                codes.append(f"{g3.upper()}-{g4}")
+        unknown = [c for c in codes if c not in _KNOWN_CAS_CODES]
+        if unknown:
+            known_hint = ", ".join(sorted(_KNOWN_CAS_CODES)[:6])
+            return {
+                "text": (
+                    f"No — I do not have a governed definition for {', '.join(unknown)}. "
+                    "I will not invent CARC/CAS meanings. Verify on the payer EOB/remark text or "
+                    f"ask about a known code such as {known_hint}."
+                ),
+                "intent": "policy:carc-unknown",
+            }
+        if codes and all(c in _KNOWN_CAS_CODES for c in codes):
+            code = codes[0]
+            briefs = {
+                "CO-45": (
+                    "CO-45 is a contractual adjustment (charged amount exceeds fee schedule/contract). "
+                    "Do not invent dollars — compare the EOB line to the imported fee schedule."
+                ),
+                "PR-1": (
+                    "PR-1 is a patient responsibility adjustment (deductible/copay/coinsurance style). "
+                    "Confirm the amount on the EOB — empty ≠ $0."
+                ),
+            }
+            if code in briefs:
+                return {"text": briefs[code], "intent": f"policy:carc-{code.lower()}"}
+
+    # Empty payroll/AP honesty
+    if re.search(r"\bempty\b", q) and re.search(r"\b(payroll|wages|ap\b|unpaid bills)\b", q):
+        if re.search(r"\b(\$0|0\$|zero|same as)\b", q) or "empty" in q:
+            return {
+                "text": (
+                    "No. An empty payroll/AP export is not the same as $0 wages or balances — "
+                    "empty ≠ $0. Drop a real QuickBooks export or mark an empty-batch sidecar; "
+                    "do not invent amounts."
+                ),
+                "intent": "policy:empty-not-zero",
+            }
+
+    # Two-sentence HAL summary (constraint-friendly local answer)
+    if re.search(r"\bwhat hal does\b", q) or (
+        re.search(r"\bsummarize\b", q) and re.search(r"\bhal\b", q) and re.search(r"\b(program|does|do)\b", q)
+    ):
+        if sentence_limit_from_query(raw) == 2 or "two sentence" in q:
+            return {
+                "text": (
+                    "HAL is the local read-only office assistant in NR2 Apex for imports, claims, and narratives. "
+                    "It never writes SoftDent/QuickBooks or submits to payers without explicit staff consent."
+                ),
+                "intent": "policy:hal-summary",
+            }
+
+    # Hard write-intent preflight (P1) — block before LLM.
+    if _WRITE_INTENT_RE.search(raw) or _WRITE_INTENT_RE.search(q):
+        if re.search(r"\b(softdent|patient|fee\s*schedule|chart)\b", q):
+            return {
+                "text": (
+                    "No. HAL cannot modify SoftDent, fee schedules, or patient records — "
+                    "NR2 stays read-only; staff update SoftDent directly."
+                ),
+                "intent": "consent:writeback-blocked",
+            }
+        if re.search(r"\b(quickbooks|qb\b|journal|ledger|iif)\b", q):
+            return {
+                "text": (
+                    "No — I cannot post or write inside QuickBooks from NR2 (read-only). "
+                    'I can draft locally or export IIF after you say "I consent"; staff still post in QuickBooks.'
+                ),
+                "intent": "consent:qb-post-blocked",
+            }
+
     hyp = re.match(r"^what happens if i ask you to (.+?)\??$", q)
     if hyp:
         action = hyp.group(1).strip()
@@ -285,7 +474,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "consent:required",
             }
 
-    can = re.match(r"^(?:are you allowed to|can you) (.+?)(?:\s+without (?:staff approval|consent))?\??$", q)
+    can = re.match(r"^(?:are you allowed to|can you|can hal) (.+?)(?:\s+without (?:staff approval|consent))?\??$", q)
     if can:
         action = can.group(1).strip()
         without_consent = "without consent" in q or "without staff approval" in q
@@ -301,7 +490,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             if re.search(r"\bpost\b", action) and re.search(r"\bquickbooks\b", action):
                 return {
                     "text": (
-                        "No — I cannot click Post inside QuickBooks from NR2. "
+                        "No — I cannot click Post inside QuickBooks from NR2 (read-only). "
                         'I can draft entries locally or export IIF after you say "I consent"; staff still post inside QuickBooks.'
                     ),
                     "intent": "consent:qb-post-blocked",
@@ -1058,7 +1247,8 @@ def evaluate_query_stream(
         messages=messages,
     )
 
-    result = call_ollama_chat(model=model, messages=chat_messages, stream=True, options=options)
+    opts = options_for_query(query, options)
+    result = call_ollama_chat(model=model, messages=chat_messages, stream=True, options=opts)
     if not result.get("ok"):
         return {
             "ok": False,
@@ -1068,7 +1258,7 @@ def evaluate_query_stream(
         }
 
     body = result.get("body") or {}
-    text = extract_ollama_message_text(body.get("message") or {})
+    text = extract_ollama_message_text(body.get("message") or {}, query=query)
     if level != "fresh" and intent == "transactional":
         text = redact_financial_numbers(text)
     elif level != "fresh" and soft_stale and intent in ("analytical", "clinical", "insurance_ops"):
@@ -1153,7 +1343,7 @@ def evaluate_query_sse_frames(
         model=model,
         messages=chat_messages,
         lane=resolved["lane"],
-        options=options,
+        options=options_for_query(query, options),
     )
 
 
@@ -1241,7 +1431,8 @@ def evaluate_query(
         messages=messages,
     )
 
-    result = call_ollama_chat(model=model, messages=chat_messages, stream=False, options=options)
+    opts = options_for_query(query, options)
+    result = call_ollama_chat(model=model, messages=chat_messages, stream=False, options=opts)
     if not result.get("ok"):
         return {
             "ok": False,
@@ -1252,7 +1443,7 @@ def evaluate_query(
 
     body = result.get("body") or {}
     message = body.get("message") or {}
-    text = extract_ollama_message_text(message)
+    text = extract_ollama_message_text(message, query=query)
     if level != "fresh" and intent == "transactional":
         text = redact_financial_numbers(text)
     elif level != "fresh" and soft_stale and intent in ("analytical", "clinical", "insurance_ops"):

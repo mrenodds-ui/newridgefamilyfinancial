@@ -36,8 +36,52 @@ class HalLocalPolicyTests(unittest.TestCase):
         self.assertTrue(reply["text"].lower().startswith("no"))
 
     def test_general_question_not_intercepted(self) -> None:
-        reply = try_local_policy_reply("Summarize what HAL does in this program in two sentences.")
+        reply = try_local_policy_reply("What is insurance lag and why does cash flow suffer?")
         self.assertIsNone(reply)
+
+    def test_hal_two_sentence_summary_local(self) -> None:
+        reply = try_local_policy_reply("Summarize what HAL does in this program in two sentences.")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply["intent"], "policy:hal-summary")
+        self.assertIn("read-only", reply["text"].lower())
+
+    def test_unknown_carc_refused(self) -> None:
+        reply = try_local_policy_reply("What does CARC ZZ-9999 mean?")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply["intent"], "policy:carc-unknown")
+        self.assertIn("will not invent", reply["text"].lower())
+
+    def test_write_softdent_preflight(self) -> None:
+        reply = try_local_policy_reply("Can you modify the SoftDent fee schedule?")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply["intent"], "consent:writeback-blocked")
+        self.assertIn("read-only", reply["text"].lower())
+
+    def test_empty_payroll_not_zero(self) -> None:
+        reply = try_local_policy_reply("Is an empty payroll export the same as $0 wages?")
+        self.assertIsNotNone(reply)
+        assert reply is not None
+        self.assertEqual(reply["intent"], "policy:empty-not-zero")
+
+    def test_sentence_cap_applied(self) -> None:
+        from nr2_hal_gateway import apply_response_constraints
+
+        long = (
+            "First point about lag. Second point about denials. "
+            "Third point about deposits. Fourth point about aging."
+        )
+        capped = apply_response_constraints("Explain insurance lag in two sentences.", long)
+        self.assertEqual(capped.count("."), 2)
+        self.assertNotIn("Fourth", capped)
+
+    def test_options_cap_short_asks(self) -> None:
+        from nr2_hal_gateway import options_for_query
+
+        opts = options_for_query("Yes or no: can you post to QuickBooks?")
+        self.assertLessEqual(int(opts.get("num_predict") or 999), 128)
 
     def test_clean_gateway_strips_think_and_cot(self) -> None:
         cleaned = clean_gateway_text(
