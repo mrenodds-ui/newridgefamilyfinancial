@@ -536,11 +536,30 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         {"label": "Sync imports", "query": "Sync imports and populate the widgets"},
     ]
     if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
+        era_chip = "ERA-835 path"
+        inbox = gap.get("eraInbox") if isinstance(gap.get("eraInbox"), dict) else None
+        if not inbox:
+            try:
+                from apex_era835_pack import scan_era_inbox
+
+                scanned = scan_era_inbox(ensure_dirs=True)
+                inbox = {
+                    "empty": scanned.get("empty"),
+                    "chipStatus": scanned.get("chipStatus"),
+                    "chipLabel": scanned.get("chipLabel"),
+                    "fileCount": scanned.get("fileCount") or 0,
+                }
+            except Exception:
+                inbox = {"empty": True, "chipStatus": "awaiting", "chipLabel": "Awaiting first 835 drop"}
+        chip_label = str(inbox.get("chipLabel") or "Awaiting first 835 drop")
+        era_chip = f"ERA-835 path · {chip_label}"
         chips = [
-            {"label": "ERA-835 path", "query": "July insurance collections ERA-835"},
+            {"label": era_chip, "query": "July insurance collections ERA-835 inbox status"},
             {"label": "Collections gap", "query": "Why are collections empty?"},
             {"label": "Sync imports", "query": "Sync imports and populate the widgets"},
         ]
+        gap = dict(gap)
+        gap["eraInbox"] = inbox
     hint = gap.get("fixHint") or FIX_HINT
     if code == GAP_ERA_835_REQUIRED:
         hint = str(gap.get("fixHint") or ERA_REGISTER_ZERO_HINT)
@@ -555,6 +574,7 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "hint": hint,
         "gapCode": code,
         "gap": gap,
+        "eraInbox": gap.get("eraInbox"),
         "halChips": chips,
     }
 
@@ -616,6 +636,24 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
             lines.append(
                 f"ERA aggregate available: claims={g.get('eraClaimCount')} "
                 f"total={g.get('eraPaymentTotal')} (proposal only — staff post in SoftDent)."
+            )
+        inbox = g.get("eraInbox") if isinstance(g.get("eraInbox"), dict) else None
+        if not inbox:
+            try:
+                from apex_era835_pack import scan_era_inbox
+
+                scanned = scan_era_inbox(ensure_dirs=False)
+                inbox = {
+                    "empty": scanned.get("empty"),
+                    "chipLabel": scanned.get("chipLabel"),
+                    "fileCount": scanned.get("fileCount") or 0,
+                }
+            except Exception:
+                inbox = None
+        if inbox:
+            lines.append(
+                f"ERA inbox: {inbox.get('chipLabel') or 'Awaiting first 835 drop'} "
+                f"(files={inbox.get('fileCount') or 0}; empty ≠ $0)."
             )
         return "\n".join(lines)
     issues = g.get("issues") if isinstance(g.get("issues"), list) else []

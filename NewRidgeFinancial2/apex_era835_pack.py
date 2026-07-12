@@ -600,17 +600,281 @@ def era835_widget(bundle: dict[str, Any] | None = None) -> dict[str, Any]:
 
 
 def era835_status() -> dict[str, Any]:
+    inbox = scan_era_inbox(ensure_dirs=True)
+    gap = assess_era835_gap()
     return {
         "ok": True,
         "phase": "U1",
+        "buildHint": "hal-10573",
         "enabled": era835_enabled(),
         "flag": "NR2_ERA835",
-        "gapCode": GAP_ERA835_PENDING,
+        "gapCode": gap.get("gapCode") or GAP_ERA835_PENDING,
+        "inbox": inbox,
+        "chipStatus": inbox.get("chipStatus"),
+        "chipLabel": inbox.get("chipLabel"),
         "endpoints": {
             "ingest": "POST /api/apex/hal/era835-ingest",
+            "inboxIngest": "POST /api/apex/hal/era-inbox/ingest",
             "status": "GET /api/apex/hal/era835-status",
+            "inbox": "GET /api/apex/hal/era-inbox/status",
             "list": "GET /api/apex/hal/era835-payments",
         },
-        "note": "Aggregates only (payer/proc/CAS codes). Patient NM1*QC discarded.",
+        "note": "Aggregates only (payer/proc/CAS codes). Patient NM1*QC discarded. Empty inbox ≠ $0.",
+        "honesty": "empty_not_zero",
+        "writeBack": False,
         "refreshedAt": _utc_now(),
     }
+
+
+_ERA_INBOX_SUFFIXES = {".835", ".edi", ".x12", ".txt", ".csv"}
+_ERA_INBOX_NAME_HINTS = ("835", "era", "remit", "eob", "payment")
+
+
+def era_inbox_candidate_roots() -> list[Path]:
+    """Canonical ERA-835 drop-box roots (plus optional NR2_ERA835_INBOX)."""
+    candidates = [
+        Path(r"C:\SoftDentFinancialExports\era"),
+        Path(r"C:\SoftDentReportExports\era"),
+    ]
+    env_inbox = str(os.environ.get("NR2_ERA835_INBOX") or "").strip()
+    if env_inbox:
+        candidates.append(Path(env_inbox).expanduser())
+    # de-dupe while preserving order
+    out: list[Path] = []
+    seen: set[str] = set()
+    for p in candidates:
+        key = str(p).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
+def ensure_era_inbox_dirs(roots: list[Path] | None = None) -> list[dict[str, Any]]:
+    """Create ERA inbox directories when missing (scaffold only — no invented dollars)."""
+    created: list[dict[str, Any]] = []
+    for root in roots or era_inbox_candidate_roots():
+        existed = root.is_dir()
+        try:
+            root.mkdir(parents=True, exist_ok=True)
+            created.append(
+                {
+                    "path": str(root),
+                    "existed": existed,
+                    "ok": root.is_dir(),
+                }
+            )
+        except OSError as exc:
+            created.append(
+                {
+                    "path": str(root),
+                    "existed": existed,
+                    "ok": False,
+                    "error": str(exc),
+                }
+            )
+    return created
+
+
+def _looks_like_era_file(path: Path) -> bool:
+    name = path.name.lower()
+    suf = path.suffix.lower()
+    if suf in _ERA_INBOX_SUFFIXES:
+        return True
+    return any(h in name for h in _ERA_INBOX_NAME_HINTS)
+
+
+def scan_era_inbox(
+    roots: list[Path] | None = None,
+    *,
+    ensure_dirs: bool = True,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """List ERA-835 drop-box files without inventing payment dollars.
+
+    Empty inbox → empty=true, honesty=empty_not_zero (never treat as $0).
+    """
+    candidate_roots = list(roots) if roots is not None else era_inbox_candidate_roots()
+    dir_meta: list[dict[str, Any]] = []
+    if ensure_dirs:
+        dir_meta = ensure_era_inbox_dirs(candidate_roots)
+
+    files: list[dict[str, Any]] = []
+    existing_roots: list[str] = []
+    for root in candidate_roots:
+        if not root.is_dir():
+            continue
+        existing_roots.append(str(root))
+        try:
+            children = sorted(root.iterdir(), key=lambda p: p.stat().st_mtime if p.is_file() else 0, reverse=True)
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_file():
+                continue
+            if not _looks_like_era_file(child):
+                continue
+            try:
+                st = child.stat()
+                files.append(
+                    {
+                        "name": child.name,
+                        "path": str(child),
+                        "sizeBytes": int(st.st_size),
+                        "mtime": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                        .replace(microsecond=0)
+                        .isoformat()
+                        .replace("+00:00", "Z"),
+                    }
+                )
+            except OSError:
+                continue
+            if len(files) >= max(1, min(int(limit), 200)):
+                break
+        if len(files) >= max(1, min(int(limit), 200)):
+            break
+
+    empty = len(files) == 0
+    if empty:
+        chip_status = "awaiting"
+        chip_label = "Awaiting first 835 drop"
+    else:
+        chip_status = "ready"
+        chip_label = "Ready to ingest"
+
+    return {
+        "ok": True,
+        "mode": "scaffold",
+        "readOnly": True,
+        "localOnly": True,
+        "writeBack": False,
+        "empty": empty,
+        "honesty": "empty_not_zero",
+        "fileCount": len(files),
+        "files": files,
+        "readyToIngest": not empty,
+        "chipStatus": chip_status,
+        "chipLabel": chip_label,
+        "candidateRoots": [str(p) for p in candidate_roots],
+        "existingRoots": existing_roots,
+        "dirs": dir_meta,
+        "hint": (
+            "Drop ERA 835 EDI/CSV into the ERA inbox. "
+            "Empty inbox ≠ $0 insurance; Apex never invents dollars or posts SoftDent."
+        ),
+        "refreshedAt": _utc_now(),
+    }
+
+
+def era_inbox_status(*, ensure_dirs: bool = True) -> dict[str, Any]:
+    """Read-only ERA inbox status for HAL chips / API (hal-10573)."""
+    inbox = scan_era_inbox(ensure_dirs=ensure_dirs)
+    return {
+        "ok": True,
+        "phase": "hal-10573",
+        "inbox": inbox,
+        "chipStatus": inbox.get("chipStatus"),
+        "chipLabel": inbox.get("chipLabel"),
+        "empty": inbox.get("empty"),
+        "honesty": "empty_not_zero",
+        "writeBack": False,
+        "refreshedAt": _utc_now(),
+    }
+
+
+def ingest_era_inbox(
+    roots: list[Path] | None = None,
+    *,
+    db_path: Path | None = None,
+    limit: int = 20,
+    ensure_dirs: bool = True,
+) -> dict[str, Any]:
+    """Scan ERA drop-box and ingest files into unified aggregates (read-only SoftDent).
+
+    Empty inbox → awaiting chip, honesty=empty_not_zero, no invented dollars.
+    Never posts SoftDent / never invents Ins Plan > 0 from Register.
+    """
+    scanned = scan_era_inbox(roots=roots, ensure_dirs=ensure_dirs, limit=limit)
+    if scanned.get("empty"):
+        return {
+            "ok": True,
+            "empty": True,
+            "honesty": "empty_not_zero",
+            "chipStatus": "awaiting",
+            "chipLabel": "Awaiting first 835 drop",
+            "readyToIngest": False,
+            "ingested": [],
+            "fileCount": 0,
+            "writeBack": False,
+            "softDentWriteBack": False,
+            "localOnly": True,
+            "inbox": scanned,
+            "hint": scanned.get("hint"),
+            "refreshedAt": _utc_now(),
+        }
+
+    ingested: list[dict[str, Any]] = []
+    for meta in list(scanned.get("files") or [])[: max(1, min(int(limit), 50))]:
+        path = Path(str(meta.get("path") or ""))
+        if not path.is_file():
+            ingested.append(
+                {
+                    "name": meta.get("name"),
+                    "ok": False,
+                    "error": "missing_file",
+                    "chipStatus": "processing",
+                }
+            )
+            continue
+        result = ingest_era835_to_unified(path=path, db_path=db_path)
+        # Legacy attach hook (aggregate proposal only — no SoftDent write-back).
+        # Skip when U1 already mirrored softdent_era_aggregates (no matches shape).
+        if result.get("ok") and isinstance(result.get("matches"), list):
+            try:
+                from apex_softdent_era_pack import attach_era_to_ingest
+
+                result = attach_era_to_ingest(result, filename=path.name)
+            except Exception as exc:  # noqa: BLE001
+                result = dict(result)
+                result["attachError"] = f"{type(exc).__name__}:{exc}"
+        ingested.append(
+            {
+                "name": path.name,
+                "path": str(path),
+                "ok": bool(result.get("ok")),
+                "period": result.get("period"),
+                "totalPaid": result.get("totalPaid"),
+                "claimCount": result.get("claimCount"),
+                "rowsInserted": result.get("rowsInserted"),
+                "gap": result.get("gap"),
+                "softDentWriteBack": False,
+                "chipStatus": "ready" if result.get("ok") else "processing",
+            }
+        )
+
+    any_ok = any(bool(row.get("ok")) for row in ingested)
+    return {
+        "ok": True,
+        "empty": False,
+        "honesty": "empty_not_zero",
+        "chipStatus": "ready" if any_ok else "processing",
+        "chipLabel": (
+            "ERA inbox ingested (proposal only)"
+            if any_ok
+            else "Processing ERA inbox — parse pending"
+        ),
+        "readyToIngest": True,
+        "ingested": ingested,
+        "fileCount": len(ingested),
+        "writeBack": False,
+        "softDentWriteBack": False,
+        "localOnly": True,
+        "inbox": scanned,
+        "hint": (
+            "ERA 835 ingested to unified aggregates only — staff post in SoftDent. "
+            "Empty ≠ $0; no SoftDent write-back; do not re-export Register hoping Ins Plan > 0."
+        ),
+        "refreshedAt": _utc_now(),
+    }
+

@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10572",
-  "BUILD_ID": "hal-10572",
-  "assetVersion": "hal-10572",
-  "builtAt": "2026-07-12T22:45:00.000Z",
-  "notes": "hal-10572: Gap-tile honesty label polish — surface ERA_835_REQUIRED (not ERA_835_AVAILABLE) when Register Ins Plan $0.",
+  "schemaVersion": "hal-10573",
+  "BUILD_ID": "hal-10573",
+  "assetVersion": "hal-10573",
+  "builtAt": "2026-07-12T22:55:00.000Z",
+  "notes": "hal-10573: ERA-835 inbox ingest wiring — empty-inbox safe drop-box + ingest_era_inbox (empty ≠ $0).",
   "staffRenderMode": "apex"
 }

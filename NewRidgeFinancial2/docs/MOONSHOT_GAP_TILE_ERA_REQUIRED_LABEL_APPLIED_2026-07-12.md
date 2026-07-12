@@ -45,3 +45,17 @@ python -m unittest test_gap_tile_era_required_label_hal10572 test_era_835_honest
 - Collections Summary Excel-temp  
 - Inventing QB payroll/AP rows  
 - Re-export July Register  
+
+## Live re-verify (operator proceed 2026-07-12 ~22:48Z)
+
+Restarted `browser_app.py` onto **hal-10572** (was still serving stale 10571 process). Synced leftover `site/index.html` + `site/workstation/index.html` cache-bust stamps `hal-10571` → `hal-10572`.
+
+| Gate | Result |
+|------|--------|
+| `GET /api/apex/hal/collections-gap` → `gapCode=ERA_835_REQUIRED` (= `collectionsGapCode`) | **PASS** |
+| `eraGapCode` remains `ERA_835_AVAILABLE` (ERA presence only) | **PASS** |
+| Financial widget message `ERA_835_REQUIRED · 2026-07` | **PASS** (browser + API) |
+| Do-not-re-export honesty hint visible | **PASS** |
+| HAL chips: ERA-835 path / Collections gap / Sync imports | **PASS** |
+| UI badge `hal-10572 · bridge` | **PASS** |
+| Unit tests `test_gap_tile_era_required_label_hal10572` | **PASS** |

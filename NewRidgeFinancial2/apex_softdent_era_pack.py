@@ -213,6 +213,25 @@ def enrich_collections_gap_with_era(
             "proceed with ERA-835 for insurance detail. Do not re-export Register hoping Ins Plan > 0. "
             "ERA aggregate is proposal-only — staff post in SoftDent. Empty ≠ $0; no SoftDent write-back."
         )
+        # Moonshot hal-10573 — attach empty-inbox scaffold status (never invents $)
+        try:
+            from apex_era835_pack import scan_era_inbox
+
+            inbox = scan_era_inbox(ensure_dirs=True)
+            out["eraInbox"] = {
+                "empty": inbox.get("empty"),
+                "chipStatus": inbox.get("chipStatus"),
+                "chipLabel": inbox.get("chipLabel"),
+                "fileCount": inbox.get("fileCount") or 0,
+                "honesty": "empty_not_zero",
+                "existingRoots": inbox.get("existingRoots") or [],
+            }
+            # Empty drop-box must not flip REQUIRED → AVAILABLE
+            if inbox.get("empty"):
+                out["gapCode"] = "ERA_835_REQUIRED"
+                out["collectionsGapCode"] = "ERA_835_REQUIRED"
+        except Exception:
+            pass
     else:
         out["fixHint"] = FIX_HINT_ERA
     out["honesty"] = "empty_not_zero"

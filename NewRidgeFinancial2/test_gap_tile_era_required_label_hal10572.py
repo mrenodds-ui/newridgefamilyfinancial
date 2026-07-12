@@ -1,4 +1,4 @@
-"""Moonshot gap-tile honesty label polish (hal-10572)."""
+"""Moonshot gap-tile honesty label polish (hal-10573)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class GapTileEraRequiredLabelTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10572")
+        self.assertEqual(BUILD_ID, "hal-10573")
 
     def test_widget_message_surfaces_required_not_available(self) -> None:
         w = collections_gap_widget(_bundle_register_ins_plan_zero())
@@ -52,7 +52,7 @@ class GapTileEraRequiredLabelTests(unittest.TestCase):
         self.assertIn("Ins Plan Collections $0.00", hint)
         self.assertIn("Do not re-export", hint)
         labels = [c.get("label") for c in (w.get("halChips") or [])]
-        self.assertIn("ERA-835 path", labels)
+        self.assertTrue(any("ERA-835 path" in str(lab) for lab in labels))
         self.assertTrue(all("re-export" not in str(c).lower() for c in (w.get("halChips") or [])))
 
     def test_enrich_preserves_required_when_register_ins_zero(self) -> None:

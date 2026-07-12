@@ -1,4 +1,4 @@
-"""Moonshot TXN ledger surface (hal-10572)."""
+"""Moonshot TXN ledger surface (hal-10573)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from softdent_transaction_extract import load_txn_jsonl, query_account_transacti
 
 class TxnLedgerSurfaceTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10572")
+        self.assertEqual(BUILD_ID, "hal-10573")
 
     def test_load_txn_jsonl_alias(self) -> None:
         rows = load_txn_jsonl()
