@@ -1,13 +1,16 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10562 (Moonshot KPI density + zero-scroll + compact pages)
+ * Build: hal-10563 (Moonshot cache coherence + KPI density + zero-scroll)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10562";
+  const ASSET_V = "hal-10563";
+  /** Consecutive warming stub polls before hard reload (Moonshot cache pack). */
+  let warmingPollStreak = 0;
+  const WARMING_POLL_MAX = 5;
   const WB_VIEW_KEY = "nr2-apex-claims-wb-view";
   const CPA_FLAG_KEY = "nr2-apex-cpa-flags";
   const DENSITY_KEY = "nr2-apex-density";
@@ -5971,13 +5974,26 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       setMeta(metaPayload, { silent });
     }
 
-    // Stale-while-revalidate: paint IndexedDB cache immediately on cold navigations.
-    if (!silent && idb && idb.loadWidgets) {
+    // Stale-while-revalidate: paint IndexedDB only when buildId matches live build
+    // (Moonshot cache coherence hal-10563 — drop pre-density crowded mosaics).
+    if (!silent && idb && (idb.loadWidgetsIfBuild || idb.loadWidgets)) {
       try {
-        const cached = await idb.loadWidgets(currentPage, currentSub, currentQuery);
+        const liveBuild =
+          ASSET_V ||
+          (typeof document !== "undefined" &&
+            document.documentElement.getAttribute("data-apex-version")) ||
+          "";
+        const cached = idb.loadWidgetsIfBuild
+          ? await idb.loadWidgetsIfBuild(currentPage, currentSub, currentQuery, liveBuild)
+          : await idb.loadWidgets(currentPage, currentSub, currentQuery);
         if (cached && cached.payload && Array.isArray(cached.payload.widgets)) {
-          applyWidgetPayload(cached.payload, { fromCache: true });
-          paintedFromCache = true;
+          const got = String((cached.payload && cached.payload.buildId) || "");
+          if (liveBuild && got && got !== liveBuild) {
+            if (idb.clearWidgets) await idb.clearWidgets(currentPage, currentSub, currentQuery);
+          } else {
+            applyWidgetPayload(cached.payload, { fromCache: true });
+            paintedFromCache = true;
+          }
         }
       } catch (_err) {
         /* cache optional */
@@ -5989,23 +6005,36 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await res.json();
       applyWidgetPayload(payload, { fromCache: false });
-      if (idb && idb.cacheWidgets && !payload.warming) {
+      if (idb && idb.cacheWidgets && !payload.warming && !payload.fillFailed) {
         idb.cacheWidgets(currentPage, currentSub, currentQuery, payload).catch(() => {});
       }
       setMeta(payload);
-      // Moonshot REC-007: stub fast-path — re-poll until cache fill completes.
-      if (payload && payload.warming && !silent) {
-        setTimeout(() => {
-          if (currentPage === pageIdOrHash || String(pageIdOrHash || "").startsWith(currentPage)) {
-            loadPage(pageIdOrHash, { silent: true });
-          } else {
-            loadPage(currentPage, { silent: true });
+      // Moonshot cache pack: re-poll warming stub; hard-reload after streak timeout.
+      if (payload && payload.warming) {
+        warmingPollStreak += 1;
+        if (warmingPollStreak >= WARMING_POLL_MAX) {
+          warmingPollStreak = 0;
+          try {
+            if (idb && idb.clearWidgets) {
+              await idb.clearWidgets(currentPage, currentSub, currentQuery);
+            }
+          } catch (_err) {
+            /* optional */
           }
+          if (typeof window !== "undefined" && window.location) {
+            window.location.reload();
+          }
+          return;
+        }
+        setTimeout(() => {
+          loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true });
         }, 750);
       } else {
+        warmingPollStreak = 0;
         startAutoRefresh();
       }
     } catch (err) {
+      warmingPollStreak = 0;
       if (!silent) {
         root.className = "apex-stage apex-mosaic";
         root.innerHTML = `<div class="apex-status-msg is-error">Error loading data: ${String(

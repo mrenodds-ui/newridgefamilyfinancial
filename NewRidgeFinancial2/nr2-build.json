@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10562",
-  "BUILD_ID": "hal-10562",
-  "assetVersion": "hal-10562",
-  "builtAt": "2026-07-12T12:45:00Z",
-  "notes": "hal-10562: Moonshot KPI density — ≤4 KPIs above fold, empty omit, Taxes planning subpage, SoftDent/QB/AR/OM vital strips.",
+  "schemaVersion": "hal-10563",
+  "BUILD_ID": "hal-10563",
+  "assetVersion": "hal-10563",
+  "builtAt": "2026-07-12T13:00:00Z",
+  "notes": "hal-10563: Moonshot cache coherence — IDB BUILD_ID gate, stub fill failure surface, warming poll timeout.",
   "staffRenderMode": "apex"
 }

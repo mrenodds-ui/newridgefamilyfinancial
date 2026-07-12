@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10562"
+BUILD_ID = "hal-10563"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -43,6 +43,7 @@ _TICKER_CACHE: dict[str, Any] = {"at": 0.0, "payload": None}
 _TICKER_CACHE_TTL_SEC = 10.0
 _WIDGETS_CACHE: dict[str, dict[str, Any]] = {}
 _WIDGETS_CACHE_TTL_SEC = 15.0
+_WIDGETS_FILL_FAILURES = 0  # Moonshot cache coherence — fill-thread crash counter
 _REPORTS_BUNDLE_CACHE: dict[str, Any] = {"at": 0.0, "reports": None, "bundle": None, "errors": None}
 _REPORTS_BUNDLE_CACHE_TTL_SEC = 20.0
 
@@ -3647,10 +3648,49 @@ def build_apex_widgets(
         if not already:
 
             def _fill_widgets_cache() -> None:
+                global _WIDGETS_FILL_FAILURES
                 try:
                     build_apex_widgets(pid, sub=sub_key, claim_id=cid, _fill=True)
                 except Exception as exc:  # noqa: BLE001
-                    print(f"Widget cache fill failed for {cache_key}: {exc}", file=sys.stderr)
+                    import traceback
+
+                    _WIDGETS_FILL_FAILURES += 1
+                    traceback.print_exc()
+                    print(
+                        f"Widget cache fill failed for {cache_key}: {exc} "
+                        f"(failures={_WIDGETS_FILL_FAILURES})",
+                        file=sys.stderr,
+                    )
+                    # Fail-open: surface error payload so client exits infinite warming stub
+                    fail_payload = {
+                        "page": pid if not sub_key else f"{pid}/{sub_key}",
+                        "parent": pid,
+                        "sub": sub_key,
+                        "claimId": cid,
+                        "refreshedAt": _utc_now(),
+                        "buildId": BUILD_ID,
+                        "warming": False,
+                        "fillFailed": True,
+                        "widgets": [
+                            {
+                                "id": "warming-fill-failed",
+                                "type": "status",
+                                "status": "empty",
+                                "label": "Bridge cache fill failed",
+                                "message": "Retry Sync imports if this persists — empty ≠ $0.",
+                                "hint": f"{type(exc).__name__}: {str(exc)[:160]}",
+                                "size": "strip",
+                                "compact": True,
+                            }
+                        ],
+                        "sourceNote": "stub-fill-failed",
+                        "errors": [str(exc)[:200]],
+                        "cachedForSec": 5,
+                    }
+                    _WIDGETS_CACHE[cache_key] = {
+                        "at": time.monotonic(),
+                        "payload": copy.deepcopy(fail_payload),
+                    }
                 finally:
                     _WIDGETS_CACHE.pop(warming_key, None)
 
