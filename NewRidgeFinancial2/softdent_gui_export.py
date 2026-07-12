@@ -778,6 +778,78 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
         )
 
 
+def _excel_sdwin_workbook_open() -> bool:
+    """True when SoftDent has an Excel workbook open (temp SDWIN*.csv / SDWINn - Excel)."""
+    try:
+        import win32gui
+
+        found = []
+
+        def _cb(h, _):
+            if win32gui.IsWindowVisible(h):
+                t = (win32gui.GetWindowText(h) or "").strip()
+                if "SDWIN" in t.upper() and "EXCEL" in t.upper():
+                    found.append(t)
+            return True
+
+        win32gui.EnumWindows(_cb, None)
+        if found:
+            return True
+    except Exception:
+        pass
+    try:
+        import win32com.client
+
+        excel = win32com.client.GetObject(Class="Excel.Application")
+        for i in range(1, int(excel.Workbooks.Count) + 1):
+            wb = excel.Workbooks(i)
+            name = str(wb.Name or "").upper()
+            full = str(wb.FullName or "").upper()
+            if "SDWIN" in name or "SDWIN" in full:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _save_excel_sdwin_copy(dest: Path) -> Path | None:
+    """SaveCopyAs the SoftDent Excel temp workbook into dest (never invent dollars)."""
+    try:
+        import win32com.client
+    except ImportError:
+        return None
+    try:
+        excel = win32com.client.GetObject(Class="Excel.Application")
+    except Exception:
+        return None
+    target = None
+    newest_mtime = -1.0
+    for i in range(1, int(excel.Workbooks.Count) + 1):
+        wb = excel.Workbooks(i)
+        name = str(wb.Name or "")
+        full = str(wb.FullName or "")
+        if "SDWIN" not in name.upper() and "SDWIN" not in full.upper():
+            continue
+        try:
+            mtime = Path(full).stat().st_mtime if full and Path(full).is_file() else time.time()
+        except OSError:
+            mtime = time.time()
+        if mtime >= newest_mtime:
+            newest_mtime = mtime
+            target = wb
+    if target is None:
+        return None
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    # SoftDent temps are often .csv opened in Excel; SaveCopyAs to .xls/.csv
+    try:
+        target.SaveCopyAs(str(dest))
+    except Exception:
+        alt = dest.with_suffix(".csv")
+        target.SaveCopyAs(str(alt))
+        return alt if alt.is_file() else None
+    return dest if dest.is_file() else None
+
+
 def _complete_output_setup_and_save(
     *,
     start: date,
@@ -854,29 +926,39 @@ def _complete_output_setup_and_save(
         save = find_dialog("Select File Name")
         if save:
             break
-        time.sleep(0.25)
-    if not save:
-        raise RuntimeError("Select File Name dialog did not appear")
-
-    short_path = rf"{EXPORT_ROOT_SHORT}\{short_stem}"
-    _keyboard_activate_dialog(save)
-    sh = int(save.handle)
-    # Filename field is usually focused on open; clear and type short path
-    _type_keys_clear_and_text(short_path, hwnd=sh)
-    time.sleep(0.15)
-    _keyboard_press_ok(hwnd=sh)
-    time.sleep(3.0)
-    cancel_printer_dialogs()
-    dismiss_softdent_alerts()
-
-    dest_root.mkdir(parents=True, exist_ok=True)
-    produced = dest_root / f"{short_stem}.XLS"
-    if not produced.is_file():
-        for cand in dest_root.glob(f"{short_stem}.*"):
-            produced = cand
+        # SoftDent often skips Select File Name and opens Excel on %TEMP%\SDWIN*.csv
+        if _excel_sdwin_workbook_open():
             break
-    if not produced.is_file():
-        raise RuntimeError(f"Expected export not found under {dest_root} ({short_stem}.*)")
+        time.sleep(0.25)
+    if save:
+        short_path = rf"{EXPORT_ROOT_SHORT}\{short_stem}"
+        _keyboard_activate_dialog(save)
+        sh = int(save.handle)
+        # Filename field is usually focused on open; clear and type short path
+        _type_keys_clear_and_text(short_path, hwnd=sh)
+        time.sleep(0.15)
+        _keyboard_press_ok(hwnd=sh)
+        time.sleep(3.0)
+        cancel_printer_dialogs()
+        dismiss_softdent_alerts()
+
+        dest_root.mkdir(parents=True, exist_ok=True)
+        produced = dest_root / f"{short_stem}.XLS"
+        if not produced.is_file():
+            for cand in dest_root.glob(f"{short_stem}.*"):
+                produced = cand
+                break
+        if not produced.is_file():
+            raise RuntimeError(f"Expected export not found under {dest_root} ({short_stem}.*)")
+    else:
+        # Excel-on-temp path (validated on SoftDent v19.1.4 Trans/Register/Collections)
+        dest_root.mkdir(parents=True, exist_ok=True)
+        produced = _save_excel_sdwin_copy(dest_root / f"{short_stem}.xls")
+        if not produced or not produced.is_file():
+            raise RuntimeError(
+                "Select File Name dialog did not appear and no SoftDent Excel "
+                "(SDWIN*) workbook was available to SaveCopyAs"
+            )
 
     canonical = dest_root / canonical_name
     shutil.copy2(produced, canonical)
