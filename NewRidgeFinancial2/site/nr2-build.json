@@ -1,8 +1,9 @@
 {
-  "schemaVersion": "hal-10576",
-  "BUILD_ID": "hal-10576",
-  "assetVersion": "hal-10576",
-  "builtAt": "2026-07-13T00:25:00.000Z",
-  "notes": "hal-10576: Collections Summary Excel-temp atomic finalize + lock retry + health endpoint; empty != $0.",
-  "staffRenderMode": "apex"
+  "schemaVersion": "hal-10608",
+  "BUILD_ID": "hal-10608",
+  "assetVersion": "hal-10608",
+  "builtAt": "2026-07-13T17:15:00.000Z",
+  "notes": "hal-10608: Gold/ERA settlement readiness + page-smoke 429/warming repairs + app-info schema align; empty != $0.",
+  "staffRenderMode": "apex",
+  "package": "HAL-10608"
 }

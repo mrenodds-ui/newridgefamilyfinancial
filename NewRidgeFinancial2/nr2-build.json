@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10603",
-  "BUILD_ID": "hal-10603",
-  "assetVersion": "hal-10603",
-  "builtAt": "2026-07-13T14:45:00.000Z",
-  "notes": "hal-10603: honesty CI gate — fail build if TP/widgets regress null→$0.00; empty != $0; no TP logic change.",
+  "schemaVersion": "hal-10608",
+  "BUILD_ID": "hal-10608",
+  "assetVersion": "hal-10608",
+  "builtAt": "2026-07-13T17:15:00.000Z",
+  "notes": "hal-10608: Gold/ERA settlement readiness + page-smoke 429/warming repairs + app-info schema align; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10603"
+  "package": "HAL-10608"
 }

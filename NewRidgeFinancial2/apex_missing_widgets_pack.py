@@ -1208,9 +1208,16 @@ def append_office_manager_missing(widgets: list[dict[str, Any]], bundle: dict[st
     widgets.append(build_verification_matrix(bundle, page="office-manager"))
     widgets.append(build_claims_needing_narrative(bundle))
     widgets.append(build_provider_utilization_trend(util))
-    widgets.append(build_patient_dossier_card(None))
-    widgets.append(build_eligibility_card_widget(None))
-    widgets.append(build_patient_dossier_mini(None))
-    widgets.append(build_active_treatment_plans(None))
-    widgets.append(build_claims_review_detail(None))
-    widgets.append(build_clinical_notes_summary(None))
+    selected = bundle.get("selectedPatient") if isinstance(bundle.get("selectedPatient"), dict) else None
+    widgets.append(build_patient_dossier_card(selected))
+    elig = None
+    if selected:
+        elig = selected.get("eligibility") if isinstance(selected.get("eligibility"), dict) else selected
+    widgets.append(build_eligibility_card_widget(elig if selected else None))
+    widgets.append(build_patient_dossier_mini(selected))
+    estimates = None
+    if selected and isinstance(selected.get("treatmentEstimates"), list):
+        estimates = selected.get("treatmentEstimates")
+    widgets.append(build_active_treatment_plans(estimates))
+    widgets.append(build_claims_review_detail(selected))
+    widgets.append(build_clinical_notes_summary(selected))

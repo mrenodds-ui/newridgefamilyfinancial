@@ -463,6 +463,44 @@ def _build_ar_rows_from_normalized(normalized: dict[str, Any]) -> list[dict[str,
     ]
 
 
+def _build_ar_rows_from_account_aging_csv() -> list[dict[str, Any]]:
+    """Map SoftDent Account Aging CSV totals into softdent_ar_aging rows (empty ≠ $0)."""
+    try:
+        from softdent_outstanding_claims_bridge import (
+            find_account_aging_export,
+            parse_account_aging_export,
+        )
+    except Exception:
+        return []
+    path = find_account_aging_export()
+    if not path:
+        return []
+    parsed = parse_account_aging_export(path)
+    if not isinstance(parsed, dict) or not parsed.get("ok"):
+        return []
+    rows: list[dict[str, Any]] = []
+    buckets = parsed.get("buckets") if isinstance(parsed.get("buckets"), dict) else {}
+    for label, bal in buckets.items():
+        if bal is None or bal == "":
+            continue
+        rows.append({"Bucket": str(label), "Balance": bal})
+    if not rows:
+        total = parsed.get("trueReceivablesTotal")
+        if total is None:
+            total = parsed.get("balanceTotal")
+        if total is not None:
+            rows.append({"Bucket": "Total", "Balance": total})
+        ins = parsed.get("outstandingInsuranceTotal")
+        if ins is None:
+            ins = parsed.get("insAmtTotal")
+        if ins is not None:
+            rows.append({"Bucket": "Insurance", "Balance": ins})
+        due = parsed.get("amtDueTotal")
+        if due is not None:
+            rows.append({"Bucket": "Amt Due", "Balance": due})
+    return rows
+
+
 def _trim_rows_to_relevant_periods(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     from import_cache_ttl import relevant_period_labels
 
@@ -505,6 +543,13 @@ def _sync_softdent_pipeline_exports(destination: Path) -> dict[str, Any]:
             ar_rows = _build_ar_rows_from_normalized(normalized)
             ar_path = destination / "softdent_ar_aging.csv"
             _write_csv(ar_path, ar_rows, ["Bucket", "Balance"])
+            written.append(ar_path.name)
+    else:
+        # Moonshot fix-all: SoftDent ReportExports account_aging.csv (fresh) when jsonl absent
+        ar_csv_rows = _build_ar_rows_from_account_aging_csv()
+        if ar_csv_rows:
+            ar_path = destination / "softdent_ar_aging.csv"
+            _write_csv(ar_path, ar_csv_rows, ["Bucket", "Balance"])
             written.append(ar_path.name)
     try:
         from softdent_dashboard_period_sync import sync_dashboard_period_rows

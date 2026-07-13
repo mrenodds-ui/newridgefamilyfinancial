@@ -3775,6 +3775,7 @@ def build_apex_widgets(
     *,
     sub: str | None = None,
     claim_id: str | None = None,
+    patient_id: str | None = None,
     _fill: bool = False,
 ) -> dict[str, Any]:
     import copy
@@ -3785,6 +3786,7 @@ def build_apex_widgets(
     pid = re.sub(r"[^a-z0-9\-]", "", str(page_id or "").strip().lower())
     sub_key = re.sub(r"[^a-z0-9\-]", "", str(sub or "").strip().lower()) or None
     cid = str(claim_id or "").strip() or None
+    pid_patient = str(patient_id or "").strip() or None
     if pid not in APEX_PAGES:
         return {
             "page": pid or "unknown",
@@ -3804,7 +3806,9 @@ def build_apex_widgets(
             "sourceNote": "invalid page",
         }
 
-    cache_key = pid if not sub_key else f"{pid}:{sub_key}:{cid or ''}"
+    cache_key = pid if not sub_key else f"{pid}:{sub_key}:{cid or ''}:{pid_patient or ''}"
+    if not sub_key and pid_patient:
+        cache_key = f"{pid}:::{pid_patient}"
     # Local-DB / attachment-backed subpages must not serve stale payloads.
     skip_cache = sub_key in {
         "collections",
@@ -3824,7 +3828,7 @@ def build_apex_widgets(
         "templates",
         "system-logs",
         "tax-docs",
-    }
+    } or bool(pid_patient)
     now = time.monotonic()
     if not skip_cache:
         hit = _WIDGETS_CACHE.get(cache_key)
@@ -3882,7 +3886,9 @@ def build_apex_widgets(
                 _FILL_PROGRESS["ts"] = time.time()
                 try:
                     _FILL_PROGRESS["pct"] = 40
-                    build_apex_widgets(pid, sub=sub_key, claim_id=cid, _fill=True)
+                    build_apex_widgets(
+                        pid, sub=sub_key, claim_id=cid, patient_id=pid_patient, _fill=True
+                    )
                     _FILL_PROGRESS["pct"] = 100
                 except Exception as exc:  # noqa: BLE001
                     import traceback
@@ -3947,6 +3953,18 @@ def build_apex_widgets(
         return stub
 
     reports, bundle, errors = _load_reports_and_bundle()
+    # Moonshot fix-all: hydrate selectedPatient when patient_id query is present
+    if pid_patient and isinstance(bundle, dict):
+        try:
+            from patient_dossier import build_patient_dossier
+
+            dossier = build_patient_dossier(pid_patient)
+            if isinstance(dossier, dict):
+                bundle = dict(bundle)
+                bundle["selectedPatient"] = dossier
+                bundle["selectedPatientId"] = pid_patient
+        except Exception:
+            pass
     if sub_key:
         try:
             from apex_subpages_pack import resolve_subpage_builder
@@ -6386,7 +6404,16 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
             sub = bottle.request.query.get("sub") or None
             claim_id = bottle.request.query.get("id") or None
-            return json_response_fn(build_apex_widgets(page_id, sub=sub, claim_id=claim_id))
+            patient_id = (
+                bottle.request.query.get("patient_id")
+                or bottle.request.query.get("patientId")
+                or None
+            )
+            return json_response_fn(
+                build_apex_widgets(
+                    page_id, sub=sub, claim_id=claim_id, patient_id=patient_id
+                )
+            )
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "widgets": []}, status=500)
 

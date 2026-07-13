@@ -424,6 +424,57 @@ def build_hal_action_list(bundle: dict[str, Any]) -> dict[str, Any]:
             }
         )
 
+    # Moonshot fix-all: surface Gold / ERA honesty gaps as actionable recommendations
+    try:
+        from softdent_gold_era_settlement_hal10608 import gold_era_settlement_status
+
+        gold = gold_era_settlement_status() or {}
+        g = gold.get("gold") if isinstance(gold.get("gold"), dict) else {}
+        if str(g.get("gapCode") or "").upper() == "GOLD_CSV_MISSING":
+            items.append(
+                {
+                    "id": "hal-act-gold-csv",
+                    "label": "Procure SoftDent Insurance Payment Analysis Gold CSV (Carestream)",
+                    "payer": "SoftDent",
+                    "status": "alert",
+                    "amount": None,
+                    "serviceDate": "",
+                }
+            )
+    except Exception:
+        pass
+    try:
+        from apex_era835_pack import era835_widget
+
+        era_w = era835_widget(bundle) if callable(era835_widget) else {}
+        msg = str((era_w or {}).get("message") or (era_w or {}).get("hint") or "")
+        gap = str((era_w or {}).get("gapCode") or "").upper()
+        if "ERA" in gap or "ERA_835" in msg.upper() or "REQUIRED" in gap:
+            items.append(
+                {
+                    "id": "hal-act-era835",
+                    "label": "Import ERA 835 remittance files (clearinghouse enrollment)",
+                    "payer": "Insurance",
+                    "status": "alert",
+                    "amount": None,
+                    "serviceDate": "",
+                }
+            )
+    except Exception:
+        # Still recommend ERA when SoftDent collections honesty gap is known
+        sd = bundle.get("softdent") if isinstance(bundle.get("softdent"), dict) else {}
+        if sd.get("collectionsGapCode") == "ERA_835_REQUIRED" or stale:
+            items.append(
+                {
+                    "id": "hal-act-era835",
+                    "label": "Import ERA 835 remittance files (collections / DEF-001)",
+                    "payer": "Insurance",
+                    "status": "alert",
+                    "amount": None,
+                    "serviceDate": "",
+                }
+            )
+
     try:
         from apex_structured_insight_pack import load_last_insight
 
@@ -455,6 +506,18 @@ def build_hal_action_list(bundle: dict[str, Any]) -> dict[str, Any]:
                 "serviceDate": str(tax.get("due_date") or ""),
             }
         )
+
+    # Dedupe by id
+    seen: set[str] = set()
+    deduped: list[dict[str, Any]] = []
+    for it in items:
+        iid = str(it.get("id") or "")
+        if iid and iid in seen:
+            continue
+        if iid:
+            seen.add(iid)
+        deduped.append(it)
+    items = deduped
 
     status = "ok" if items else "empty"
     return {
@@ -629,6 +692,7 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
             "emptyMessage": None,
         }
         st = "ok"
+        gap = None
     else:
         # Live FE: empty message shows when status=empty and patientHash falsy
         payload = {
@@ -642,16 +706,20 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
             "emptyMessage": empty_msg,
         }
         st = "empty"
+        gap = "NO_PATIENT_CONTEXT"
 
-    return {
+    out = {
         "id": "softdent-patient-dossier",
         "type": "patient-dossier-card",
         "label": "Patient Dossier",
         "size": "l",
         "status": st,
         "data": payload,
-        "hint": "PHI-safe hashes/initials · empty until patient selected.",
+        "hint": "PHI-safe hashes/initials · empty until patient selected (?patient_id=).",
     }
+    if gap:
+        out["gapCode"] = gap
+    return out
 
 
 # ---------------------------------------------------------------------------
