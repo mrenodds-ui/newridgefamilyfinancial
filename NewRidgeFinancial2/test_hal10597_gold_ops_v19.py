@@ -32,7 +32,7 @@ def _empty_db(path: Path) -> None:
 class GoldOpsV19Hal10597Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10597")
-        self.assertEqual(BUILD_ID, "hal-10603")
+        self.assertEqual(BUILD_ID, "hal-10604")
 
     def test_playbook_v19_print_preview_honest(self) -> None:
         play = gold_csv_drop_playbook()

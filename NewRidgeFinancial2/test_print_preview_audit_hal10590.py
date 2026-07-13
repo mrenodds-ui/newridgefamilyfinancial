@@ -25,7 +25,7 @@ from softdent_treatment_planning import ensure_treatment_planning_schema
 class PrintPreviewAuditHal10590Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10590")
-        self.assertEqual(BUILD_ID, "hal-10603")
+        self.assertEqual(BUILD_ID, "hal-10604")
 
     def test_visual_audit_does_not_trigger_gold_ingest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

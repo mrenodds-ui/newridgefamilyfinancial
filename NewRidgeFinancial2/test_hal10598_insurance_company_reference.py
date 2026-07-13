@@ -28,7 +28,7 @@ _CSV = """company_name,status,record_number,address1,address2,zip
 class InsuranceCompanyReferenceHal10598Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10598")
-        self.assertEqual(BUILD_ID, "hal-10603")
+        self.assertEqual(BUILD_ID, "hal-10604")
 
     def test_ingest_and_status(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

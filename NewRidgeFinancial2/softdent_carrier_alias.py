@@ -665,10 +665,11 @@ def resolve_accepted_alias_for_tp(
     *,
     db_path: Path | None = None,
 ) -> dict[str, Any]:
-    """Resolve staff payer → spine carrier for TP (HAL-10601).
+    """Resolve staff payer → spine carrier for TP (HAL-10601 / HAL-10604).
 
-    Only ``confidence='auto'`` + ``review_status='accepted'`` resolve.
-    Pending manuals (``confidence='manual'``) are blocked — never auto-used.
+    Any ``review_status='accepted'`` row resolves (auto or operator/Moonshot
+    manual-accepted). Pending manuals (``confidence='manual'`` +
+    ``review_status='pending'``) are blocked — never auto-used.
     Does not invent dollars.
     """
     out: dict[str, Any] = {
@@ -725,7 +726,6 @@ def resolve_accepted_alias_for_tp(
                     SELECT spine_carrier_name, master_company_id, master_company_name
                     FROM carrier_alias
                     WHERE review_status='accepted'
-                      AND confidence='auto'
                       AND (
                         master_company_id = ?
                         OR upper(master_company_name) = upper(?)
@@ -785,6 +785,101 @@ def _table_exists_alias(conn: sqlite3.Connection) -> bool:
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='carrier_alias'"
         ).fetchone()
     )
+
+
+# HAL-10604 — Moonshot industry HIGH (+ optional MEDIUM pending)
+MOONSHOT_INDUSTRY_HIGH: list[tuple[str, str]] = [
+    ("Assurant", "SUN LIFE FINANCIAL"),
+    ("Connecticut General", "CIGNA DENTAL"),
+    ("Met Life", "METLIFE DENTAL"),
+    ("Met Life /dental Claims", "METLIFE DENTAL"),
+    ("Met Life/ Pepsico", "METLIFE DENTAL"),
+    ("UniCare", "ANTHEM - 1115"),
+    ("Unicare Life & Health Insurance Co", "ANTHEM - 1115"),
+]
+MOONSHOT_INDUSTRY_MEDIUM: list[tuple[str, str]] = [
+    ("Coventry", "AETNA"),
+    ("Coventry Health Care Of Kansas", "AETNA"),
+]
+
+
+def apply_moonshot_industry_aliases(
+    *,
+    db_path: Path | None = None,
+    include_medium_as_pending: bool = True,
+) -> dict[str, Any]:
+    """HAL-10604 — accept Moonshot HIGH industry aliases; MEDIUM → pending.
+
+    Does not invent settlement dollars. Spine names must exist in spine list.
+    """
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    out: dict[str, Any] = {
+        "ok": False,
+        "def": "HAL-10604",
+        "packageBuildId": "hal-10604",
+        "highAccepted": 0,
+        "mediumPending": 0,
+        "emptyIsNotZero": True,
+        "triggersGoldIngest": False,
+    }
+    if not target or not target.is_file():
+        out["error"] = "analytics_db_missing"
+        return out
+    spine_map = {s.upper(): s for s in list_spine_carriers(db_path=target)}
+    conn = sqlite3.connect(str(target), timeout=30.0)
+    try:
+        ensure_carrier_alias_schema(conn)
+        high_n = 0
+        for master, spine_name in MOONSHOT_INDUSTRY_HIGH:
+            exact = spine_map.get(spine_name.upper())
+            if not exact:
+                out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                continue
+            cur = conn.execute(
+                """
+                UPDATE carrier_alias
+                SET spine_carrier_name=?,
+                    match_score=90.0,
+                    confidence='manual',
+                    review_status='accepted',
+                    match_method='moonshot_industry'
+                WHERE upper(master_company_name)=upper(?)
+                """,
+                (exact, master),
+            )
+            high_n += int(cur.rowcount or 0)
+        med_n = 0
+        if include_medium_as_pending:
+            for master, spine_name in MOONSHOT_INDUSTRY_MEDIUM:
+                exact = spine_map.get(spine_name.upper())
+                if not exact:
+                    out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                    continue
+                cur = conn.execute(
+                    """
+                    UPDATE carrier_alias
+                    SET spine_carrier_name=?,
+                        match_score=75.0,
+                        confidence='manual',
+                        review_status='pending',
+                        match_method='moonshot_industry_medium'
+                    WHERE upper(master_company_name)=upper(?)
+                    """,
+                    (exact, master),
+                )
+                med_n += int(cur.rowcount or 0)
+        conn.commit()
+        out.update(
+            {
+                "ok": high_n == len(MOONSHOT_INDUSTRY_HIGH),
+                "highAccepted": high_n,
+                "mediumPending": med_n,
+                "dbPath": str(target),
+            }
+        )
+        return out
+    finally:
+        conn.close()
 
 
 def accept_pending_alias(

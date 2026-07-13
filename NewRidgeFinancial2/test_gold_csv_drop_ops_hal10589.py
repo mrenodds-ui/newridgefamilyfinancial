@@ -42,7 +42,7 @@ def _empty_db(path: Path) -> None:
 class GoldCsvDropOpsHal10589Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10597")
-        self.assertEqual(BUILD_ID, "hal-10603")
+        self.assertEqual(BUILD_ID, "hal-10604")
 
     def test_schema_verify_and_ingest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
