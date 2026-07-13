@@ -1,11 +1,9 @@
-"""HAL-10594 / sql-null-honesty — NULL-preserving ledger aggregates + fingerprint.
+"""HAL-10595 / money-bridge-bijection — exact cents at API/history boundary.
 
-Builds on HAL-10593: Print Preview visual totals vs SoftDent code-2 ledger sums,
-carrier breakdown, period clamp, variance history.
-HAL-10594: all-null amount rows must not become $0; record_fingerprint is
-inputs-only with unique-index fail-fast.
-Flag only — never invent gold payment lines, never SoftDent write-back.
-empty != $0 (HAL-10591 honesty gate).
+Builds on HAL-10594: NULL-preserving ledger aggregates + inputs-only fingerprint.
+HAL-10595: dual-write integer cents alongside legacy REAL floats; bijective
+money_to_api_bijective for audit consumers. Flag only — never invent gold lines,
+never SoftDent write-back. empty != $0 (HAL-10591 honesty gate).
 """
 
 from __future__ import annotations
@@ -14,6 +12,7 @@ import hashlib
 import json
 import re
 import sqlite3
+import warnings
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timezone
@@ -22,7 +21,13 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from money_cents import money_abs, money_sub, money_to_api, to_money
+from money_cents import (
+    money_abs,
+    money_sub,
+    money_to_api,
+    money_to_api_bijective,
+    to_money,
+)
 from softdent_gold_payment_pipeline import audit_gold_payment_pipeline
 from softdent_insco_ada_spine import (
     INS_PAYMENT_CODES,
@@ -39,9 +44,25 @@ from ui_honesty_policy import (
     is_empty_money,
 )
 
-DEF_ID = "HAL-10594"
-PACKAGE_BUILD_ID = "hal-10594"
-PRIOR_DEF_ID = "HAL-10593"
+DEF_ID = "HAL-10595"
+PACKAGE_BUILD_ID = "hal-10595"
+PRIOR_DEF_ID = "HAL-10594"
+
+
+def _api_float(value: Any) -> float | None:
+    """Legacy float bridge without repeating DeprecationWarning per call site."""
+    money = value if isinstance(value, Decimal) else to_money(value)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return money_to_api(money)
+
+
+def _cents(value: Any) -> int | None:
+    return money_to_api_bijective(value, format="cents_int")  # type: ignore[arg-type]
+
+
+def _exact_str(value: Any) -> str | None:
+    return money_to_api_bijective(value, format="string_decimal")  # type: ignore[arg-type]
 
 VARIANCE_THRESHOLD_ABSOLUTE = 5.00
 VARIANCE_THRESHOLD_PERCENT = 5.0
@@ -127,7 +148,12 @@ def ensure_recon_variance_history_schema(conn: sqlite3.Connection) -> None:
             package_build_id TEXT,
             triggers_gold_ingest INTEGER NOT NULL DEFAULT 0,
             record_fingerprint TEXT,
-            money_scale TEXT DEFAULT '0.01'
+            money_scale TEXT DEFAULT '0.01',
+            visual_total_cents INTEGER,
+            ledger_total_cents INTEGER,
+            clamped_ledger_total_cents INTEGER,
+            variance_cents INTEGER,
+            money_cents_exact INTEGER
         )
         """
     )
@@ -147,6 +173,16 @@ def ensure_recon_variance_history_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN money_scale TEXT DEFAULT '0.01'"
         )
+    # HAL-10595: exact integer cents (dual-write; REAL floats retained, deprecated for math)
+    for col in (
+        "visual_total_cents",
+        "ledger_total_cents",
+        "clamped_ledger_total_cents",
+        "variance_cents",
+        "money_cents_exact",
+    ):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN {col} INTEGER")
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{HISTORY_TABLE}_created "
         f"ON {HISTORY_TABLE}(created_at DESC)"
@@ -213,7 +249,10 @@ def sum_ledger_code2_payments(
             out["ok"] = True
             return out
         total_m = to_money(total_raw)
-        out["ledgerTotal"] = money_to_api(total_m)
+        out["ledgerTotal"] = _api_float(total_m)
+        out["ledgerTotalCents"] = _cents(total_m)
+        out["ledgerTotalExact"] = _exact_str(total_m)
+        out["totalCents"] = out["ledgerTotalCents"]
         out["ok"] = True
         out["message"] = (
             f"Ledger code-2 sum {out['ledgerTotal']:,.2f} from {count} row(s) "
@@ -306,16 +345,21 @@ def sum_ledger_code2_by_carrier(
         ranked = sorted(by_carrier.items(), key=lambda kv: kv[1], reverse=True)
         total = to_money(sum((v for _, v in ranked), start=Decimal("0.00"))) or Decimal("0.00")
         top_n = [
-            {"carrierCode": c, "amount": money_to_api(to_money(a))}
+            {
+                "carrierCode": c,
+                "amount": _api_float(to_money(a)),
+                "amountCents": _cents(a),
+            }
             for c, a in ranked[: max(1, int(limit))]
         ]
         out["carrierBreakdown"] = top_n
-        out["breakdownTotal"] = money_to_api(total)
+        out["breakdownTotal"] = _api_float(total)
+        out["breakdownTotalCents"] = _cents(total)
         out["topCarrierCode"] = ranked[0][0]
         out["ok"] = True
         out["message"] = (
-            f"Carrier breakdown n={len(ranked)} total={float(total):,.2f} "
-            f"(Decimal cents; codes only, no PHI)"
+            f"Top carriers by code-2 amount (n={len(top_n)}); "
+            f"breakdownTotal={out['breakdownTotal']}"
         )
         return out
     finally:
@@ -335,6 +379,8 @@ def clamp_ledger_to_audit_period(
     return {
         "ok": bool(clamped.get("ok")),
         "clampedLedgerTotal": clamped.get("ledgerTotal"),
+        "clampedLedgerTotalCents": clamped.get("ledgerTotalCents"),
+        "totalCents": clamped.get("ledgerTotalCents"),
         "clampedPeriodStart": audit_start,
         "clampedPeriodEnd": audit_end,
         "rowCount": clamped.get("rowCount"),
@@ -392,12 +438,17 @@ def classify_variance(
     assert delta is not None and delta_abs is not None
     base = max(abs(v), abs(l), Decimal("0.01"))
     delta_pct = (delta_abs / base) * Decimal("100")
-    result["delta"] = money_to_api(delta)
-    result["deltaAbs"] = money_to_api(delta_abs)
+    result["delta"] = _api_float(delta)
+    result["deltaAbs"] = _api_float(delta_abs)
     result["deltaPct"] = float(delta_pct.quantize(Decimal("0.0001")))
-    result["visualTotal"] = money_to_api(v)
-    result["ledgerTotal"] = money_to_api(l)
+    result["deltaCents"] = _cents(delta)
+    result["visualTotal"] = _api_float(v)
+    result["ledgerTotal"] = _api_float(l)
+    result["visualTotalCents"] = _cents(v)
+    result["ledgerTotalCents"] = _cents(l)
+    result["totalCents"] = result["ledgerTotalCents"]
     result["moneyScale"] = "0.01"
+    result["floatMoneyDeprecated"] = True
 
     abs_thr = to_money(abs_threshold) or Decimal(str(VARIANCE_THRESHOLD_ABSOLUTE))
     pct_thr = Decimal(str(pct_threshold))
@@ -482,14 +533,18 @@ def append_recon_variance_history(
     if carriers and isinstance(carriers[0], dict):
         top = carriers[0].get("carrierCode")
     top = top or recon.get("topCarrierCode")
-    # HAL-10594: record_fingerprint hashes INPUTS only (no clamped/delta/result outputs)
+    # HAL-10594/10595: record_fingerprint hashes INPUTS only (bijective string money)
+    visual_m = to_money(recon.get("visualTotal"))
+    ledger_m = to_money(recon.get("ledgerTotal"))
+    clamped_m = to_money(recon.get("clampedLedgerTotal"))
+    delta_m = to_money(cmp_.get("delta"))
     payload = {
         "periodStart": recon.get("periodStart") or recon.get("requestedPeriodStart"),
         "periodEnd": recon.get("periodEnd") or recon.get("requestedPeriodEnd"),
         "auditPeriodStart": recon.get("auditPeriodStart"),
         "auditPeriodEnd": recon.get("auditPeriodEnd"),
-        "visual": money_to_api(to_money(recon.get("visualTotal"))),
-        "ledger": money_to_api(to_money(recon.get("ledgerTotal"))),
+        "visual": _exact_str(visual_m),
+        "ledger": _exact_str(ledger_m),
         "scopeMismatch": bool(recon.get("scopeMismatch")),
         "build": PACKAGE_BUILD_ID,
         "scale": "0.01",
@@ -497,6 +552,10 @@ def append_recon_variance_history(
     fingerprint = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
     ).hexdigest()
+    visual_cents = _cents(visual_m)
+    ledger_cents = _cents(ledger_m)
+    clamped_cents = _cents(clamped_m)
+    variance_cents = _cents(delta_m)
     conn = sqlite3.connect(str(path), timeout=30.0)
     try:
         conn.execute("PRAGMA busy_timeout=30000")
@@ -520,28 +579,37 @@ def append_recon_variance_history(
                 period_start, period_end, visual_total, ledger_total,
                 clamped_ledger_total, variance_dollars, top_carrier_code,
                 scope_mismatch, result_code, created_at, package_build_id,
-                triggers_gold_ingest, record_fingerprint, money_scale
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, '0.01')
+                triggers_gold_ingest, record_fingerprint, money_scale,
+                visual_total_cents, ledger_total_cents, clamped_ledger_total_cents,
+                variance_cents, money_cents_exact
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, '0.01', ?, ?, ?, ?, ?)
             """,
             (
                 payload["periodStart"],
                 payload["periodEnd"],
-                payload["visual"],
-                payload["ledger"],
-                money_to_api(to_money(recon.get("clampedLedgerTotal"))),
-                cmp_.get("delta"),
+                _api_float(visual_m),
+                _api_float(ledger_m),
+                _api_float(clamped_m),
+                _api_float(delta_m),
                 top,
                 1 if recon.get("scopeMismatch") else 0,
                 recon.get("result") or cmp_.get("result"),
                 _utc_now(),
                 PACKAGE_BUILD_ID,
                 fingerprint,
+                visual_cents,
+                ledger_cents,
+                clamped_cents,
+                variance_cents,
+                ledger_cents,  # money_cents_exact = ledger total cents
             ),
         )
         conn.commit()
         result["ok"] = True
         result["id"] = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
         result["recordFingerprint"] = fingerprint
+        result["totalCents"] = ledger_cents
+        result["ledgerTotalCents"] = ledger_cents
         return result
     except sqlite3.IntegrityError as exc:
         try:
@@ -599,7 +667,9 @@ def list_recon_variance_history(
             f"""
             SELECT period_start, period_end, visual_total, ledger_total,
                    clamped_ledger_total, variance_dollars, top_carrier_code,
-                   scope_mismatch, result_code, created_at, package_build_id
+                   scope_mismatch, result_code, created_at, package_build_id,
+                   visual_total_cents, ledger_total_cents, clamped_ledger_total_cents,
+                   variance_cents, money_cents_exact
             FROM {HISTORY_TABLE}
             WHERE created_at >= ?
             ORDER BY created_at DESC
@@ -611,6 +681,7 @@ def list_recon_variance_history(
             {
                 "periodStart": r[0],
                 "periodEnd": r[1],
+                # Legacy floats (deprecated for exact math)
                 "visualTotal": r[2],
                 "ledgerTotal": r[3],
                 "clampedLedgerTotal": r[4],
@@ -620,10 +691,19 @@ def list_recon_variance_history(
                 "resultCode": r[8],
                 "createdAt": r[9],
                 "packageBuildId": r[10],
+                # HAL-10595 bijective cents
+                "visualTotalCents": r[11],
+                "ledgerTotalCents": r[12],
+                "clampedLedgerTotalCents": r[13],
+                "varianceCents": r[14],
+                "moneyCentsExact": r[15],
+                "totalCents": r[15] if r[15] is not None else r[12],
+                "floatMoneyDeprecated": True,
             }
             for r in rows
         ]
         out["count"] = len(out["rows"])
+        out["floatMoneyDeprecated"] = True
         return out
     finally:
         conn.close()
@@ -778,7 +858,127 @@ def reconcile_visual_vs_ledger(
     out["comparison"] = comparison
     out["thresholdViolated"] = bool(comparison.get("thresholdViolated"))
     out["result"] = comparison.get("result")
+    # HAL-10595: bijective cents alongside deprecated floats
+    out["visualTotalCents"] = _cents(out.get("visualTotal"))
+    out["ledgerTotalCents"] = _cents(out.get("ledgerTotal"))
+    out["clampedLedgerTotalCents"] = _cents(out.get("clampedLedgerTotal"))
+    out["totalCents"] = out["ledgerTotalCents"]
+    out["floatMoneyDeprecated"] = True
     return out
+
+
+def migrate_history_to_exact(
+    *,
+    db_path: Path | None = None,
+    dest: Path | None = None,
+) -> dict[str, Any]:
+    """Backfill *_cents / money_cents_exact from source Decimal — never from REAL.
+
+    Recomputes ledger from sd_account_transactions for stored period bounds.
+    Visual cents from matching Print Preview audits when available.
+    PHI-safe; no SoftDent write-back; no gold invent.
+    """
+    path = Path(db_path) if db_path else resolve_analytics_db()
+    out: dict[str, Any] = {
+        "ok": False,
+        "updated": 0,
+        "skipped": 0,
+        "errors": [],
+        "triggersGoldIngest": False,
+        "packageBuildId": PACKAGE_BUILD_ID,
+        "def": DEF_ID,
+    }
+    if path is None or not Path(path).is_file():
+        out["error"] = "analytics_db_missing"
+        return out
+    conn = sqlite3.connect(str(path), timeout=30.0)
+    try:
+        conn.execute("PRAGMA busy_timeout=30000")
+        ensure_recon_variance_history_schema(conn)
+        rows = conn.execute(
+            f"""
+            SELECT id, period_start, period_end, scope_mismatch,
+                   visual_total_cents, ledger_total_cents
+            FROM {HISTORY_TABLE}
+            ORDER BY id ASC
+            """
+        ).fetchall()
+        audits = list_print_preview_audits(dest=dest, limit=200)
+        audit_rows = [r for r in (audits.get("rows") or []) if isinstance(r, dict)]
+        conn.execute("BEGIN IMMEDIATE")
+        updated = 0
+        skipped = 0
+        for row in rows:
+            rid, p_start, p_end, scope_mm, vis_c, led_c = row
+            if vis_c is not None and led_c is not None:
+                skipped += 1
+                continue
+            if not p_start or not p_end:
+                skipped += 1
+                out["errors"].append(f"id={rid}:missing_period")
+                continue
+            ledger = sum_ledger_code2_payments(
+                period_start=str(p_start), period_end=str(p_end), db_path=path
+            )
+            ledger_cents = ledger.get("ledgerTotalCents")
+            visual_cents = None
+            for ar in reversed(audit_rows):
+                a_start, a_end = parse_date_range(str(ar.get("dateRange") or ""))
+                if a_start == p_start and a_end == p_end:
+                    visual_cents = _cents(ar.get("lastPageAggregateTotal"))
+                    break
+                if a_start and str(a_start)[:7] == str(p_start)[:7] and visual_cents is None:
+                    visual_cents = _cents(ar.get("lastPageAggregateTotal"))
+            clamped_cents = None
+            if int(scope_mm or 0) == 1:
+                # Clamp needs audit bounds; use matching audit if found
+                for ar in reversed(audit_rows):
+                    a_start, a_end = parse_date_range(str(ar.get("dateRange") or ""))
+                    if a_start and a_end:
+                        clamped = clamp_ledger_to_audit_period(
+                            audit_start=a_start, audit_end=a_end, db_path=path
+                        )
+                        clamped_cents = clamped.get("clampedLedgerTotalCents")
+                        break
+            else:
+                clamped_cents = ledger_cents
+            variance_cents = None
+            if visual_cents is not None and ledger_cents is not None:
+                variance_cents = int(visual_cents) - int(ledger_cents)
+            conn.execute(
+                f"""
+                UPDATE {HISTORY_TABLE}
+                SET visual_total_cents = COALESCE(?, visual_total_cents),
+                    ledger_total_cents = COALESCE(?, ledger_total_cents),
+                    clamped_ledger_total_cents = COALESCE(?, clamped_ledger_total_cents),
+                    variance_cents = COALESCE(?, variance_cents),
+                    money_cents_exact = COALESCE(?, money_cents_exact)
+                WHERE id = ?
+                """,
+                (
+                    visual_cents,
+                    ledger_cents,
+                    clamped_cents,
+                    variance_cents,
+                    ledger_cents,
+                    rid,
+                ),
+            )
+            updated += 1
+        conn.commit()
+        out["ok"] = True
+        out["updated"] = updated
+        out["skipped"] = skipped
+        return out
+    except Exception as exc:  # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        out["error"] = f"{type(exc).__name__}:{exc}"
+        return out
+    finally:
+        conn.close()
 
 
 def run_ops_10593_visual_ledger_recon(
@@ -849,27 +1049,33 @@ def visual_ledger_recon_widget() -> dict[str, Any]:
     return {
         "id": "softdent-visual-ledger-recon",
         "type": "status",
-        "label": "Visual×Ledger Variance (HAL-10594)",
+        "label": "Visual×Ledger Variance (HAL-10595)",
         "size": "full",
         "status": status,
         "tone": tone,
         "message": message,
         "hint": (
             "Compares Print Preview Insurance Income to SoftDent code-2 ledger sum; "
-            "shows top carriers and clamped total when period scopes differ. Alert only."
+            "exposes totalCents (exact) alongside deprecated float totals. Alert only."
         ),
         "result": result_code,
         "period": r.get("period"),
         "visualTotal": r.get("visualTotal"),
+        "visualTotalCents": r.get("visualTotalCents"),
         "visualDisplay": r.get("visualDisplay"),
         "visualBadge": r.get("visualBadge"),
         "ledgerTotal": r.get("ledgerTotal"),
+        "ledgerTotalCents": r.get("ledgerTotalCents"),
         "ledgerDisplay": r.get("ledgerDisplay"),
         "clampedLedgerTotal": r.get("clampedLedgerTotal"),
+        "clampedLedgerTotalCents": r.get("clampedLedgerTotalCents"),
         "clampedLedgerDisplay": r.get("clampedLedgerDisplay"),
+        "totalCents": r.get("totalCents"),
+        "floatMoneyDeprecated": True,
         "carrierBreakdown": r.get("carrierBreakdown") or [],
         "topCarrierCode": r.get("topCarrierCode"),
         "delta": cmp_.get("delta"),
+        "deltaCents": cmp_.get("deltaCents"),
         "thresholdViolated": cmp_.get("thresholdViolated"),
         "scopeMismatch": bool(r.get("scopeMismatch")),
         "gapCode": r.get("gapCode"),

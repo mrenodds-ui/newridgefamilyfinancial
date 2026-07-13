@@ -1,4 +1,7 @@
-"""HAL-10594 / sql-null-honesty — NULL-preserving ledger + fingerprint tests."""
+"""HAL-10594 / sql-null-honesty — NULL-preserving ledger + fingerprint tests.
+
+Module BUILD_ID advanced to HAL-10595; 10594 SQL-null behaviors still covered.
+"""
 
 from __future__ import annotations
 
@@ -40,8 +43,8 @@ def _empty_tx_db(db: Path) -> sqlite3.Connection:
 
 class SqlNullHonestyHal10594Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        self.assertEqual(PACKAGE_BUILD_ID, "hal-10594")
-        self.assertEqual(BUILD_ID, "hal-10594")
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
+        self.assertEqual(BUILD_ID, "hal-10595")
         self.assertEqual(BUILD_ID, PACKAGE_BUILD_ID)
 
     def test_ledger_all_null_returns_none(self) -> None:
@@ -139,9 +142,9 @@ class SqlNullHonestyHal10594Tests(unittest.TestCase):
 
     def test_widget_package(self) -> None:
         w = visual_ledger_recon_widget()
-        self.assertEqual(w.get("packageBuildId"), "hal-10594")
-        self.assertEqual(w.get("def"), "HAL-10594")
-        self.assertIn("HAL-10594", str(w.get("label") or ""))
+        self.assertEqual(w.get("packageBuildId"), "hal-10595")
+        self.assertEqual(w.get("def"), "HAL-10595")
+        self.assertIn("HAL-10595", str(w.get("label") or ""))
         self.assertFalse(w.get("triggersGoldIngest"))
 
 

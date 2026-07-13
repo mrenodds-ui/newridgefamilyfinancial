@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10594"
+BUILD_ID = "hal-10595"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -7427,6 +7427,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             except Exception:
                 months = 3
             result = list_recon_variance_history(months=months)
+            # HAL-10595: rows include totalCents / *Cents; float totals deprecated
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

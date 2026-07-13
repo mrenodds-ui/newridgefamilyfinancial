@@ -26,9 +26,9 @@ from softdent_visual_ledger_recon import (
 
 class VisualLedgerReconHal10592Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        # Module advanced to HAL-10594; prior 10592 behaviors still covered below
-        self.assertEqual(PACKAGE_BUILD_ID, "hal-10594")
-        self.assertEqual(BUILD_ID, "hal-10594")
+        # Module advanced to hal-10595; prior 10592 behaviors still covered below
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
+        self.assertEqual(BUILD_ID, "hal-10595")
 
     def test_parse_date_range_month_and_span(self) -> None:
         self.assertEqual(parse_date_range("2026-06"), ("2026-06-01", "2026-06-30"))
@@ -134,7 +134,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
         w = visual_ledger_recon_widget()
         self.assertTrue(w.get("ok"))
         self.assertIn("result", w)
-        self.assertEqual(w.get("packageBuildId"), "hal-10594")
+        self.assertEqual(w.get("packageBuildId"), "hal-10595")
         self.assertFalse(w.get("triggersGoldIngest"))
 
     def test_null_visual_never_treated_as_zero(self) -> None:
@@ -248,7 +248,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
 
     def test_widget_and_reply(self) -> None:
         w = visual_ledger_recon_widget()
-        self.assertEqual(w.get("packageBuildId"), "hal-10594")
+        self.assertEqual(w.get("packageBuildId"), "hal-10595")
         self.assertTrue(w.get("emptyIsNotZero"))
         self.assertFalse(w.get("triggersGoldIngest"))
         text = format_visual_ledger_recon_reply(
@@ -261,7 +261,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
                 "comparison": {"result": "INSUFFICIENT_VISUAL", "delta": None, "thresholdViolated": False},
             }
         )
-        self.assertIn("HAL-10594", text)
+        self.assertIn("HAL-10595", text)
         self.assertIn("empty != $0", text)
 
 

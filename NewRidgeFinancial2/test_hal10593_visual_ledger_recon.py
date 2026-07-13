@@ -65,8 +65,8 @@ def _seed_tx_db(db: Path) -> None:
 
 class VisualLedgerReconHal10593Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        # Module advanced to HAL-10594; prior 10593 behaviors still covered below
-        self.assertEqual(PACKAGE_BUILD_ID, "hal-10594")
+        # Module advanced to hal-10595; prior 10593 behaviors still covered below
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
         self.assertEqual(BUILD_ID, PACKAGE_BUILD_ID)
 
     def test_carrier_breakdown_sums_to_ledger(self) -> None:
@@ -143,11 +143,11 @@ class VisualLedgerReconHal10593Tests(unittest.TestCase):
             row = hist["rows"][0]
             self.assertIn("topCarrierCode", row)
             self.assertNotIn("patient", str(row).lower())
-            self.assertEqual(row.get("packageBuildId"), "hal-10594")
+            self.assertEqual(row.get("packageBuildId"), "hal-10595")
 
     def test_widget_shows_carrier_and_clamp_fields(self) -> None:
         w = visual_ledger_recon_widget()
-        self.assertEqual(w.get("packageBuildId"), "hal-10594")
+        self.assertEqual(w.get("packageBuildId"), "hal-10595")
         self.assertIn("carrierBreakdown", w)
         self.assertIn("clampedLedgerTotal", w)
         self.assertFalse(w.get("triggersGoldIngest"))
