@@ -605,7 +605,7 @@ def era835_status() -> dict[str, Any]:
     return {
         "ok": True,
         "phase": "U1",
-        "buildHint": "hal-10575",
+        "buildHint": "hal-10576",
         "enabled": era835_enabled(),
         "flag": "NR2_ERA835",
         "gapCode": gap.get("gapCode") or GAP_ERA835_PENDING,
@@ -768,11 +768,11 @@ def scan_era_inbox(
 
 
 def era_inbox_status(*, ensure_dirs: bool = True) -> dict[str, Any]:
-    """Read-only ERA inbox status for HAL chips / API (hal-10575)."""
+    """Read-only ERA inbox status for HAL chips / API (hal-10576)."""
     inbox = scan_era_inbox(ensure_dirs=ensure_dirs)
     out: dict[str, Any] = {
         "ok": True,
-        "phase": "hal-10575",
+        "phase": "hal-10576",
         "inbox": inbox,
         "chipStatus": inbox.get("chipStatus"),
         "chipLabel": inbox.get("chipLabel"),
@@ -1195,7 +1195,7 @@ def discover_era_candidates(
 
     return {
         "ok": True,
-        "phase": "hal-10575",
+        "phase": "hal-10576",
         "mode": "discovery",
         "readOnly": True,
         "writeBack": False,

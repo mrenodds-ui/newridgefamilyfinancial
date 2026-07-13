@@ -83,10 +83,12 @@ SYSTEM_STATUS_PREFIXES = (
     "/api/apex/hal/import-watcher-status",
     "/api/apex/hal/import-cron-status",
     "/api/apex/hal/import-dq-status",
-    # hal-10575 — ERA inbox status is telemetry (empty ≠ $0); ingest POST still needs session token.
+    # hal-10576 — ERA inbox status is telemetry (empty ≠ $0); ingest POST still needs session token.
     "/api/apex/hal/era-inbox/status",
     # 10575 — remittance discovery is read-only telemetry (never invents $0).
     "/api/apex/hal/era-inbox/discover",
+    # 10576 — Collections Excel-temp health (read-only; no invent $0).
+    "/api/apex/hal/collections-export/health",
 )
 
 # Backward-compatible alias (tests / callers).
@@ -336,7 +338,7 @@ MUTATION_HEADER = "X-NR2-Session-Token"
 
 
 def era_inbox_mutation_contract(*, mutation_token: str | None = None) -> dict[str, Any]:
-    """hal-10575 — browser CSRF contract for ERA inbox ingest (session token = mutation token).
+    """hal-10576 — browser CSRF contract for ERA inbox ingest (session token = mutation token).
 
     POST /api/apex/hal/era-inbox/ingest requires X-NR2-Session-Token (same as other Apex mutations).
     UI acquires via GET /api/app-info → sessionToken / X-NR2-Refresh-Token.

@@ -579,7 +579,7 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "halChips": chips,
     }
     if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
-        # hal-10575 — browser Refresh Inbox uses apexFetch + X-NR2-Session-Token (CSRF).
+        # hal-10576 — browser Refresh Inbox uses apexFetch + X-NR2-Session-Token (CSRF).
         out["eraInboxIngestUrl"] = "/api/apex/hal/era-inbox/ingest"
         out["eraInboxIngestLabel"] = "Refresh Inbox"
         out["eraInboxStatusUrl"] = "/api/apex/hal/era-inbox/status"

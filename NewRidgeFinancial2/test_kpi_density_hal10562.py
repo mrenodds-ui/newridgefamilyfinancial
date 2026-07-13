@@ -1,4 +1,4 @@
-"""Moonshot KPI density (hal-10575) — page-level smoke."""
+"""Moonshot KPI density (hal-10576) — page-level smoke."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from apex_backend import BUILD_ID, build_apex_widgets
 
 class KpiDensityPageTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10575")
+        self.assertEqual(BUILD_ID, "hal-10576")
 
     def _kpi_tiles(self, widgets: list) -> list:
         return [

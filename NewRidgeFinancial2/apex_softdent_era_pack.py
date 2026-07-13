@@ -213,7 +213,7 @@ def enrich_collections_gap_with_era(
             "proceed with ERA-835 for insurance detail. Do not re-export Register hoping Ins Plan > 0. "
             "ERA aggregate is proposal-only — staff post in SoftDent. Empty ≠ $0; no SoftDent write-back."
         )
-        # Moonshot hal-10575 — attach empty-inbox scaffold status (never invents $)
+        # Moonshot hal-10576 — attach empty-inbox scaffold status (never invents $)
         try:
             from apex_era835_pack import scan_era_inbox
 

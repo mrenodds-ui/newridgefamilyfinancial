@@ -829,7 +829,11 @@ def _excel_sdwin_workbook_open() -> bool:
 
 
 def _save_excel_sdwin_copy(dest: Path) -> Path | None:
-    """SaveCopyAs the SoftDent Excel temp workbook into dest (never invent dollars)."""
+    """SaveCopyAs SoftDent Excel temp workbook into dest (hal-10576 atomic + retry).
+
+    SoftDent often opens ``%TEMP%\\SDWIN*.csv`` in Excel and skips Select File Name.
+    Finalize via NamedTemporaryFile + os.replace (empty ≠ $0; no SoftDent write-back).
+    """
     try:
         import win32com.client
     except ImportError:
@@ -856,14 +860,42 @@ def _save_excel_sdwin_copy(dest: Path) -> Path | None:
     if target is None:
         return None
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # SoftDent temps are often .csv opened in Excel; SaveCopyAs to .xls/.csv
+
+    from softdent_excel_temp import call_with_excel_temp_retry
+    from softdent_practice_exports import atomic_write_excel_export
+
+    def _save_one(candidate: Path) -> Path:
+        def _write(tmp: Path, wb=target) -> None:
+            wb.SaveCopyAs(str(tmp))
+
+        meta = atomic_write_excel_export(
+            candidate,
+            _write,
+            min_bytes=1,
+            event="collections_summary_export_success",
+        )
+        if not candidate.is_file() or int(meta.get("bytes") or 0) < 1:
+            raise OSError(f"atomic SaveCopyAs produced empty file: {candidate}")
+        logger.info(
+            "SoftDent Excel SaveCopyAs ok path=%s bytes=%s temp_cleanup=%s",
+            candidate,
+            meta.get("bytes"),
+            meta.get("temp_cleanup"),
+        )
+        return candidate
+
+    def _save() -> Path:
+        # SoftDent temps are often .csv opened in Excel; prefer dest suffix, fall back to .csv
+        try:
+            return _save_one(dest)
+        except Exception:
+            return _save_one(dest.with_suffix(".csv"))
+
     try:
-        target.SaveCopyAs(str(dest))
-    except Exception:
-        alt = dest.with_suffix(".csv")
-        target.SaveCopyAs(str(alt))
-        return alt if alt.is_file() else None
-    return dest if dest.is_file() else None
+        return call_with_excel_temp_retry(_save)
+    except Exception as exc:
+        logger.warning("SoftDent Excel SaveCopyAs retry exhausted: %s", type(exc).__name__)
+        return None
 
 
 def _complete_output_setup_and_save(
@@ -977,18 +1009,30 @@ def _complete_output_setup_and_save(
             )
 
     canonical = dest_root / canonical_name
-    shutil.copy2(produced, canonical)
+    try:
+        from softdent_excel_temp import copy_file_with_retry
+
+        copy_file_with_retry(produced, canonical)
+    except Exception:
+        shutil.copy2(produced, canonical)
     for extra in also_copy_as or []:
         try:
-            shutil.copy2(produced, dest_root / extra)
+            from softdent_excel_temp import copy_file_with_retry
+
+            copy_file_with_retry(produced, dest_root / extra)
         except OSError as exc:
             logger.warning("SoftDent extra copy %s failed: %s", extra, type(exc).__name__)
     if MIRROR_ROOT.is_dir():
         try:
-            shutil.copy2(produced, MIRROR_ROOT / canonical.name)
-            shutil.copy2(produced, MIRROR_ROOT / produced.name)
+            from softdent_excel_temp import copy_file_with_retry
+
+            copy_file_with_retry(produced, MIRROR_ROOT / canonical.name)
+            copy_file_with_retry(produced, MIRROR_ROOT / produced.name)
             for extra in also_copy_as or []:
-                shutil.copy2(produced, MIRROR_ROOT / extra)
+                try:
+                    copy_file_with_retry(produced, MIRROR_ROOT / extra)
+                except OSError:
+                    shutil.copy2(produced, MIRROR_ROOT / extra)
         except OSError as exc:
             logger.warning("SoftDent export mirror copy failed: %s", type(exc).__name__)
     return canonical

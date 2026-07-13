@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10575",
-  "BUILD_ID": "hal-10575",
-  "assetVersion": "hal-10575",
-  "builtAt": "2026-07-13T00:20:00.000Z",
-  "notes": "hal-10575: ERA remittance discovery scanner — read-only SoftDent/export walk; empty ≠ $0.",
+  "schemaVersion": "hal-10576",
+  "BUILD_ID": "hal-10576",
+  "assetVersion": "hal-10576",
+  "builtAt": "2026-07-13T00:25:00.000Z",
+  "notes": "hal-10576: Collections Summary Excel-temp atomic finalize + lock retry + health endpoint; empty != $0.",
   "staffRenderMode": "apex"
 }

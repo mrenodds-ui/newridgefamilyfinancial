@@ -713,8 +713,42 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
 
     # DEF-001 — empty revenue-composition / collections ≠ $0 (local, no LLM)
     # Also: Register Ins Plan $0 → ERA-835 honesty (hal-10571)
-    # Also: Refresh Inbox / ERA inbox ingest guidance (hal-10575)
-    # Also: remittance discovery scan (hal-10575)
+    # Also: Refresh Inbox / ERA inbox ingest guidance (hal-10576)
+    # Also: remittance discovery scan (hal-10576)
+    # Also: Collections Excel-temp health (hal-10576)
+    if re.search(
+        r"\b("
+        r"collections?\s+export\s+(health|ready|status)|"
+        r"excel[- ]?temp|"
+        r"temp_file_locked|"
+        r"(sdwin|excel).{0,20}(lock|locked|sharing)"
+        r")\b",
+        q,
+    ):
+        try:
+            from softdent_excel_temp import collections_export_health
+
+            health = collections_export_health()
+            ready = bool(health.get("collectionsExportReady"))
+            code = health.get("errorCode") or "ok"
+            return {
+                "text": (
+                    f"Collections Excel-temp health: ready={ready} · errorCode=`{code}`.\n"
+                    f"{health.get('hint') or ''}\n"
+                    "Reliability only — empty ≠ $0; do not re-export Register hoping Ins Plan > 0; "
+                    "ERA-835 still required for insurance detail when Ins Plan is $0."
+                ),
+                "intent": "policy:collections-excel-temp",
+            }
+        except Exception:
+            return {
+                "text": (
+                    "Collections Excel-temp uses retry/backoff when SoftDent holds SDWIN* locks. "
+                    "Check GET /api/apex/hal/collections-export/health. Empty ≠ $0."
+                ),
+                "intent": "policy:collections-excel-temp",
+            }
+
     if re.search(
         r"\b("
         r"scan\s+for\s+(era|835|remit)|"

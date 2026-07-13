@@ -1,4 +1,4 @@
-"""Moonshot UI mutation-token wiring for ERA inbox ingest (hal-10575)."""
+"""Moonshot UI mutation-token wiring for ERA inbox ingest (hal-10576)."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class Hal10574MutationTokenEraInboxTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10575")
+        self.assertEqual(BUILD_ID, "hal-10576")
 
     def test_mutation_contract_shape(self) -> None:
         c = era_inbox_mutation_contract()

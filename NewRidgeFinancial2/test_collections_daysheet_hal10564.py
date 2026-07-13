@@ -1,4 +1,4 @@
-"""Moonshot DEF-001 Collections/Daysheet after Phase 5 (hal-10564 → period ingest hal-10575)."""
+"""Moonshot DEF-001 Collections/Daysheet after Phase 5 (hal-10564 → period ingest hal-10576)."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def _bundle_pending() -> dict:
 
 class CollectionsDaysheetHal10564Tests(unittest.TestCase):
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10575")
+        self.assertEqual(BUILD_ID, "hal-10576")
 
     def test_inbox_scan_finds_collections_named_file(self):
         with tempfile.TemporaryDirectory() as tmp:

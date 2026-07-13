@@ -1,4 +1,4 @@
-"""Moonshot ERA remittance discovery scanner (hal-10575)."""
+"""Moonshot ERA remittance discovery scanner (hal-10576)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class EraRemittanceDiscoveryHal10575Tests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10575")
+        self.assertEqual(BUILD_ID, "hal-10576")
 
     def test_discover_path_is_system_telemetry(self) -> None:
         self.assertTrue(system_status_path("/api/apex/hal/era-inbox/discover"))

@@ -4,17 +4,101 @@ from __future__ import annotations
 
 import csv
 import json
+import logging
 import os
 import re
+import shutil
 import sqlite3
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from import_cache_ttl import relevant_period_labels
 from import_loader import softdent_import_dir
 from quickbooks_monthly_sync import resolve_analytics_db
 from softdent_dashboard_period_sync import diagnose_collections_gap
+
+_log = logging.getLogger(__name__)
+
+
+def atomic_write_excel_export(
+    dest: Path | str,
+    write_to_temp: Callable[[Path], None],
+    *,
+    min_bytes: int = 1,
+    event: str = "collections_summary_export_success",
+) -> dict[str, Any]:
+    """Atomic SoftDent Excel-temp finalize (hal-10576).
+
+    Writes via ``NamedTemporaryFile(delete=False)`` in the destination directory,
+    validates non-empty output, then ``os.replace`` into place. Cleans up temps on
+    failure. Never invents dollars; never SoftDent write-back.
+    """
+    target = Path(dest)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    suffix = target.suffix if target.suffix else ".xls"
+    tmp: Path | None = None
+    temp_cleanup = False
+    try:
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{target.stem}.",
+            suffix=suffix + ".tmp",
+            dir=str(target.parent),
+        )
+        os.close(fd)
+        tmp = Path(tmp_name)
+        write_to_temp(tmp)
+        if not tmp.is_file():
+            raise RuntimeError(f"Excel temp write produced no file: {tmp}")
+        size = int(tmp.stat().st_size)
+        if size < int(min_bytes):
+            raise RuntimeError(f"Excel temp export empty/zero-byte ({size}b): {tmp}")
+        os.replace(str(tmp), str(target))
+        tmp = None
+        temp_cleanup = True
+        out = {
+            "ok": True,
+            "event": event,
+            "path": str(target),
+            "bytes": size,
+            "temp_cleanup": True,
+            "writeBack": False,
+            "softDentWriteBack": False,
+        }
+        _log.info("%s path=%s bytes=%s temp_cleanup=%s", event, target, size, True)
+        return out
+    except Exception:
+        if tmp is not None:
+            try:
+                if tmp.is_file():
+                    tmp.unlink()
+                    temp_cleanup = True
+            except OSError:
+                pass
+        _log.warning(
+            "collections_summary_export_failed dest=%s temp_cleanup=%s",
+            target,
+            temp_cleanup,
+        )
+        raise
+
+
+def atomic_copy_export(src: Path | str, dest: Path | str) -> dict[str, Any]:
+    """Copy an existing SoftDent Excel/CSV export into place via atomic temp (hal-10576)."""
+    source = Path(src)
+    if not source.is_file():
+        raise FileNotFoundError(str(source))
+
+    def _write(tmp: Path) -> None:
+        shutil.copy2(source, tmp)
+
+    return atomic_write_excel_export(
+        dest,
+        _write,
+        min_bytes=1,
+        event="collections_summary_export_success",
+    )
 
 
 def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
@@ -1028,8 +1112,8 @@ def _period_from_register_filename(name: str) -> str | None:
     return None
 
 
-def _load_excel_register_rows(path: Path) -> list[list[Any]]:
-    """Load SoftDent Register .xls/.xlsx as row lists (no PHI logging)."""
+def _load_excel_register_rows_once(path: Path) -> list[list[Any]]:
+    """Load SoftDent Register .xls/.xlsx as row lists (single attempt; no PHI logging)."""
     suffix = path.suffix.lower()
     if suffix == ".xls":
         try:
@@ -1051,6 +1135,14 @@ def _load_excel_register_rows(path: Path) -> list[list[Any]]:
         finally:
             book.close()
     raise ValueError(f"unsupported excel suffix: {suffix}")
+
+
+def _load_excel_register_rows(path: Path) -> list[list[Any]]:
+    """Load SoftDent Register Excel with Excel-temp lock retry (hal-10576)."""
+    from softdent_excel_temp import call_with_excel_temp_retry
+
+    target = Path(path)
+    return call_with_excel_temp_retry(lambda: _load_excel_register_rows_once(target))
 
 
 def _summarize_register_rows(
@@ -1439,7 +1531,7 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
 from softdent_odbc_extract import ensure_softdent_odbc_fresh, extract_softdent_odbc, read_extract_status, run_odbc_lane
 
 def stub_era835_ingestion_path() -> dict[str, Any]:
-    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10575).
+    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10576).
 
     Ensures drop-box dirs exist and scans for files. Does not invent dollars or write SoftDent.
     """
@@ -1515,10 +1607,17 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
 
 
 def discover_era_candidates(**kwargs: Any) -> dict[str, Any]:
-    """hal-10575 — thin export wrapper for remittance discovery (read-only)."""
+    """hal-10576 — thin export wrapper for remittance discovery (read-only)."""
     from apex_era835_pack import discover_era_candidates as _discover
 
     return _discover(**kwargs)
+
+
+def collections_export_health(**kwargs: Any) -> dict[str, Any]:
+    """hal-10576 — Excel-temp / Collections export readability health (read-only)."""
+    from softdent_excel_temp import collections_export_health as _health
+
+    return _health(**kwargs)
 
 
 __all__ = [
@@ -1534,6 +1633,10 @@ __all__ = [
     "parse_softdent_register_xls",
     "stub_era835_ingestion_path",
     "discover_era_candidates",
+    "collections_export_health",
+    "atomic_write_excel_export",
+    "atomic_copy_export",
+    "_load_excel_register_rows_once",
 ]
 
 
