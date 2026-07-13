@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10589",
-  "BUILD_ID": "hal-10589",
-  "assetVersion": "hal-10589",
-  "builtAt": "2026-07-13T09:45:00.000Z",
-  "notes": "hal-10589: SoftDent gold CSV drop facilitation + ingest verification checklist; empty != $0.",
+  "schemaVersion": "hal-10590",
+  "BUILD_ID": "hal-10590",
+  "assetVersion": "hal-10590",
+  "builtAt": "2026-07-13T11:30:00.000Z",
+  "notes": "hal-10590: SoftDent Print Preview visual-audit protocol (PHI-safe last-page aggregates); empty != $0; not gold line ingest.",
   "staffRenderMode": "apex",
-  "package": "HAL-10589"
+  "package": "HAL-10590"
 }

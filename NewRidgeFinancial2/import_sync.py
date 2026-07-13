@@ -1139,6 +1139,21 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 )
         except Exception as ops_exc:  # noqa: BLE001
             result["warnings"].append(f"Gold CSV drop OPS skipped: {ops_exc}")
+        try:
+            from softdent_print_preview_audit import run_ops_10590_print_preview_audit
+
+            # Sync: status snapshot only — recording totals is staff/API driven
+            ppa = run_ops_10590_print_preview_audit()
+            result["softdent"]["printPreviewAudit"] = {
+                "ok": bool(ppa.get("ok")),
+                "visualAuditAvailable": ppa.get("visualAuditAvailable"),
+                "visualAuditLastPageTotal": ppa.get("visualAuditLastPageTotal"),
+                "gapCode": ppa.get("gapCode"),
+                "paymentLines": ppa.get("paymentLines"),
+                "triggersGoldIngest": False,
+            }
+        except Exception as ppa_exc:  # noqa: BLE001
+            result["warnings"].append(f"Print Preview audit skipped: {ppa_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):

@@ -819,6 +819,38 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # Print Preview visual audit (HAL-10590)
+    try:
+        from softdent_print_preview_audit import (
+            format_print_preview_audit_reply,
+            list_print_preview_audits,
+            print_preview_audit_playbook,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(print\s+preview\s+audit|visual\s+audit|ops-?10590|"
+            r"record.{0,30}(insurance\s+income|last\s+page)|"
+            r"how.{0,40}record.{0,40}print\s+preview)",
+            raw_l,
+        ):
+            st = list_print_preview_audits()
+            play = print_preview_audit_playbook()
+            text = format_print_preview_audit_reply(st)
+            text += (
+                f" When Print Preview only: {play.get('f10')} → Print Preview → "
+                f"{play.get('pages')}."
+            )
+            return {
+                "text": text,
+                "intent": "policy:print-preview-audit",
+                "gapCode": st.get("gapCode"),
+                "visualAuditLastPageTotal": st.get("visualAuditLastPageTotal"),
+                "playbook": play,
+            }
+    except Exception:
+        pass
+
     # Gold CSV drop OPS (HAL-10589) — prefer before generic gold pipeline for drop asks
     try:
         from softdent_gold_csv_drop_ops import (

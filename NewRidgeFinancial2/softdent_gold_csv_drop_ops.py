@@ -77,6 +77,19 @@ def gold_csv_drop_playbook() -> dict[str, Any]:
             "Operator: Excel is not available for Insurance Income / related reports — "
             "use Print Preview (click Print Preview → Enter → Next pages as needed → last page)."
         ),
+        "whenPrintPreviewOnly": {
+            "title": "When Print Preview is the Only Option",
+            "f10": "F10 r m i i",
+            "steps": [
+                "Reports → Practice Management → Insurance Reports → Insurance Income",
+                "Output Options → Print Preview → Enter (never Printer; Excel unavailable)",
+                "PageDown/Next through pages — page 1 alone is incomplete",
+                "LAST page → read Total Insurance Income (aggregate only)",
+                "Record via Print Preview Visual Audit widget (HAL-10590) — does NOT create gold lines",
+            ],
+            "seeAlso": "softdent_print_preview_audit.py / policy:print-preview-audit",
+            "honesty": "gapCode stays GOLD_CSV_MISSING; paymentLines stays 0; empty != $0",
+        },
     }
 
 

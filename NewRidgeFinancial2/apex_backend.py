@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10589"
+BUILD_ID = "hal-10590"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2325,6 +2325,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         from softdent_gold_csv_drop_ops import gold_csv_drop_ops_widget
 
         widgets.insert(6, gold_csv_drop_ops_widget())
+    except Exception:
+        pass
+    try:
+        from softdent_print_preview_audit import print_preview_audit_widget
+
+        widgets.insert(7, print_preview_audit_widget())
     except Exception:
         pass
     try:
@@ -7273,6 +7279,57 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
             # Default: no GUI from HTTP (operator/desktop owns SoftDent focus)
             result = run_ops_10589_gold_csv_drop(attempt_gui_export=False)
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/print-preview-audit/status")
+    def apex_print_preview_audit_status_api():
+        try:
+            from softdent_print_preview_audit import (
+                format_print_preview_audit_reply,
+                list_print_preview_audits,
+            )
+
+            st = list_print_preview_audits()
+            return json_response_fn(
+                {
+                    "ok": True,
+                    **st,
+                    "reply": format_print_preview_audit_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/print-preview-audit/record")
+    def apex_print_preview_audit_record_api():
+        try:
+            import bottle
+
+            from softdent_print_preview_audit import append_print_preview_audit
+
+            body = bottle.request.json if getattr(bottle.request, "json", None) else {}
+            if not isinstance(body, dict):
+                body = {}
+            result = append_print_preview_audit(body)
+            status = 400 if not result.get("ok") else 200
+            return json_response_fn({**result, "buildId": BUILD_ID}, status=status)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/print-preview-audit/run")
+    def apex_print_preview_audit_run_api():
+        try:
+            import bottle
+
+            from softdent_print_preview_audit import run_ops_10590_print_preview_audit
+
+            body = bottle.request.json if getattr(bottle.request, "json", None) else {}
+            if not isinstance(body, dict):
+                body = {}
+            result = run_ops_10590_print_preview_audit(body or None)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
