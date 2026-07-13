@@ -1170,6 +1170,29 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 )
         except Exception as hon_exc:  # noqa: BLE001
             result["warnings"].append(f"UI honesty audit skipped: {hon_exc}")
+        try:
+            from softdent_visual_ledger_recon import run_ops_10592_visual_ledger_recon
+
+            recon = run_ops_10592_visual_ledger_recon()
+            cmp_ = recon.get("comparison") if isinstance(recon.get("comparison"), dict) else {}
+            result["softdent"]["visualLedgerRecon"] = {
+                "ok": bool(recon.get("ok")),
+                "result": recon.get("result") or cmp_.get("result"),
+                "thresholdViolated": recon.get("thresholdViolated") or cmp_.get("thresholdViolated"),
+                "period": recon.get("period"),
+                "visualTotal": recon.get("visualTotal"),
+                "ledgerTotal": recon.get("ledgerTotal"),
+                "triggersGoldIngest": False,
+                "gapCode": recon.get("gapCode"),
+                "paymentLines": recon.get("paymentLines"),
+            }
+            if cmp_.get("thresholdViolated"):
+                result["warnings"].append(
+                    f"Visual×ledger variance exceeds threshold "
+                    f"(delta={cmp_.get('delta')}) — flag only; empty != $0"
+                )
+        except Exception as recon_exc:  # noqa: BLE001
+            result["warnings"].append(f"Visual×ledger recon skipped: {recon_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):

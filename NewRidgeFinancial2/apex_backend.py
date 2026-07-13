@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10591"
+BUILD_ID = "hal-10592"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2343,6 +2343,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         from ui_honesty_policy import ui_honesty_widget
 
         widgets.insert(8, ui_honesty_widget())
+    except Exception:
+        pass
+    try:
+        from softdent_visual_ledger_recon import visual_ledger_recon_widget
+
+        widgets.insert(9, visual_ledger_recon_widget())
     except Exception:
         pass
     try:
@@ -7362,6 +7368,47 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                     "buildId": BUILD_ID,
                 }
             )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/reconciliation/visual-ledger/status")
+    def apex_visual_ledger_recon_status_api():
+        try:
+            import bottle
+
+            from softdent_visual_ledger_recon import (
+                format_visual_ledger_recon_reply,
+                reconcile_visual_vs_ledger,
+            )
+
+            period = None
+            try:
+                period = bottle.request.query.get("period")  # type: ignore[attr-defined]
+            except Exception:
+                period = None
+            result = reconcile_visual_vs_ledger(period=period or None)
+            return json_response_fn(
+                {
+                    **result,
+                    "reply": format_visual_ledger_recon_reply(result),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/reconciliation/visual-ledger/run")
+    def apex_visual_ledger_recon_run_api():
+        try:
+            import bottle
+
+            from softdent_visual_ledger_recon import run_ops_10592_visual_ledger_recon
+
+            body = bottle.request.json if getattr(bottle.request, "json", None) else {}
+            if not isinstance(body, dict):
+                body = {}
+            result = run_ops_10592_visual_ledger_recon(period=body.get("period"))
+            return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 

@@ -876,6 +876,34 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # Visual×ledger reconciliation (HAL-10592 / HON-002)
+    try:
+        from softdent_visual_ledger_recon import (
+            format_visual_ledger_recon_reply,
+            reconcile_visual_vs_ledger,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(visual\s*(x|×|\-| )?ledger|hon-?002|ops-?10592|hal-?10592|"
+            r"visual\s+ledger\s+recon|"
+            r"visual\s+audit\s+vs\s+ledger|"
+            r"what\s+does\s+visual.{0,40}reconcil)",
+            raw_l,
+        ):
+            result = reconcile_visual_vs_ledger()
+            return {
+                "text": format_visual_ledger_recon_reply(result),
+                "intent": "policy:visual-ledger-recon",
+                "result": result.get("result")
+                or (result.get("comparison") or {}).get("result"),
+                "thresholdViolated": result.get("thresholdViolated")
+                or (result.get("comparison") or {}).get("thresholdViolated"),
+                "gapCode": result.get("gapCode"),
+            }
+    except Exception:
+        pass
+
     # Gold CSV drop OPS (HAL-10589) — prefer before generic gold pipeline for drop asks
     try:
         from softdent_gold_csv_drop_ops import (
