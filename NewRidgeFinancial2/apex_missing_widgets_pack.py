@@ -306,7 +306,10 @@ def build_denial_pareto(bundle: dict[str, Any]) -> dict[str, Any]:
         data=data,
         hint="Denial codes from SoftDent/ERA when present — never invented.",
         collapse_when_empty=status == "empty",
-        extra={"denialCodes": [b["code"] for b in bars]},
+        extra={
+            "denialCodes": [b["code"] for b in bars],
+            **({"gapCode": "ZERO_VOLUME"} if status == "empty" else {}),
+        },
     )
 
 
@@ -450,6 +453,7 @@ def build_preauth_lanes(bundle: dict[str, Any]) -> dict[str, Any]:
         data=data,
         hint="Pre-authorization aging by procedure code — empty without SoftDent pre-auth export.",
         collapse_when_empty=status == "empty",
+        extra={"gapCode": "ZERO_VOLUME"} if status == "empty" else None,
     )
 
 

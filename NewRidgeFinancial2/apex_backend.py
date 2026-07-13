@@ -3306,6 +3306,13 @@ def _documents_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[
 def _library_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
     del reports, bundle
     widgets: list[dict[str, Any]] = []
+    # Moonshot fix-all: seed library index from document queue when storage empty
+    try:
+        from hal_post_pull_setup import seed_document_library
+
+        seed_document_library(force=False)
+    except Exception:
+        pass
     state = _load_local_json("nr2:v2:library") or {}
     docs = state.get("docs") if isinstance(state.get("docs"), list) else []
     detail = state.get("detailById") if isinstance(state.get("detailById"), dict) else {}

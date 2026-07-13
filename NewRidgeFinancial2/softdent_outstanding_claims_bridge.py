@@ -88,6 +88,7 @@ def ensure_sd_claims_bridge_columns(conn: sqlite3.Connection) -> None:
 
 
 def find_account_aging_export(*, roots: list[Path] | None = None) -> Path | None:
+    """Locate SoftDent Account Aging export (not NR2's derived softdent_ar_aging.csv)."""
     search_roots = roots or [
         DEFAULT_EXPORTS,
         DEFAULT_FINANCIAL,
@@ -98,26 +99,48 @@ def find_account_aging_export(*, roots: list[Path] | None = None) -> Path | None
         search_roots.append(softdent_import_dir())
     except Exception:
         pass
-    patterns = (
+    # Exact SoftDent export names first; globs last. Never treat NR2 AR buckets as aging truth.
+    exact_patterns = (
         "account_aging.csv",
         "account_aging.xls",
         "account_aging.xlsx",
         "AGE*.CSV",
         "AGE*.XLS",
         "AGE*.XLSX",
+    )
+    loose_patterns = (
         "*aging*.csv",
         "*Aging*.csv",
     )
-    candidates: list[Path] = []
-    for root in search_roots:
-        if not root or not Path(root).is_dir():
-            continue
-        root_p = Path(root)
-        for pat in patterns:
-            candidates.extend(p for p in root_p.glob(pat) if p.is_file())
+    skip_names = {"softdent_ar_aging.csv", "softdent_ar_aging.jsonl"}
+
+    def _collect(patterns: tuple[str, ...]) -> list[Path]:
+        found: list[Path] = []
+        for root in search_roots:
+            if not root or not Path(root).is_dir():
+                continue
+            root_p = Path(root)
+            for pat in patterns:
+                for p in root_p.glob(pat):
+                    if p.is_file() and p.name.lower() not in skip_names:
+                        found.append(p)
+        return found
+
+    candidates = _collect(exact_patterns)
+    if not candidates:
+        candidates = _collect(loose_patterns)
     if not candidates:
         return None
-    return max(candidates, key=lambda p: p.stat().st_mtime)
+    # Prefer a file that actually parses as SoftDent Account Aging; else newest exact/loose hit.
+    parsed_ok: list[Path] = []
+    for cand in candidates:
+        try:
+            if parse_account_aging_export(cand).get("ok"):
+                parsed_ok.append(cand)
+        except Exception:
+            continue
+    pool = parsed_ok or candidates
+    return max(pool, key=lambda p: p.stat().st_mtime)
 
 
 def parse_account_aging_export(path: Path | str) -> dict[str, Any]:

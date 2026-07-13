@@ -30,15 +30,31 @@ Applied the **verifiable** MUST/SHOULD pieces from Moonshot’s fix-all consult.
 - Pytest: `test_fix_all_page_inspect_applied` + SHOULD/cache coherence → **passed**  
 - Restart NR2 required to serve new `nr2-build.json` / import path in the running process
 
+## Continue (2026-07-13, post proceed)
+
+| Item | Change |
+|------|--------|
+| NICE honest-empty | `denial-pareto` / `preauth-aging-lanes` / `payer-change-alerts` → `gapCode=ZERO_VOLUME` when empty |
+| Library seed | `_library_widgets` calls real `hal_post_pull_setup.seed_document_library` (no invented indexer) — live library now **active** |
+| Aging finder bug | `find_account_aging_export` skipped derived `softdent_ar_aging.csv`; prefers real SoftDent `account_aging.csv` that parses — bridge now `CLAIMS_AR_RECONCILE_MISMATCH` (honest SoftDent ins $0 vs claims) not false `AGING_EXPORT_MISSING` |
+
+### Live re-inspect after continue
+
+- schema/asset `hal-10608` · readiness **fresh** · A/R gaps **[]**
+- **142 active / 22 faulty / 13 honest** (0 crashed)
+- Library: active (seeded)
+- SoftDent outstanding-claims bridge: honest reconcile mismatch (not missing export)
+
 ## Explicitly not done (still OPS / honest-empty)
 
 | Issue | Why |
 |-------|-----|
 | Gold CSV (`GOLD_CSV_MISSING`) | Carestream ticket / real SoftDent line export — do not invent |
 | ERA 835 | Clearinghouse enrollment + file drop |
-| Denial/preauth/payer-change empties | Honest zero-volume until data exists |
-| Library indexer invent | No real `library_indexer.py`; keep `LIBRARY_NOT_INDEXED` until intake indexes docs |
-| Fictional treatment-plan SQL | Real builders already empty-honest without inventing tables |
+| `CLAIMS_AR_RECONCILE_MISMATCH` | SoftDent Account Aging Outstanding Insurance = $0 vs sd_claims billed — flag only |
+| OM patient cards empty | Need `?patient_id=` (or selected patient) — not invent |
+| Financial empties (procedure-profitability, treatment-conversion, cash-flow-bridge) | No invented SoftDent SQL |
+| Denial/preauth/payer ZERO_VOLUME | Honest until denial/preauth/payer-change feeds exist |
 
 ## Acceptance vs consult
 

@@ -13,6 +13,7 @@ from softdent_outstanding_claims_bridge import (
     GAP_PAYER_ATTRIBUTION,
     aggregate_sd_claims_by_carrier,
     build_outstanding_claims_by_carrier_bridge,
+    find_account_aging_export,
     format_outstanding_claims_hal_reply,
     parse_account_aging_export,
     reconcile_claims_to_aging,
@@ -72,6 +73,18 @@ def _seed_claims_db(path: Path, rows: list[tuple]) -> None:
 
 
 class OutstandingClaimsBridgeHal10580Tests(unittest.TestCase):
+    def test_find_aging_skips_derived_ar_buckets_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            derived = root / "softdent_ar_aging.csv"
+            derived.write_text("Bucket,Balance\nCurrent,100\n", encoding="utf-8")
+            real = root / "account_aging.csv"
+            _write_aging_csv(real, ar_total=100.0, ins_total=0.0)
+            # Make derived newer so a naive mtime pick would choose it.
+            derived.touch()
+            hit = find_account_aging_export(roots=[root])
+            self.assertEqual(hit, real)
+
     def test_resolve_account_transactions_db_alias(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Path(tmp) / "softdent_financial_analytics.db"
