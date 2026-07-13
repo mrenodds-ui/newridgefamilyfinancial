@@ -440,11 +440,11 @@
             <div class="apex-hal-chat__chips-wrap">
               <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
             </div>
-            <form class="apex-hal-chat__composer" data-hal-form action="#" method="dialog">
+            <form class="apex-hal-chat__composer" data-hal-form action="javascript:void(0)" method="post">
               <div class="apex-hal-chat__input-sizer" data-input-sizer>
                 <textarea class="apex-hal-chat__input" data-hal-input rows="1" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL" maxlength="2000"></textarea>
               </div>
-              <button type="submit" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
+              <button type="button" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
@@ -5460,14 +5460,23 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       // Deterministic board reply wins over LLM — including replies with no actions.
       if (board && board.handled) {
         let boardResults = null;
-        if (Array.isArray(board.actions) && board.actions.length) {
-          boardResults = await runHalBoardActions(board.actions);
+        let actions = Array.isArray(board.actions) ? board.actions.slice() : [];
+        // Chat box must not leave the HAL page unless the user explicitly asked to navigate.
+        // (Board heuristics like "are imports…" used to force #financial and felt like a refresh.)
+        const wantsNav = /\b(open|go to|navigate|switch to|take me to|show (?:me )?(?:the )?(?:page|financial|softdent|claims|taxes|a\/?r|quickbooks))\b/i.test(
+          q
+        );
+        if (!wantsNav) {
+          actions = actions.filter((a) => !(a && a.type === "navigate"));
+        }
+        if (actions.length) {
+          boardResults = await runHalBoardActions(actions);
         }
         const reply = String(board.reply || "Board updated from imports.");
         if (pending) {
           finalizeHalPending(pending, reply);
         } else appendHalMessage(logEl, "hal", reply);
-        if (boardResults) appendHalReceipt(logEl, board.actions, boardResults);
+        if (boardResults) appendHalReceipt(logEl, actions, boardResults);
         if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
           window.ApexHalBrain.setState("reply");
         }
@@ -5747,19 +5756,25 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         ev.stopPropagation();
         submitAsk();
       });
+      const sendBtn = panel.querySelector("[data-hal-send]");
+      if (sendBtn) {
+        sendBtn.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          submitAsk();
+        });
+      }
       // Enter sends; Shift+Enter inserts a newline; Ctrl/Cmd+Enter also sends
       input.addEventListener("keydown", (ev) => {
         if (ev.key !== "Enter" || ev.isComposing) return;
         if (ev.metaKey || ev.ctrlKey) {
           ev.preventDefault();
-          if (form.requestSubmit) form.requestSubmit();
-          else submitAsk();
+          submitAsk();
           return;
         }
         if (ev.shiftKey) return;
         ev.preventDefault();
-        if (form.requestSubmit) form.requestSubmit();
-        else submitAsk();
+        submitAsk();
       });
     }
   }
@@ -6136,8 +6151,6 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         throw err;
       }
       const payload = await res.json();
-      applyWidgetPayload(payload, { fromCache: false });
-      // Moonshot warming coherence pack: 429 backoff + buildId skew detection
       if (payload && payload.warming) {
         // Moonshot import-cache KPIs SHOULD: progress + Retry-After-aware backoff
         const fillPct = Number(payload.fillProgress || 0);
@@ -6166,38 +6179,43 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           return; // Stop processing stale payload
         }
 
+        // If we already have a live mosaic (esp. HAL chat), do not remount a warming stub —
+        // that wiped the composer and looked like a full page refresh on every Ask.
+        const hasLiveMosaic =
+          widgets.size > 0 &&
+          !Array.from(widgets.keys()).every((id) => String(id) === "warming-bridge");
+        if (hasLiveMosaic || paintedFromCache) {
+          // Keep current DOM; only schedule another silent poll.
+        } else if (!silent) {
+          applyWidgetPayload(payload, { fromCache: false });
+        }
+
         warmingPollStreak += 1;
 
         // Moonshot: base on server retryAfter (default 1s), 1→2→4… capped at 8s
         const baseSec = Math.max(1, Number(payload.retryAfter) || 1);
         const backoffMs = Math.min(baseSec * 1000 * Math.pow(2, warmingPollStreak - 1), 8000);
 
+        // Never hard-reload on warming streak — that refreshed the whole app mid-HAL chat.
+        // Cap the streak counter so backoff stays at 8s instead of growing forever.
         if (warmingPollStreak >= WARMING_POLL_MAX) {
-          warmingPollStreak = 0;
-          // Hard reset: clear IDB and reload to clear potential version skew
-          try {
-            if (idb && idb.clearWidgets) {
-              await idb.clearWidgets(currentPage, currentSub, currentQuery);
-            }
-          } catch (e) {
-            console.error("[NR2] IDB clear failed", e);
-          }
-          window.location.reload();
-        } else {
-          // Schedule next poll with backoff instead of immediate tight loop
-          setTimeout(() => {
-            loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }).catch(
-              (err) => {
-                if (err && err.status === 429) {
-                  console.warn("[NR2] Widget 429; backoff active");
-                }
-              }
-            );
-          }, backoffMs);
+          warmingPollStreak = WARMING_POLL_MAX;
+          console.warn("[NR2] Still warming after max polls; continuing soft retry (no reload)");
         }
+        setTimeout(() => {
+          loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }).catch(
+            (err) => {
+              if (err && err.status === 429) {
+                console.warn("[NR2] Widget 429; backoff active");
+              }
+            }
+          );
+        }, backoffMs);
+        return;
       } else {
         // Reset streak when warming resolves
         warmingPollStreak = 0;
+        applyWidgetPayload(payload, { fromCache: false });
         if (payload && !payload.fillFailed) {
           if (idb && idb.cacheWidgets) {
             idb.cacheWidgets(currentPage, currentSub, currentQuery, payload).catch(() => {});

@@ -3953,6 +3953,32 @@ def build_apex_widgets(
     }
     warming_key = f"{cache_key}:warming"
     if not skip_cache and not _fill and stub_on:
+        # Stale-while-revalidate: if TTL expired but we still have a real payload, keep serving
+        # it while a background fill runs. Returning warming:true here remounted HAL chat and
+        # triggered client hard-reloads mid-conversation.
+        stale_hit = _WIDGETS_CACHE.get(cache_key)
+        stale_payload = stale_hit.get("payload") if isinstance(stale_hit, dict) else None
+        if isinstance(stale_payload, dict) and not stale_payload.get("warming"):
+            if warming_key not in _WIDGETS_CACHE:
+
+                def _refill_stale_widgets() -> None:
+                    try:
+                        build_apex_widgets(
+                            pid, sub=sub_key, claim_id=cid, patient_id=pid_patient, _fill=True
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"Widget stale refill failed for {cache_key}: {exc}", file=sys.stderr)
+                    finally:
+                        _WIDGETS_CACHE.pop(warming_key, None)
+
+                _WIDGETS_CACHE[warming_key] = {"at": now}
+                threading.Thread(
+                    target=_refill_stale_widgets, daemon=True, name=f"nr2-widgets-stale-{cache_key}"
+                ).start()
+            out = copy.deepcopy(stale_payload)
+            out["staleWhileRevalidate"] = True
+            return out
+
         # Moonshot import-cache KPIs: per-page progress + retryAfter (empty mosaic ≠ crash)
         progress = _get_fill_progress(pid)
         fill_pct = int(progress.get("pct") or 0)
@@ -5370,8 +5396,10 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             }
         )
         if not any(a.get("type") == "navigate" for a in actions):
-            actions.append({"type": "navigate", "page": "financial"})
-            actions.append({"type": "focus_widget", "widgetId": "financial-command-strip"})
+            # Stay on HAL when staff is chatting — do not yank the mosaic to Financial.
+            if page != "hal":
+                actions.append({"type": "navigate", "page": "financial"})
+                actions.append({"type": "focus_widget", "widgetId": "financial-command-strip"})
         notes.append(str(fresh.get("message") or "Import diagnostics loaded from cache."))
         notes.append(str(fresh.get("hint") or ""))
         handled = True
