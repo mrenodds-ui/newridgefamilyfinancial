@@ -1,10 +1,17 @@
 # Carestream SoftDent Support Ticket — Line-item Insurance Payment CSV
 
-**Status:** READY TO SUBMIT (operator/staff)  
+**Status:** SUBMIT PACK READY — awaiting staff portal submit + case number  
 **Date:** 2026-07-13  
 **Practice:** New Ridge Family Dental  
 **SoftDent:** CS SoftDent Software **v19.1.4**  
-**Product need:** Line-item insurance payment export for analytics ingest (not Print Preview totals)
+**Product need:** Line-item insurance payment export for analytics ingest (not Print Preview totals)  
+**Submit pack:** `C:\SoftDentFinancialExports\CARESTREAM_GOLD_CSV_TICKET_PACK_2026-07-13\`  
+**Support hub:** https://www.carestreamdental.com/en-us/support/  
+**Customer portal:** https://www.carestreamdental.com/en-us/portal/portal-home/  
+**SoftDent phone:** (866) 435-7473  
+**OPS log:** `docs/MOONSHOT_OPS_CARESTREAM_TICKET_SUBMIT_2026-07-13.md`  
+**carestreamCaseNumber:** _(pending staff)_  
+**Note:** `support.carestreamdental.com` does not resolve (DNS NXDOMAIN).
 
 ---
 
