@@ -7232,6 +7232,61 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/apex/insco-ada-pct-variance/status")
+    def apex_insco_ada_pct_variance_status_api():
+        try:
+            from softdent_insco_ada_pct_variance import (
+                format_pct_variance_status_reply,
+                pct_variance_status,
+            )
+
+            st = pct_variance_status()
+            return json_response_fn(
+                {
+                    "ok": bool(st.get("ok")),
+                    **st,
+                    "reply": format_pct_variance_status_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/insco-ada-pct-variance/lookup")
+    def apex_insco_ada_pct_variance_lookup_api():
+        try:
+            import bottle
+
+            from softdent_insco_ada_pct_variance import (
+                format_pct_variance_reply,
+                lookup_pct_variance,
+            )
+
+            payer = str(bottle.request.query.get("payer") or "").strip()
+            ada = str(
+                bottle.request.query.get("ada") or bottle.request.query.get("adaCode") or ""
+            ).strip()
+            include_inferred = str(bottle.request.query.get("includeInferred") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            row = lookup_pct_variance(payer=payer, ada_code=ada, include_inferred=include_inferred)
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "status": "ok" if row else "insufficient_data",
+                    "result": row,
+                    "includeInferred": include_inferred,
+                    "reply": format_pct_variance_reply(row, payer=payer, ada=ada),
+                    "buildId": BUILD_ID,
+                    "honesty": "empty != $0; code 2/51 episode pairing; +/- 1 SD",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
     @app.get("/api/apex/softdent/ledger")
     def apex_softdent_ledger_api():
         """Read-only TXN Excel JSONL ledger — empty≠$0; filters: account_num, patient_name, date_range."""

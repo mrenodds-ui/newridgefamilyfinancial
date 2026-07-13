@@ -1072,6 +1072,21 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 result["warnings"].append(f"InsCo×ADA probabilistic: {warning}")
         except Exception as prob_exc:  # noqa: BLE001
             result["warnings"].append(f"InsCo×ADA probabilistic skipped: {prob_exc}")
+        try:
+            from softdent_insco_ada_pct_variance import run_insco_ada_pct_variance_report
+
+            pct = run_insco_ada_pct_variance_report(years=5)
+            result["softdent"]["inscoAdaPctVariance"] = {
+                "ok": bool(pct.get("ok")),
+                "exactCount": ((pct.get("export") or {}).get("exactCount")),
+                "allCount": ((pct.get("export") or {}).get("allCount")),
+                "episodes": ((pct.get("build") or {}).get("episodes")),
+                "jsonPath": ((pct.get("export") or {}).get("jsonPath")),
+            }
+            for warning in (pct.get("build") or {}).get("warnings") or []:
+                result["warnings"].append(f"InsCo×ADA pct variance: {warning}")
+        except Exception as pct_exc:  # noqa: BLE001
+            result["warnings"].append(f"InsCo×ADA pct variance skipped: {pct_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):

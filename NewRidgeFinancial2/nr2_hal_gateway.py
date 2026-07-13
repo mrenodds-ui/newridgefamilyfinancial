@@ -711,6 +711,61 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # InsCo × ADA pay/write-off % +/- variance (HAL-10584) — 5yr code 2/51 pairing
+    try:
+        from softdent_insco_ada_pct_variance import (
+            format_pct_variance_reply,
+            format_pct_variance_status_reply,
+            lookup_pct_variance,
+            pct_variance_status,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(pay|paid|write[\s-]?off|wo)\s*%|percent(age)?\s*(pay|write)|"
+            r"insco.{0,20}(pct|percent|variance)|"
+            r"(ada|code).{0,30}(pay|write).{0,20}%|"
+            r"5\s*year.{0,40}(insurance|insco|pay|write)",
+            raw_l,
+        ):
+            if re.search(r"\bstatus\b|how many|summary|report", raw_l):
+                return {
+                    "text": format_pct_variance_status_reply(pct_variance_status()),
+                    "intent": "policy:insco-ada-pct-variance",
+                }
+            # crude payer + ADA extract
+            ada_m = re.search(r"\b(d?\d{3,5})\b", raw_l, re.I)
+            ada = (ada_m.group(1) if ada_m else "").upper()
+            payer = ""
+            for name in (
+                "DELTA DENTAL OF KS",
+                "METLIFE DENTAL",
+                "CIGNA DENTAL",
+                "BCBS OF KS",
+                "GUARDIAN",
+                "AETNA",
+            ):
+                if name.lower() in raw_l or name.split()[0].lower() in raw_l:
+                    payer = name
+                    break
+            if payer and ada:
+                include_inf = bool(re.search(r"infer|uncertain|multi", raw_l))
+                row = lookup_pct_variance(
+                    payer=payer, ada_code=ada, include_inferred=include_inf
+                )
+                return {
+                    "text": format_pct_variance_reply(row, payer=payer, ada=ada),
+                    "intent": "policy:insco-ada-pct-variance",
+                    "tier": (row or {}).get("tier"),
+                    "credibility": (row or {}).get("credibility"),
+                }
+            return {
+                "text": format_pct_variance_status_reply(pct_variance_status()),
+                "intent": "policy:insco-ada-pct-variance",
+            }
+    except Exception:
+        pass
+
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
     # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
     # account transactions → Excel playbook
