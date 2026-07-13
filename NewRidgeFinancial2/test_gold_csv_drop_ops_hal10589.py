@@ -41,8 +41,8 @@ def _empty_db(path: Path) -> None:
 
 class GoldCsvDropOpsHal10589Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        self.assertEqual(PACKAGE_BUILD_ID, "hal-10589")
-        self.assertEqual(BUILD_ID, "hal-10595")
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10597")
+        self.assertEqual(BUILD_ID, "hal-10597")
 
     def test_schema_verify_and_ingest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -88,9 +88,10 @@ class GoldCsvDropOpsHal10589Tests(unittest.TestCase):
         text = format_gold_csv_drop_ops_reply(
             {"post": checklist_post_ingest(db_path=Path("nope.db"))}
         )
-        self.assertIn("HAL-10589", text)
+        self.assertIn("HAL-10597", text)
         w = gold_csv_drop_ops_widget()
-        self.assertEqual(w.get("packageBuildId"), "hal-10589")
+        self.assertEqual(w.get("packageBuildId"), "hal-10597")
+        self.assertFalse(w.get("triggersGoldIngest"))
 
 
 if __name__ == "__main__":

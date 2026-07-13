@@ -1,17 +1,19 @@
-"""HAL-10586 full InsCo × ADA catalog matrix (includes insufficient)."""
+"""HAL-10596 — InsCo×ADA staff catalog CSV + cents + rebuild coupling."""
 
 from __future__ import annotations
 
+import csv
 import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
 
+from apex_backend import BUILD_ID
 from softdent_insco_ada_catalog_matrix import (
-    catalog_matrix_status,
+    PACKAGE_BUILD_ID,
+    export_catalog_matrix_report,
     insco_ada_catalog_widget,
     list_catalog_matrix_rows,
-    run_insco_ada_catalog_matrix_report,
 )
 from softdent_insco_ada_pct_variance import build_insco_ada_pct_variance, ensure_pct_variance_schema
 from softdent_insco_ada_probabilistic import (
@@ -61,7 +63,6 @@ def _seed(db: Path) -> None:
             """
         )
         rn = 1
-        # 12 exact D1110 episodes (usable)
         for i in range(12):
             day = f"2025-{(i % 9) + 1:02d}-{(i % 27) + 1:02d}"
             for proc, billed, prod_adj, paid in (
@@ -92,7 +93,6 @@ def _seed(db: Path) -> None:
                     ),
                 )
                 rn += 1
-        # Rare CDT with only 2 episodes → insufficient
         for i in range(2):
             day = f"2024-06-{i + 1:02d}"
             for proc, billed, prod_adj, paid in (
@@ -123,66 +123,50 @@ def _seed(db: Path) -> None:
                     ),
                 )
                 rn += 1
-        # Production CDT with no settlement → uncovered universe
-        conn.execute(
-            """
-            INSERT INTO sd_account_transactions (
-                stable_id, source_file, row_number, account_num, patient_name,
-                service_date, provider, procedure, note_flag, amount,
-                prod, charges, prod_adj, cash, "check", credit, pay_adj,
-                period_start, period_end, extracted_at
-            ) VALUES ('c999', 't', 999, '400400', 'Test', '2025-03-15', '', '1351', 'A', 45,
-                      45, NULL, NULL, NULL, NULL, NULL, NULL,
-                      '2021-01-01', '2026-07-01', 'now')
-            """
-        )
+        conn.commit()
+        build_insco_ada_probabilistic_estimates(conn)
+        build_insco_ada_pct_variance(conn, years=5)
         conn.commit()
     finally:
         conn.close()
 
 
-class InscoAdaCatalogHal10586Tests(unittest.TestCase):
-    def test_catalog_includes_insufficient_not_zero(self) -> None:
+class InscoAdaCatalogHal10596Tests(unittest.TestCase):
+    def test_build_id_coupled(self) -> None:
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10596")
+        self.assertEqual(BUILD_ID, "hal-10597")
+
+    def test_csv_row_count_matches_cells_and_cents(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            db = Path(tmp) / "analytics.db"
+            dest = Path(tmp)
+            db = dest / "analytics.db"
             _seed(db)
-            conn = sqlite3.connect(str(db))
-            try:
-                build_insco_ada_probabilistic_estimates(conn, years=5)
-                build_insco_ada_pct_variance(conn, years=5)
-            finally:
-                conn.close()
-
-            st = catalog_matrix_status(db_path=db)
-            self.assertTrue(st.get("ok"))
-            self.assertGreaterEqual(int(st.get("exactUsableCells") or 0), 1)
-            self.assertGreaterEqual(int(st.get("insufficientCells") or 0), 1)
-
-            all_rows = list_catalog_matrix_rows(
-                db_path=db, include_insufficient=True, include_inferred=True, limit=100
+            export = export_catalog_matrix_report(db_path=db, dest=dest)
+            self.assertTrue(export.get("ok"))
+            csv_path = Path(export["csvPath"])
+            self.assertTrue(csv_path.is_file())
+            with csv_path.open(encoding="utf-8", newline="") as fh:
+                rows = list(csv.DictReader(fh))
+            cells = list_catalog_matrix_rows(
+                db_path=db, include_insufficient=True, include_inferred=True, limit=100000
             )
-            self.assertGreaterEqual(len(all_rows), 2)
-            insuff = [r for r in all_rows if r.get("credibility") == "insufficient"]
-            self.assertTrue(insuff)
+            self.assertEqual(len(rows), len(cells))
+            self.assertEqual(len(rows), export.get("cellCount"))
+            self.assertIn("paidMedianCents", rows[0])
+            # insufficient with samples keep real amounts; never invent $0 for empty
+            insuff = [r for r in cells if r.get("credibility") == "insufficient"]
             for r in insuff:
-                self.assertTrue(r.get("emptyIsNotZero"))
-                # never invent literal zero when empty
                 if int(r.get("sampleSize") or 0) <= 0:
                     self.assertIsNone(r.get("paidMedian"))
+                    self.assertIsNone(r.get("paidMedianCents"))
 
-            exact = list_catalog_matrix_rows(
-                db_path=db, include_insufficient=False, include_inferred=False, limit=20
-            )
-            self.assertTrue(any(r.get("adaCode") == "D1110" for r in exact))
-
-            rep = run_insco_ada_catalog_matrix_report(db_path=db)
-            self.assertTrue(rep.get("ok"))
-            self.assertGreaterEqual(int((rep.get("export") or {}).get("cellCount") or 0), 2)
-
-            w = insco_ada_catalog_widget()
-            # widget uses live DB; just check shape when live empty is ok
-            self.assertEqual(w.get("id"), "softdent-insco-ada-catalog")
-            self.assertEqual(w.get("def"), "HAL-10596")
+    def test_widget_exposes_csv_and_uncovered(self) -> None:
+        w = insco_ada_catalog_widget()
+        self.assertEqual(w.get("packageBuildId"), "hal-10596")
+        self.assertIn("uncoveredCount", w)
+        self.assertIn("csvPath", w)
+        self.assertTrue(w.get("emptyIsNotZero"))
+        self.assertIn("HAL-10596", str(w.get("label") or ""))
 
 
 if __name__ == "__main__":

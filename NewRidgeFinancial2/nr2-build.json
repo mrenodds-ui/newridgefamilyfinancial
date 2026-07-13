@@ -1,10 +1,9 @@
 {
-  "schemaVersion": "hal-10595",
-  "BUILD_ID": "hal-10595",
-  "assetVersion": "hal-10595",
-  "builtAt": "2026-07-13T12:45:00.000Z",
-  "notes": "hal-10595: money-bridge-bijection — integer cents dual-write + money_to_api_bijective; float totals deprecated; flag only; empty != $0.",
+  "schemaVersion": "hal-10597",
+  "BUILD_ID": "hal-10597",
+  "assetVersion": "hal-10597",
+  "builtAt": "2026-07-13T13:15:00.000Z",
+  "notes": "hal-10597: gold-ops-v19-honest — Print Preview path; visual audit ≠ gold lines; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10595",
-  "consult": "MOONSHOT_WHATS_NEXT_AFTER_HAL10594_2026-07-13.md"
+  "package": "HAL-10597"
 }

@@ -1,21 +1,24 @@
-"""Full InsCo × ADA catalog matrix (HAL-10586).
+"""Full InsCo × ADA catalog matrix (HAL-10596 staff export).
 
 Surfaces **every** spine cell — including honest ``insufficient`` — so
 "every code analyzed" is visible. Joins $ and %+/- tables from the unified
 spine; also lists the 5yr ledger CDT universe.
 
+HAL-10596: full-cell CSV export + stable inbox copy + bijective cents fields.
 Honesty: empty != $0; insufficient cells never become $0.00.
-No SoftDent write-back. Gold path unchanged.
+No SoftDent write-back. Gold path unchanged (still GOLD_CSV_MISSING until CSV).
 """
 
 from __future__ import annotations
 
+import csv
 import json
 import sqlite3
 from datetime import date
 from pathlib import Path
 from typing import Any
 
+from money_cents import money_to_api_bijective
 from softdent_insco_ada_spine import (
     CREDIBILITY,
     DEFAULT_YEARS,
@@ -25,12 +28,57 @@ from softdent_insco_ada_spine import (
 )
 from softdent_treatment_planning import resolve_analytics_db, resolve_exports_dir
 
-DEF_ID = "HAL-10586"
+DEF_ID = "HAL-10596"
+PACKAGE_BUILD_ID = "hal-10596"
+PRIOR_DEF_ID = "HAL-10586"
+
+CSV_COLUMNS = (
+    "insuranceCompany",
+    "adaCode",
+    "tier",
+    "sampleSize",
+    "credibility",
+    "paidMedian",
+    "paidMedianCents",
+    "writeOffMedian",
+    "writeOffMedianCents",
+    "billedAvg",
+    "billedAvgCents",
+    "paidPctMedian",
+    "paidPctStdev",
+    "paidPctMinus",
+    "paidPctPlus",
+    "writeOffPctMedian",
+    "writeOffPctStdev",
+    "periodStart",
+    "periodEnd",
+    "emptyIsNotZero",
+    "floatMoneyDeprecated",
+)
+
+
+def _cents(value: Any) -> int | None:
+    return money_to_api_bijective(value, format="cents_int")  # type: ignore[arg-type]
+
+
+def _enrich_money_cents(row: dict[str, Any]) -> dict[str, Any]:
+    """Attach bijective cents; keep legacy floats (deprecated for exact math)."""
+    out = dict(row)
+    out["paidMedianCents"] = _cents(row.get("paidMedian"))
+    out["writeOffMedianCents"] = _cents(row.get("writeOffMedian"))
+    out["billedAvgCents"] = _cents(row.get("billedAvg"))
+    out["floatMoneyDeprecated"] = True
+    return out
 
 
 def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
     target = Path(db_path) if db_path else resolve_analytics_db()
-    out: dict[str, Any] = {"ok": False, "def": DEF_ID, "dbPath": str(target) if target else None}
+    out: dict[str, Any] = {
+        "ok": False,
+        "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
+        "dbPath": str(target) if target else None,
+    }
     if not target or not target.is_file():
         out["error"] = "analytics_db_missing"
         return out
@@ -94,6 +142,7 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
         conn.close()
 
     universe = list_ledger_cdt_universe(db_path=target)
+    uncovered = uncovered_ledger_cdts(db_path=target)
     out.update(
         {
             "ok": True,
@@ -104,11 +153,14 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
             "distinctAdaInSpine": distinct_ada,
             "carriers": carriers,
             "ledgerCdtUniverse": len(universe),
+            "uncoveredCount": len(uncovered),
             "periodStart": meta.get("period_start"),
             "periodEnd": meta.get("period_end"),
             "spineEpisodes": int(meta.get("spine_episodes") or 0),
             "updatedAt": meta.get("updated_at"),
             "honesty": CREDIBILITY.get("honesty"),
+            "emptyIsNotZero": True,
+            "floatMoneyDeprecated": True,
         }
     )
     return out
@@ -222,45 +274,40 @@ def list_catalog_matrix_rows(
         cred = str(r[4] or "")
         paid = r[5] if r[5] is not None else r[6]
         wo = r[7] if r[7] is not None else r[8]
-        # Honesty: insufficient → null dollars, never coerce to 0
-        if cred == "insufficient":
-            paid_out = None if paid is None else paid  # keep real samples if present
-            # Still show amounts when n>0 but below publish floor — amounts are real history
-            # Only invent-null when sample truly empty
-            if int(r[3] or 0) <= 0:
-                paid_out = None
-                wo_out = None
-            else:
-                paid_out = paid
-                wo_out = wo
+        # Honesty: insufficient with n<=0 → null dollars, never coerce to 0
+        if cred == "insufficient" and int(r[3] or 0) <= 0:
+            paid_out = None
+            wo_out = None
         else:
             paid_out = paid
             wo_out = wo
         out.append(
-            {
-                "insuranceCompany": r[0],
-                "adaCode": r[1],
-                "tier": r[2],
-                "sampleSize": r[3],
-                "credibility": cred,
-                "badge": _badge(cred, str(r[2] or "")),
-                "paidMedian": paid_out,
-                "writeOffMedian": wo_out,
-                "billedAvg": r[9],
-                "periodStart": r[10],
-                "periodEnd": r[11],
-                "updatedAt": r[12],
-                "paidPctMedian": r[13],
-                "paidPctStdev": r[14],
-                "paidPctMinus": r[15],
-                "paidPctPlus": r[16],
-                "writeOffPctMedian": r[17],
-                "writeOffPctStdev": r[18],
-                "writeOffPctMinus": r[19],
-                "writeOffPctPlus": r[20],
-                "source": "ledger_episode_5yr",
-                "emptyIsNotZero": True,
-            }
+            _enrich_money_cents(
+                {
+                    "insuranceCompany": r[0],
+                    "adaCode": r[1],
+                    "tier": r[2],
+                    "sampleSize": r[3],
+                    "credibility": cred,
+                    "badge": _badge(cred, str(r[2] or "")),
+                    "paidMedian": paid_out,
+                    "writeOffMedian": wo_out,
+                    "billedAvg": r[9],
+                    "periodStart": r[10],
+                    "periodEnd": r[11],
+                    "updatedAt": r[12],
+                    "paidPctMedian": r[13],
+                    "paidPctStdev": r[14],
+                    "paidPctMinus": r[15],
+                    "paidPctPlus": r[16],
+                    "writeOffPctMedian": r[17],
+                    "writeOffPctStdev": r[18],
+                    "writeOffPctMinus": r[19],
+                    "writeOffPctPlus": r[20],
+                    "source": "ledger_episode_5yr",
+                    "emptyIsNotZero": True,
+                }
+            )
         )
     return out
 
@@ -296,6 +343,15 @@ def uncovered_ledger_cdts(*, db_path: Path | None = None) -> list[str]:
     return sorted(universe - present)
 
 
+def _write_catalog_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k) for k in CSV_COLUMNS})
+
+
 def export_catalog_matrix_report(
     *,
     db_path: Path | None = None,
@@ -306,13 +362,14 @@ def export_catalog_matrix_report(
     out_dir.mkdir(parents=True, exist_ok=True)
     st = catalog_matrix_status(db_path=target)
     rows = list_catalog_matrix_rows(
-        db_path=target, include_insufficient=True, include_inferred=True, limit=10000
+        db_path=target, include_insufficient=True, include_inferred=True, limit=100000
     )
     universe = list_ledger_cdt_universe(db_path=target)
     uncovered = uncovered_ledger_cdts(db_path=target)
     payload = {
         "ok": bool(st.get("ok")),
         "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
         "checkedAt": _utc_now(),
         "status": st,
         "method": {
@@ -320,6 +377,8 @@ def export_catalog_matrix_report(
             "includesInsufficient": True,
             "emptyIsNotZero": True,
             "joins": "insco_ada_probabilistic_estimates LEFT JOIN insco_ada_pct_variance",
+            "floatMoneyDeprecated": True,
+            "centsFields": True,
         },
         "cellCount": len(rows),
         "ledgerCdtUniverse": universe,
@@ -332,7 +391,9 @@ def export_catalog_matrix_report(
     stamp = date.today().isoformat()
     json_path = out_dir / f"insco_ada_catalog_matrix_{stamp}.json"
     md_path = out_dir / f"insco_ada_catalog_matrix_{stamp}.md"
-    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    csv_path = out_dir / f"insco_ada_catalog_matrix_{stamp}.csv"
+    json_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    _write_catalog_csv(csv_path, rows)
 
     lines = [
         f"# InsCo × ADA Full Catalog Matrix ({stamp})",
@@ -341,22 +402,27 @@ def export_catalog_matrix_report(
         f"insufficient **{st.get('insufficientCells')}** · ledger CDT universe **{len(universe)}** · "
         f"uncovered (no 2/51 yet) **{len(uncovered)}**.",
         "",
-        "Insufficient cells are listed honestly — empty != $0.",
+        f"Staff CSV (all cells): `{csv_path}`",
+        "",
+        "Insufficient cells are listed honestly — empty != $0. "
+        "Float $ columns deprecated; prefer *Cents.",
         "",
         "## Top exact usable+",
         "",
-        "| Carrier | ADA | n | Pay$ | WO$ | Pay% +/- | Cred |",
-        "|---|---|---:|---:|---:|---|---|",
+        "| Carrier | ADA | n | Pay$ | Pay¢ | WO$ | Pay% +/- | Cred |",
+        "|---|---|---:|---:|---:|---:|---|---|",
     ]
-    exact = [r for r in rows if r.get("tier") == "exact" and r.get("credibility") in {"high", "usable"}]
+    exact = [
+        r for r in rows if r.get("tier") == "exact" and r.get("credibility") in {"high", "usable"}
+    ]
     for row in exact[:40]:
         pct = row.get("paidPctMedian")
         sd = row.get("paidPctStdev")
         pct_s = f"{pct} +/-{sd}" if pct is not None else "—"
         lines.append(
             f"| {row['insuranceCompany']} | {row['adaCode']} | {row['sampleSize']} | "
-            f"{row.get('paidMedian')} | {row.get('writeOffMedian')} | {pct_s} | "
-            f"{row['credibility']} |"
+            f"{row.get('paidMedian')} | {row.get('paidMedianCents')} | "
+            f"{row.get('writeOffMedian')} | {pct_s} | {row['credibility']} |"
         )
     lines.extend(
         [
@@ -371,33 +437,46 @@ def export_catalog_matrix_report(
 
     result: dict[str, Any] = {
         "ok": True,
+        "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
         "jsonPath": str(json_path),
         "mdPath": str(md_path),
+        "csvPath": str(csv_path),
         "cellCount": len(rows),
         "exactUsable": st.get("exactUsableCells"),
         "insufficient": st.get("insufficientCells"),
         "ledgerCdtUniverse": len(universe),
         "uncovered": len(uncovered),
+        "uncoveredCount": len(uncovered),
+        "floatMoneyDeprecated": True,
     }
     try:
         from import_loader import softdent_import_dir
 
         inbox = softdent_import_dir()
         inbox.mkdir(parents=True, exist_ok=True)
-        stable = inbox / "softdent_insco_ada_catalog_matrix.json"
-        # Slim inbox copy (no full 2k+ cells blob) — status + samples
+        stable_json = inbox / "softdent_insco_ada_catalog_matrix.json"
+        stable_csv = inbox / "softdent_insco_ada_catalog_matrix.csv"
+        # Slim inbox JSON — status + samples; full cells live in stamped CSV/JSON
         slim = {
             "ok": True,
             "def": DEF_ID,
+            "packageBuildId": PACKAGE_BUILD_ID,
             "status": st,
             "exactSample": exact[:25],
             "insufficientSample": [r for r in rows if r.get("credibility") == "insufficient"][:15],
             "uncoveredLedgerCdts": uncovered[:60],
+            "uncoveredCount": len(uncovered),
             "fullReport": str(json_path),
+            "csvPath": str(csv_path),
+            "inboxCsvPath": str(stable_csv),
             "honesty": st.get("honesty"),
+            "floatMoneyDeprecated": True,
         }
-        stable.write_text(json.dumps(slim, indent=2), encoding="utf-8")
-        result["inboxPath"] = str(stable)
+        stable_json.write_text(json.dumps(slim, indent=2, default=str), encoding="utf-8")
+        _write_catalog_csv(stable_csv, rows)
+        result["inboxPath"] = str(stable_json)
+        result["inboxCsvPath"] = str(stable_csv)
     except Exception as exc:  # noqa: BLE001
         result["inboxError"] = f"{type(exc).__name__}:{exc}"
     return result
@@ -410,6 +489,7 @@ def run_insco_ada_catalog_matrix_report(*, db_path: Path | None = None) -> dict[
     return {
         "ok": bool(st.get("ok")) and bool(export.get("ok")),
         "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
         "status": st,
         "export": export,
     }
@@ -419,14 +499,19 @@ def format_catalog_status_reply(st: dict[str, Any] | None = None) -> str:
     s = st if isinstance(st, dict) else catalog_matrix_status()
     if not s.get("ok"):
         return f"InsCo×ADA catalog unavailable ({s.get('error') or 'unknown'})."
+    export_hint = (
+        "Open staff CSV at SoftDentFinancialExports "
+        "(insco_ada_catalog_matrix_*.csv or inbox/softdent_insco_ada_catalog_matrix.csv)."
+    )
     return (
         f"InsCo×ADA full catalog ({DEF_ID}): cells={s.get('totalCells')} "
         f"(exact usable={s.get('exactUsableCells')}, published={s.get('publishedCells')}, "
         f"insufficient={s.get('insufficientCells')}); "
         f"spine ADAs={s.get('distinctAdaInSpine')}; "
         f"ledger CDT universe={s.get('ledgerCdtUniverse')}; "
+        f"uncovered={s.get('uncoveredCount')}; "
         f"episodes={s.get('spineEpisodes')}. "
-        "Insufficient listed honestly — empty != $0."
+        f"Insufficient listed honestly — empty != $0. {export_hint}"
     )
 
 
@@ -441,32 +526,56 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
         credibility="insufficient",
         limit=5,
     )
-    uncovered = uncovered_ledger_cdts()[:12]
+    uncovered_all = uncovered_ledger_cdts()
+    uncovered = uncovered_all[:12]
     total = int(st.get("totalCells") or 0)
+    # Prefer stable inbox CSV when present
+    csv_path = None
+    inbox_csv = None
+    try:
+        from import_loader import softdent_import_dir
+
+        cand = softdent_import_dir() / "softdent_insco_ada_catalog_matrix.csv"
+        if cand.is_file():
+            inbox_csv = str(cand)
+            csv_path = str(cand)
+    except Exception:
+        pass
+    if csv_path is None:
+        exports = resolve_exports_dir()
+        stamped = sorted(exports.glob("insco_ada_catalog_matrix_*.csv"), reverse=True)
+        if stamped:
+            csv_path = str(stamped[0])
+
     if total <= 0:
         status = "empty"
-        message = "Catalog empty — run InsCo×ADA spine rebuild / Sync."
+        message = "Catalog empty — run scripts/rebuild_insco_ada_catalog.py or Sync."
     else:
         status = "ok"
         message = (
             f"Catalog · cells={total} · exact usable={st.get('exactUsableCells')} · "
-            f"insufficient={st.get('insufficientCells')} · ledger CDTs={st.get('ledgerCdtUniverse')}"
+            f"insufficient={st.get('insufficientCells')} · uncovered={st.get('uncoveredCount')} · "
+            f"ledger CDTs={st.get('ledgerCdtUniverse')}"
         )
     return {
         "id": "softdent-insco-ada-catalog",
         "type": "status",
-        "label": "InsCo × ADA Full Catalog (HAL-10586)",
+        "label": "InsCo × ADA Full Catalog (HAL-10596)",
         "size": "full",
         "status": status,
         "message": message,
         "hint": (
             "All spine cells including insufficient (empty != $0). "
-            "Exact usable+ highlighted; uncovered ledger CDTs listed separately."
+            "Staff CSV has every cell with *Cents; float $ deprecated. "
+            "Gold CSV still separate (not invented from this ledger matrix)."
         ),
         "totalCells": total,
         "exactUsableCells": st.get("exactUsableCells"),
         "insufficientCells": st.get("insufficientCells"),
         "ledgerCdtUniverse": st.get("ledgerCdtUniverse"),
+        "uncoveredCount": st.get("uncoveredCount") or len(uncovered_all),
+        "csvPath": csv_path,
+        "inboxCsvPath": inbox_csv,
         "topExact": exact,
         "insufficientSample": [
             {
@@ -474,6 +583,7 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
                 "adaCode": r["adaCode"],
                 "sampleSize": r["sampleSize"],
                 "credibility": r["credibility"],
+                "paidMedianCents": r.get("paidMedianCents"),
             }
             for r in insuff
         ],
@@ -488,9 +598,17 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
                 "label": "Uncovered ledger CDTs?",
                 "query": "Which ledger CDTs have no InsCo ADA spine settlement?",
             },
+            {
+                "label": "Where is the catalog CSV?",
+                "query": "Where is the InsCo ADA catalog CSV export?",
+            },
         ],
         "honesty": CREDIBILITY.get("honesty"),
+        "emptyIsNotZero": True,
+        "floatMoneyDeprecated": True,
         "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
+        "priorDef": PRIOR_DEF_ID,
     }
 
 

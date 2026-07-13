@@ -26,9 +26,9 @@ from softdent_visual_ledger_recon import (
 
 class VisualLedgerReconHal10592Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        # Module advanced to hal-10595; prior 10592 behaviors still covered below
+        # Module package remains HAL-10595; global BUILD_ID advanced to 10596
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
-        self.assertEqual(BUILD_ID, "hal-10595")
+        self.assertEqual(BUILD_ID, "hal-10597")
 
     def test_parse_date_range_month_and_span(self) -> None:
         self.assertEqual(parse_date_range("2026-06"), ("2026-06-01", "2026-06-30"))

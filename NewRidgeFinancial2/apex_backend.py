@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10595"
+BUILD_ID = "hal-10597"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -7589,6 +7589,10 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             import bottle
 
             from softdent_insco_ada_catalog_matrix import (
+                PACKAGE_BUILD_ID,
+                DEF_ID as CATALOG_DEF,
+                catalog_matrix_status,
+                export_catalog_matrix_report,
                 list_catalog_matrix_rows,
                 list_ledger_cdt_universe,
                 uncovered_ledger_cdts,
@@ -7615,6 +7619,11 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 offset = int(q.get("offset") or 0)
             except (TypeError, ValueError):
                 offset = 0
+            export_now = str(q.get("export") or "").strip().lower() in {"1", "true", "yes", "csv"}
+            export_meta = {}
+            if export_now:
+                export_meta = export_catalog_matrix_report()
+            st = catalog_matrix_status()
             rows = list_catalog_matrix_rows(
                 include_insufficient=include_insufficient,
                 include_inferred=include_inferred,
@@ -7624,16 +7633,32 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 limit=limit,
                 offset=offset,
             )
+            w = None
+            try:
+                from softdent_insco_ada_catalog_matrix import insco_ada_catalog_widget
+
+                w = insco_ada_catalog_widget()
+            except Exception:
+                w = {}
             return json_response_fn(
                 {
                     "ok": True,
-                    "def": "HAL-10586",
+                    "def": CATALOG_DEF,
+                    "packageBuildId": PACKAGE_BUILD_ID,
                     "count": len(rows),
                     "includeInsufficient": include_insufficient,
                     "includeInferred": include_inferred,
                     "cells": rows,
+                    "totalCells": st.get("totalCells"),
+                    "exactUsableCells": st.get("exactUsableCells"),
+                    "insufficientCells": st.get("insufficientCells"),
                     "ledgerCdtUniverseCount": len(list_ledger_cdt_universe()),
                     "uncoveredCount": len(uncovered_ledger_cdts()),
+                    "csvPath": (export_meta.get("csvPath") if export_meta else None)
+                    or (w or {}).get("csvPath"),
+                    "inboxCsvPath": (export_meta.get("inboxCsvPath") if export_meta else None)
+                    or (w or {}).get("inboxCsvPath"),
+                    "floatMoneyDeprecated": True,
                     "honesty": "empty != $0; insufficient cells are not invented zeros",
                     "buildId": BUILD_ID,
                 }

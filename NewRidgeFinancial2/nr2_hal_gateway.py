@@ -779,9 +779,27 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
         if re.search(
             r"\b(catalog|full\s+matrix|matrix\s+catalog|insco.{0,20}catalog|"
             r"every\s+(ada|cdt|code)|insufficient\s+cells|"
-            r"uncovered\s+(ledger\s+)?(cdt|ada))",
+            r"uncovered\s+(ledger\s+)?(cdt|ada)|catalog\s+csv|"
+            r"where\s+is\s+the\s+catalog)",
             raw_l,
         ):
+            if re.search(r"csv|export|where\s+is\s+the\s+catalog", raw_l):
+                from softdent_insco_ada_catalog_matrix import insco_ada_catalog_widget
+
+                w = insco_ada_catalog_widget()
+                return {
+                    "text": (
+                        f"InsCo×ADA catalog CSV ({w.get('def')}): "
+                        f"csvPath={w.get('csvPath') or '—'}; "
+                        f"inboxCsvPath={w.get('inboxCsvPath') or '—'}; "
+                        f"cells={w.get('totalCells')}; exact usable={w.get('exactUsableCells')}; "
+                        f"uncovered={w.get('uncoveredCount')}. "
+                        "Ledger-inferred only — does not invent gold payment lines. empty≠$0."
+                    ),
+                    "intent": "policy:insco-ada-catalog-matrix",
+                    "csvPath": w.get("csvPath"),
+                    "inboxCsvPath": w.get("inboxCsvPath"),
+                }
             if re.search(r"uncovered|no spine|without settlement", raw_l):
                 uncovered = uncovered_ledger_cdts()
                 return {

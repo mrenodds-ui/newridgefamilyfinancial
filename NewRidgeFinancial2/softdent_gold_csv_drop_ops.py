@@ -1,8 +1,12 @@
-"""HAL-10589 / OPS-10589 — SoftDent gold CSV drop facilitation & ingest verification.
+"""HAL-10597 / gold-ops-v19-honest — SoftDent gold path for Print Preview reality.
 
-Moonshot NEXT after HAL-10588: operator Insurance Payment Analysis export + light
-automated verification checklist. Does not invent gold lines. empty != $0.
-No SoftDent write-back.
+SoftDent v19.1.4: no 'Insurance Payment Analysis' menu; Excel unavailable for
+Insurance Income / related reports → Print Preview only (never Printer).
+Visual audit (HAL-10590) records last-page totals but does NOT create gold lines.
+If a real line-item CSV later appears, schema verify + ingest still apply.
+
+Honesty: empty != $0. gapCode stays GOLD_CSV_MISSING / paymentLines=0 until real CSV.
+No SoftDent write-back. Never invent gold from ledger/DaySheet.
 """
 
 from __future__ import annotations
@@ -25,8 +29,9 @@ from softdent_treatment_planning import (
     resolve_exports_dir,
 )
 
-DEF_ID = "HAL-10589"
-PACKAGE_BUILD_ID = "hal-10589"
+DEF_ID = "HAL-10597"
+PACKAGE_BUILD_ID = "hal-10597"
+PRIOR_DEF_ID = "HAL-10589"
 
 # Required semantic fields for gold ingest (aliases in _PAYMENT_COLMAP)
 _REQUIRED_FIELDS = ("insurance_company", "ada_code", "paid_amount")
@@ -39,6 +44,8 @@ def _utc_now() -> str:
 
 def gold_csv_drop_playbook() -> dict[str, Any]:
     return {
+        "package": DEF_ID,
+        "softDentVersion": "v19.1.4",
         "softDentMenuDiscovered": (
             "SoftDent v19.1.4 has NO menu item named 'Insurance Payment Analysis'. "
             "Use Insurance Income / Contractual Plan Analysis / Payment Allocation."
@@ -61,6 +68,7 @@ def gold_csv_drop_playbook() -> dict[str, Any]:
         "params": "Last 24 months (or max), all carriers, include write-offs when offered",
         "format": "Print Preview only — Excel not available on this SoftDent for these reports. NEVER Printer.",
         "outputMode": "print_preview_only",
+        "excelAvailable": False,
         "visualRead": (
             "After Print Preview opens, page through with Next/PageDown — detail often "
             "continues on later pages. Then go to the LAST page for exact totals. "
@@ -70,26 +78,51 @@ def gold_csv_drop_playbook() -> dict[str, Any]:
             "No Excel/CSV from SoftDent for this report on v19.1.4 — Print Preview is visual truth. "
             "sd_insurance_payment_lines stays 0 until a real line-item file exists (empty != $0)."
         ),
+        "visualAuditBridge": {
+            "def": "HAL-10590",
+            "widget": "softdent-print-preview-audit",
+            "records": "lastPageAggregateTotal only (Insurance Income)",
+            "doesNotCreateGoldLines": True,
+            "triggersGoldIngest": False,
+            "then": "Optional visual×ledger recon (HAL-10592+) — flag variance only",
+        },
         "optional": r"procedure_codes_YYYYMMDD.csv from Procedure Code Listing (if Excel offered elsewhere)",
-        "then": "Sync / run_ops_10589_gold_csv_drop — checklist records Print Preview status; empty != $0",
-        "never": "Printer; Esc on SoftDent main; invent gold from ledger/DaySheet/sd_payments; pretend Excel exists",
+        "ifRealCsvAppears": (
+            "Place insurance_payments*.csv under SoftDentFinancialExports → Sync / "
+            "run_ops_10589_gold_csv_drop — schema verify then ingest. Never invent CSV from ledger."
+        ),
+        "then": (
+            "1) Print Preview → page-through → last page  "
+            "2) Record Print Preview Visual Audit (HAL-10590)  "
+            "3) Checklist records status; gapCode stays GOLD_CSV_MISSING until real CSV"
+        ),
+        "never": (
+            "Printer; Esc on SoftDent main; invent gold from ledger/DaySheet/sd_payments; "
+            "pretend Excel exists; treat visual audit as payment lines"
+        ),
+        "launch": "Desktop/Start Menu 'CS SoftDent Software.lnk' (-sus) only — never bare SDWIN.EXE",
+        "signOn": "COMPUTE / computer (or SOFTDENT_SIGNON_* env)",
         "note": (
             "Operator: Excel is not available for Insurance Income / related reports — "
-            "use Print Preview (click Print Preview → Enter → Next pages as needed → last page)."
+            "use Print Preview (click Print Preview → Enter → Next pages as needed → last page). "
+            "Visual audit does NOT populate gold payment lines."
         ),
         "whenPrintPreviewOnly": {
             "title": "When Print Preview is the Only Option",
             "f10": "F10 r m i i",
             "steps": [
+                "Launch SoftDent via CS SoftDent Software.lnk (Sign On COMPUTE)",
                 "Reports → Practice Management → Insurance Reports → Insurance Income",
                 "Output Options → Print Preview → Enter (never Printer; Excel unavailable)",
                 "PageDown/Next through pages — page 1 alone is incomplete",
                 "LAST page → read Total Insurance Income (aggregate only)",
                 "Record via Print Preview Visual Audit widget (HAL-10590) — does NOT create gold lines",
+                "Confirm gold pipeline still shows gapCode=GOLD_CSV_MISSING / paymentLines=0",
             ],
             "seeAlso": "softdent_print_preview_audit.py / policy:print-preview-audit",
-            "honesty": "gapCode stays GOLD_CSV_MISSING; paymentLines stays 0; empty != $0",
+            "honesty": "gapCode stays GOLD_CSV_MISSING; paymentLines stays 0; empty != $0; triggersGoldIngest=false",
         },
+        "honesty": "empty != $0; Print Preview ≠ gold ingest; no SoftDent write-back",
     }
 
 
@@ -618,18 +651,22 @@ def format_gold_csv_drop_ops_reply(result: dict[str, Any] | None = None) -> str:
     r = result if isinstance(result, dict) else run_ops_10589_gold_csv_drop(attempt_gui_export=False)
     post = r.get("post") or checklist_post_ingest()
     audit = post.get("audit") or {}
+    play = gold_csv_drop_playbook()
     return (
-        f"Gold CSV drop OPS ({DEF_ID}): gapCode={audit.get('gapCode')}; "
+        f"Gold OPS ({DEF_ID} / v19 Print Preview honest): gapCode={audit.get('gapCode')}; "
         f"lines={audit.get('paymentLines')}; "
-        f"postPass={post.get('passCount')}/{post.get('stepCount')}. "
-        f"Playbook: SoftDent {gold_csv_drop_playbook()['softDentMenu']} → "
-        f"{gold_csv_drop_playbook()['saveAs']}. empty != $0."
+        f"postPass={post.get('passCount')}/{post.get('stepCount')}; "
+        f"outputMode={play.get('outputMode')}; excelAvailable={play.get('excelAvailable')}. "
+        f"Playbook: SoftDent {play['softDentMenu']} → Print Preview → page-through → "
+        f"HAL-10590 visual audit (does NOT create gold lines). "
+        f"{play['saveAs']} empty != $0."
     )
 
 
 def gold_csv_drop_ops_widget() -> dict[str, Any]:
     post = checklist_post_ingest()
     audit = post.get("audit") or {}
+    play = gold_csv_drop_playbook()
     lines = int(audit.get("paymentLines") or 0)
     gap = str(audit.get("gapCode") or "")
     if gap == "GOLD_OK" and lines > 0:
@@ -637,34 +674,54 @@ def gold_csv_drop_ops_widget() -> dict[str, Any]:
         message = f"Gold CSV ingested · lines={lines}"
     elif gap == "GOLD_FILE_PRESENT_NOT_INGESTED":
         status, tone = "warn", "warn"
-        message = "Gold file on disk — run Sync / OPS-10589 verify"
+        message = "Gold file on disk — run Sync / OPS verify ingest"
     else:
         status, tone = "empty", "warn"
-        message = "Awaiting SoftDent Insurance Payment Analysis CSV drop (empty != $0)"
+        message = (
+            "v19: Print Preview only for Insurance Income — visual audit does not create "
+            "gold lines (gapCode=GOLD_CSV_MISSING; empty != $0)"
+        )
     return {
         "id": "softdent-gold-csv-drop-ops",
         "type": "status",
-        "label": "Gold CSV Drop OPS (HAL-10589)",
+        "label": "Gold OPS v19 Print Preview (HAL-10597)",
         "size": "full",
         "status": status,
         "tone": tone,
         "message": message,
-        "hint": gold_csv_drop_playbook()["softDentMenu"] + " → " + gold_csv_drop_playbook()["saveAs"],
+        "hint": (
+            f"{play['softDentMenu']} → Print Preview (never Printer) → page-through → "
+            f"last page → HAL-10590 visual audit. Does NOT populate payment lines."
+        ),
         "gapCode": gap,
         "paymentLines": lines,
+        "outputMode": play.get("outputMode"),
+        "excelAvailable": False,
+        "triggersGoldIngest": False,
+        "visualAuditBridge": play.get("visualAuditBridge"),
         "checklist": post.get("steps"),
-        "playbook": gold_csv_drop_playbook(),
+        "playbook": play,
         "halChips": [
             {"label": "Gold CSV drop status", "query": "gold csv drop ops status"},
             {
                 "label": "How do I export Insurance Payment Analysis?",
                 "query": "How do I export SoftDent Insurance Payment Analysis CSV?",
             },
+            {
+                "label": "Print Preview visual audit",
+                "query": "SoftDent Print Preview visual audit status",
+            },
         ],
-        "honesty": "empty != $0",
+        "honesty": play.get("honesty") or "empty != $0",
+        "emptyIsNotZero": True,
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
+        "priorDef": PRIOR_DEF_ID,
     }
+
+
+# Back-compat alias
+run_ops_10597_gold_ops_v19 = run_ops_10589_gold_csv_drop
 
 
 if __name__ == "__main__":
