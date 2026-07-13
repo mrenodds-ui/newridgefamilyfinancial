@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10597",
-  "BUILD_ID": "hal-10597",
-  "assetVersion": "hal-10597",
-  "builtAt": "2026-07-13T13:15:00.000Z",
-  "notes": "hal-10597: gold-ops-v19-honest — Print Preview path; visual audit ≠ gold lines; empty != $0.",
+  "schemaVersion": "hal-10598",
+  "BUILD_ID": "hal-10598",
+  "assetVersion": "hal-10598",
+  "builtAt": "2026-07-13T13:50:00.000Z",
+  "notes": "hal-10598: load SoftDent insurance companies CSV into insurance_company_reference; catalog surfaces master vs spine; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10597"
+  "package": "HAL-10598"
 }

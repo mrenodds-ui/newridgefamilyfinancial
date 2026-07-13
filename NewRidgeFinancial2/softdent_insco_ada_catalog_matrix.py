@@ -143,6 +143,13 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
 
     universe = list_ledger_cdt_universe(db_path=target)
     uncovered = uncovered_ledger_cdts(db_path=target)
+    company_ref: dict[str, Any] = {}
+    try:
+        from softdent_insurance_company_reference import insurance_company_reference_status
+
+        company_ref = insurance_company_reference_status(db_path=target)
+    except Exception as exc:  # noqa: BLE001
+        company_ref = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
     out.update(
         {
             "ok": True,
@@ -154,6 +161,14 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
             "carriers": carriers,
             "ledgerCdtUniverse": len(universe),
             "uncoveredCount": len(uncovered),
+            "companyReference": {
+                "total": company_ref.get("total"),
+                "likelyActive": company_ref.get("likelyActive"),
+                "discontinued": company_ref.get("discontinued"),
+                "spineOverlapLikelyActive": company_ref.get("spineOverlapLikelyActive"),
+                "likelyActiveNotInSpine": company_ref.get("likelyActiveNotInSpine"),
+                "ok": company_ref.get("ok"),
+            },
             "periodStart": meta.get("period_start"),
             "periodEnd": meta.get("period_end"),
             "spineEpisodes": int(meta.get("spine_episodes") or 0),
@@ -510,6 +525,8 @@ def format_catalog_status_reply(st: dict[str, Any] | None = None) -> str:
         f"spine ADAs={s.get('distinctAdaInSpine')}; "
         f"ledger CDT universe={s.get('ledgerCdtUniverse')}; "
         f"uncovered={s.get('uncoveredCount')}; "
+        f"company master likely_active="
+        f"{(s.get('companyReference') or {}).get('likelyActive')}; "
         f"episodes={s.get('spineEpisodes')}. "
         f"Insufficient listed honestly — empty != $0. {export_hint}"
     )
@@ -555,6 +572,8 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
         message = (
             f"Catalog · cells={total} · exact usable={st.get('exactUsableCells')} · "
             f"insufficient={st.get('insufficientCells')} · uncovered={st.get('uncoveredCount')} · "
+            f"company master likely_active="
+            f"{(st.get('companyReference') or {}).get('likelyActive')} · "
             f"ledger CDTs={st.get('ledgerCdtUniverse')}"
         )
     return {
@@ -574,6 +593,7 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
         "insufficientCells": st.get("insufficientCells"),
         "ledgerCdtUniverse": st.get("ledgerCdtUniverse"),
         "uncoveredCount": st.get("uncoveredCount") or len(uncovered_all),
+        "companyReference": st.get("companyReference") or {},
         "csvPath": csv_path,
         "inboxCsvPath": inbox_csv,
         "topExact": exact,
