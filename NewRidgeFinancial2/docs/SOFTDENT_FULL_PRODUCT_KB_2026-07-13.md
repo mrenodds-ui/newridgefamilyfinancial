@@ -1,7 +1,7 @@
 # SoftDent Full Product Knowledge (encoded for NR2/HAL)
 
 **Date:** 2026-07-13  
-**Goal:** Learn SoftDent as a **whole product** (not just period-close pulls) and make the **program** answer from that knowledge.
+**Goal:** SoftDent **inside and out** — whole-product Help knowledge in the program, not titles alone.
 
 ---
 
@@ -14,14 +14,16 @@ Source of truth: Carestream **SoftDent Online Help OH_DE1010** decompiled from t
 | Surface | Encoded |
 |---------|---------|
 | Help TOC | **2040** topics (full `.hhc` tree) |
-| Reports menu | **13 categories**, **167** named reports with descriptions (Accounting, PM, Patient, Account, Recall/Appt, Provider, Insurance, Trojan, ADA/Tx/Diag, Rx/Labs, Report Manager, Audit Trail, User-Selected) |
+| Help topic **bodies** | **1874** searchable Help pages in `softdent_product_kb_topics.json` (~3 MB) |
+| howSoftDentWorks | Lifecycle map + **18** core Help articles (posting, reports, ERA, schedule, charting, insurance, …) |
+| Reports menu | **13 categories**, **167** named reports with descriptions |
 | Product modules | Scheduling, Patients/Accounts, Transactions/Codes, Insurance/eClaims/ERA, Accounting, Practice Management analytics, Charting/Tx Planning, Imaging, Rx/Labs, Security/Utilities, Sensei integrations |
-| Roles / workflows | Front Desk, Hygienist, Dental Assistant, Treatment Coordinator, Office Manager (from Help TOC) |
+| Roles / workflows | Front Desk, Hygienist, Dental Assistant, Treatment Coordinator, Office Manager |
 | Keystrokes | F1 Help, F3 Account, F4 Provider, F5 Patient, F8 ADA, F10 menus |
 | Office doctrine | Launch `.lnk -sus`, Sign On COMPUTE, Excel/Preview only, period $ vs ops lane |
-| Electronic Services | Separate `ECSHELP.hlp` topics (claim validation, payer lists) |
+| Electronic Services | `ECSHELP.hlp` topic titles (claim validation, payer lists) — not full WinHelp bodies |
 
-**Honesty:** Full Help topic *prose* for every TOC entry is **referenced** (name + `.htm` / Carestream URL), not copy-pasted verbatim into git. Rebuild anytime from the local CHM extract.
+**Honesty:** HAL searches real Carestream Help **body text**. Long pages are truncated (~3.5k chars; core how-it-works up to ~12k). Full product knowledge ≠ full GUI automation.
 
 ---
 
@@ -29,19 +31,15 @@ Source of truth: Carestream **SoftDent Online Help OH_DE1010** decompiled from t
 
 | Artifact | Role |
 |----------|------|
-| `softdent_product_kb.json` | Machine KB (~676 KB) |
-| `softdent_product_kb.py` | `load_*`, `lookup_report`, `lookup_help_topics`, HAL formatter |
+| `softdent_product_kb.json` | TOC, reports, modules, howSoftDentWorks |
+| `softdent_product_kb_topics.json` | Searchable Help article bodies (inside-out) |
+| `softdent_product_kb.py` | Deep `lookup_topic_bodies` + HAL formatter |
 | `scripts/build_softdent_product_kb.py` | Rebuild from Help extract |
 | HAL local policy | `policy:softdent-product-kb` |
-| LLM inject | `compile_softdent_signon_guidance` when product questions hit |
+| LLM inject | `compile_softdent_signon_guidance` on product questions |
 | API | `GET /api/apex/hal/softdent-kb?q=Account+Aging` |
 
-Automation catalogs stay separate and authoritative for pulls:
-
-- `softdent_gui_menu_map.json`
-- `softdent_master_reports.json`
-
-**Full product ≠ full automation.** NR2 still only GUI-pulls the money/ops subset; the KB teaches what SoftDent *is* and which Help report exists when staff ask.
+Automation catalogs stay separate for pulls: `softdent_gui_menu_map.json`, `softdent_master_reports.json`.
 
 ---
 
@@ -53,11 +51,13 @@ python NewRidgeFinancial2\scripts\build_softdent_product_kb.py
 python -m unittest NewRidgeFinancial2.test_softdent_product_kb -v
 ```
 
+Restart Apex after rebuild so HAL reloads the topic body cache.
+
 ---
 
 ## Ask HAL examples
 
-- “Describe the SoftDent product Help catalog”
-- “What SoftDent Practice Management reports exist?”
-- “SoftDent charting / treatment plan in the full product”
+- “How does SoftDent work inside and out?”
+- “Describe SoftDent Account Aging from Help”
+- “SoftDent charting / treatment plan / ERA”
 - API: `/api/apex/hal/softdent-kb?q=unsubmitted+claims`

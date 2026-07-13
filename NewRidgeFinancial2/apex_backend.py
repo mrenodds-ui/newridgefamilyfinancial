@@ -4616,16 +4616,24 @@ def build_export_playbook() -> dict[str, Any]:
             "At least daily for SoftDent operational pages; weekly (or after books close) for QuickBooks P&L.",
         ],
         "howSoftDent": [
-            "Preferred: Direct-First / ODBC lane (Sensei DataSync or SoftDent ODBC) — HAL Sync reloads the live extract cache "
-            "when the needed SoftDent rows are reachable in the database.",
-            "Doctrine: the only way to get SoftDent data that cannot be reached by the database is SoftDent Sign On "
-            "(SOFTDENT_SIGNON_* env vars) and use the SoftDent UI (Reports / Accounting → export), then place the file "
-            "for NR2 ingest/Sync. No invented dollars, no SoftDent write-back, no fictional vendor CLI.",
-            "SoftDent GUI Sign On: credentials are in environment variables SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD "
+            "TEACHING: Desktop SoftDent report pull — Launch CS SoftDent Software.lnk (-sus) → Sign On "
+            "COMPUTE/computer → Reports → <report> → Output Options → click Excel then Enter "
+            "(or Print Preview then Enter) — NEVER Printer. Setup dates / doctor 999 → OK. "
+            r"Save Excel into C:\SoftDentReportExports (temp SDWIN*.csv → SaveCopyAs). "
+            "Preview: last page for totals. Then NR2 SoftDent → Sync. "
+            "Ask HAL: how do I pull SoftDent reports? (policy softdent-report-pull).",
+            "Phase-1 menus: Accounting→Registers/Period; Practice Management→Collection Reports→Summary; "
+            "Accounting→Trans for a Period (Format 1 for line txs); Accounting→Daysheet; "
+            "Accounting→Account Aging. Automation: "
+            "python scripts\\run_softdent_money_widget_pull.py --reports register,daysheet,aging,collections",
+            "Preferred for ops detail when DB has rows: Direct-First / ODBC lane (Sensei DataSync or SoftDent ODBC).",
+            "Doctrine: SoftDent data that cannot be reached by the database requires SoftDent Sign On "
+            "(SOFTDENT_SIGNON_* env vars) + SoftDent UI report export — no invented dollars, no SoftDent write-back.",
+            "SoftDent GUI Sign On: SOFTDENT_SIGNON_USER / SOFTDENT_SIGNON_PASSWORD "
             r"(aliases SOFTDENT_GUI_USER / SOFTDENT_GUI_PASSWORD; also C:\New folder\.env). "
-            "Ask HAL about SoftDent Sign On, or Refresh SoftDent period (step softdent_signon). HAL never prints the password.",
-            "File path: export SoftDent CSVs/XLS (claims, claim status, A/R aging, procedures, dashboard/daysheet, "
-            "Register for a Period, Collections) into app_data/nr2/document_inbox/softdent/ (or configured SoftDent import dir).",
+            "HAL never prints the password.",
+            "File path: SoftDent Excel/CSV into C:\\SoftDentReportExports then Sync into "
+            "app_data/nr2/document_inbox/softdent/ (or configured SoftDent import dir).",
             "Claims aging shelves need ClaimId, PatientName, ServiceDate, and Age/Days (or DOS so age can be computed).",
             "Then tell HAL: Sync imports and populate the widgets — or click Apex Sync.",
         ],
@@ -4640,6 +4648,8 @@ def build_export_playbook() -> dict[str, Any]:
             "Verify SoftDent and QuickBooks import status",
             "Which widgets are empty on this page?",
             "How do I get SoftDent exports?",
+            "How do I pull SoftDent reports?",
+            "Teach me SoftDent Output Options Excel",
             "How do I get SoftDent data not in the database?",
             "How do I get QuickBooks exports?",
             "How does SoftDent Sign On work?",
@@ -6945,6 +6955,34 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/apex/hal/softdent-report-pull")
+    def apex_hal_softdent_report_pull():
+        """HAL/program SoftDent desktop report-pull teaching playbook."""
+        try:
+            import bottle
+
+            from softdent_report_pull import (
+                format_softdent_report_pull_hal_reply,
+                office_report_catalog,
+                universal_report_pull_steps,
+            )
+
+            q = str(bottle.request.query.get("q") or "").strip()
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "buildId": BUILD_ID,
+                    "steps": universal_report_pull_steps(),
+                    "catalog": office_report_catalog(),
+                    "exportDir": r"C:\SoftDentReportExports",
+                    "reply": format_softdent_report_pull_hal_reply(q),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn(
+                {"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500
+            )
+
     @app.get("/api/apex/hal/softdent-kb")
     def apex_hal_softdent_kb():
         """HAL/program SoftDent full product knowledge base (Help TOC + report catalog)."""
@@ -6956,24 +6994,42 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 load_softdent_product_kb,
                 lookup_help_topics,
                 lookup_report,
+                lookup_topic_bodies,
                 product_kb_summary,
             )
 
             q = str(bottle.request.query.get("q") or "").strip()
             summary = product_kb_summary()
             kb = load_softdent_product_kb()
+            pull_reply = None
+            try:
+                from softdent_report_pull import format_softdent_report_pull_hal_reply
+
+                if q and re.search(r"\b(pull|export|run|output\s+options)\b", q.lower()):
+                    pull_reply = format_softdent_report_pull_hal_reply(q)
+            except Exception:
+                pull_reply = None
             return json_response_fn(
                 {
                     "ok": True,
                     "buildId": BUILD_ID,
                     "summary": summary,
                     "officeDoctrine": kb.get("officeDoctrine"),
+                    "howSoftDentWorks": {
+                        "summary": ((kb.get("howSoftDentWorks") or {}).get("summary")),
+                        "lifecycle": ((kb.get("howSoftDentWorks") or {}).get("lifecycle")),
+                        "coreArticleIds": list(
+                            ((kb.get("howSoftDentWorks") or {}).get("coreHelpArticles") or {}).keys()
+                        ),
+                    },
                     "productModules": kb.get("productModules"),
                     "reportCategoryCounts": summary.get("categoryCounts"),
                     "endOfDayRecommended": (
                         (kb.get("reportCatalog") or {}).get("endOfDayRecommended")
                     ),
+                    "reportPull": pull_reply,
                     "matches": {
+                        "topicBodies": lookup_topic_bodies(q, limit=8) if q else [],
                         "reports": lookup_report(q, limit=12) if q else [],
                         "helpTopics": lookup_help_topics(q, limit=12) if q else [],
                     },

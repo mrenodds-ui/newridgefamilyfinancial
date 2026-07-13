@@ -634,19 +634,47 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "policy:softdent-account-tx-ledger",
             }
 
-    # SoftDent full product KB (Carestream Help TOC + report catalog) — before
+    # Teach SoftDent desktop report pulls (Output Options Excel/Preview) — before
+    # generic product KB so “how do I pull SoftDent reports?” gets the playbook.
+    # Account-tx Excel asks stay on softdent-signon-env (Format 1 Trans playbook).
+    try:
+        from softdent_report_pull import (
+            format_softdent_report_pull_hal_reply,
+            query_touches_softdent_report_pull,
+        )
+        from softdent_signon import _query_touches_softdent_account_tx
+
+        if query_touches_softdent_report_pull(raw) and not _query_touches_softdent_account_tx(raw):
+            return {
+                "text": format_softdent_report_pull_hal_reply(raw),
+                "intent": "policy:softdent-report-pull",
+            }
+    except Exception:
+        pass
+
+    # SoftDent full product KB (Carestream Help TOC + topic bodies) — before
     # InsCo×ADA "catalog" and other SoftDent ops policies that share keywords.
+    # Skip account-tx Excel playbook asks (those stay on softdent-signon-env).
     try:
         from softdent_product_kb import (
             format_softdent_product_kb_hal_reply,
             query_touches_softdent_product,
         )
+        from softdent_signon import _query_touches_softdent_account_tx
 
-        if query_touches_softdent_product(raw):
-            return {
-                "text": format_softdent_product_kb_hal_reply(raw),
-                "intent": "policy:softdent-product-kb",
-            }
+        if query_touches_softdent_product(raw) and not _query_touches_softdent_account_tx(raw):
+            # Credential-only Sign On questions stay on sign-on policy
+            if not re.search(
+                r"\b(sign\s*on|sign-on|password|credential|change login)\b",
+                q,
+            ) or re.search(
+                r"\b(product|help|manual|module|report|charting|era|how\s+(does|do)|inside)\b",
+                q,
+            ):
+                return {
+                    "text": format_softdent_product_kb_hal_reply(raw),
+                    "intent": "policy:softdent-product-kb",
+                }
     except Exception:
         pass
 

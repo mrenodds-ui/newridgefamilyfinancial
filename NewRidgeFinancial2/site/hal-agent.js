@@ -770,6 +770,37 @@ const HalAgent = (function () {
         }
       },
     },
+    softdent_report_pull: {
+      label: "SoftDent report pull playbook",
+      run: async (ctx) => {
+        try {
+          const bridge = window.HalBridge || window.NR2Bridge;
+          const q = encodeURIComponent(String(ctx?.query || ctx?.rawQuery || "how to pull SoftDent reports"));
+          const data =
+            bridge && typeof bridge.loopbackJson === "function"
+              ? await bridge.loopbackJson(`/api/apex/hal/softdent-report-pull?q=${q}`, { method: "GET" })
+              : null;
+          if (!data || data.ok === false) {
+            return {
+              ok: false,
+              summary:
+                "SoftDent report pull: Launch CS SoftDent Software.lnk → Sign On → Reports → report → Output Options → Excel or Print Preview (never Printer) → save to C:\\SoftDentReportExports → Sync.",
+            };
+          }
+          return {
+            ok: true,
+            summary: String(data.reply || "").slice(0, 2800),
+            status: data,
+          };
+        } catch {
+          return {
+            ok: false,
+            summary:
+              "SoftDent report pull: Output Options → Excel or Print Preview only — never Printer. Save to C:\\SoftDentReportExports then Sync.",
+          };
+        }
+      },
+    },
     read_tasks: {
       label: "Read local office tasks",
       run: async (ctx) => {
@@ -3317,6 +3348,14 @@ const HalAgent = (function () {
       /\b(cannot be reached|not in (the )?(database|db|odbc)|only (way|via).{0,20}(ui|gui)|sign on and use (the )?ui)\b/i.test(query)
     ) {
       if (!tools.includes("softdent_signon_status")) tools.push("softdent_signon_status");
+    }
+    if (
+      /\b(how|teach|show).{0,40}(pull|export|run).{0,40}softdent|\bpull\s+softdent|\bsoftdent\s+(report\s+)?(pull|export)|\bsoftdent\s+output\s+options\b/i.test(
+        query
+      ) ||
+      (/\bsoftdent\b/i.test(query) && /\b(pull|export|run).{0,20}(report|register|daysheet|aging|collections)\b/i.test(query))
+    ) {
+      if (!tools.includes("softdent_report_pull")) tools.push("softdent_report_pull");
     }
     if (/\b(shift|tier|employee level|standing consent)\b/i.test(query)) {
       tools.push("read_shift_context");

@@ -321,16 +321,37 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
     if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
         # Still append master list if missing from prompt
         if "softdent_master_reports" in prompt.lower() or "master reports:" in prompt.lower():
+            touches_report_pull_early = False
+            try:
+                from softdent_report_pull import query_touches_softdent_report_pull
+
+                touches_report_pull_early = query_touches_softdent_report_pull(query)
+            except Exception:
+                touches_report_pull_early = False
             if (
                 not _query_touches_softdent_widgets_or_drift(query)
                 and not _query_touches_softdent_account_tx(query)
                 and not touches_product
+                and not touches_report_pull_early
             ):
                 return ""
     touches_signon = _query_touches_softdent_signon_or_ui_data(query)
     touches_widgets = _query_touches_softdent_widgets_or_drift(query)
     touches_account_tx = _query_touches_softdent_account_tx(query)
-    if not touches_signon and not touches_widgets and not touches_account_tx and not touches_product:
+    touches_report_pull = False
+    try:
+        from softdent_report_pull import query_touches_softdent_report_pull
+
+        touches_report_pull = query_touches_softdent_report_pull(query)
+    except Exception:
+        touches_report_pull = False
+    if (
+        not touches_signon
+        and not touches_widgets
+        and not touches_account_tx
+        and not touches_product
+        and not touches_report_pull
+    ):
         return ""
     try:
         from softdent_master_reports import format_master_reports_hal_reply
@@ -342,6 +363,16 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
             "(desktop Excel for period $; sd_* for ops detail)."
         )
     parts: list[str] = []
+    if touches_report_pull:
+        try:
+            from softdent_report_pull import format_softdent_report_pull_hal_reply
+
+            parts.append(format_softdent_report_pull_hal_reply(query))
+        except Exception:
+            parts.append(
+                "SoftDent report pull: Output Options → Excel or Print Preview only "
+                r"(never Printer); save to C:\SoftDentReportExports; then Sync."
+            )
     if touches_signon or touches_account_tx:
         if "SOFTDENT_SIGNON_USER" in prompt and not touches_account_tx:
             parts.append("SOFTDENT DATA ACCESS: " + format_softdent_data_access_hal_reply())

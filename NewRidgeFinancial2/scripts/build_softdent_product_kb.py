@@ -19,8 +19,32 @@ from pathlib import Path
 NR2 = Path(__file__).resolve().parents[1]
 DEFAULT_HELP_ROOT = Path(r"C:\SoftDentReportExports\softdent_help_extract")
 OUT_PATH = NR2 / "softdent_product_kb.json"
+TOPICS_OUT_PATH = NR2 / "softdent_product_kb_topics.json"
 HELP_BASE_URL = (
     "https://help.carestreamdental.com/rh/web/server/SoftDent/projects_responsive/OH_DE1010/"
+)
+
+# Core “how SoftDent works” pages always embedded with fuller text
+HOW_IT_WORKS_PAGES = (
+    "AbtPM.htm",
+    "HnRpt.htm",
+    "AcctRp.htm",
+    "HnPMR.htm",
+    "KystrkSht.htm",
+    "Daily_Reports__End_of_Day.htm",
+    "AccesERA.htm",
+    "HnPstTrn.htm",
+    "HnTrPln.htm",
+    "HnOpScd.htm",
+    "HnChtImg.htm",
+    "HnInsCo.htm",
+    "HnInsPlnInf.htm",
+    "InsRpt.htm",
+    "ActAgeRp.htm",
+    "RegstrRpt.htm",
+    "Daysheet.htm",
+    "Using_Online_Help.htm",
+    "Tutorial.htm",
 )
 
 REPORT_CATEGORY_PAGES = {
@@ -238,6 +262,87 @@ def parse_keystrokes(page: Path | None) -> dict:
     return keys
 
 
+def extract_title(raw: str, fallback: str) -> str:
+    m = re.search(r"(?is)<title[^>]*>(.*?)</title>", raw)
+    if m:
+        t = _strip_tags(m.group(1))
+        if t:
+            return t
+    return fallback
+
+
+def ingest_help_topic_bodies(
+    help_root: Path,
+    *,
+    max_chars: int = 3500,
+    how_it_works_max_chars: int = 12000,
+) -> tuple[list[dict], dict[str, dict]]:
+    """Strip every SoftDent Help .htm into searchable topic bodies."""
+    topics: list[dict] = []
+    how_it_works: dict[str, dict] = {}
+    how_set = {n.lower() for n in HOW_IT_WORKS_PAGES}
+    for htm in sorted(help_root.glob("*.htm")):
+        # Skip obvious non-topic assets mistakenly named .htm
+        if htm.stem.lower().startswith("+") or "button" in htm.stem.lower():
+            continue
+        try:
+            raw = htm.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        body = _strip_tags(raw)
+        if len(body) < 60:
+            continue
+        title = extract_title(raw, htm.stem.replace("_", " "))
+        # Drop “SoftDent Help” noise prefixes
+        title = re.sub(r"(?i)^softDent help\s*[|>]\s*", "", title).strip() or title
+        is_how = htm.name.lower() in how_set
+        cap = how_it_works_max_chars if is_how else max_chars
+        entry = {
+            "id": htm.stem,
+            "file": htm.name,
+            "title": title,
+            "body": body[:cap],
+            "helpUrl": HELP_BASE_URL + htm.name,
+            "chars": len(body),
+            "truncated": len(body) > cap,
+        }
+        topics.append(entry)
+        if is_how:
+            how_it_works[htm.stem] = {
+                "title": title,
+                "file": htm.name,
+                "helpUrl": entry["helpUrl"],
+                "body": body[:how_it_works_max_chars],
+                "truncated": len(body) > how_it_works_max_chars,
+            }
+    return topics, how_it_works
+
+
+def build_how_softdent_works(how_pages: dict[str, dict], doctrine: dict) -> dict:
+    """Operational map HAL uses to explain SoftDent end-to-end."""
+    return {
+        "summary": (
+            "SoftDent is Carestream/Sensei on-premise dental practice management (Win32). "
+            "Staff work in Account/Patient/Provider lists, post transactions, schedule operatories, "
+            "manage insurance plans/claims/ERA, chart/treatment-plan, and run 200+ reports via "
+            "Reports → Output Options (Excel or Print Preview — never Printer at this office)."
+        ),
+        "lifecycle": [
+            "Launch CS SoftDent Software.lnk (-sus) → Sign On",
+            "Daily scheduling / check-in (operatory schedule, patients F5, accounts F3)",
+            "Post production & payments (Handling Transactions)",
+            "Insurance: plans/companies, claim batch, eClaims, ERA remits",
+            "End of day: Daysheet + recommended daily reports",
+            "Period close money: Register / Aging / Collections / Trans Excel → NR2 sync",
+            "Practice analytics: Practice Management report family",
+            "Clinical: charting, treatment plans, imaging launcher",
+            "Admin: audit trail, backup, year-end, CDT updates",
+        ],
+        "officeDoctrine": doctrine,
+        "coreHelpArticles": how_pages,
+    }
+
+
 def load_nr2_automation(nr2: Path) -> dict:
     gui = {}
     master = {}
@@ -430,17 +535,23 @@ def build_kb(help_root: Path, nr2: Path) -> dict:
         "supportPortal": "https://gosensei.com/softdent-support/",
     }
 
+    topic_bodies, how_pages = ingest_help_topic_bodies(help_root)
+    how_softdent_works = build_how_softdent_works(how_pages, office_doctrine)
+
     kb = {
-        "version": 1,
+        "version": 2,
         "built": str(date.today()),
         "title": "SoftDent full product knowledge base (this office + Carestream Help)",
         "honesty": (
-            "Encodes SoftDent Online Help (OH_DE1010 CHM) product map + thirteen report "
-            "categories + NR2 automation catalog. Individual Help topic prose for all "
-            f"{len(toc)} TOC entries is referenced by topic id/path, not fully inlined. "
-            "Never invent SoftDent dollar amounts."
+            "Encodes SoftDent Online Help (OH_DE1010 CHM) inside-out for HAL: full TOC, "
+            "thirteen report categories with descriptions, searchable Help topic bodies "
+            f"({len(topic_bodies)} pages), and howSoftDentWorks lifecycle + core articles. "
+            "Never invent SoftDent dollar amounts. Full product knowledge ≠ full GUI automation."
         ),
         "officeDoctrine": office_doctrine,
+        "howSoftDentWorks": how_softdent_works,
+        "topicBodiesFile": "softdent_product_kb_topics.json",
+        "topicBodyCount": len(topic_bodies),
         "productModules": product_modules,
         "helpToc": {
             "source": "SoftDent_OnlineHelp_OH_DE1010.hhc",
@@ -483,6 +594,7 @@ def build_kb(help_root: Path, nr2: Path) -> dict:
             ],
         },
         "helpUrlBase": HELP_BASE_URL,
+        "_topicBodies": topic_bodies,
     }
     return kb
 
@@ -491,19 +603,33 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--help-root", type=Path, default=DEFAULT_HELP_ROOT)
     ap.add_argument("--out", type=Path, default=OUT_PATH)
+    ap.add_argument("--topics-out", type=Path, default=TOPICS_OUT_PATH)
     args = ap.parse_args()
     if not args.help_root.is_dir():
         print(f"Help extract missing: {args.help_root}", file=sys.stderr)
         print("Decompile SoftDent_OnlineHelp_OH_DE1010.chm first.", file=sys.stderr)
         return 2
     kb = build_kb(args.help_root, NR2)
-    # Slim file size for git? TOC can be large — keep full entries; they're the product map.
+    topic_bodies = list(kb.pop("_topicBodies", []) or [])
     args.out.write_text(json.dumps(kb, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    topics_payload = {
+        "version": 2,
+        "built": kb.get("built"),
+        "source": "SoftDent_OnlineHelp_OH_DE1010.chm",
+        "topicCount": len(topic_bodies),
+        "topics": topic_bodies,
+    }
+    args.topics_out.write_text(
+        json.dumps(topics_payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
     cats = kb["reportCatalog"]["categories"]
     parsed = kb["reportCatalog"]["reportCountParsed"]
     toc_n = kb["helpToc"]["entryCount"]
-    print(f"Wrote {args.out}")
-    print(f"TOC entries: {toc_n}; report rows parsed: {parsed}")
+    print(f"Wrote {args.out} ({args.out.stat().st_size} bytes)")
+    print(f"Wrote {args.topics_out} ({args.topics_out.stat().st_size} bytes)")
+    print(f"TOC entries: {toc_n}; report rows: {parsed}; topic bodies: {len(topic_bodies)}")
+    print(f"howSoftDentWorks core articles: {len((kb.get('howSoftDentWorks') or {}).get('coreHelpArticles') or {})}")
     for name in [
         "Accounting",
         "Practice Management",
