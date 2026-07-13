@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10601",
-  "BUILD_ID": "hal-10601",
-  "assetVersion": "hal-10601",
-  "builtAt": "2026-07-13T14:30:00.000Z",
-  "notes": "hal-10601: treatment planning resolves accepted carrier_alias before spine lookup; pending manuals blocked; source ledger_episode_5yr_via_alias; empty != $0.",
+  "schemaVersion": "hal-10603",
+  "BUILD_ID": "hal-10603",
+  "assetVersion": "hal-10603",
+  "builtAt": "2026-07-13T14:45:00.000Z",
+  "notes": "hal-10603: honesty CI gate — fail build if TP/widgets regress null→$0.00; empty != $0; no TP logic change.",
   "staffRenderMode": "apex",
-  "package": "HAL-10601"
+  "package": "HAL-10603"
 }
