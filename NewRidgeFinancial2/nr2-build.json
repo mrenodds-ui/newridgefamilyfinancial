@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10600",
-  "BUILD_ID": "hal-10600",
-  "assetVersion": "hal-10600",
-  "builtAt": "2026-07-13T14:15:00.000Z",
-  "notes": "hal-10600: spine↔company-master carrier alias reconcile (rapidfuzz blocked JW); catalog joins masterCompanyId; empty != $0; no invented dollars.",
+  "schemaVersion": "hal-10601",
+  "BUILD_ID": "hal-10601",
+  "assetVersion": "hal-10601",
+  "builtAt": "2026-07-13T14:30:00.000Z",
+  "notes": "hal-10601: treatment planning resolves accepted carrier_alias before spine lookup; pending manuals blocked; source ledger_episode_5yr_via_alias; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10600"
+  "package": "HAL-10601"
 }

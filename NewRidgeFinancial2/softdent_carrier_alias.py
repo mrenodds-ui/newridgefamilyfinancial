@@ -660,6 +660,133 @@ def carrier_alias_status(*, db_path: Path | None = None) -> dict[str, Any]:
         conn.close()
 
 
+def resolve_accepted_alias_for_tp(
+    payer: str,
+    *,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Resolve staff payer → spine carrier for TP (HAL-10601).
+
+    Only ``confidence='auto'`` + ``review_status='accepted'`` resolve.
+    Pending manuals (``confidence='manual'``) are blocked — never auto-used.
+    Does not invent dollars.
+    """
+    out: dict[str, Any] = {
+        "viaAlias": False,
+        "blockedPending": False,
+        "spineCarrierName": None,
+        "masterCompanyId": None,
+        "masterCompanyName": None,
+    }
+    raw = str(payer or "").strip()
+    if not raw:
+        return out
+    maps = load_accepted_alias_maps(db_path=db_path)
+    payer_u = raw.upper()
+
+    for pend in maps.get("pending") or []:
+        mname = str(pend.get("masterCompanyName") or "").strip()
+        mid = str(pend.get("masterCompanyId") or "").strip()
+        if mname.upper() == payer_u or (mid and mid == raw):
+            out.update(
+                {
+                    "blockedPending": True,
+                    "pending": pend,
+                    "masterCompanyName": mname or raw,
+                    "masterCompanyId": mid or None,
+                    "spineCarrierName": pend.get("spineCarrierName"),
+                }
+            )
+            return out
+
+    master_to_spine = maps.get("masterToSpine") or {}
+    master_to_id = maps.get("masterToId") or {}
+
+    # Exact master name
+    if payer_u in master_to_spine:
+        out.update(
+            {
+                "viaAlias": True,
+                "spineCarrierName": master_to_spine[payer_u],
+                "masterCompanyId": master_to_id.get(payer_u),
+                "masterCompanyName": raw,
+            }
+        )
+        return out
+
+    # master_company_id match (Moonshot step 1)
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    if target and target.is_file():
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        try:
+            if _table_exists_alias(conn):
+                row = conn.execute(
+                    """
+                    SELECT spine_carrier_name, master_company_id, master_company_name
+                    FROM carrier_alias
+                    WHERE review_status='accepted'
+                      AND confidence='auto'
+                      AND (
+                        master_company_id = ?
+                        OR upper(master_company_name) = upper(?)
+                      )
+                    LIMIT 1
+                    """,
+                    (raw, raw),
+                ).fetchone()
+                if row and row[0]:
+                    out.update(
+                        {
+                            "viaAlias": True,
+                            "spineCarrierName": str(row[0]),
+                            "masterCompanyId": str(row[1] or "") or None,
+                            "masterCompanyName": str(row[2] or raw),
+                        }
+                    )
+                    return out
+                # Pending by id
+                pend_row = conn.execute(
+                    """
+                    SELECT spine_carrier_name, master_company_id, master_company_name,
+                           match_score, confidence, review_status
+                    FROM carrier_alias
+                    WHERE confidence='manual' AND review_status='pending'
+                      AND (master_company_id = ? OR upper(master_company_name)=upper(?))
+                    LIMIT 1
+                    """,
+                    (raw, raw),
+                ).fetchone()
+                if pend_row:
+                    out.update(
+                        {
+                            "blockedPending": True,
+                            "spineCarrierName": pend_row[0],
+                            "masterCompanyId": pend_row[1],
+                            "masterCompanyName": pend_row[2] or raw,
+                            "pending": {
+                                "masterCompanyName": pend_row[2],
+                                "masterCompanyId": pend_row[1],
+                                "spineCarrierName": pend_row[0],
+                                "matchScore": pend_row[3],
+                                "confidence": pend_row[4],
+                                "reviewStatus": pend_row[5],
+                            },
+                        }
+                    )
+                    return out
+        finally:
+            conn.close()
+    return out
+
+
+def _table_exists_alias(conn: sqlite3.Connection) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='carrier_alias'"
+        ).fetchone()
+    )
+
+
 def accept_pending_alias(
     master_company_name: str,
     *,
@@ -687,7 +814,14 @@ def accept_pending_alias(
             (status, status, name),
         )
         conn.commit()
-        out.update({"ok": cur.rowcount > 0, "masterCompanyName": name, "reviewStatus": status, "updated": cur.rowcount})
+        out.update(
+            {
+                "ok": cur.rowcount > 0,
+                "masterCompanyName": name,
+                "reviewStatus": status,
+                "updated": cur.rowcount,
+            }
+        )
         return out
     finally:
         conn.close()

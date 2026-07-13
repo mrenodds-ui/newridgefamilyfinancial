@@ -692,12 +692,98 @@ def lookup_treatment_estimate(
     finally:
         conn.close()
 
-    # Gold path miss → HAL-10585/87 ledger spine + catalog chip
+    # HAL-10601: resolve accepted carrier_alias before spine fallback.
+    # Pending manuals never auto-resolve.
+    alias_meta: dict[str, Any] = {}
+    try:
+        from softdent_carrier_alias import resolve_accepted_alias_for_tp
+
+        alias_meta = resolve_accepted_alias_for_tp(payer, db_path=Path(db_path))
+    except Exception as exc:  # noqa: BLE001
+        alias_meta = {"viaAlias": False, "resolveError": f"{type(exc).__name__}:{exc}"}
+
+    if alias_meta.get("blockedPending"):
+        pend = alias_meta.get("pending") if isinstance(alias_meta.get("pending"), dict) else {}
+        blocked = {
+            "ok": True,
+            "found": True,
+            "sufficient": False,
+            "payer": payer.strip(),
+            "adaCode": ada,
+            "minSample": min_sample,
+            "sampleSize": 0,
+            "estimate": {
+                "insuranceCompany": payer.strip(),
+                "adaCode": ada,
+                "submittedFeeAvg": None,
+                "allowedAmountAvg": None,
+                "paidAmountAvg": None,
+                "writeOffAvg": None,
+                "patientPortionAvg": None,
+                "sampleSize": 0,
+                "credibility": "insufficient",
+                "tier": None,
+                "source": "carrier_alias_pending",
+                "goldAvailable": False,
+                "masterCompanyId": alias_meta.get("masterCompanyId"),
+                "spineCarrierName": alias_meta.get("spineCarrierName"),
+                "pendingAlias": True,
+            },
+            "credibility": "insufficient",
+            "source": "carrier_alias_pending",
+            "viaAlias": False,
+            "blockedPending": True,
+            "pendingAlias": pend,
+            "tpCodeUsesCarrierAlias": True,
+            "emptyIsNotZero": True,
+            "message": (
+                f"Carrier alias for {payer.strip()} is pending HAL review "
+                f"(proposed spine={alias_meta.get('spineCarrierName') or '?'}). "
+                "Not auto-resolved — empty != $0. "
+                "Confirm with: python scripts/reconcile_carrier_aliases.py "
+                f"--accept-pending \"{payer.strip()}\""
+            ),
+            "honesty": (
+                "Pending carrier aliases never auto-resolve into treatment estimates. "
+                "empty != $0."
+            ),
+            "def": "HAL-10601",
+        }
+        blocked["chip"] = build_tp_estimate_chip(blocked)
+        return blocked
+
+    spine_payer = str(alias_meta.get("spineCarrierName") or payer)
     result = _ledger_spine_treatment_fallback(
-        payer=payer, ada_code=ada, db_path=Path(db_path), include_inferred=False
+        payer=spine_payer,
+        ada_code=ada,
+        db_path=Path(db_path),
+        include_inferred=False,
     )
+    result["tpCodeUsesCarrierAlias"] = True
+    result["emptyIsNotZero"] = True
+    result["def"] = "HAL-10601"
+    if alias_meta.get("viaAlias"):
+        result["viaAlias"] = True
+        result["masterCompanyId"] = alias_meta.get("masterCompanyId")
+        result["spineCarrierName"] = alias_meta.get("spineCarrierName")
+        result["payer"] = payer.strip()
+        if result.get("found"):
+            result["source"] = "ledger_episode_5yr_via_alias"
+            est = result.get("estimate") if isinstance(result.get("estimate"), dict) else None
+            if est is not None:
+                est["source"] = "ledger_episode_5yr_via_alias"
+                est["insuranceCompany"] = payer.strip()
+                est["spineCarrierName"] = alias_meta.get("spineCarrierName")
+                est["masterCompanyId"] = alias_meta.get("masterCompanyId")
+                result["estimate"] = est
+            result["honesty"] = (
+                "Estimate from SoftDent ledger episodes via accepted carrier alias "
+                f"({payer.strip()} → {alias_meta.get('spineCarrierName')}). "
+                "Not a guarantee of benefits. empty != $0."
+            )
+    else:
+        result["viaAlias"] = False
     result["chip"] = build_tp_estimate_chip(result)
-    result["def"] = "HAL-10587"
     return result
 
 
@@ -757,6 +843,9 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
             "emptyIsNotZero": True,
             "adaCode": ada,
             "insuranceCompany": payer,
+            "masterCompanyId": est.get("masterCompanyId") or r.get("masterCompanyId"),
+            "spineCarrierName": est.get("spineCarrierName") or r.get("spineCarrierName"),
+            "viaAlias": bool(r.get("viaAlias") or source == "ledger_episode_5yr_via_alias"),
         }
 
     if cred == "high":
@@ -797,6 +886,9 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
             "emptyIsNotZero": True,
             "adaCode": ada,
             "insuranceCompany": payer,
+            "masterCompanyId": est.get("masterCompanyId") or r.get("masterCompanyId"),
+            "spineCarrierName": est.get("spineCarrierName") or r.get("spineCarrierName"),
+            "viaAlias": bool(r.get("viaAlias") or source == "ledger_episode_5yr_via_alias"),
             "honestyDef": "HAL-10591",
         }
 
@@ -826,8 +918,11 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
         "source": source,
         "adaCode": ada,
         "insuranceCompany": payer,
+        "masterCompanyId": est.get("masterCompanyId") or r.get("masterCompanyId"),
+        "spineCarrierName": est.get("spineCarrierName") or r.get("spineCarrierName"),
+        "viaAlias": bool(r.get("viaAlias") or source == "ledger_episode_5yr_via_alias"),
         "emptyIsNotZero": True,
-        "def": "HAL-10587",
+        "def": "HAL-10601" if (r.get("viaAlias") or source == "ledger_episode_5yr_via_alias") else "HAL-10587",
         "honestyDef": "HAL-10591",
     }
 
@@ -1232,10 +1327,16 @@ def treatment_planning_status(db_path: Path | None = None) -> dict[str, Any]:
                 if spine_n:
                     out["hint"] = (
                         "Gold payment lines empty — treatment estimates fall back to unified "
-                        "InsCo×ADA ledger spine (code 2/51, 5yr). empty != $0."
+                        "InsCo×ADA ledger spine (code 2/51, 5yr), resolving accepted carrier "
+                        "aliases (HAL-10601). Pending manuals never auto-resolve. empty != $0."
                     )
+                    out["tpCodeUsesCarrierAlias"] = True
+                    out["fallbackSource"] = "ledger_episode_5yr_via_alias"
         except Exception:
             pass
+        out["tpCodeUsesCarrierAlias"] = True
+        out["emptyIsNotZero"] = True
+        out["def"] = "HAL-10601"
     finally:
         conn.close()
     return out
