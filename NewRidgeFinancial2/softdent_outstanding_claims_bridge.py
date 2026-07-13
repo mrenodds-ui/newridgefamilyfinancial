@@ -486,7 +486,7 @@ def build_outstanding_claims_by_carrier_bridge(
         "reconcile": recon,
         "gapCode": recon.get("gapCode") or GAP_OK,
         "suggestedAction": (
-            "refresh_odbc_claims_payers"
+            "refresh_sensei_claims_payer_attribution"
             if recon.get("gapCode") == GAP_PAYER_ATTRIBUTION
             else (
                 "export_account_aging"

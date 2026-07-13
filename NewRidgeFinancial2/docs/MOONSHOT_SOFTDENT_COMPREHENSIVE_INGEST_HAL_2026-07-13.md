@@ -58,8 +58,8 @@ Purpose: Outstanding claims by carrier, production by provider, collection recon
 | **Insurance Collections** | Missing | ERA-835 (procurement blocker) | Ins Plan split, denial analysis |
 | **Account Ledger (Multi-year)** | Live / Broken | Excel year-chunks → `sd_account_transactions` | Transaction drill-down, coverage chip |
 | **Ops Detail (Patients/Appts/Procedures)** | Live | ODBC `sd_*` | Scheduling, dossier, chair utilization |
-| **Insurance Master (Carriers/Policies)** | Live | ODBC `sd_patient_insurance`, `sd_carrier_payer_map` | Eligibility, payer mix |
-| **Claims (Outstanding by Carrier)** | Missing | ODBC `sd_claims` + Excel AR Aging | AR aging by payer, collections targeting |
+| **Insurance Master (Carriers/Policies)** | Live | Sensei Reference → `sd_patient_insurance` (HAL-10581); ODBC/CSV when DSN available | Eligibility, payer mix |
+| **Claims (Outstanding by Carrier)** | Live (bridge) | Aging Excel + `sd_claims` by named payer (HAL-10580/10581) | AR aging by payer, collections targeting |
 | **Production by Provider** | Reserved | Excel (Phase 2) | Productivity analytics |
 | **Production by ADA Code** | Reserved | Excel (Phase 2) | Procedure mix analysis |
 | **Collection Reconciliation** | Reserved | Excel/ODBC hybrid (Phase 2) | Payment line-item to deposit validation |
@@ -133,3 +133,10 @@ Purpose: Outstanding claims by carrier, production by provider, collection recon
 - [ ] Schedule baseline Register AR aging export (`C:\SoftDentReportExports`) for validation.  
 - [ ] Acknowledge Account TX ImportError fix as maintenance prereq (not new ingestion).  
 - [ ] Reject synthetic Ins Plan dollars; maintain July Register Ins Plan $0 truth.
+
+---
+
+## Amendment 2026-07-13 — HAL-10581 (applied)
+
+Operator `proceed` after `MOONSHOT_WHATS_NEXT_AFTER_CLAIMS_BRIDGE_2026-07-13.md`. SoftDent ODBC DSN was unavailable; Sensei Gateway **Reference** (`patient_*.json` + `insco_*.json`) populated `sd_patient_insurance` and attributed daysheet `sd_claims` payers via chart MRN (`DS-YYYYMMDD-{chart}-…`). Live: insurance rows **5415**, named claims **61/61**, gap `CLAIMS_PAYER_ATTRIBUTION_REQUIRED` cleared; remaining honest gap `CLAIMS_AR_RECONCILE_MISMATCH` (aging Ins **$0** vs claims billed **$7,714**). See `MOONSHOT_PAYER_ATTRIBUTION_REFRESH_HAL10581_APPLIED_2026-07-13.md`.
+
