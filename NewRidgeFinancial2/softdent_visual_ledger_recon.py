@@ -8,17 +8,19 @@ empty != $0 (HAL-10591 honesty gate).
 
 from __future__ import annotations
 
+import hashlib
 import json
-import math
 import re
 import sqlite3
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from money_cents import money_abs, money_sub, money_to_api, to_money
 from softdent_gold_payment_pipeline import audit_gold_payment_pipeline
 from softdent_insco_ada_spine import (
     INS_PAYMENT_CODES,
@@ -33,7 +35,6 @@ from ui_honesty_policy import (
     SOURCE_PRINT_PREVIEW_VISUAL,
     enforce_empty_not_zero,
     is_empty_money,
-    parse_money_or_empty,
 )
 
 DEF_ID = "HAL-10593"
@@ -122,7 +123,9 @@ def ensure_recon_variance_history_schema(conn: sqlite3.Connection) -> None:
             result_code TEXT,
             created_at TEXT NOT NULL,
             package_build_id TEXT,
-            triggers_gold_ingest INTEGER NOT NULL DEFAULT 0
+            triggers_gold_ingest INTEGER NOT NULL DEFAULT 0,
+            input_fingerprint TEXT,
+            money_scale TEXT DEFAULT '0.01'
         )
         """
     )
@@ -179,7 +182,9 @@ def sum_ledger_code2_payments(
             )
             out["ok"] = True
             return out
-        out["ledgerTotal"] = float(total_raw)
+        total_m = to_money(total_raw)
+        out["ledgerTotal"] = money_to_api(total_m)
+        out["moneyScale"] = "0.01"
         out["ok"] = True
         out["message"] = (
             f"Ledger code-2 sum {out['ledgerTotal']:,.2f} from {count} row(s) "
@@ -237,35 +242,46 @@ def sum_ledger_code2_by_carrier(
             return out
 
         ins_map = load_primary_insurance_map(conn)
-        by_carrier: dict[str, float] = defaultdict(float)
+        by_carrier: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+        skipped_null = 0
+        has_negative = False
         for account_num, amt in rows:
-            try:
-                amount = float(amt or 0)
-            except (TypeError, ValueError):
+            # Honesty: never coerce null amount to 0.0
+            if amt is None:
+                skipped_null += 1
                 continue
+            amount = to_money(amt)
+            if amount is None:
+                skipped_null += 1
+                continue
+            if amount < 0:
+                has_negative = True
             if amount == 0:
                 continue
             carrier = carrier_for_account(str(account_num or ""), ins_map) or UNMAPPED_CARRIER
             by_carrier[str(carrier)] += amount
 
+        out["skippedNullAmounts"] = skipped_null
+        out["hasNegative"] = has_negative
+        out["moneyScale"] = "0.01"
         if not by_carrier:
             out["ok"] = True
             out["message"] = "Carrier amounts empty after map (empty != $0)"
             return out
 
         ranked = sorted(by_carrier.items(), key=lambda kv: kv[1], reverse=True)
-        total = sum(v for _, v in ranked)
+        total = to_money(sum((v for _, v in ranked), start=Decimal("0.00"))) or Decimal("0.00")
         top_n = [
-            {"carrierCode": c, "amount": round(a, 2)}
+            {"carrierCode": c, "amount": money_to_api(to_money(a))}
             for c, a in ranked[: max(1, int(limit))]
         ]
         out["carrierBreakdown"] = top_n
-        out["breakdownTotal"] = round(total, 2)
+        out["breakdownTotal"] = money_to_api(total)
         out["topCarrierCode"] = ranked[0][0]
         out["ok"] = True
         out["message"] = (
-            f"Carrier breakdown n={len(ranked)} total={total:,.2f} "
-            f"(top5 shown; codes only, no PHI)"
+            f"Carrier breakdown n={len(ranked)} total={float(total):,.2f} "
+            f"(Decimal cents; codes only, no PHI)"
         )
         return out
     finally:
@@ -329,40 +345,46 @@ def classify_variance(
         result["message"] = "Ledger code-2 sum missing — exclude from compare (empty != $0)"
         return result
 
-    v = parse_money_or_empty(visual)
-    l = parse_money_or_empty(ledger)
+    v = to_money(visual)
+    l = to_money(ledger)
     if v is None or l is None:
         result["result"] = ReconciliationResult.HONESTY_HALT.value
         result["honestyCheckPassed"] = False
         result["message"] = "Honesty halt — refused to coerce empty to $0.00 for reconciliation"
         return result
 
-    delta = v - l
-    delta_abs = abs(delta)
-    base = max(abs(v), abs(l), 0.01)
-    delta_pct = (delta_abs / base) * 100.0
-    result["delta"] = round(delta, 2)
-    result["deltaAbs"] = round(delta_abs, 2)
-    result["deltaPct"] = round(delta_pct, 4)
+    delta = money_sub(v, l)
+    delta_abs = money_abs(delta)
+    assert delta is not None and delta_abs is not None
+    base = max(abs(v), abs(l), Decimal("0.01"))
+    delta_pct = (delta_abs / base) * Decimal("100")
+    result["delta"] = money_to_api(delta)
+    result["deltaAbs"] = money_to_api(delta_abs)
+    result["deltaPct"] = float(delta_pct.quantize(Decimal("0.0001")))
+    result["visualTotal"] = money_to_api(v)
+    result["ledgerTotal"] = money_to_api(l)
+    result["moneyScale"] = "0.01"
 
-    within_abs = delta_abs <= float(abs_threshold)
-    within_pct = delta_pct <= float(pct_threshold)
-    if math.isclose(v, l, abs_tol=0.005):
+    abs_thr = to_money(abs_threshold) or Decimal(str(VARIANCE_THRESHOLD_ABSOLUTE))
+    pct_thr = Decimal(str(pct_threshold))
+    within_abs = delta_abs <= abs_thr
+    within_pct = delta_pct <= pct_thr
+    if v == l:
         result["result"] = ReconciliationResult.MATCH.value
         result["thresholdViolated"] = False
-        result["message"] = "Visual audit matches ledger code-2 sum"
+        result["message"] = "Visual audit matches ledger code-2 sum (cent-exact)"
     elif within_abs or within_pct:
         result["result"] = ReconciliationResult.VARIANCE_WITHIN_TOLERANCE.value
         result["thresholdViolated"] = False
         result["message"] = (
-            f"Variance ${delta_abs:,.2f} ({delta_pct:.2f}%) within tolerance "
-            f"(${abs_threshold:,.2f} or {pct_threshold}%)"
+            f"Variance ${delta_abs:,.2f} ({float(delta_pct):.2f}%) within tolerance "
+            f"(${abs_thr:,.2f} or {pct_threshold}%)"
         )
     else:
         result["result"] = ReconciliationResult.VARIANCE_EXCEEDS_THRESHOLD.value
         result["thresholdViolated"] = True
         result["message"] = (
-            f"Variance ${delta_abs:,.2f} ({delta_pct:.2f}%) exceeds threshold — "
+            f"Variance ${delta_abs:,.2f} ({float(delta_pct):.2f}%) exceeds threshold — "
             "flag only; do not invent gold lines"
         )
     return result
@@ -426,35 +448,68 @@ def append_recon_variance_history(
     if carriers and isinstance(carriers[0], dict):
         top = carriers[0].get("carrierCode")
     top = top or recon.get("topCarrierCode")
-    conn = sqlite3.connect(str(path))
+    payload = {
+        "periodStart": recon.get("periodStart") or recon.get("requestedPeriodStart"),
+        "periodEnd": recon.get("periodEnd") or recon.get("requestedPeriodEnd"),
+        "visual": money_to_api(to_money(recon.get("visualTotal"))),
+        "ledger": money_to_api(to_money(recon.get("ledgerTotal"))),
+        "clamped": money_to_api(to_money(recon.get("clampedLedgerTotal"))),
+        "delta": cmp_.get("delta"),
+        "scopeMismatch": bool(recon.get("scopeMismatch")),
+        "result": recon.get("result") or cmp_.get("result"),
+        "build": PACKAGE_BUILD_ID,
+        "scale": "0.01",
+    }
+    fingerprint = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+    conn = sqlite3.connect(str(path), timeout=30.0)
     try:
+        conn.execute("PRAGMA busy_timeout=30000")
         ensure_recon_variance_history_schema(conn)
+        cols = {str(r[1]) for r in conn.execute(f"PRAGMA table_info({HISTORY_TABLE})").fetchall()}
+        if "input_fingerprint" not in cols:
+            conn.execute(f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN input_fingerprint TEXT")
+        if "money_scale" not in cols:
+            conn.execute(
+                f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN money_scale TEXT DEFAULT '0.01'"
+            )
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute(
             f"""
             INSERT INTO {HISTORY_TABLE} (
                 period_start, period_end, visual_total, ledger_total,
                 clamped_ledger_total, variance_dollars, top_carrier_code,
                 scope_mismatch, result_code, created_at, package_build_id,
-                triggers_gold_ingest
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                triggers_gold_ingest, input_fingerprint, money_scale
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, '0.01')
             """,
             (
-                recon.get("periodStart") or recon.get("requestedPeriodStart"),
-                recon.get("periodEnd") or recon.get("requestedPeriodEnd"),
-                recon.get("visualTotal"),
-                recon.get("ledgerTotal"),
-                recon.get("clampedLedgerTotal"),
+                payload["periodStart"],
+                payload["periodEnd"],
+                payload["visual"],
+                payload["ledger"],
+                payload["clamped"],
                 cmp_.get("delta"),
                 top,
                 1 if recon.get("scopeMismatch") else 0,
-                recon.get("result") or cmp_.get("result"),
+                payload["result"],
                 _utc_now(),
                 PACKAGE_BUILD_ID,
+                fingerprint,
             ),
         )
         conn.commit()
         result["ok"] = True
         result["id"] = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        result["inputFingerprint"] = fingerprint
+        return result
+    except Exception as exc:  # noqa: BLE001
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        result["error"] = f"{type(exc).__name__}:{exc}"
         return result
     finally:
         conn.close()

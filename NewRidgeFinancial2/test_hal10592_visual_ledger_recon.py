@@ -49,8 +49,13 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
         self.assertEqual(out.get("delta"), 0.0)
 
     def test_classify_isclose_match(self) -> None:
-        out = classify_variance(100.0, 99.996)
+        # Cent-exact MATCH after Decimal quantize; sub-cent noise collapses to equal
+        out = classify_variance(100.0, 100.001)
         self.assertEqual(out["result"], ReconciliationResult.MATCH.value)
+        near = classify_variance(100.0, 99.99)
+        self.assertEqual(
+            near["result"], ReconciliationResult.VARIANCE_WITHIN_TOLERANCE.value
+        )
 
     def test_classify_within_and_exceeds(self) -> None:
         within = classify_variance(100.0, 98.0)
