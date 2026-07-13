@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10606"
+BUILD_ID = "hal-10607"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2340,21 +2340,27 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_pwimages_eligibility_hal10607 import pwimages_eligibility_widget
+
+        widgets.insert(8, pwimages_eligibility_widget())
+    except Exception:
+        pass
+    try:
         from softdent_print_preview_audit import print_preview_audit_widget
 
-        widgets.insert(8, print_preview_audit_widget())
+        widgets.insert(9, print_preview_audit_widget())
     except Exception:
         pass
     try:
         from ui_honesty_policy import ui_honesty_widget
 
-        widgets.insert(9, ui_honesty_widget())
+        widgets.insert(10, ui_honesty_widget())
     except Exception:
         pass
     try:
         from softdent_visual_ledger_recon import visual_ledger_recon_widget
 
-        widgets.insert(10, visual_ledger_recon_widget())
+        widgets.insert(11, visual_ledger_recon_widget())
     except Exception:
         pass
     try:
@@ -7373,6 +7379,39 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             )
 
             result = run_ops_10606_gold_drop_facilitation(attempt_gui_export=False)
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/pwimages-eligibility/status")
+    def apex_pwimages_eligibility_status_api():
+        try:
+            from softdent_pwimages_eligibility_hal10607 import (
+                format_hal10607_reply,
+                pwimages_eligibility_status,
+            )
+
+            st = pwimages_eligibility_status()
+            return json_response_fn(
+                {
+                    **st,
+                    "reply": format_hal10607_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/pwimages-eligibility/run")
+    def apex_pwimages_eligibility_run_api():
+        try:
+            from softdent_pwimages_eligibility_hal10607 import (
+                format_hal10607_reply,
+                run_hal10607_ingest,
+            )
+
+            result = run_hal10607_ingest()
+            result["reply"] = format_hal10607_reply(result)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

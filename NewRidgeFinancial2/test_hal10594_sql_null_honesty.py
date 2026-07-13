@@ -44,7 +44,7 @@ def _empty_tx_db(db: Path) -> sqlite3.Connection:
 class SqlNullHonestyHal10594Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
-        self.assertEqual(BUILD_ID, "hal-10606")
+        self.assertEqual(BUILD_ID, "hal-10607")
         # Visual-ledger package id stays 10595; global BUILD advanced with catalog package
 
 

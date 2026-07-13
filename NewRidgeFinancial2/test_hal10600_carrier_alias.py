@@ -118,7 +118,7 @@ def _seed_spine(db: Path) -> None:
 class CarrierAliasHal10600Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10600")
-        self.assertEqual(BUILD_ID, "hal-10606")
+        self.assertEqual(BUILD_ID, "hal-10607")
 
     def test_confidence_bands_moonshot(self) -> None:
         self.assertEqual(confidence_band(90.0), "auto")
