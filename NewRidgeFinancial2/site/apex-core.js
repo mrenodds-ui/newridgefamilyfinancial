@@ -6139,10 +6139,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       applyWidgetPayload(payload, { fromCache: false });
       // Moonshot warming coherence pack: 429 backoff + buildId skew detection
       if (payload && payload.warming) {
-        // Moonshot crash/perf SHOULD: visual progress if fill is running (empty ≠ crash)
-        if (payload.fillProgress > 0 && payload.fillProgress < 100) {
+        // Moonshot import-cache KPIs SHOULD: progress + Retry-After-aware backoff
+        const fillPct = Number(payload.fillProgress || 0);
+        if (fillPct > 0 && fillPct < 100) {
           console.info(
-            `[NR2] Fill progress for ${payload.fillPage}: ${payload.fillProgress}%`
+            `[NR2] Fill progress for ${payload.fillPage || currentPage}: ${fillPct}%`
           );
         }
         // BuildId skew guard: if server build differs from UI chrome, nuke IDB and reload
@@ -6167,8 +6168,9 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
 
         warmingPollStreak += 1;
 
-        // Exponential backoff capped at 30s to prevent 429 storm
-        const backoffMs = Math.min(1000 * Math.pow(2, warmingPollStreak), 30000);
+        // Moonshot: base on server retryAfter (default 1s), 1→2→4… capped at 8s
+        const baseSec = Math.max(1, Number(payload.retryAfter) || 1);
+        const backoffMs = Math.min(baseSec * 1000 * Math.pow(2, warmingPollStreak - 1), 8000);
 
         if (warmingPollStreak >= WARMING_POLL_MAX) {
           warmingPollStreak = 0;

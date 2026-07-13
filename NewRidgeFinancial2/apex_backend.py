@@ -47,10 +47,38 @@ _WIDGETS_CACHE: dict[str, dict[str, Any]] = {}
 _WIDGETS_CACHE_TTL_SEC = 15.0
 _WIDGETS_FILL_FAILURES = 0  # Moonshot cache coherence — fill-thread crash counter
 _REPORTS_BUNDLE_CACHE: dict[str, Any] = {"at": 0.0, "reports": None, "bundle": None, "errors": None}
-_REPORTS_BUNDLE_CACHE_TTL_SEC = 20.0
-# Moonshot crash/perf SHOULD: Sync back-pressure + fill-progress telemetry
+# Moonshot import-cache KPIs: align TTL with widgets (was 20s → thundering herd)
+_REPORTS_BUNDLE_CACHE_TTL_SEC = 15.0
+_REPORTS_BUNDLE_CACHE_LOCK = threading.Lock()
+_BUNDLE_LOAD_LOCK = threading.Lock()
+_BUNDLE_LOAD_EVENT: threading.Event | None = None
+# Moonshot crash/perf SHOULD: Sync back-pressure
 _SYNC_SEMAPHORE = threading.Semaphore(1)
-_FILL_PROGRESS: dict[str, Any] = {"page": None, "pct": 0, "ts": 0.0}
+# Moonshot import-cache KPIs MUST: per-page fill progress (not a global singleton)
+_FILL_PROGRESS: dict[str, dict[str, Any]] = {}
+_FILL_PROGRESS_LOCK = threading.Lock()
+
+
+def _update_fill_progress(pid: str, pct: int) -> None:
+    """Thread-safe per-page fill progress (Moonshot import-cache KPIs)."""
+    key = str(pid or "").strip() or "_"
+    with _FILL_PROGRESS_LOCK:
+        _FILL_PROGRESS[key] = {"pct": max(0, min(100, int(pct))), "ts": time.time()}
+
+
+def _get_fill_progress(pid: str) -> dict[str, Any]:
+    key = str(pid or "").strip() or "_"
+    with _FILL_PROGRESS_LOCK:
+        hit = _FILL_PROGRESS.get(key)
+        return dict(hit) if isinstance(hit, dict) else {"pct": 0, "ts": 0.0}
+
+
+def _prune_fill_progress(max_age_sec: float = 300.0) -> None:
+    cutoff = time.time() - max_age_sec
+    with _FILL_PROGRESS_LOCK:
+        stale = [k for k, v in _FILL_PROGRESS.items() if float(v.get("ts") or 0.0) < cutoff]
+        for k in stale:
+            _FILL_PROGRESS.pop(k, None)
 
 
 def _utc_now() -> str:
@@ -1499,49 +1527,120 @@ def save_tax_return_upload(*, year: str, jurisdiction: str, filename: str, data:
     return {"ok": True, "relPath": f"{year_s}/{jur}/{safe_name}", "bytes": len(data)}
 
 
-def _load_reports_and_bundle() -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+def _load_reports_and_bundle(*, _waited: bool = False) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """Load import bundle + financial reports with single-flight coalescing.
+
+    Moonshot import-cache KPIs MUST: at most one concurrent loader across pages.
+    """
+    global _BUNDLE_LOAD_EVENT
     import copy
-    import time
 
     now = time.monotonic()
-    cached_at = float(_REPORTS_BUNDLE_CACHE.get("at") or 0.0)
-    if (
-        _REPORTS_BUNDLE_CACHE.get("reports") is not None
-        and _REPORTS_BUNDLE_CACHE.get("bundle") is not None
-        and (now - cached_at) < _REPORTS_BUNDLE_CACHE_TTL_SEC
-    ):
-        return (
-            copy.deepcopy(_REPORTS_BUNDLE_CACHE["reports"]),
-            copy.deepcopy(_REPORTS_BUNDLE_CACHE["bundle"]),
-            list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
-        )
+    with _REPORTS_BUNDLE_CACHE_LOCK:
+        cached_at = float(_REPORTS_BUNDLE_CACHE.get("at") or 0.0)
+        if (
+            _REPORTS_BUNDLE_CACHE.get("reports") is not None
+            and _REPORTS_BUNDLE_CACHE.get("bundle") is not None
+            and (now - cached_at) < _REPORTS_BUNDLE_CACHE_TTL_SEC
+        ):
+            return (
+                copy.deepcopy(_REPORTS_BUNDLE_CACHE["reports"]),
+                copy.deepcopy(_REPORTS_BUNDLE_CACHE["bundle"]),
+                list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
+            )
+
+    wait_required = False
+    i_am_loader = False
+    event: threading.Event | None = None
+    with _BUNDLE_LOAD_LOCK:
+        now = time.monotonic()
+        with _REPORTS_BUNDLE_CACHE_LOCK:
+            cached_at = float(_REPORTS_BUNDLE_CACHE.get("at") or 0.0)
+            if (
+                _REPORTS_BUNDLE_CACHE.get("reports") is not None
+                and _REPORTS_BUNDLE_CACHE.get("bundle") is not None
+                and (now - cached_at) < _REPORTS_BUNDLE_CACHE_TTL_SEC
+            ):
+                return (
+                    copy.deepcopy(_REPORTS_BUNDLE_CACHE["reports"]),
+                    copy.deepcopy(_REPORTS_BUNDLE_CACHE["bundle"]),
+                    list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
+                )
+        if _BUNDLE_LOAD_EVENT is not None:
+            event = _BUNDLE_LOAD_EVENT
+            wait_required = True
+        else:
+            _BUNDLE_LOAD_EVENT = threading.Event()
+            event = _BUNDLE_LOAD_EVENT
+            i_am_loader = True
+
+    if wait_required and event is not None:
+        event.wait(timeout=30.0)
+        now = time.monotonic()
+        with _REPORTS_BUNDLE_CACHE_LOCK:
+            cached_at = float(_REPORTS_BUNDLE_CACHE.get("at") or 0.0)
+            if (
+                _REPORTS_BUNDLE_CACHE.get("reports") is not None
+                and _REPORTS_BUNDLE_CACHE.get("bundle") is not None
+                and (now - cached_at) < _REPORTS_BUNDLE_CACHE_TTL_SEC
+            ):
+                return (
+                    copy.deepcopy(_REPORTS_BUNDLE_CACHE["reports"]),
+                    copy.deepcopy(_REPORTS_BUNDLE_CACHE["bundle"]),
+                    list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
+                )
+        if not _waited:
+            return _load_reports_and_bundle(_waited=True)
+        # Timed out / empty after wait: take ownership for one recovery load.
+        with _BUNDLE_LOAD_LOCK:
+            if _BUNDLE_LOAD_EVENT is None:
+                _BUNDLE_LOAD_EVENT = threading.Event()
+                event = _BUNDLE_LOAD_EVENT
+                i_am_loader = True
+            else:
+                # Another recovery loader won; wait once more then read cache.
+                event = _BUNDLE_LOAD_EVENT
+                event.wait(timeout=30.0)
+                with _REPORTS_BUNDLE_CACHE_LOCK:
+                    return (
+                        copy.deepcopy(_REPORTS_BUNDLE_CACHE.get("reports") or {}),
+                        copy.deepcopy(_REPORTS_BUNDLE_CACHE.get("bundle") or {}),
+                        list(_REPORTS_BUNDLE_CACHE.get("errors") or []),
+                    )
 
     reports: dict[str, Any] = {}
     bundle: dict[str, Any] = {}
     errors: list[str] = []
-
     try:
-        from import_loader import load_import_bundle
+        try:
+            from import_loader import load_import_bundle
 
-        bundle = load_import_bundle(sync=False, deep=False)
-    except Exception as exc:  # noqa: BLE001
-        errors.append(f"import_loader: {exc}")
-        bundle = {}
+            bundle = load_import_bundle(sync=False, deep=False)
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"import_loader: {exc}")
+            bundle = {}
 
-    try:
-        from financial_reports import build_financial_reports
+        try:
+            from financial_reports import build_financial_reports
 
-        # Reuse the same bundle — avoid a second cold import scan on every page.
-        reports = build_financial_reports(sync_exports=False, bundle=bundle or None)
-    except Exception as exc:  # noqa: BLE001 — surface honest empty state
-        errors.append(f"financial_reports: {exc}")
-        reports = {}
+            # Reuse the same bundle — avoid a second cold import scan on every page.
+            reports = build_financial_reports(sync_exports=False, bundle=bundle or None)
+        except Exception as exc:  # noqa: BLE001 — surface honest empty state
+            errors.append(f"financial_reports: {exc}")
+            reports = {}
 
-    _REPORTS_BUNDLE_CACHE["at"] = time.monotonic()
-    _REPORTS_BUNDLE_CACHE["reports"] = copy.deepcopy(reports)
-    _REPORTS_BUNDLE_CACHE["bundle"] = copy.deepcopy(bundle)
-    _REPORTS_BUNDLE_CACHE["errors"] = list(errors)
-    return reports, bundle, errors
+        with _REPORTS_BUNDLE_CACHE_LOCK:
+            _REPORTS_BUNDLE_CACHE["at"] = time.monotonic()
+            _REPORTS_BUNDLE_CACHE["reports"] = copy.deepcopy(reports)
+            _REPORTS_BUNDLE_CACHE["bundle"] = copy.deepcopy(bundle)
+            _REPORTS_BUNDLE_CACHE["errors"] = list(errors)
+        return copy.deepcopy(reports), copy.deepcopy(bundle), list(errors)
+    finally:
+        if i_am_loader:
+            with _BUNDLE_LOAD_LOCK:
+                if _BUNDLE_LOAD_EVENT is not None:
+                    _BUNDLE_LOAD_EVENT.set()
+                    _BUNDLE_LOAD_EVENT = None
 
 
 def _load_local_json(key: str) -> dict[str, Any] | None:
@@ -3854,13 +3953,14 @@ def build_apex_widgets(
     }
     warming_key = f"{cache_key}:warming"
     if not skip_cache and not _fill and stub_on:
-        # Moonshot crash/perf SHOULD: expose fill progress (empty mosaic ≠ crash)
-        progress = (
-            dict(_FILL_PROGRESS)
-            if _FILL_PROGRESS.get("page") == pid
-            else {"page": pid, "pct": 0, "ts": 0.0}
-        )
+        # Moonshot import-cache KPIs: per-page progress + retryAfter (empty mosaic ≠ crash)
+        progress = _get_fill_progress(pid)
         fill_pct = int(progress.get("pct") or 0)
+        if fill_pct <= 0:
+            # Queued / about to fill — never leave all tabs at silent 0 forever
+            _update_fill_progress(pid, 5)
+            fill_pct = 5
+        retry_after = max(1, min(5, (100 - fill_pct) // 25 + 1)) if fill_pct < 100 else 1
         stub = {
             "page": pid,
             "sub": sub_key,
@@ -3868,7 +3968,8 @@ def build_apex_widgets(
             "buildId": BUILD_ID,
             "warming": True,
             "fillProgress": fill_pct,
-            "fillPage": progress.get("page"),
+            "fillPage": pid,
+            "retryAfter": retry_after,
             "widgets": [
                 {
                     "id": "warming-bridge",
@@ -3877,7 +3978,7 @@ def build_apex_widgets(
                     "label": "Loading bridge instruments…",
                     "message": "Warming import cache — KPIs appear when ready (empty ≠ $0).",
                     "fillProgress": fill_pct,
-                    "fillPage": progress.get("page"),
+                    "fillPage": pid,
                     "hint": "Direct-first pipeline assembling SoftDent/QuickBooks.",
                 }
             ],
@@ -3889,15 +3990,13 @@ def build_apex_widgets(
 
             def _fill_widgets_cache() -> None:
                 global _WIDGETS_FILL_FAILURES
-                _FILL_PROGRESS["page"] = pid
-                _FILL_PROGRESS["pct"] = 5
-                _FILL_PROGRESS["ts"] = time.time()
+                _update_fill_progress(pid, 5)
                 try:
-                    _FILL_PROGRESS["pct"] = 40
+                    _update_fill_progress(pid, 40)
                     build_apex_widgets(
                         pid, sub=sub_key, claim_id=cid, patient_id=pid_patient, _fill=True
                     )
-                    _FILL_PROGRESS["pct"] = 100
+                    _update_fill_progress(pid, 100)
                 except Exception as exc:  # noqa: BLE001
                     import traceback
 
@@ -3940,9 +4039,8 @@ def build_apex_widgets(
                     }
                 finally:
                     _WIDGETS_CACHE.pop(warming_key, None)
-                    if _FILL_PROGRESS.get("page") == pid:
-                        _FILL_PROGRESS["pct"] = 100
-                        _FILL_PROGRESS["ts"] = time.time()
+                    _update_fill_progress(pid, 100)
+                    _prune_fill_progress()
 
             _WIDGETS_CACHE[warming_key] = {"at": now}
             threading.Thread(
@@ -3956,6 +4054,7 @@ def build_apex_widgets(
             response.set_header("Pragma", "no-cache")
             response.set_header("Expires", "0")
             response.set_header("X-NR2-Build-Id", BUILD_ID)
+            response.set_header("Retry-After", str(retry_after))
         except Exception:
             pass
         return stub
@@ -5844,9 +5943,8 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "page": body.get("page"),
         }
     try:
-        _FILL_PROGRESS["page"] = body.get("page")
-        _FILL_PROGRESS["pct"] = 5
-        _FILL_PROGRESS["ts"] = time.time()
+        sync_page = str(body.get("page") or "financial")
+        _update_fill_progress(sync_page, 5)
         started = _utc_now()
         result: dict[str, Any] = {
             "ok": True,
@@ -5875,14 +5973,15 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             from import_loader import load_import_bundle
 
             sync = bool(body.get("fullSync", True))
-            _FILL_PROGRESS["pct"] = 40
+            _update_fill_progress(sync_page, 40)
             bundle = load_import_bundle(sync=sync, deep=False)
             # Fresh imports must not serve stale page payloads.
             _WIDGETS_CACHE.clear()
-            _REPORTS_BUNDLE_CACHE["at"] = 0.0
-            _REPORTS_BUNDLE_CACHE["reports"] = None
-            _REPORTS_BUNDLE_CACHE["bundle"] = None
-            _REPORTS_BUNDLE_CACHE["errors"] = None
+            with _REPORTS_BUNDLE_CACHE_LOCK:
+                _REPORTS_BUNDLE_CACHE["at"] = 0.0
+                _REPORTS_BUNDLE_CACHE["reports"] = None
+                _REPORTS_BUNDLE_CACHE["bundle"] = None
+                _REPORTS_BUNDLE_CACHE["errors"] = None
             _TICKER_CACHE["at"] = 0.0
             _TICKER_CACHE["payload"] = None
             try:
@@ -5916,8 +6015,7 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             result["status"] = "error"
             result["error"] = str(exc)
             result["completedAt"] = _utc_now()
-        _FILL_PROGRESS["pct"] = 100
-        _FILL_PROGRESS["ts"] = time.time()
+        _update_fill_progress(sync_page, 100)
         return result
     finally:
         _SYNC_SEMAPHORE.release()

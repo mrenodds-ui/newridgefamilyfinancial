@@ -49,7 +49,7 @@ class SingletonGuardTests(unittest.TestCase):
 class SyncSemaphoreTests(unittest.TestCase):
     def setUp(self) -> None:
         ab._SYNC_SEMAPHORE = threading.Semaphore(1)
-        ab._FILL_PROGRESS.update({"page": None, "pct": 0, "ts": 0.0})
+        ab._FILL_PROGRESS.clear()
 
     def test_second_sync_returns_locked(self) -> None:
         acquired = ab._SYNC_SEMAPHORE.acquire(blocking=False)
@@ -66,11 +66,12 @@ class SyncSemaphoreTests(unittest.TestCase):
 class FillProgressStubTests(unittest.TestCase):
     def setUp(self) -> None:
         ab._WIDGETS_CACHE.clear()
-        ab._FILL_PROGRESS.update({"page": "taxes", "pct": 40, "ts": 1.0})
+        ab._FILL_PROGRESS.clear()
+        ab._update_fill_progress("taxes", 40)
 
     def tearDown(self) -> None:
         ab._WIDGETS_CACHE.clear()
-        ab._FILL_PROGRESS.update({"page": None, "pct": 0, "ts": 0.0})
+        ab._FILL_PROGRESS.clear()
 
     def test_warming_stub_includes_fill_progress(self) -> None:
         # Mark warming already in-progress so we don't spawn a real fill thread.
@@ -80,9 +81,24 @@ class FillProgressStubTests(unittest.TestCase):
         self.assertTrue(stub.get("warming"))
         self.assertEqual(stub.get("fillProgress"), 40)
         self.assertEqual(stub.get("fillPage"), "taxes")
+        self.assertGreaterEqual(int(stub.get("retryAfter") or 0), 1)
         widgets = stub.get("widgets") or []
         self.assertEqual(widgets[0].get("id"), "warming-bridge")
         self.assertEqual(widgets[0].get("fillProgress"), 40)
+
+    def test_per_page_progress_independent(self) -> None:
+        ab._update_fill_progress("softdent", 70)
+        ab._update_fill_progress("ar", 10)
+        self.assertEqual(ab._get_fill_progress("softdent").get("pct"), 70)
+        self.assertEqual(ab._get_fill_progress("ar").get("pct"), 10)
+        self.assertEqual(ab._get_fill_progress("claims").get("pct"), 0)
+
+
+class ReportsBundleTtlTests(unittest.TestCase):
+    def test_ttl_aligned_with_widgets(self) -> None:
+        self.assertEqual(ab._WIDGETS_CACHE_TTL_SEC, 15.0)
+        self.assertEqual(ab._REPORTS_BUNDLE_CACHE_TTL_SEC, 15.0)
+
 
 
 class IndexBuildIdAlignmentTests(unittest.TestCase):
