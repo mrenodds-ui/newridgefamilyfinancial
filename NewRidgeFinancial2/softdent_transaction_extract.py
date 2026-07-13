@@ -56,6 +56,14 @@ def resolve_analytics_db() -> Path | None:
     return default if default.is_file() else None
 
 
+def resolve_account_transactions_db(db_path: Path | str | None = None) -> Path | None:
+    """Resolve DB holding sd_account_transactions / sd_claims (HAL-10580 alias)."""
+    if db_path:
+        target = Path(db_path)
+        return target if target.is_file() else None
+    return resolve_analytics_db()
+
+
 def parse_money(value: Any) -> float | None:
     if value is None or value == "":
         return None

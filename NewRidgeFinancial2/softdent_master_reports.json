@@ -60,6 +60,7 @@
     "transactions",
     "daysheet",
     "aging",
+    "outstanding_claims_by_co",
     "writeoff_totals"
   ],
   "reports": {
@@ -235,13 +236,32 @@
       "phase": 2,
       "verifiedOutputOptions": true,
       "nr2Uses": ["writeoff / contractual adjustment reporting"]
+    },
+    "outstanding_claims_by_co": {
+      "id": "outstanding_claims_by_co",
+      "label": "Outstanding Claims by Carrier (HAL-10580 bridge)",
+      "preferredSource": "database",
+      "outputMode": "database_plus_aging_excel",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "visualReadRequired": false,
+      "guiRequiredWhenMissing": false,
+      "why": "Bridge sd_claims by payer to Account Aging insurance/AR totals. Unnamed payers stay unnamed (empty ≠ $0). Promoted from phase2_reserved.",
+      "dbTables": ["sd_claims", "sd_patient_insurance"],
+      "guiMenuPath": "Reports → Accounting → Account Aging (validation baseline)",
+      "guiWin32Path": "Reports->Accounting->Account Aging",
+      "guiExportId": "aging",
+      "canonicalPatterns": ["account_aging.csv", "account_aging.xls", "AGE*.XLS"],
+      "requiredForFinancialClose": false,
+      "phase": 1,
+      "verifiedOutputOptions": true,
+      "nr2Uses": ["HAL outstanding claims by carrier", "AR reconcile vs aging insurance"]
     }
   },
   "phase2_reserved": [
     "production_by_provider",
     "production_by_ada_code",
     "collection_reconciliation",
-    "deposit_slip",
-    "outstanding_claims_by_co"
+    "deposit_slip"
   ]
 }

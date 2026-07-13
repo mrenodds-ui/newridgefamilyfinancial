@@ -236,6 +236,8 @@ def ensure_sd_schema(conn: sqlite3.Connection) -> None:
             claim_status TEXT,
             practice_id TEXT NOT NULL DEFAULT '',
             extracted_at TEXT,
+            total_fee REAL,
+            balance REAL,
             PRIMARY KEY (practice_id, claim_id)
         );
         CREATE TABLE IF NOT EXISTS sd_payments (
@@ -996,11 +998,23 @@ def _populate_from_claims_csv(conn: sqlite3.Connection, path: Path, *, extracted
                 amount = float(amount_raw)
             except ValueError:
                 amount = 0.0
+            try:
+                from softdent_outstanding_claims_bridge import ensure_sd_claims_bridge_columns
+
+                ensure_sd_claims_bridge_columns(conn)
+            except Exception:
+                pass
+            bal_raw = str(row.get("Balance") or row.get("balance") or "").replace(",", "").replace("$", "").strip()
+            try:
+                balance = float(bal_raw) if bal_raw else None
+            except ValueError:
+                balance = None
             conn.execute(
                 """
                 INSERT OR REPLACE INTO sd_claims
-                (claim_id, patient_name, payer, service_date, claim_amount, claim_status, practice_id, extracted_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (claim_id, patient_name, payer, service_date, claim_amount, claim_status,
+                 practice_id, extracted_at, total_fee, balance)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     claim_id,
@@ -1011,6 +1025,8 @@ def _populate_from_claims_csv(conn: sqlite3.Connection, path: Path, *, extracted
                     str(row.get("ClaimStatus") or row.get("claim_status") or "").strip(),
                     "",
                     extracted_at,
+                    amount,
+                    balance,
                 ),
             )
             count += 1
@@ -1110,21 +1126,41 @@ def _populate_from_odbc(conn: sqlite3.Connection, *, extracted_at: str) -> dict[
                     )
                     inserted += 1
                 elif table == "sd_claims":
+                    try:
+                        from softdent_outstanding_claims_bridge import ensure_sd_claims_bridge_columns
+
+                        ensure_sd_claims_bridge_columns(conn)
+                    except Exception:
+                        pass
+                    amount = float(mapping.get("claim_amount") or mapping.get("ClaimAmount") or 0)
+                    total_fee_raw = mapping.get("total_fee") or mapping.get("TotalFee") or mapping.get("Fee")
+                    balance_raw = mapping.get("balance") or mapping.get("Balance") or mapping.get("AmountDue")
+                    try:
+                        total_fee = float(total_fee_raw) if total_fee_raw not in (None, "") else amount
+                    except (TypeError, ValueError):
+                        total_fee = amount
+                    try:
+                        balance = float(balance_raw) if balance_raw not in (None, "") else None
+                    except (TypeError, ValueError):
+                        balance = None
                     conn.execute(
                         """
                         INSERT OR REPLACE INTO sd_claims
-                        (claim_id, patient_name, payer, service_date, claim_amount, claim_status, practice_id, extracted_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        (claim_id, patient_name, payer, service_date, claim_amount, claim_status,
+                         practice_id, extracted_at, total_fee, balance)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             str(mapping.get("claim_id") or mapping.get("ClaimID") or mapping.get("ClaimId") or ""),
                             str(mapping.get("patient_name") or mapping.get("PatientName") or ""),
                             str(mapping.get("payer") or mapping.get("Payer") or ""),
                             str(mapping.get("service_date") or mapping.get("ServiceDate") or ""),
-                            float(mapping.get("claim_amount") or mapping.get("ClaimAmount") or 0),
+                            amount,
                             str(mapping.get("claim_status") or mapping.get("ClaimStatus") or ""),
                             str(mapping.get("practice_id") or mapping.get("PracticeID") or ""),
                             extracted_at,
+                            total_fee,
+                            balance,
                         ),
                     )
                     inserted += 1

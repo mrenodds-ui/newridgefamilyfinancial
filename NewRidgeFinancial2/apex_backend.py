@@ -2292,6 +2292,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_outstanding_claims_bridge import outstanding_claims_bridge_widget
+
+        widgets.insert(1, outstanding_claims_bridge_widget())
+    except Exception:
+        pass
+    try:
         from apex_softdent_production_pack import production_widgets
         from apex_softdent_aging_schedule_pack import aging_schedule_widgets
 

@@ -632,6 +632,40 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "policy:softdent-account-tx-ledger",
             }
 
+    # Outstanding Claims by Carrier ↔ Account Aging bridge (HAL-10580)
+    if re.search(
+        r"\b("
+        r"outstanding\s+claims?\s+by\s+(carrier|payer|co)|"
+        r"claims?\s+by\s+(carrier|payer)|"
+        r"claims?\s*/?\s*a/?r\s+bridge|"
+        r"account\s+aging\s+total|"
+        r"aging\s+outstanding\s+insurance"
+        r")\b",
+        q,
+    ):
+        try:
+            from softdent_outstanding_claims_bridge import (
+                build_outstanding_claims_by_carrier_bridge,
+                format_outstanding_claims_hal_reply,
+            )
+
+            bridge = build_outstanding_claims_by_carrier_bridge(write_inbox=True)
+            return {
+                "text": format_outstanding_claims_hal_reply(bridge),
+                "intent": "policy:outstanding-claims-by-carrier",
+                "suggestedAction": str(bridge.get("suggestedAction") or ""),
+                "gapCode": str(bridge.get("gapCode") or ""),
+            }
+        except Exception:
+            return {
+                "text": (
+                    "Outstanding Claims by Carrier bridge unavailable. "
+                    "Ensure softdent_financial_analytics.db has sd_claims and "
+                    r"Account Aging Excel is in C:\SoftDentReportExports. Empty != $0."
+                ),
+                "intent": "policy:outstanding-claims-by-carrier",
+            }
+
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
     # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
     # account transactions → Excel playbook
