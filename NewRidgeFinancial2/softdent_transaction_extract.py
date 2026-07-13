@@ -1409,9 +1409,11 @@ def upsert_account_transactions_jsonl(
         donna = conn.execute(
             """
             SELECT COUNT(*) FROM sd_account_transactions
-            WHERE account_num = '27002'
+            WHERE source_file = ?
+              AND account_num = '27002'
               AND (period_start = '2026-02-01' OR service_date LIKE '2026-02-%')
-            """
+            """,
+            (source_file,),
         ).fetchone()[0]
         result["donna27002Count"] = int(donna)
         # Null honesty spot-check: count rows with amount IS NULL for this source
@@ -1584,17 +1586,22 @@ def load_txn_jsonl(
 def _parse_date_range(
     date_range: Any,
 ) -> tuple[str | None, str | None]:
-    """Accept '2026-02', '2026-02-01:2026-02-28', (start, end), or None."""
+    """Accept '2026-02', '2018', '2018:2019', '2026-02-01:2026-02-28', (start, end), or None."""
     if date_range is None or date_range == "":
         return None, None
     if isinstance(date_range, (list, tuple)) and len(date_range) >= 2:
         start = str(date_range[0] or "").strip() or None
         end = str(date_range[1] or "").strip() or None
-        return start, end
+        return _normalize_range_bound(start, end=False), _normalize_range_bound(end, end=True)
     text = str(date_range).strip()
     if ":" in text:
         left, right = text.split(":", 1)
-        return left.strip() or None, right.strip() or None
+        return _normalize_range_bound(left.strip(), end=False), _normalize_range_bound(
+            right.strip(), end=True
+        )
+    if re.fullmatch(r"20\d{2}", text):
+        y = int(text)
+        return f"{y:04d}-01-01", f"{y:04d}-12-31"
     if len(text) == 7 and text[4] == "-":
         # YYYY-MM → month bounds
         year, month = text.split("-", 1)
@@ -1605,7 +1612,18 @@ def _parse_date_range(
             return f"{y:04d}-{m:02d}-01", f"{y:04d}-{m + 1:02d}-01"
         except ValueError:
             return text, text
-    return text, text
+    return _normalize_range_bound(text, end=False), _normalize_range_bound(text, end=True)
+
+
+def _normalize_range_bound(value: str | None, *, end: bool) -> str | None:
+    """Expand bare YYYY to year start/end so ISO service_date compares work."""
+    if not value:
+        return None
+    text = str(value).strip()
+    if re.fullmatch(r"20\d{2}", text) or re.fullmatch(r"19\d{2}", text):
+        y = int(text)
+        return f"{y:04d}-12-31" if end else f"{y:04d}-01-01"
+    return text
 
 
 def _date_in_range(date_iso: str | None, start: str | None, end: str | None) -> bool:
@@ -1623,6 +1641,90 @@ def _date_in_range(date_iso: str | None, start: str | None, end: str | None) -> 
         elif d > end_s:
             return False
     return True
+
+
+def account_tx_ledger_coverage(*, db_path: Path | None = None) -> dict[str, Any]:
+    """Honest multi-year coverage for HAL (from ingest log + DB; empty ≠ $0)."""
+    coverage: dict[str, Any] = {
+        "account_tx_multi_year_available": False,
+        "dbTotal": 0,
+        "serviceDateMin": None,
+        "serviceDateMax": None,
+        "source": None,
+        "honesty": "empty != $0; read-only SoftDent Excel/CSV ledger",
+    }
+    ingest_log = YEAR_CHUNK_INGEST_LOG
+    if ingest_log.is_file():
+        try:
+            raw = json.loads(ingest_log.read_text(encoding="utf-8"))
+            coverage.update(
+                {
+                    "account_tx_multi_year_available": bool(
+                        raw.get("account_tx_multi_year_available")
+                    ),
+                    "dbTotal": int(raw.get("dbTotal") or 0),
+                    "serviceDateMin": (
+                        f"{raw.get('serviceYearMin')}-01-01"
+                        if raw.get("serviceYearMin")
+                        else None
+                    ),
+                    "serviceDateMax": (
+                        f"{raw.get('serviceYearMax')}-12-31"
+                        if raw.get("serviceYearMax")
+                        else None
+                    ),
+                    "source": "softdent_account_tx_year_chunks_ingest.json",
+                }
+            )
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    if not target or not target.is_file():
+        return coverage
+    try:
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        try:
+            if _account_tx_db_row_count(target) <= 0:
+                return coverage
+            total = int(conn.execute("SELECT COUNT(*) FROM sd_account_transactions").fetchone()[0])
+            row = conn.execute(
+                """
+                SELECT MIN(service_date), MAX(service_date)
+                FROM sd_account_transactions
+                WHERE service_date IS NOT NULL AND length(service_date) >= 10
+                """
+            ).fetchone()
+            dmin = row[0] if row else None
+            dmax = row[1] if row else None
+            coverage["dbTotal"] = total
+            coverage["serviceDateMin"] = dmin or coverage.get("serviceDateMin")
+            coverage["serviceDateMax"] = dmax or coverage.get("serviceDateMax")
+            coverage["source"] = "sd_account_transactions"
+            ymin = int(str(dmin)[:4]) if dmin else None
+            ymax = int(str(dmax)[:4]) if dmax else None
+            coverage["account_tx_multi_year_available"] = bool(
+                total > 100_000 and ymin and ymax and ymin <= 2017 and ymax >= 2026
+            )
+        finally:
+            conn.close()
+    except Exception:
+        return coverage
+    return coverage
+
+
+def _attach_account_tx_coverage(result: dict[str, Any], *, db_path: Path | None = None) -> dict[str, Any]:
+    coverage = account_tx_ledger_coverage(db_path=db_path)
+    result["coverage"] = coverage
+    result["account_tx_multi_year_available"] = bool(
+        coverage.get("account_tx_multi_year_available")
+    )
+    result["dbTotal"] = coverage.get("dbTotal")
+    result["availableRange"] = {
+        "min": coverage.get("serviceDateMin"),
+        "max": coverage.get("serviceDateMax"),
+    }
+    return result
 
 
 def query_account_transactions(
@@ -1649,7 +1751,7 @@ def query_account_transactions(
             limit=limit,
         )
         if db_hit is not None:
-            return db_hit
+            return _attach_account_tx_coverage(db_hit, db_path=db_path)
 
     records = load_parsed_account_transactions(parsed_dir=parsed_dir)
     if not records:
@@ -1665,7 +1767,7 @@ def query_account_transactions(
             parsed = parse_account_transactions_xls(target)
             records = list(parsed.get("records") or [])
         if not records:
-            return {
+            out = {
                 "ok": False,
                 "reason": "data not yet exported",
                 "message": (
@@ -1678,6 +1780,7 @@ def query_account_transactions(
                 "matches": [],
                 "matchCount": 0,
             }
+            return _attach_account_tx_coverage(out, db_path=db_path)
 
     start, end = _parse_date_range(date_range)
     acct = _account_num_str(account_num) if account_num not in (None, "") else None
@@ -1699,7 +1802,7 @@ def query_account_transactions(
         if len(matches) >= max(1, int(limit)):
             break
 
-    return {
+    result = {
         "ok": True,
         "reason": None,
         "matchCount": len(matches),
@@ -1711,25 +1814,50 @@ def query_account_transactions(
         },
         "source": "jsonl_or_xls",
     }
+    return _attach_account_tx_coverage(result, db_path=db_path)
 
 
 def format_account_transactions_hal_reply(result: dict[str, Any], *, max_lines: int = 12) -> str:
     """HAL-facing reply from query_account_transactions (honesty: empty ≠ $0)."""
+    coverage = (result or {}).get("coverage") or {}
+    avail_min = coverage.get("serviceDateMin") or ((result or {}).get("availableRange") or {}).get(
+        "min"
+    )
+    avail_max = coverage.get("serviceDateMax") or ((result or {}).get("availableRange") or {}).get(
+        "max"
+    )
+    db_total = (result or {}).get("dbTotal") or coverage.get("dbTotal")
+    multi = bool(
+        (result or {}).get("account_tx_multi_year_available")
+        or coverage.get("account_tx_multi_year_available")
+    )
+    coverage_bits = []
+    if multi:
+        coverage_bits.append("account_tx_multi_year_available=true")
+    if db_total:
+        coverage_bits.append(f"db_total={db_total}")
+    if avail_min and avail_max:
+        coverage_bits.append(f"available_range={avail_min} to {avail_max}")
+    coverage_s = f" [{'; '.join(coverage_bits)}]" if coverage_bits else ""
+
     if not result or not result.get("ok"):
-        return str(
+        base = str(
             (result or {}).get("message")
             or "Account transaction data not yet exported."
         )
+        return f"{base}{coverage_s}".strip()
     matches = list(result.get("matches") or [])
     if not matches:
         filters = result.get("filters") or {}
         return (
-            "No matching account transactions in the parsed SoftDent TXN Excel export "
-            f"(filters={filters}). Data source is read-only Excel ingest — empty != $0."
+            "No matching account transactions for these filters "
+            f"(filters={filters}; source={result.get('source') or 'unknown'}). "
+            f"Ledger is read-only SoftDent ingest — empty != $0.{coverage_s}"
         )
     lines = [
         f"SoftDent account transactions "
-        f"({result.get('source') or 'parsed TXN'}; {len(matches)} match(es); empty != $0):"
+        f"({result.get('source') or 'parsed TXN'}; {len(matches)} match(es); empty != $0)"
+        f"{coverage_s}:"
     ]
     for rec in matches[: max(1, int(max_lines))]:
         amt = rec.get("amount")

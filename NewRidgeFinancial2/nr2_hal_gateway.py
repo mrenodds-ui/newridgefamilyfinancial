@@ -463,7 +463,7 @@ def query_account_transactions(
 
 
 def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
-    """Detect patient-ledger asks (Donna-style) and extract filters; else None."""
+    """Detect patient-ledger asks (Donna-style / multi-year) and extract filters; else None."""
     q = str(query or "").strip()
     if not q:
         return None
@@ -472,6 +472,7 @@ def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
         re.search(
             r"\b("
             r"account\s+transactions?|patient\s+transactions?|patient\s+ledger|"
+            r"account\s+history|ledger\s+for|history\s+for\s+account|"
             r"transactions?\s+for|"
             r"(what|show|list|pull|get).{0,40}transactions?"
             r")\b",
@@ -492,7 +493,30 @@ def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
         acct = re.search(r"\b(27002)\b", low)
     if acct:
         filters["account_num"] = acct.group(1)
-    # "Donna Nickel" / "Nickel, Donna"
+    # "Donna Nickel" / "Nickel, Donna" — skip command verbs / ledger nouns
+    _name_stop = {
+        "show",
+        "list",
+        "what",
+        "pull",
+        "get",
+        "are",
+        "account",
+        "accounts",
+        "history",
+        "transaction",
+        "transactions",
+        "patient",
+        "ledger",
+        "softdent",
+        "from",
+        "for",
+        "with",
+        "the",
+        "and",
+        "in",
+        "to",
+    }
     name = re.search(
         r"\b([A-Za-z]{2,})\s+([A-Za-z]{2,})(?:'s)?\b(?=.*\btransactions?\b)|"
         r"\b([A-Za-z]{2,})\s*,\s*([A-Za-z]{2,})\b",
@@ -500,9 +524,13 @@ def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
     )
     if name:
         if name.group(1) and name.group(2):
-            filters["patient_name"] = f"{name.group(2)}, {name.group(1)}"
+            a, b = name.group(1).lower(), name.group(2).lower()
+            if a not in _name_stop and b not in _name_stop:
+                filters["patient_name"] = f"{name.group(2)}, {name.group(1)}"
         elif name.group(3) and name.group(4):
-            filters["patient_name"] = f"{name.group(3)}, {name.group(4)}"
+            a, b = name.group(3).lower(), name.group(4).lower()
+            if a not in _name_stop and b not in _name_stop:
+                filters["patient_name"] = f"{name.group(3)}, {name.group(4)}"
     if "donna" in low and "nickel" in low:
         filters["patient_name"] = "Nickel, Donna"
         filters.setdefault("account_num", "27002")
@@ -542,11 +570,26 @@ def _extract_account_tx_query_filters(query: str) -> dict[str, Any] | None:
         }
         filters["date_range"] = f"{month.group(2)}-{mon_map[month.group(1)]}"
     else:
-        ym = re.search(r"\b(20\d{2})-(\d{2})\b", low)
-        if ym:
-            filters["date_range"] = f"{ym.group(1)}-{ym.group(2)}"
+        span = re.search(
+            r"\b((?:19|20)\d{2})\s*(?:to|-|–|—|/)\s*((?:19|20)\d{2})\b",
+            low,
+        )
+        if span:
+            filters["date_range"] = f"{span.group(1)}:{span.group(2)}"
+        else:
+            ym = re.search(r"\b(20\d{2})-(\d{2})\b", low)
+            if ym:
+                filters["date_range"] = f"{ym.group(1)}-{ym.group(2)}"
+            else:
+                year_only = re.search(
+                    r"\b(?:in|for|during|year)\s+((?:19|20)\d{2})\b|\b((?:19|20)\d{2})\b(?!\s*-\d{2})",
+                    low,
+                )
+                if year_only:
+                    filters["date_range"] = year_only.group(1) or year_only.group(2)
     if not filters.get("account_num") and not filters.get("patient_name"):
         return None
+    filters["prefer_db"] = True
     return filters
 
 
@@ -572,7 +615,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": f"navigate:{page}",
             }
 
-    # Parsed SoftDent TXN Excel patient-ledger (Donna-style) — prefer data over playbook
+    # Parsed SoftDent TXN Excel / sd_account_transactions patient-ledger — prefer DB
     ledger_filters = _extract_account_tx_query_filters(raw)
     if ledger_filters is not None:
         try:

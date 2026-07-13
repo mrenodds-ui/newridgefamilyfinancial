@@ -10,7 +10,6 @@ from pathlib import Path
 from softdent_transaction_extract import (
     ingest_account_transactions_xls,
     query_account_transactions,
-    resolve_analytics_db,
     upsert_account_transactions_jsonl,
 )
 
@@ -21,51 +20,53 @@ LIVE_JSONL = Path(r"C:\SoftDentFinancialExports\tx_parsed\TXN260201.jsonl")
 class AccountTxDbTests(unittest.TestCase):
     @unittest.skipUnless(LIVE_JSONL.is_file() or LIVE_TXN.is_file(), "TXN export not present")
     def test_upsert_and_query_donna_from_db(self):
-        if LIVE_TXN.is_file():
-            ingest = ingest_account_transactions_xls(LIVE_TXN)
-            self.assertTrue(ingest.get("ok"), msg=str(ingest))
-            self.assertEqual(ingest.get("recordCount"), 1716)
-            db_info = ingest.get("db") or {}
-        else:
-            db_info = upsert_account_transactions_jsonl(LIVE_JSONL)
-            self.assertTrue(db_info.get("ok"), msg=str(db_info))
+        # Use a temp analytics DB so live year-chunk ledger is not polluted by TXN260201.
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "analytics.db"
+            if LIVE_TXN.is_file():
+                ingest = ingest_account_transactions_xls(LIVE_TXN, db_path=db)
+                self.assertTrue(ingest.get("ok"), msg=str(ingest))
+                self.assertEqual(ingest.get("recordCount"), 1716)
+                db_info = ingest.get("db") or {}
+            else:
+                db_info = upsert_account_transactions_jsonl(LIVE_JSONL, db_path=db)
+                self.assertTrue(db_info.get("ok"), msg=str(db_info))
 
-        self.assertEqual(int(db_info.get("dbCount") or 0), 1716)
-        self.assertEqual(int(db_info.get("donna27002Count") or 0), 5)
+            self.assertEqual(int(db_info.get("dbCount") or 0), 1716)
+            self.assertEqual(int(db_info.get("donna27002Count") or 0), 5)
 
-        db = resolve_analytics_db()
-        self.assertIsNotNone(db)
-        assert db is not None
-        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-        try:
-            n = conn.execute("SELECT COUNT(*) FROM sd_account_transactions").fetchone()[0]
-            self.assertGreaterEqual(int(n), 1716)
-            # Null honesty: some amount cells are null (never forced to 0)
-            nulls = conn.execute(
-                "SELECT COUNT(*) FROM sd_account_transactions WHERE amount IS NULL"
-            ).fetchone()[0]
-            self.assertGreater(int(nulls), 0)
-            # Re-query Donna Feb from DB path
+            conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+            try:
+                n = conn.execute("SELECT COUNT(*) FROM sd_account_transactions").fetchone()[0]
+                self.assertEqual(int(n), 1716)
+                nulls = conn.execute(
+                    "SELECT COUNT(*) FROM sd_account_transactions WHERE amount IS NULL"
+                ).fetchone()[0]
+                self.assertGreater(int(nulls), 0)
+            finally:
+                conn.close()
+
             q = query_account_transactions(
                 account_num="27002",
                 patient_name="Donna",
                 date_range="2026-02",
                 prefer_db=True,
+                db_path=db,
             )
             self.assertTrue(q.get("ok"))
             self.assertEqual(q.get("source"), "sd_account_transactions")
             self.assertEqual(q.get("matchCount"), 5)
-        finally:
-            conn.close()
 
     @unittest.skipUnless(LIVE_JSONL.is_file(), "TXN JSONL not present")
     def test_upsert_idempotent(self):
-        first = upsert_account_transactions_jsonl(LIVE_JSONL)
-        second = upsert_account_transactions_jsonl(LIVE_JSONL)
-        self.assertTrue(first.get("ok"))
-        self.assertTrue(second.get("ok"))
-        self.assertEqual(first.get("dbCount"), second.get("dbCount"))
-        self.assertEqual(first.get("dbCount"), 1716)
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / "analytics.db"
+            first = upsert_account_transactions_jsonl(LIVE_JSONL, db_path=db)
+            second = upsert_account_transactions_jsonl(LIVE_JSONL, db_path=db)
+            self.assertTrue(first.get("ok"))
+            self.assertTrue(second.get("ok"))
+            self.assertEqual(first.get("dbCount"), second.get("dbCount"))
+            self.assertEqual(first.get("dbCount"), 1716)
 
     def test_temp_db_schema_and_null_money(self):
         with tempfile.TemporaryDirectory() as tmp:
