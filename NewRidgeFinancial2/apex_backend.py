@@ -4842,7 +4842,9 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         actions.append({"type": "focus_widget", "widgetId": "c0-import-guidance"})
         notes.append(
             "Refreshing SoftDent period imports from C:\\SoftDentReportExports (Register/Daysheet promote). "
-            "If July is still pending, export Register for a Period MTD from SoftDent first."
+            "If the open month is still pending production/collections, export Register for a Period once. "
+            "Do not re-export Register hoping Ins Plan Collections > 0 when SoftDent already printed $0 — "
+            "use ERA-835 for insurance detail."
         )
         handled = True
 

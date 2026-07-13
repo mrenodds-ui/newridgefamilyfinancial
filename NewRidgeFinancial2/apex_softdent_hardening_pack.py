@@ -44,6 +44,57 @@ ERA_REGISTER_ZERO_HINT = (
     "Proceed with ERA-835 for insurance detail (read-only; empty ≠ $0; no SoftDent write-back)."
 )
 
+# Stable suggestedAction tokens for HAL / widgets (hal-10578).
+# Never emit SUGGESTED_ACTION_RE_EXPORT_REGISTER when Ins Plan $0 + Regular truth.
+SUGGESTED_ACTION_ERA_835_PROCURE = "era_835_procure"
+SUGGESTED_ACTION_COLLECTIONS_EXPORT = "collections_export"
+SUGGESTED_ACTION_SYNC_IMPORTS = "sync_imports"
+SUGGESTED_ACTION_NONE = "none"
+# Forbidden token when registerInsPlanZero / ERA_835_REQUIRED — kept for tests + filters.
+SUGGESTED_ACTION_RE_EXPORT_REGISTER = "re_export_register"
+
+_RE_EXPORT_REGISTER_SUGGEST_RE = re.compile(
+    r"(?i)("
+    r"re[- ]?export\s+(?:the\s+)?(?:july\s+)?register|"
+    r"(?<!re-)export\s+(?:the\s+)?(?:july\s+)?register.{0,40}(ins\s*plan|insurance|>\s*0|hoping)|"
+    r"suggestedAction[\"']?\s*[:=]\s*[\"']?re_export_register"
+    r")"
+)
+_RE_EXPORT_FORBID_PHRASE_RE = re.compile(
+    r"(?i)(do\s+not|don't)\s+re[- ]?export.{0,100}register.{0,100}"
+)
+
+
+def register_ins_plan_zero_blocks_reexport(gap: dict[str, Any] | None) -> bool:
+    """True when SoftDent Register Ins Plan $0 / ERA path forbids Register re-export."""
+    g = gap if isinstance(gap, dict) else {}
+    code = str(g.get("collectionsGapCode") or g.get("gapCode") or "")
+    return bool(
+        g.get("registerInsPlanZero")
+        or g.get("regularCollectionsReported")
+        or code == GAP_ERA_835_REQUIRED
+    )
+
+
+def resolve_collections_suggested_action(gap: dict[str, Any] | None) -> str:
+    """Single suggestedAction for DEF-001 — never re_export_register on Ins Plan $0 truth."""
+    g = gap if isinstance(gap, dict) else {}
+    if g.get("healthy"):
+        return SUGGESTED_ACTION_NONE
+    if register_ins_plan_zero_blocks_reexport(g):
+        return SUGGESTED_ACTION_ERA_835_PROCURE
+    if g.get("collectionsExportRequired") or g.get("collectionsFormatRequired"):
+        return SUGGESTED_ACTION_COLLECTIONS_EXPORT
+    if g.get("collectionsPending"):
+        return SUGGESTED_ACTION_SYNC_IMPORTS
+    return SUGGESTED_ACTION_SYNC_IMPORTS
+
+
+def reply_suggests_register_reexport(text: str | None) -> bool:
+    """Detect remedial Register re-export suggestions (ignores 'Do not re-export…')."""
+    cleaned = _RE_EXPORT_FORBID_PHRASE_RE.sub(" ", str(text or ""))
+    return bool(_RE_EXPORT_REGISTER_SUGGEST_RE.search(cleaned))
+
 # SoftDent export inbox roots (same family as import_sync upstream)
 _EXPORT_INBOX_CANDIDATES = (
     r"C:\SoftDentReportExports",
@@ -496,6 +547,8 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     )
     result["insurance"] = insurance
     result["patient"] = patient
+    if latest and latest.get("regularCollectionsReported") is True:
+        result["regularCollectionsReported"] = True
     try:
         result["regularCollections"] = (
             float((latest or {}).get("regularCollections"))
@@ -550,6 +603,18 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         result = enrich_collections_gap_with_era(result)
     except Exception:
         pass
+
+    # hal-10578 — stamp suggestedAction; never re_export_register on Ins Plan $0 truth.
+    action = resolve_collections_suggested_action(result)
+    result["suggestedAction"] = action
+    result["forbidRegisterReexport"] = bool(
+        register_ins_plan_zero_blocks_reexport(result)
+        or action == SUGGESTED_ACTION_ERA_835_PROCURE
+    )
+    if result.get("forbidRegisterReexport"):
+        # Defense: strip any accidental re-export action token.
+        if result.get("suggestedAction") == SUGGESTED_ACTION_RE_EXPORT_REGISTER:
+            result["suggestedAction"] = SUGGESTED_ACTION_ERA_835_PROCURE
     return result
 
 
@@ -630,6 +695,7 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
             message = (
                 f"Ins Plan $0 (SoftDent truth) · Insurance Collections: ERA Required · {period}"
             )
+    suggested = str(gap.get("suggestedAction") or resolve_collections_suggested_action(gap))
     out: dict[str, Any] = {
         "id": "softdent-collections-gap",
         "type": "status",
@@ -646,6 +712,9 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "regularCollections": gap.get("regularCollections"),
         "insPlanCollections": gap.get("insPlanCollections"),
         "registerInsPlanZero": bool(gap.get("registerInsPlanZero")),
+        "suggestedAction": suggested,
+        "forbidRegisterReexport": bool(gap.get("forbidRegisterReexport"))
+        or suggested == SUGGESTED_ACTION_ERA_835_PROCURE,
     }
     if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
         # hal-10576 — browser Refresh Inbox uses apexFetch + X-NR2-Session-Token (CSRF).
@@ -704,12 +773,23 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
     code = str(g.get("collectionsGapCode") or g.get("gapCode") or "")
     if g.get("registerInsPlanZero") or code in {GAP_ERA_835_REQUIRED, "ERA_835_AVAILABLE"}:
         period = g.get("period") or "—"
+        action = str(g.get("suggestedAction") or resolve_collections_suggested_action(g))
         lines = [
             f"SoftDent Register reports Ins Plan Collections $0.00; proceed with ERA-835 for insurance detail.",
-            f"Period `{period}` · collectionsGapCode=`{code}` · empty ≠ $0 · no SoftDent write-back.",
+            f"Period `{period}` · collectionsGapCode=`{code}` · suggestedAction=`{action}` · "
+            "empty ≠ $0 · no SoftDent write-back.",
             "Do not re-export July Register hoping Ins Plan > 0 — SoftDent already printed $0.",
             str(g.get("fixHint") or ERA_REGISTER_ZERO_HINT),
         ]
+        try:
+            reg = float(g.get("regularCollections")) if g.get("regularCollections") is not None else None
+        except (TypeError, ValueError):
+            reg = None
+        if reg is not None and reg > 0:
+            lines.insert(
+                1,
+                f"Regular Collections: Complete (${reg:,.2f}) — SoftDent truth; Insurance Collections: ERA Required.",
+            )
         if g.get("eraAvailable"):
             lines.append(
                 f"ERA aggregate available: claims={g.get('eraClaimCount')} "

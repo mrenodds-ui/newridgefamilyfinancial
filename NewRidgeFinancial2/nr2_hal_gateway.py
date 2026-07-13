@@ -874,17 +874,66 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
 
     if re.search(
         r"\b("
+        r"re[- ]?export\s+(?:the\s+)?(?:july\s+)?register|"
+        r"export\s+(?:the\s+)?(?:july\s+)?register\s+again|"
+        r"(hope|hoping|want|need).{0,40}ins\s*plan.{0,20}(>\s*0|greater|positive)|"
+        r"register.{0,30}ins\s*plan.{0,20}(>\s*0|again)"
+        r")\b",
+        q,
+    ):
+        try:
+            from apex_softdent_hardening_pack import (
+                SUGGESTED_ACTION_ERA_835_PROCURE,
+                assess_collections_gap,
+                format_collections_gap_reply,
+                register_ins_plan_zero_blocks_reexport,
+            )
+
+            bundle = None
+            try:
+                from apex_backend import _load_reports_and_bundle
+
+                _reports, bundle, _err = _load_reports_and_bundle()
+            except Exception:
+                bundle = None
+            gap = assess_collections_gap(bundle)
+            if register_ins_plan_zero_blocks_reexport(gap):
+                return {
+                    "text": (
+                        format_collections_gap_reply(gap)
+                        + "\nRefused: Register re-export for Ins Plan > 0 is blocked "
+                        f"(suggestedAction=`{gap.get('suggestedAction') or SUGGESTED_ACTION_ERA_835_PROCURE}`)."
+                    ),
+                    "intent": "policy:forbid-register-reexport",
+                    "suggestedAction": str(
+                        gap.get("suggestedAction") or SUGGESTED_ACTION_ERA_835_PROCURE
+                    ),
+                }
+        except Exception:
+            return {
+                "text": (
+                    "Do not re-export SoftDent Register hoping Ins Plan Collections > 0 — "
+                    "July Register already reported Ins Plan $0.00 (SoftDent truth). "
+                    "Procure ERA-835 for insurance detail. Empty ≠ $0."
+                ),
+                "intent": "policy:forbid-register-reexport",
+                "suggestedAction": "era_835_procure",
+            }
+
+    if re.search(
+        r"\b("
         r"revenue.?composition|payer mix|insurance.?patient|"
         r"collections?\s+(empty|pending|missing|gap)|"
         r"why .{0,40}(collections|revenue.?composition)|"
         r"def-?001|daysheet|"
         r"(july|open.?month).{0,30}(insurance|ins.?plan).{0,20}collections?|"
         r"ins.?plan\s+collections?|"
-        r"era.?835"
+        r"era.?835|"
+        r"regular\s+collections"
         r")\b",
         q,
     ) and re.search(
-        r"\b(empty|pending|missing|gap|\$0|zero|why|july|insurance|ins.?plan|era|collections?)\b",
+        r"\b(empty|pending|missing|gap|\$0|zero|why|july|insurance|ins.?plan|era|collections?|regular)\b",
         q,
     ):
         try:
@@ -901,6 +950,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             return {
                 "text": format_collections_gap_reply(gap),
                 "intent": "policy:def-001-collections",
+                "suggestedAction": str(gap.get("suggestedAction") or "era_835_procure"),
             }
         except Exception:
             return {
@@ -909,6 +959,7 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                     "for insurance detail. Empty ≠ $0; do not re-export Register hoping Ins Plan > 0."
                 ),
                 "intent": "policy:def-001-collections",
+                "suggestedAction": "era_835_procure",
             }
 
     # Two-sentence HAL summary (constraint-friendly local answer)
