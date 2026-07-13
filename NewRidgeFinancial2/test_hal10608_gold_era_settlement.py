@@ -43,6 +43,36 @@ class Hal10608GoldEraSettlementTests(unittest.TestCase):
         self.assertFalse(gate.get("ready"))
         self.assertEqual(gate.get("lanes"), [])
 
+    def test_readiness_via_era_inbox(self) -> None:
+        gate = settlement_hydration_readiness_gate(
+            gold={"gapCode": "GOLD_CSV_MISSING", "paymentLines": 0},
+            era={
+                "gapCode": "ERA835_PENDING",
+                "fileCount": 3,
+                "pending": True,
+                "ingestedRowSample": 0,
+                "latestTotalPaid": None,
+            },
+        )
+        self.assertTrue(gate.get("ready"))
+        self.assertIn("era", gate.get("lanes") or [])
+        self.assertFalse(gate.get("settlementMatrixReady"))
+
+    def test_stale_era_fixture_not_ghost_ready(self) -> None:
+        gate = settlement_hydration_readiness_gate(
+            gold={"gapCode": "GOLD_CSV_MISSING", "paymentLines": 0},
+            era={
+                "gapCode": None,
+                "fileCount": 0,
+                "pending": False,
+                "ingestedRowSample": 2,
+                "latestTotalPaid": None,  # t.835 fixture
+            },
+        )
+        self.assertFalse(gate.get("ready"))
+        self.assertFalse(gate.get("eraReady"))
+        self.assertFalse(gate.get("settlementMatrixReady"))
+
     def test_readiness_via_gold(self) -> None:
         gate = settlement_hydration_readiness_gate(
             gold={"gapCode": "GOLD_OK", "paymentLines": 1200},
@@ -50,14 +80,7 @@ class Hal10608GoldEraSettlementTests(unittest.TestCase):
         )
         self.assertTrue(gate.get("ready"))
         self.assertIn("gold", gate.get("lanes") or [])
-
-    def test_readiness_via_era_inbox(self) -> None:
-        gate = settlement_hydration_readiness_gate(
-            gold={"gapCode": "GOLD_CSV_MISSING", "paymentLines": 0},
-            era={"gapCode": "ERA835_PENDING", "fileCount": 3, "pending": True, "ingestedRowSample": 0},
-        )
-        self.assertTrue(gate.get("ready"))
-        self.assertIn("era", gate.get("lanes") or [])
+        self.assertTrue(gate.get("settlementMatrixReady"))
 
     def test_status_honesty(self) -> None:
         st = gold_era_settlement_status()

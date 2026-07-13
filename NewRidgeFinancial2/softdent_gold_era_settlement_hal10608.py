@@ -125,6 +125,7 @@ def era_lane_status() -> dict[str, Any]:
     file_count = int(inbox.get("fileCount") or 0)
     ingested = int(gap.get("rowCount") or 0)
     pending = bool(gap.get("pending"))
+    latest = gap.get("latest") if isinstance(gap.get("latest"), dict) else {}
     return {
         "ok": True,
         "enabled": era835_enabled(),
@@ -135,6 +136,9 @@ def era_lane_status() -> dict[str, Any]:
         "chipStatus": inbox.get("chipStatus"),
         "chipLabel": inbox.get("chipLabel"),
         "ingestedRowSample": ingested,
+        "latestTotalPaid": latest.get("totalPaid"),
+        "latestPayerName": latest.get("payerName"),
+        "latestSourceFile": latest.get("sourceFile"),
         "inboxRoots": [str(r) for r in (inbox.get("inbox") or {}).get("roots") or []],
         "fixHint": gap.get("fixHint"),
     }
@@ -149,10 +153,29 @@ def settlement_hydration_readiness_gate(
     e = era if isinstance(era, dict) else era_lane_status()
 
     gold_ready = str(g.get("gapCode") or "") == "GOLD_OK" and int(g.get("paymentLines") or 0) > 0
-    # ERA readiness = files in inbox OR non-pending gap (ingested aggregates present)
-    era_ready = (int(e.get("fileCount") or 0) > 0) or (
-        e.get("gapCode") is None and not e.get("pending") and int(e.get("ingestedRowSample") or 0) > 0
+
+    # ERA ops readiness: real inbox files OR non-pending ingest with a paid aggregate.
+    # Stale fixture rows (e.g. t.835 / totalPaid null) must NOT ghost-ready the gate.
+    file_count = int(e.get("fileCount") or 0)
+    ingested = int(e.get("ingestedRowSample") or 0)
+    era_pending = bool(e.get("pending"))
+    era_gap = e.get("gapCode")
+    latest_paid = e.get("latestTotalPaid")
+    has_paid = latest_paid is not None and str(latest_paid).strip() != ""
+    try:
+        if has_paid:
+            has_paid = float(latest_paid) > 0  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        has_paid = False
+
+    era_inbox_ready = file_count > 0
+    era_ingest_ready = (
+        (not era_pending)
+        and era_gap is None
+        and ingested > 0
+        and has_paid
     )
+    era_ready = era_inbox_ready or era_ingest_ready
 
     lanes: list[str] = []
     if gold_ready:
@@ -160,13 +183,21 @@ def settlement_hydration_readiness_gate(
     if era_ready:
         lanes.append("era")
 
+    # Matrix hydrate is Gold-only (ERA readiness ≠ invent settlement_matrix cells)
+    settlement_matrix_ready = gold_ready
+
     ready = bool(lanes)
-    if ready:
-        reason = f"ready via {', '.join(lanes)}"
+    if settlement_matrix_ready:
+        reason = "settlement_matrix ready via gold payment lines"
+    elif era_inbox_ready:
+        reason = f"ERA inbox has {file_count} file(s) — ingest available (matrix still needs Gold)"
+    elif era_ingest_ready:
+        reason = "ERA aggregates present with paid amount — ops lane only (matrix still needs Gold)"
     else:
         reason = (
             f"blocked — gold={g.get('gapCode') or 'UNKNOWN'}; "
-            f"era={e.get('gapCode') or 'ERA835_PENDING'} (empty inbox ≠ $0)"
+            f"era={era_gap or 'ERA835_PENDING'} "
+            f"(inbox empty / no paid ERA aggregate; empty != $0)"
         )
 
     return {
@@ -175,10 +206,12 @@ def settlement_hydration_readiness_gate(
         "lanes": lanes,
         "goldReady": gold_ready,
         "eraReady": era_ready,
+        "settlementMatrixReady": settlement_matrix_ready,
         "matrixHydrateFrom": "gold_csv_only",
         "note": (
-            "ERA readiness enables inbox/ingest ops; settlement_matrix still hydrates "
-            "only from sd_insurance_payment_lines (Gold). empty != $0."
+            "ERA inbox/ingest enables structured remittance ops; "
+            "settlement_matrix hydrates only from sd_insurance_payment_lines (Gold). "
+            "Stale ERA fixtures with null paid do not count. empty != $0."
         ),
     }
 
