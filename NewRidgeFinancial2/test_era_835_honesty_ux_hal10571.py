@@ -41,7 +41,8 @@ class Era835HonestyUxTests(unittest.TestCase):
 
     def test_era_fallback_when_register_zero_insurance(self) -> None:
         gap = assess_collections_gap(_bundle_register_ins_plan_zero())
-        self.assertTrue(gap.get("collectionsFormatRequired"))
+        # Ins Plan $0 is SoftDent truth → ERA path, not Collections-format re-export.
+        self.assertFalse(gap.get("collectionsFormatRequired"))
         self.assertEqual(gap.get("collectionsGapCode"), GAP_ERA_835_REQUIRED)
         self.assertTrue(gap.get("registerInsPlanZero"))
         self.assertFalse(gap.get("collectionsExportRequired"))

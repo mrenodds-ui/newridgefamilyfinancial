@@ -1201,21 +1201,35 @@ def _summarize_register_rows(
         return None
     production = float(productions if productions is not None else (net_productions or 0.0))
     coll = float(collections) if collections is not None else None
+    # SoftDent Register explicitly labels both Ins Plan and Regular lines (may be $0).
+    labels_present = ins_plan is not None and regular is not None
     insurance = float(ins_plan) if ins_plan is not None else 0.0
-    split_ok = insurance > 0 and coll is not None and coll > 0
-    patient = 0.0
-    if split_ok:
-        patient = float(regular) if regular is not None else max(0.0, coll - insurance)
+    # Patient side: prefer SoftDent "Regular Collections" label (truth even when Ins Plan is $0).
+    # Never invent patient=collections when Regular label is absent.
+    if regular is not None:
+        patient = float(regular)
+    elif insurance > 0 and coll is not None and coll > 0:
+        patient = max(0.0, coll - insurance)
+    else:
+        patient = 0.0
+    split_ok = insurance > 0 and patient >= 0 and coll is not None and coll > 0
+    register_ins_zero = bool(
+        ins_plan is not None and float(ins_plan) <= 0 and coll is not None and coll > 0
+    )
     return {
         "period": period,
         "production": production,
         "collections": coll,
-        "insurance": insurance if split_ok else 0.0,
-        "patient": patient if split_ok else 0.0,
-        "insuranceSplitReported": split_ok,
-        "hasInsurancePatientSplit": split_ok,
-        "daysheetWithoutSplit": bool(production > 0 and not split_ok and coll is None),
-        "collectionsFormatRequired": bool(production > 0 and coll is not None and coll > 0 and not split_ok),
+        "insurance": insurance,
+        "patient": patient,
+        "insuranceSplitReported": bool(labels_present or split_ok),
+        "hasInsurancePatientSplit": bool(labels_present or split_ok),
+        "regularCollectionsReported": regular is not None,
+        "registerInsPlanZero": register_ins_zero,
+        "daysheetWithoutSplit": bool(production > 0 and not labels_present and not split_ok and coll is None),
+        "collectionsFormatRequired": bool(
+            production > 0 and coll is not None and coll > 0 and not labels_present and not split_ok
+        ),
         "sourceKind": source_kind,
         "sourcePath": str(path),
         "schema": schema,

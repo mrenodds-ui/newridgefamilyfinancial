@@ -212,6 +212,26 @@ def _prior_source_dict(prior: dict[str, Any]) -> dict[str, Any]:
         "insurance": float(prior.get("insurance") or 0),
         "patient": float(prior.get("patient") or 0),
     }
+    # Preserve Register Regular / Ins Plan honesty flags so a later stale CSV
+    # cannot drop an earlier SoftDent-labeled Regular Collections truth.
+    if prior.get("insuranceSplitReported") is True or (
+        float(prior.get("patient") or 0) > 0 and float(prior.get("collections") or 0) > 0
+    ):
+        payload["insuranceSplitReported"] = True
+    if prior.get("regularCollectionsReported") is True:
+        payload["regularCollectionsReported"] = True
+    if prior.get("registerInsPlanZero") is True:
+        payload["registerInsPlanZero"] = True
+    if prior.get("regularCollections") is not None:
+        try:
+            payload["regularCollections"] = float(prior.get("regularCollections") or 0)
+        except (TypeError, ValueError):
+            pass
+    if prior.get("insPlanCollections") is not None:
+        try:
+            payload["insPlanCollections"] = float(prior.get("insPlanCollections") or 0)
+        except (TypeError, ValueError):
+            pass
     if pending is True:
         payload["collectionsPending"] = True
     elif reported is False:
@@ -261,7 +281,13 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
         collections, collections_reported = _merge_collections(collections, candidate, reported=reported)
         src_ins = float(source.get("insurance") or 0)
         src_pat = float(source.get("patient") or 0)
-        if source.get("insuranceSplitReported") is True or (src_ins > 0 and src_pat >= 0):
+        src_split = (
+            source.get("insuranceSplitReported") is True
+            or source.get("regularCollectionsReported") is True
+            or source.get("registerInsPlanZero") is True
+            or (src_ins > 0 and src_pat >= 0)
+        )
+        if src_split:
             split_reported = True
             insurance = _merge_metric(insurance, src_ins)
             patient = _merge_metric(patient, src_pat)
@@ -271,12 +297,19 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
             if src_pat > 0:
                 patient = _merge_metric(patient, src_pat)
     # Only derive patient from collections−insurance when insurance side is real (>0).
-    # Never invent all-patient dumps (ins=0, patient=collections).
+    # Never invent all-patient dumps (ins=0, patient=collections) unless SoftDent
+    # labeled Regular Collections on the Register (regularCollectionsReported).
     if split_reported and patient <= 0 and collections is not None and collections > 0 and insurance > 0:
         patient = max(0.0, collections - insurance)
-    # Collapse false prior dumps: collections≈patient with insurance=0 is not a mix.
+    explicit_regular = any(
+        bool(source.get("regularCollectionsReported") or source.get("registerInsPlanZero"))
+        for source in sources
+    )
+    # Collapse false prior dumps: collections≈patient with insurance=0 is not a mix
+    # — unless SoftDent Register explicitly reported Regular Collections / Ins Plan $0.
     if (
-        collections is not None
+        not explicit_regular
+        and collections is not None
         and collections > 0
         and insurance <= 0
         and patient > 0
@@ -291,6 +324,45 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
         "insurance": insurance if split_reported else 0.0,
         "patient": patient if split_reported else 0.0,
     }
+    if split_reported:
+        row["insuranceSplitReported"] = True
+    if explicit_regular:
+        row["regularCollectionsReported"] = True
+        if insurance <= 0 and collections is not None and float(collections or 0) > 0:
+            row["registerInsPlanZero"] = True
+    # Prefer the highest SoftDent-labeled Regular / Ins Plan figures across sources
+    # (stale CSV must not clobber a newer Register XLS truth).
+    for source in sources:
+        if source.get("regularCollections") is None:
+            continue
+        try:
+            cand = float(source.get("regularCollections") or 0)
+        except (TypeError, ValueError):
+            continue
+        prev = row.get("regularCollections")
+        if prev is None or cand > float(prev):
+            row["regularCollections"] = cand
+    for source in sources:
+        if source.get("insPlanCollections") is None:
+            continue
+        try:
+            cand = float(source.get("insPlanCollections") or 0)
+        except (TypeError, ValueError):
+            continue
+        prev = row.get("insPlanCollections")
+        if prev is None or cand > float(prev):
+            row["insPlanCollections"] = cand
+    # SoftDent Regular label is the patient-side truth when present.
+    if explicit_regular and row.get("regularCollections") is not None:
+        try:
+            reg = float(row.get("regularCollections") or 0)
+        except (TypeError, ValueError):
+            reg = 0.0
+        if reg > float(row.get("patient") or 0):
+            row["patient"] = reg
+            split_reported = True
+            row["insuranceSplitReported"] = True
+            row["insurance"] = insurance if split_reported else 0.0
     if collections is not None:
         row["collections"] = collections
         row["collectionsReported"] = True
@@ -490,6 +562,20 @@ def _stub_source_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
     }
     if summary.get("insuranceSplitReported") is True:
         source["insuranceSplitReported"] = True
+    if summary.get("regularCollectionsReported") is True:
+        source["regularCollectionsReported"] = True
+    if summary.get("registerInsPlanZero") is True:
+        source["registerInsPlanZero"] = True
+    if summary.get("regularCollections") is not None:
+        try:
+            source["regularCollections"] = float(summary.get("regularCollections"))
+        except (TypeError, ValueError):
+            pass
+    if summary.get("insPlanCollections") is not None:
+        try:
+            source["insPlanCollections"] = float(summary.get("insPlanCollections"))
+        except (TypeError, ValueError):
+            pass
     collections = summary.get("collections")
     if collections is not None:
         try:

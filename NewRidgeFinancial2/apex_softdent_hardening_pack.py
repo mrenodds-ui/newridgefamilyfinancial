@@ -52,7 +52,8 @@ _EXPORT_INBOX_CANDIDATES = (
 )
 
 _COLLECTIONS_NAME_RE = re.compile(
-    r"(?i)(collections|daysheet|register.?for.?(?:a.?)?period|col[_-]?\d{6})",
+    # SoftDent short names: REG202607.XLS / COL260712.csv
+    r"(?i)(collections|daysheet|register.?for.?(?:a.?)?period|reg\d{6}|col[_-]?\d{6})",
 )
 
 
@@ -73,8 +74,11 @@ def scan_collections_export_inbox(*, limit: int = 12) -> dict[str, Any]:
         raw = str(os.environ.get(env_key) or "").strip()
         if raw:
             roots.append(Path(raw))
-    for cand in _EXPORT_INBOX_CANDIDATES:
-        roots.append(Path(cand))
+    # When an operator/test pins an export root via env, do not also scan the
+    # hardcoded SoftDent folders (avoids stale CSV leakage into isolated ingests).
+    if not roots:
+        for cand in _EXPORT_INBOX_CANDIDATES:
+            roots.append(Path(cand))
 
     seen: set[str] = set()
     matches: list[dict[str, Any]] = []
@@ -308,8 +312,12 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
             patient = None
         ins = float(insurance or 0)
         pat = float(patient or 0)
+        regular_reported = bool(
+            latest.get("regularCollectionsReported") or latest.get("registerInsPlanZero")
+        )
         if (
-            has_collections_key
+            not regular_reported
+            and has_collections_key
             and collections
             and collections > 0
             and ins <= 0
@@ -462,34 +470,76 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
     except Exception:
         pass
 
-    # Moonshot hal-10571 — SoftDent Register Ins Plan $0 is truth → ERA honesty path
-    # Only when collections were reported (Register totals present) but Ins Plan is $0.
-    # Do not hijack COLLECTIONS_PENDING / wrong-period inbox format gaps.
+    # Moonshot — SoftDent Register Ins Plan $0 is truth → ERA honesty path.
+    # Regular Collections may be complete while insurance still needs ERA-835.
     register_ins_zero = bool(
-        (format_required or result.get("collectionsFormatRequired"))
-        and (insurance is None or float(insurance or 0) <= 0)
+        (insurance is None or float(insurance or 0) <= 0)
         and production is not None
         and float(production or 0) > 0
-        and not result.get("healthy")
         and not pending
         and (
             reported is True
             or (collections is not None and float(collections or 0) > 0)
         )
+        and (
+            format_required
+            or result.get("collectionsFormatRequired")
+            or bool((latest or {}).get("registerInsPlanZero"))
+            or bool((latest or {}).get("regularCollectionsReported"))
+            or (
+                patient is not None
+                and float(patient or 0) > 0
+                and collections is not None
+                and float(collections or 0) > 0
+            )
+        )
     )
     result["insurance"] = insurance
     result["patient"] = patient
+    try:
+        result["regularCollections"] = (
+            float((latest or {}).get("regularCollections"))
+            if latest and (latest.get("regularCollections") is not None)
+            else (float(patient) if patient is not None else None)
+        )
+    except (TypeError, ValueError):
+        result["regularCollections"] = patient
+    try:
+        result["insPlanCollections"] = (
+            float((latest or {}).get("insPlanCollections"))
+            if latest and (latest.get("insPlanCollections") is not None)
+            else insurance
+        )
+    except (TypeError, ValueError):
+        result["insPlanCollections"] = insurance
     if register_ins_zero:
         result["registerInsPlanZero"] = True
         result["collectionsGapCode"] = GAP_ERA_835_REQUIRED
         result["gapCode"] = GAP_ERA_835_REQUIRED
+        result["healthy"] = False
         result["collectionsExportRequired"] = False
+        result["collectionsFormatRequired"] = False
         result["fixHint"] = ERA_REGISTER_ZERO_HINT
+        # Keep SoftDent-reported Regular Collections visible (not inventing Ins Plan).
+        if collections is not None:
+            result["collections"] = collections
         issues = list(result.get("issues") or [])
+        reg_amt = result.get("regularCollections")
+        reg_bit = (
+            f" Regular Collections ${float(reg_amt):,.2f} (SoftDent truth)."
+            if reg_amt is not None and float(reg_amt or 0) > 0
+            else ""
+        )
+        issues = [
+            i
+            for i in issues
+            if "insurance/patient split" not in str(i).lower()
+            and "collections format required" not in str(i).lower()
+        ]
         issues.insert(
             0,
-            f"{period or 'period'}: SoftDent Register Ins Plan Collections $0.00 (truth) — "
-            "proceed with ERA-835 for insurance detail; do not re-export Register hoping Ins Plan > 0.",
+            f"{period or 'period'}: SoftDent Register Ins Plan Collections $0.00 (truth).{reg_bit} "
+            "Proceed with ERA-835 for insurance detail; do not re-export Register hoping Ins Plan > 0.",
         )
         result["issues"] = issues[:12]
 
@@ -564,19 +614,38 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
     hint = gap.get("fixHint") or FIX_HINT
     if code == GAP_ERA_835_REQUIRED:
         hint = str(gap.get("fixHint") or ERA_REGISTER_ZERO_HINT)
+    message = f"{code} · {period}"
+    if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
+        reg = gap.get("regularCollections")
+        try:
+            reg_f = float(reg) if reg is not None else None
+        except (TypeError, ValueError):
+            reg_f = None
+        if reg_f is not None and reg_f > 0:
+            message = (
+                f"Regular Collections: Complete (${reg_f:,.2f}) · "
+                f"Insurance Collections: ERA Required · {period}"
+            )
+        else:
+            message = (
+                f"Ins Plan $0 (SoftDent truth) · Insurance Collections: ERA Required · {period}"
+            )
     out: dict[str, Any] = {
         "id": "softdent-collections-gap",
         "type": "status",
         "label": "Collections Gap (DEF-001)",
         "size": "full",
         "status": "empty",
-        "message": f"{code} · {period}",
+        "message": message,
         "emptyMessage": code,
         "hint": hint,
         "gapCode": code,
         "gap": gap,
         "eraInbox": gap.get("eraInbox"),
         "halChips": chips,
+        "regularCollections": gap.get("regularCollections"),
+        "insPlanCollections": gap.get("insPlanCollections"),
+        "registerInsPlanZero": bool(gap.get("registerInsPlanZero")),
     }
     if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
         # hal-10576 — browser Refresh Inbox uses apexFetch + X-NR2-Session-Token (CSRF).

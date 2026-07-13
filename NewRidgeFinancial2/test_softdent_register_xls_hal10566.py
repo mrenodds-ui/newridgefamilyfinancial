@@ -79,8 +79,11 @@ class SoftDentRegisterXlsHal10566Tests(unittest.TestCase):
             self.assertEqual(summary.get("period"), "2026-06")
             self.assertEqual(float(summary.get("collections") or 0), 108787.14)
             self.assertEqual(float(summary.get("insurance") or 0), 0.0)
-            self.assertEqual(float(summary.get("patient") or 0), 0.0)
-            self.assertTrue(summary.get("collectionsFormatRequired"))
+            # SoftDent labeled Regular Collections — patient side is truth, not invented.
+            self.assertEqual(float(summary.get("patient") or 0), 108787.14)
+            self.assertTrue(summary.get("regularCollectionsReported"))
+            self.assertTrue(summary.get("registerInsPlanZero"))
+            self.assertFalse(summary.get("collectionsFormatRequired"))
             classified = classify_daysheet_inbox_periods(
                 [{"name": path.name, "path": str(path), "kind": "register"}]
             )
@@ -130,10 +133,16 @@ class SoftDentRegisterXlsHal10566Tests(unittest.TestCase):
         self.assertIsNotNone(summary)
         self.assertEqual(summary.get("period"), "2026-06")
         self.assertGreater(float(summary.get("production") or 0), 0)
-        # Live SoftDent file reports Ins Plan $0 — honesty: no invented patient dump.
+        # Live SoftDent file reports Ins Plan $0 — insurance stays 0; Regular may be > 0.
         self.assertEqual(float(summary.get("insurance") or 0), 0.0)
-        self.assertEqual(float(summary.get("patient") or 0), 0.0)
-        self.assertTrue(summary.get("collectionsFormatRequired"))
+        if summary.get("regularCollections") is not None:
+            self.assertEqual(
+                float(summary.get("patient") or 0),
+                float(summary.get("regularCollections") or 0),
+            )
+            self.assertTrue(summary.get("registerInsPlanZero"))
+        else:
+            self.assertEqual(float(summary.get("patient") or 0), 0.0)
 
 
 if __name__ == "__main__":
