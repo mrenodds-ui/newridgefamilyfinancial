@@ -19,13 +19,13 @@
       "useForAgentLoop": false,
       "sanitizeBeforeCloud": true,
       "apiKeyEnv": "NR2_CLOUD_API_KEY",
-      "note": "DISABLED \u2014 office HAL is local hal-local:32b only (R9700). No cloud AI."
+      "note": "DISABLED — office HAL is local MoE hal-local:30b-a3b only (R9700). No cloud AI."
     },
     "webResearch": {
       "enabled": true,
       "mode": "broad",
       "maxResults": 8,
-      "policy": "Public reference lookup for practice operations. Sanitized queries only \u2014 no patient names, amounts, or account numbers.",
+      "policy": "Public reference lookup for practice operations. Sanitized queries only — no patient names, amounts, or account numbers.",
       "topics": [
         "softdent",
         "quickbooks",
@@ -39,13 +39,13 @@
         "vendor documentation"
       ]
     },
-    "activeLane": "local32b-single",
+    "activeLane": "local-moe-30b-a3b",
     "preferReasoning": true,
     "hybridGpuLayout": {
       "enabled": false,
-      "policy": "2026-07-13 hard 32B-only: pin only hal-local:32b. No other local or cloud AI models.",
+      "policy": "2026-07-13 hard MoE-only: pin only hal-local:30b-a3b. No other local or cloud AI models.",
       "gpuPinned": [
-        "hal-local:32b"
+        "hal-local:30b-a3b"
       ],
       "onDemandCoder": null,
       "neverPin": [
@@ -56,14 +56,16 @@
         "gpt-oss:120b",
         "qwen3-coder:30b",
         "llama3.3:latest",
-        "falcon:180b"
+        "falcon:180b",
+        "hal-local:32b",
+        "qwen3:32b"
       ]
     },
     "singleGpuLayout": {
       "enabled": true,
-      "policy": "One quantized 32B on R9700 only. No other AI models for the office program.",
-      "approvedModel": "hal-local:32b",
-      "baseModel": "qwen3:32b",
+      "policy": "One quantized MoE Instruct (Qwen3 30B-A3B) on R9700 only. Not the thinking-only alias.",
+      "approvedModel": "hal-local:30b-a3b",
+      "baseModel": "qwen3:30b-a3b-instruct-2507-q4_K_M",
       "quantization": "Q4_K_M",
       "numCtx": 8192,
       "maxLoadedModels": 1,
@@ -71,7 +73,8 @@
       "gpuDevice": "AMD Radeon AI PRO R9700",
       "vramGiB": 32,
       "vramSafetyMarginGiB": 5,
-      "keepAlive": -1
+      "keepAlive": -1,
+      "architecture": "MoE (~30.5B total / ~3.3B active)"
     },
     "cursorParity": {
       "enabled": true,
@@ -125,19 +128,19 @@
       "multiGatherRounds": 4,
       "agentLoopMaxTurns": 8,
       "minSentences": 5,
-      "policy": "Chat tier 9000 on local hal-local:32b only \u2014 no cloud, no alternate Ollama tags."
+      "policy": "Chat tier 9000 on local MoE hal-local:30b-a3b only — no cloud, no alternate Ollama tags."
     },
     "employee": {
       "enabled": true,
       "targetLevel": 7,
       "profile": {
         "name": "HAL",
-        "title": "Executive Partner \u2014 Office Operations",
+        "title": "Executive Partner — Office Operations",
         "department": "Back Office"
       },
       "standingConsent": {
         "enabled": true,
-        "policy": "Level 7 executive partner \u2014 continuous shift, director delegation, standing consent on routine back-office with full audit. Payer portal submit and clinical charting remain staff-confirmed."
+        "policy": "Level 7 executive partner — continuous shift, director delegation, standing consent on routine back-office with full audit. Payer portal submit and clinical charting remain staff-confirmed."
       },
       "scheduler": {
         "enabled": true,
@@ -148,21 +151,21 @@
     "ascension10000": {
       "enabled": true,
       "directorMode": true,
-      "policy": "HAL 10000 transcendent tier \u2014 practice director loop, predictive alerts, executive digest, HCI ceiling 10000."
+      "policy": "HAL 10000 transcendent tier — practice director loop, predictive alerts, executive digest, HCI ceiling 10000."
     },
     "chat10000": {
       "enabled": true,
       "executivePersona": true,
       "alwaysAgentLoop": true,
-      "policy": "Chat 10000 \u2014 director voice, executive summary first, agent loop always on when ascension active."
+      "policy": "Chat 10000 — director voice, executive summary first, agent loop always on when ascension active."
     },
     "independentThought": {
       "enabled": true,
       "allowScriptSpeech": false,
-      "policy": "No canned scripts \u2014 text and voice come only from live agent reasoning and tool evidence."
+      "policy": "No canned scripts — text and voice come only from live agent reasoning and tool evidence."
     },
     "agentCapabilities": {
-      "gatherMode": "Cursor-style \u2014 parallel tool gather, auto-escalate to reasoning on weak answers",
+      "gatherMode": "Cursor-style — parallel tool gather, auto-escalate to reasoning on weak answers",
       "tools": [
         "read_current_context",
         "read_program_snapshot",
@@ -205,7 +208,7 @@
     "localModel": {
       "enabled": true,
       "endpoint": "http://127.0.0.1:11434/api/chat",
-      "model": "hal-local:32b",
+      "model": "hal-local:30b-a3b",
       "timeoutMs": 90000,
       "temperature": 0.2,
       "think": false,
@@ -222,17 +225,17 @@
       "temperature": 0.2
     },
     "gpuPinnedModels": [
-      "hal-local:32b"
+      "hal-local:30b-a3b"
     ],
     "gpuPinOptions": {
-      "hal-local:32b": {
+      "hal-local:30b-a3b": {
         "num_ctx": 8192
       }
     },
     "reasoningModel": {
       "enabled": true,
       "endpoint": "http://127.0.0.1:11434/api/chat",
-      "model": "hal-local:32b",
+      "model": "hal-local:30b-a3b",
       "timeoutMs": 210000,
       "temperature": 0.25,
       "think": false,
@@ -246,7 +249,7 @@
     "escalationModel": {
       "enabled": true,
       "endpoint": "http://127.0.0.1:11434/api/chat",
-      "model": "hal-local:32b",
+      "model": "hal-local:30b-a3b",
       "timeoutMs": 180000,
       "temperature": 0.2,
       "think": false,
@@ -259,7 +262,7 @@
       "enabled": true,
       "onDemand": false,
       "endpoint": "http://127.0.0.1:11434/api/chat",
-      "model": "hal-local:32b",
+      "model": "hal-local:30b-a3b",
       "timeoutMs": 180000,
       "temperature": 0.25,
       "think": false,
@@ -269,12 +272,12 @@
         "repeat_penalty": 1.05,
         "top_p": 0.9
       },
-      "note": "Single-32B layout: coder lane maps to hal-local:32b (no second model load). qwen2.5-coder:32b retained on disk only."
+      "note": "Single-MoE layout: coder lane maps to hal-local:30b-a3b (no second model load)."
     },
-    "note": "Single 32B (2026-07-11): GPU pin only hal-local:32b (qwen3:32b Q4_K_M, num_ctx 8192) on R9700 32 GB. OLLAMA_MAX_LOADED_MODELS=1. Prior 8B/30B/coder tags retained on disk but not auto-routed. Cloud reasoning remains disabled unless explicitly enabled with NR2_CLOUD_API_KEY (PHI sanitized). Rollback: model-automation/Rollback-HAL-Dual-8B-30B.ps1.",
+    "note": "Single MoE Instruct (2026-07-13): GPU pin only hal-local:30b-a3b (FROM qwen3:30b-a3b-instruct-2507-q4_K_M, num_ctx 8192) on R9700 32 GB. Not the thinking-only qwen3:30b-a3b alias. OLLAMA_MAX_LOADED_MODELS=1. Rollback: Install-HAL-GPU-Single-32B.ps1 + restore APPROVED_LOCAL_MODEL.",
     "naturalVoice": {
       "instructions": [
-        "Write like a sharp office teammate: clear, direct, collaborative \u2014 not a film computer or dashboard narrator.",
+        "Write like a sharp office teammate: clear, direct, collaborative — not a film computer or dashboard narrator.",
         "Sound natural when spoken aloud: short sentences, contractions, no stiff openers like 'I should inform you' or 'If I may'.",
         "Structure: direct answer first, then local evidence, implication for staff, missing data, one safe next step.",
         "Proportional depth: one to three sentences for simple or yes/no questions; five to ten for open diagnostic questions.",
@@ -282,7 +285,7 @@
         "On the reasoning lane: think through the question before answering, then give a structured prose reply.",
         "Yes/no must start with Yes or No. Never paste the full capability list unless they ask what you can do.",
         "Never open with Here is a structured plan unless they asked for a plan.",
-        "Never expose chain-of-thought or scratchpad \u2014 staff see only the final answer.",
+        "Never expose chain-of-thought or scratchpad — staff see only the final answer.",
         "QuickBooks/SoftDent write or post requests: first sentence must include read-only.",
         "Outbound email/submit/fax/upload/post: first sentence must require consent.",
         "No sarcasm, no dismissals, no 'happy to help' filler. Accurate on consent policy and missing-data limits."
@@ -294,7 +297,7 @@
         },
         {
           "role": "assistant",
-          "content": "No \u2014 I cannot click Post inside QuickBooks from NR2. I can draft journal entries locally or export approved IIF after you say \"I consent\"; staff still post inside QuickBooks. Nothing writes back without explicit consent and review."
+          "content": "No — I cannot click Post inside QuickBooks from NR2. I can draft journal entries locally or export approved IIF after you say \"I consent\"; staff still post inside QuickBooks. Nothing writes back without explicit consent and review."
         },
         {
           "role": "user",
@@ -302,7 +305,7 @@
         },
         {
           "role": "assistant",
-          "content": "Yes. Refresh reloads SoftDent and QuickBooks exports into the local import bundle only \u2014 nothing writes back to either system. If widgets still look empty after refresh, the export files or paths are the likely issue, not the dashboard layout. Staff should confirm the export landed in the inbox before re-asking. I can show import status and diagnostics from the local bundle. This stays entirely on-machine."
+          "content": "Yes. Refresh reloads SoftDent and QuickBooks exports into the local import bundle only — nothing writes back to either system. If widgets still look empty after refresh, the export files or paths are the likely issue, not the dashboard layout. Staff should confirm the export landed in the inbox before re-asking. I can show import status and diagnostics from the local bundle. This stays entirely on-machine."
         },
         {
           "role": "user",
@@ -310,7 +313,7 @@
         },
         {
           "role": "assistant",
-          "content": "On Claims I can open the workbench, walk denied and needs-review lanes, and check packet readiness against local imports. I can build a claim submission packet zip after consent \u2014 staff upload it to the payer portal. I do not submit to payer portals directly. I can flag missing narrative or attachment gaps before staff sends anything outbound. Name a specific claim or lane if you want detail instead of a general walkthrough."
+          "content": "On Claims I can open the workbench, walk denied and needs-review lanes, and check packet readiness against local imports. I can build a claim submission packet zip after consent — staff upload it to the payer portal. I do not submit to payer portals directly. I can flag missing narrative or attachment gaps before staff sends anything outbound. Name a specific claim or lane if you want detail instead of a general walkthrough."
         },
         {
           "role": "user",
@@ -318,23 +321,23 @@
         },
         {
           "role": "assistant",
-          "content": "No \u2014 I won't email the payer without explicit consent. I can prepare the draft locally, show what would be sent, and wait for you to say \"I consent.\" Without consent I only prepare notes and readiness checklists \u2014 nothing is delivered externally."
+          "content": "No — I won't email the payer without explicit consent. I can prepare the draft locally, show what would be sent, and wait for you to say \"I consent.\" Without consent I only prepare notes and readiness checklists — nothing is delivered externally."
         },
         {
           "role": "user",
-          "content": "That's wrong \u2014 I meant imports, not widgets."
+          "content": "That's wrong — I meant imports, not widgets."
         },
         {
           "role": "assistant",
-          "content": "Understood \u2014 imports, not widgets. Refresh reloads SoftDent and QuickBooks files locally; nothing writes back to those systems. Widgets only reflect what landed in the import bundle. If you saw empty tiles, check import status first, then the export path. I can walk either surface if you name which page you are on."
+          "content": "Understood — imports, not widgets. Refresh reloads SoftDent and QuickBooks files locally; nothing writes back to those systems. Widgets only reflect what landed in the import bundle. If you saw empty tiles, check import status first, then the export path. I can walk either surface if you name which page you are on."
         },
         {
           "role": "user",
-          "content": "Keep it brief \u2014 can you open claims?"
+          "content": "Keep it brief — can you open claims?"
         },
         {
           "role": "assistant",
-          "content": "Yes. I can open the claims workbench from here. It loads the local claims import view \u2014 denied lanes, needs-review, and packet readiness. I do not submit claims to payers. Tell me if you want a specific lane once the page is open."
+          "content": "Yes. I can open the claims workbench from here. It loads the local claims import view — denied lanes, needs-review, and packet readiness. I do not submit claims to payers. Tell me if you want a specific lane once the page is open."
         },
         {
           "role": "user",
@@ -342,15 +345,15 @@
         },
         {
           "role": "assistant",
-          "content": "Not from live SoftDent \u2014 I only see production that arrived in the local imports. If production looks empty, refresh imports and verify the SoftDent export path first. I can explain what the Financial dashboard shows once data is loaded. Live SoftDent write-back and real-time reads are outside this program."
+          "content": "Not from live SoftDent — I only see production that arrived in the local imports. If production looks empty, refresh imports and verify the SoftDent export path first. I can explain what the Financial dashboard shows once data is loaded. Live SoftDent write-back and real-time reads are outside this program."
         },
         {
           "role": "user",
-          "content": "Same question \u2014 still read-only?"
+          "content": "Same question — still read-only?"
         },
         {
           "role": "assistant",
-          "content": "Yes \u2014 still read-only, same as before. I open pages and explain status from local imports; staff handles anything external. The firewall has not changed. Outbound submit, email, fax, upload, and post remain blocked from this program."
+          "content": "Yes — still read-only, same as before. I open pages and explain status from local imports; staff handles anything external. The firewall has not changed. Outbound submit, email, fax, upload, and post remain blocked from this program."
         },
         {
           "role": "user",
@@ -358,7 +361,7 @@
         },
         {
           "role": "assistant",
-          "content": "Random word: diligent \u2014 adjective, careful and persistent in work or effort. It fits office review tasks where attention to detail matters. Ask for another word or a definition in context if you need one."
+          "content": "Random word: diligent — adjective, careful and persistent in work or effort. It fits office review tasks where attention to detail matters. Ask for another word or a definition in context if you need one."
         },
         {
           "role": "user",
@@ -366,7 +369,7 @@
         },
         {
           "role": "assistant",
-          "content": "Ability \u2014 noun, the skill or power to do something. In this program it usually refers to what HAL can do locally versus what staff must do outside the firewall. I can list page capabilities if you name a surface like Claims or QuickBooks."
+          "content": "Ability — noun, the skill or power to do something. In this program it usually refers to what HAL can do locally versus what staff must do outside the firewall. I can list page capabilities if you name a surface like Claims or QuickBooks."
         }
       ],
       "sampling": {
@@ -375,8 +378,8 @@
     }
   },
   "readinessDisplay": {
-    "label": "Operator-verified local inventory \u2014 single 32B",
-    "verifiedAt": "2026-07-11",
+    "label": "Operator-verified local inventory — single MoE 30B-A3B",
+    "verifiedAt": "2026-07-13",
     "localAiService": {
       "status": "Detected",
       "name": "Ollama",
@@ -388,21 +391,21 @@
       "endpoint": "http://127.0.0.1:11434/api/version",
       "version": "0.31.1"
     },
-    "activeLane": "local32b-single",
-    "laneExecution": "Enabled \u00b7 single GPU-pinned 32B (hal-local:32b Q4_K_M) \u00b7 loopback only \u00b7 cloud AI refused",
-    "runningModel": "hal-local:32b (FROM qwen3:32b Q4_K_M)",
+    "activeLane": "local-moe-30b-a3b",
+    "laneExecution": "Enabled · single GPU-pinned MoE (hal-local:30b-a3b Q4_K_M) · loopback only · cloud AI refused",
+    "runningModel": "hal-local:30b-a3b (FROM qwen3:30b-a3b-instruct-2507-q4_K_M MoE Instruct)",
     "quantization": "Q4_K_M",
     "contextSize": 8192,
     "localEndpoint": "http://127.0.0.1:11434/api/chat",
     "activeProvider": "local-ollama",
-    "fallbackStatus": "cloud refused \u00b7 no alternate local models",
-    "gpuStatus": "AMD Radeon AI PRO R9700 \u00b7 index via HIP_VISIBLE_DEVICES \u00b7 32 GB VRAM \u00b7 single 32B pin",
-    "bindingStatus": "OLLAMA_HOST=127.0.0.1:11434 \u00b7 HAL client 127.0.0.1 only \u00b7 not LAN-exposed",
+    "fallbackStatus": "cloud refused · no alternate local models",
+    "gpuStatus": "AMD Radeon AI PRO R9700 · index via HIP_VISIBLE_DEVICES · 32 GB VRAM · single MoE pin",
+    "bindingStatus": "OLLAMA_HOST=127.0.0.1:11434 · HAL client 127.0.0.1 only · not LAN-exposed",
     "dataPolicy": "No patient or sensitive practice data sent to models or the web. Web research uses sanitized generic queries for public reference material.",
     "allModelsEnabled": false,
     "gpu": {
       "verified": true,
-      "verifiedAt": "2026-07-11",
+      "verifiedAt": "2026-07-13",
       "device": "AMD Radeon AI PRO R9700",
       "gpuIndex": 0,
       "vendor": "AMD",
@@ -411,11 +414,11 @@
       "vramGiB": 32,
       "vramTotalGiB": 32,
       "vramSafetyMarginGiB": 5,
-      "layerOffload": "Target: 100% GPU residency for hal-local:32b; fail readiness if substantial CPU offload",
+      "layerOffload": "Target: 100% GPU residency for MoE pin; fail readiness if substantial CPU offload",
       "fullyGpuResidentRequired": true,
       "integratedGpu": "Intel Graphics present; OLLAMA_IGPU_ENABLE=0 (disabled)",
       "resolvedWarning": "ROCBLAS_TENSILE_LIBPATH; OLLAMA_MAX_LOADED_MODELS=1; HIP_VISIBLE_DEVICES set to R9700 index",
-      "lastVerifiedLoad": "2026-07-11 controlled test: 100% GPU, size_vram=size (~14.84 GiB), ctx 8192, CPU offload 0%, loopback-only listener"
+      "lastVerifiedLoad": "pending post-pull verify"
     },
     "runtime": {
       "ollamaVersion": "0.31.1",
@@ -428,59 +431,60 @@
       "keepAlive": "-1 via HAL model warmup automation"
     },
     "availableModels": [
-      "hal-local:32b",
-      "qwen3:32b"
+      "hal-local:30b-a3b",
+      "qwen3:30b-a3b-instruct-2507-q4_K_M"
     ],
     "configuredModels": {
       "local": {
         "lane": "chat8b",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "available": true,
         "quantization": "Q4_K_M"
       },
       "reasoning": {
         "lane": "reason21b",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "available": true,
         "gpuPinnedWithLocal": true
       },
       "escalation": {
         "lane": "escalate30b",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "available": true,
         "gpuPinnedWithLocal": true
       },
       "coderHeavy": {
         "lane": "coder32b",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "available": true,
         "onDemand": false,
-        "sharedWithLocal32b": true
+        "sharedWithLocal32b": false,
+        "sharedWithLocalMoe": true
       }
     }
   },
   "lanes": [
     {
       "id": "chat8b",
-      "name": "32B chat lane (legacy id chat8b)",
-      "model": "hal-local:32b",
-      "role": "Staff conversation on single GPU-pinned 32B (lane id preserved; model is 32B not 8B)",
+      "name": "MoE chat lane (legacy id chat8b)",
+      "model": "hal-local:30b-a3b",
+      "role": "Staff conversation on single GPU-pinned MoE (lane id preserved; model is MoE not 8B)",
       "state": "Configured",
       "inventoryAvailable": true,
       "executionEnabled": true,
       "runtime": {
         "enabled": true,
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "timeoutMs": 90000,
         "temperature": 0.2
       },
       "gpuFit": {
         "verified": true,
         "processor": "100% GPU target",
-        "residentSize": "~15\u201318 GB at 8K ctx",
+        "residentSize": "~18–22 GB at 8K ctx (all experts resident)",
         "context": 8192,
-        "quantization": "Q4_K_M (qwen3:32b)"
+        "quantization": "Q4_K_M (qwen3:30b-a3b MoE)"
       },
       "willAllow": [
         "Explain pages in plain language",
@@ -497,16 +501,16 @@
     },
     {
       "id": "reason32b",
-      "name": "32B reasoning lane",
-      "model": "hal-local:32b",
-      "role": "Reasoning on shared single 32B pin for plans, accounting review, insurance narratives, and structured recommendations",
+      "name": "MoE reasoning lane",
+      "model": "hal-local:30b-a3b",
+      "role": "Reasoning on shared single MoE pin for plans, accounting review, insurance narratives, and structured recommendations",
       "state": "Configured",
       "inventoryAvailable": true,
       "executionEnabled": true,
       "runtime": {
         "enabled": true,
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "timeoutMs": 180000,
         "temperature": 0.25,
         "think": false
@@ -514,9 +518,9 @@
       "gpuFit": {
         "verified": true,
         "processor": "100% GPU target",
-        "residentSize": "~15\u201318 GB (shared single pin)",
+        "residentSize": "~18–22 GB at 8K ctx (all experts resident)",
         "context": 8192,
-        "quantization": "Q4_K_M"
+        "quantization": "Q4_K_M (qwen3:30b-a3b MoE)"
       },
       "willAllow": [
         "Prioritize work across pages",
@@ -532,16 +536,16 @@
     },
     {
       "id": "reason21b",
-      "name": "32B reasoning lane (alias)",
-      "model": "hal-local:32b",
-      "role": "Alias for reason32b \u2014 gateway reason21b maps to hal-local:32b",
+      "name": "MoE reasoning lane (alias)",
+      "model": "hal-local:30b-a3b",
+      "role": "Alias for reason32b — gateway reason21b maps to hal-local:30b-a3b",
       "state": "Configured",
       "inventoryAvailable": true,
       "executionEnabled": true,
       "runtime": {
         "enabled": true,
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "timeoutMs": 180000,
         "temperature": 0.25,
         "think": false
@@ -558,16 +562,16 @@
     },
     {
       "id": "escalate30b",
-      "name": "32B escalation lane (legacy id escalate30b)",
-      "model": "hal-local:32b",
-      "role": "Escalation on shared single 32B pin (lane id preserved; model is 32B not 30B)",
+      "name": "MoE escalation lane (legacy id escalate30b)",
+      "model": "hal-local:30b-a3b",
+      "role": "Escalation on shared single MoE pin (lane id preserved; model is MoE not 30B)",
       "state": "Configured",
       "inventoryAvailable": true,
       "executionEnabled": true,
       "runtime": {
         "enabled": true,
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "timeoutMs": 180000,
         "temperature": 0.2,
         "think": false
@@ -575,9 +579,9 @@
       "gpuFit": {
         "verified": true,
         "processor": "100% GPU target",
-        "residentSize": "~15\u201318 GB",
+        "residentSize": "~18–22 GB at 8K ctx (all experts resident)",
         "context": 8192,
-        "quantization": "Q4_K_M",
+        "quantization": "Q4_K_M (qwen3:30b-a3b MoE)",
         "thinkMode": "disabled for visible staff-facing replies"
       },
       "willAllow": [
@@ -592,16 +596,16 @@
     },
     {
       "id": "coder32b",
-      "name": "32B coder lane (legacy id coder32b)",
-      "model": "hal-local:32b",
-      "role": "Agent programming / patch / debug on shared single 32B pin (no second model). qwen2.5-coder:32b retained on disk only.",
+      "name": "MoE coder lane (legacy id coder32b)",
+      "model": "hal-local:30b-a3b",
+      "role": "Agent programming / patch / debug on shared single MoE pin (no second model). qwen2.5-coder:32b retained on disk only.",
       "state": "Configured",
       "inventoryAvailable": true,
       "executionEnabled": true,
       "runtime": {
         "enabled": true,
         "endpoint": "http://127.0.0.1:11434/api/chat",
-        "model": "hal-local:32b",
+        "model": "hal-local:30b-a3b",
         "timeoutMs": 180000,
         "temperature": 0.25,
         "options": {
@@ -615,9 +619,9 @@
         "verified": true,
         "onDemand": false,
         "processor": "100% GPU target (shared pin)",
-        "residentSize": "~15\u201318 GB",
+        "residentSize": "~18–22 GB at 8K ctx (all experts resident)",
         "context": 8192,
-        "quantization": "Q4_K_M"
+        "quantization": "Q4_K_M (qwen3:30b-a3b MoE)"
       },
       "willAllow": [
         "Agent tool loop and apply_program_patch",

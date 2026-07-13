@@ -1,4 +1,4 @@
-"""Hard 32B-only policy — office program must not call other AI models."""
+"""Hard MoE-only policy (30B-A3B) — office program must not call other AI models."""
 
 from __future__ import annotations
 
@@ -62,16 +62,16 @@ class Hal32bOnlyPolicyTests(unittest.TestCase):
             body = json.loads(req.data.decode("utf-8"))
             self.assertEqual(body["model"], APPROVED_LOCAL_MODEL)
 
-    def test_hal_models_inventory_is_32b_only(self) -> None:
+    def test_hal_models_inventory_is_moe_only(self) -> None:
         data = json.loads(HAL_MODELS.read_text(encoding="utf-8"))
         cfg = data["config"]
         self.assertFalse(cfg["cloudReasoning"]["enabled"])
         self.assertFalse(cfg["cloudReasoning"]["autoEnableWhenKeySet"])
         avail = data["readinessDisplay"]["availableModels"]
-        self.assertEqual(set(avail), {"hal-local:32b", "qwen3:32b"})
+        self.assertEqual(set(avail), {"hal-local:30b-a3b", "qwen3:30b-a3b-instruct-2507-q4_K_M"})
         for lane in data["lanes"]:
-            self.assertEqual(lane["model"], "hal-local:32b")
-            self.assertEqual(lane["runtime"]["model"], "hal-local:32b")
+            self.assertEqual(lane["model"], "hal-local:30b-a3b")
+            self.assertEqual(lane["runtime"]["model"], "hal-local:30b-a3b")
         banned = {"oss120b", "deep235b", "helper14b", "general14b", "coder30b"}
         ids = {lane["id"] for lane in data["lanes"]}
         self.assertTrue(ids.isdisjoint(banned))

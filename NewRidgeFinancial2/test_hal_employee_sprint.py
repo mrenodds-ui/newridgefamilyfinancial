@@ -69,11 +69,11 @@ class HalGatewayTests(unittest.TestCase):
     def test_resolve_lane_mapping(self) -> None:
         from nr2_hal_gateway import resolve_lane, route_by_complexity
 
-        self.assertEqual(resolve_lane("chat8b")["model"], "hal-local:32b")
+        self.assertEqual(resolve_lane("chat8b")["model"], "hal-local:30b-a3b")
         self.assertEqual(resolve_lane("reason21b")["lane"], "reason21b")
-        self.assertEqual(resolve_lane("reason21b")["model"], "hal-local:32b")
-        self.assertEqual(resolve_lane("escalate30b")["model"], "hal-local:32b")
-        self.assertEqual(resolve_lane("coder32b")["model"], "hal-local:32b")
+        self.assertEqual(resolve_lane("reason21b")["model"], "hal-local:30b-a3b")
+        self.assertEqual(resolve_lane("escalate30b")["model"], "hal-local:30b-a3b")
+        self.assertEqual(resolve_lane("coder32b")["model"], "hal-local:30b-a3b")
         lane = route_by_complexity("simple hello", shift_context={"tier": 1})
         self.assertEqual(lane, "chat8b")
         lane_esc = route_by_complexity("deep root cause investigation", shift_context={"tier": 5})

@@ -23,14 +23,14 @@ function Get-ConfiguredModels {
     )
 
     if (-not (Test-Path $modelsConfigPath)) {
-        return @("hal-local:32b")
+        return @("hal-local:30b-a3b")
     }
 
     $config = Get-Content $modelsConfigPath -Raw | ConvertFrom-Json
 
     $approved = $config.config.singleGpuLayout.approvedModel
     if ($approved) {
-        # Hard single-GPU policy: only warm the approved 32B pin (ignore inventory extras).
+        # Hard single-GPU policy: only warm the approved MoE pin (ignore inventory extras).
         if (-not $All) {
             return @([string]$approved)
         }

@@ -17,10 +17,10 @@ SOFT_STALE_WATERMARK = (
     "[DATA SOFT-STALE — analytical guidance only; verify amounts against fresh imports before acting]"
 )
 # Hard single-GPU policy: the office program may only call this local model.
-APPROVED_LOCAL_MODEL = "hal-local:32b"
+APPROVED_LOCAL_MODEL = "hal-local:30b-a3b"
 LANE_MODELS = {
-    # R9700 32 GB single-model layout: all approved local lanes → hal-local:32b (qwen3:32b Q4_K_M).
-    # Lane keys preserved for routing policy; do not load 8B/30B/coder concurrently.
+    # R9700 32 GB single-model layout: all approved local lanes → MoE pin
+    # (qwen3:30b-a3b Q4_K_M). Lane keys preserved; do not load dense 32B concurrently.
     "chat8b": APPROVED_LOCAL_MODEL,
     "reason21b": APPROVED_LOCAL_MODEL,
     "escalate30b": APPROVED_LOCAL_MODEL,
@@ -1682,7 +1682,7 @@ def enforce_approved_local_model(
     override_header: str | None = None,
     allow_missing: bool = True,
 ) -> dict[str, Any]:
-    """Hard allowlist: only hal-local:32b may run on the office GPU.
+    """Hard allowlist: only hal-local:30b-a3b (MoE) may run on the office GPU.
 
     Explicit payload.model / X-HAL-Model-Override that name another model → reject.
     Missing override → force APPROVED_LOCAL_MODEL.
@@ -2051,7 +2051,7 @@ def iter_ollama_sse_tokens(
 def _ollama_think_flag(model: str) -> bool | None:
     """Staff-facing lanes disable hidden reasoning (DeepSeek-R1 / Qwen3)."""
     name = str(model or "").lower()
-    # hal-local:32b is qwen3:32b under an alias — must disable think or content stays empty.
+    # hal-local:* Qwen3 aliases — must disable think or content stays empty.
     if (
         name.startswith("hal-escalate")
         or name.startswith("hal-local")
@@ -2091,7 +2091,7 @@ def call_ollama_chat(
         payload["options"] = options
     if format is not None:
         payload["format"] = format
-    # REC-007 HAL keep-alive: default forever (-1) so qwen3:32b stays GPU-resident.
+    # REC-007 HAL keep-alive: default forever (-1) so MoE stays GPU-resident.
     if keep_alive is None:
         raw = str(os.environ.get("NR2_OLLAMA_KEEP_ALIVE") or "-1").strip()
         if raw.lstrip("-").isdigit():

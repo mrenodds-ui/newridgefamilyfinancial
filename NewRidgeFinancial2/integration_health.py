@@ -24,7 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 NR2_ROOT = Path(__file__).resolve().parent
 DATA_DIR = REPO_ROOT / "app_data" / "nr2"
 HAL_MODELS_PATH = NR2_ROOT / "site" / "data" / "hal-models.json"
-APPROVED_LOCAL_MODEL = "hal-local:32b"
+APPROVED_LOCAL_MODEL = "hal-local:30b-a3b"
 APPROVED_QUANT = "Q4_K_M"
 VRAM_TOTAL_GIB = 32.0
 VRAM_SAFETY_MARGIN_GIB = 5.0
@@ -333,7 +333,7 @@ def integration_health_snapshot(
             ok=ollama_ok,
             status=ollama_status,
             detail=ollama_detail,
-            action_hint="Run Apply-HAL-GPU-Performance.ps1 and validate_hal_local_32b.py; expect only hal-local:32b loaded.",
+            action_hint="Run Apply-HAL-GPU-Performance.ps1; expect only hal-local:30b-a3b (MoE) loaded.",
         )
     )
 

@@ -4290,9 +4290,9 @@ const HalAgent = (function () {
       if (!ctx.reasoningModelReady()) return { text: ctx.offlineModelMessage("reason21b"), lane: "reason21b · offline" };
       const om = Object.assign({ reasoningLane: true }, ctx.reasoningModelConfig());
       const text = await ctx.runModel(om, combinedPrompt, userText, "Local 32B draft", onToken);
-      return { text, lane: "hal-local:32b" };
+      return { text, lane: "hal-local:30b-a3b" };
     }
-    // Cloud AI deliberately removed — office program is local hal-local:32b only.
+    // Cloud AI deliberately removed — office program is local hal-local:30b-a3b MoE only.
     const wantAgentReasoning =
       plan &&
       plan.agentToolLoop &&
