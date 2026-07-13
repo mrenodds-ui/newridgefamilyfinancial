@@ -170,6 +170,38 @@ def _merge_metric(existing: float, candidate: float) -> float:
     return max(existing, candidate)
 
 
+def _is_register_production_authority(source: dict[str, Any]) -> bool:
+    """True when SoftDent Register / daysheet / bridge should beat provider_prod max-merge."""
+    auth = str(source.get("productionAuthority") or "").strip().lower()
+    if auth in {"register", "softdent_period"}:
+        return True
+    kind = str(source.get("_source") or "").strip().lower()
+    if kind in {"daysheet", "bridge", "inbox_export"}:
+        return True
+    if source.get("regularCollectionsReported") is True or source.get("registerInsPlanZero") is True:
+        return True
+    sk = str(source.get("sourceKind") or "").strip().lower()
+    return sk.startswith("register")
+
+
+def _merge_production(sources: list[dict[str, Any]]) -> float:
+    """Prefer SoftDent Register/period production over provider_prod inflation (hal-10579)."""
+    auth = 0.0
+    other = 0.0
+    for source in sources:
+        try:
+            prod = float(source.get("production") or 0)
+        except (TypeError, ValueError):
+            prod = 0.0
+        if prod <= 0:
+            continue
+        if _is_register_production_authority(source):
+            auth = _merge_metric(auth, prod)
+        else:
+            other = _merge_metric(other, prod)
+    return auth if auth > 0 else other
+
+
 def _merge_collections(existing: float | None, candidate: float | None, *, reported: bool) -> tuple[float | None, bool]:
     if not reported:
         return existing, existing is not None
@@ -232,6 +264,10 @@ def _prior_source_dict(prior: dict[str, Any]) -> dict[str, Any]:
             payload["insPlanCollections"] = float(prior.get("insPlanCollections") or 0)
         except (TypeError, ValueError):
             pass
+    if prior.get("productionAuthority"):
+        payload["productionAuthority"] = str(prior.get("productionAuthority"))
+    elif prior.get("regularCollectionsReported") or prior.get("registerInsPlanZero"):
+        payload["productionAuthority"] = "register"
     if pending is True:
         payload["collectionsPending"] = True
     elif reported is False:
@@ -269,14 +305,13 @@ def _is_current_month(period: str) -> bool:
 
 
 def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, Any]:
-    production = 0.0
+    production = _merge_production(sources)
     collections: float | None = None
     collections_reported = False
     insurance = 0.0
     patient = 0.0
     split_reported = False
     for source in sources:
-        production = _merge_metric(production, float(source.get("production") or 0))
         candidate, reported = _include_collections_from_source(source)
         collections, collections_reported = _merge_collections(collections, candidate, reported=reported)
         src_ins = float(source.get("insurance") or 0)
@@ -324,6 +359,8 @@ def _build_period_row(period: str, sources: list[dict[str, Any]]) -> dict[str, A
         "insurance": insurance if split_reported else 0.0,
         "patient": patient if split_reported else 0.0,
     }
+    if any(_is_register_production_authority(s) for s in sources) and production > 0:
+        row["productionAuthority"] = "register"
     if split_reported:
         row["insuranceSplitReported"] = True
     if explicit_regular:
@@ -495,16 +532,34 @@ def _month_rows(db_path: Path | None, periods: list[str]) -> list[dict[str, Any]
     for period in periods:
         sources: list[dict[str, Any]] = []
         if period in daysheet:
-            sources.append({"_source": "daysheet", **daysheet[period]})
+            sources.append(
+                {
+                    "_source": "daysheet",
+                    "productionAuthority": "softdent_period",
+                    **daysheet[period],
+                }
+            )
         if period in provider_prod:
             sources.append({"_source": "provider_prod", "production": provider_prod[period]})
         if period in bridge:
-            sources.append({"_source": "bridge", **bridge[period]})
+            sources.append(
+                {
+                    "_source": "bridge",
+                    "productionAuthority": "softdent_period",
+                    **bridge[period],
+                }
+            )
         # DEF-001: SoftDentReportExports daysheet when analytics DB has no period row.
         if period in inbox_daysheet and not any(
             _collections_source_kind(s) == "daysheet" for s in sources
         ):
-            sources.append({"_source": "daysheet", **inbox_daysheet[period]})
+            sources.append(
+                {
+                    "_source": "daysheet",
+                    "productionAuthority": "softdent_period",
+                    **inbox_daysheet[period],
+                }
+            )
         if not sources:
             continue
         row = _build_period_row(period, sources)
@@ -554,12 +609,18 @@ def diagnose_collections_gap(db_path: Path | None, periods: list[str] | None = N
 def _stub_source_from_summary(summary: dict[str, Any]) -> dict[str, Any]:
     """Convert export summary into a period-row source (no invented $)."""
     production = float(summary.get("production") or 0)
+    source_kind = str(summary.get("sourceKind") or "")
     source: dict[str, Any] = {
         "_source": "inbox_export",
         "production": production,
         "insurance": float(summary.get("insurance") or 0),
         "patient": float(summary.get("patient") or 0),
+        "sourceKind": source_kind,
     }
+    if source_kind.startswith("register") or summary.get("regularCollectionsReported") is True:
+        source["productionAuthority"] = "register"
+    elif production > 0:
+        source["productionAuthority"] = "softdent_period"
     if summary.get("insuranceSplitReported") is True:
         source["insuranceSplitReported"] = True
     if summary.get("regularCollectionsReported") is True:
@@ -746,6 +807,22 @@ def sync_dashboard_period_rows(*, force_reimport: bool = False) -> dict[str, Any
                 float(merged.get("insurance") or 0) > 0
             ):
                 merged["collectionsFormatRequired"] = True
+            # Keep Register Regular / Ins Plan honesty when analytics merge lacks labels.
+            if prior.get("regularCollectionsReported") is True:
+                merged["regularCollectionsReported"] = True
+            if prior.get("registerInsPlanZero") is True:
+                merged["registerInsPlanZero"] = True
+            if prior.get("regularCollections") is not None and merged.get("regularCollections") is None:
+                try:
+                    merged["regularCollections"] = float(prior.get("regularCollections") or 0)
+                except (TypeError, ValueError):
+                    pass
+            if prior.get("productionAuthority"):
+                merged["productionAuthority"] = prior.get("productionAuthority")
+            elif float(merged.get("production") or 0) > 0 and (
+                prior.get("regularCollectionsReported") or prior.get("registerInsPlanZero")
+            ):
+                merged["productionAuthority"] = "register"
             merge_log.append(
                 {
                     "period": period,
