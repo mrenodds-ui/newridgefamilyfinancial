@@ -666,6 +666,51 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "policy:outstanding-claims-by-carrier",
             }
 
+    # InsCo × ADA probabilistic ledger estimates (HAL-10582/83) — exact default
+    try:
+        from softdent_insco_ada_probabilistic import (
+            format_probabilistic_estimate_reply,
+            format_probabilistic_status_reply,
+            log_inferred_view_audit,
+            lookup_probabilistic_estimate,
+            parse_probabilistic_estimate_query,
+            probabilistic_report_status,
+        )
+
+        parsed_p = parse_probabilistic_estimate_query(raw)
+        if parsed_p and parsed_p.get("kind") == "status":
+            return {
+                "text": format_probabilistic_status_reply(probabilistic_report_status()),
+                "intent": "policy:insco-ada-estimates",
+            }
+        if parsed_p and parsed_p.get("kind") == "lookup":
+            include_inf = bool(parsed_p.get("includeInferred"))
+            if include_inf:
+                log_inferred_view_audit(
+                    payer=str(parsed_p.get("payer") or ""),
+                    ada=str(parsed_p.get("adaCode") or ""),
+                    source="hal-gateway",
+                )
+            est = lookup_probabilistic_estimate(
+                payer=str(parsed_p.get("payer") or ""),
+                ada_code=str(parsed_p.get("adaCode") or ""),
+                include_inferred=include_inf,
+            )
+            return {
+                "text": format_probabilistic_estimate_reply(
+                    est,
+                    payer=str(parsed_p.get("payer") or ""),
+                    ada=str(parsed_p.get("adaCode") or ""),
+                    include_inferred=include_inf,
+                ),
+                "intent": "policy:insco-ada-estimates",
+                "includeInferred": include_inf,
+                "credibility": (est or {}).get("credibility"),
+                "tier": (est or {}).get("tier"),
+            }
+    except Exception:
+        pass
+
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
     # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
     # account transactions → Excel playbook

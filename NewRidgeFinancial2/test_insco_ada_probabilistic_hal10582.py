@@ -122,7 +122,7 @@ class InscoAdaProbabilisticHal10582Tests(unittest.TestCase):
             self.assertIsNotNone(est)
             text = format_probabilistic_estimate_reply(est, payer="Delta", ada="D1110")
             self.assertIn("D1110", text)
-            self.assertIn("credibility=", text)
+            self.assertIn("badge=", text)
 
     def test_credibility_constants_documented(self) -> None:
         self.assertEqual(CREDIBILITY["exact_publish_n"], 10)

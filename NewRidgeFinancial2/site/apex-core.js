@@ -5637,6 +5637,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       { label: "What should HAL learn?", query: "What would you like to learn?" },
       { label: "Tx plan data status", query: "Treatment planning data status" },
       { label: "Delta pay for D0274?", query: "How much will Delta Dental typically pay for D0274?" },
+      { label: "InsCo×ADA estimate status", query: "InsCo ADA estimate status" },
+      {
+        label: "Delta KS pay for D1110?",
+        query: "How much does Delta Dental of KS typically pay for D1110?",
+      },
       { label: "Dictate to findings", query: "dictate findings: clinical exam supports the billed procedure" },
       { label: "How to get SoftDent exports", query: "How do I get SoftDent exports?" },
       { label: "How to get QuickBooks exports", query: "How do I get QuickBooks exports?" },

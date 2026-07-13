@@ -399,7 +399,13 @@ def lookup_probabilistic_estimate(
     ada_code: str,
     db_path: Path | None = None,
     prefer_exact: bool = True,
+    include_inferred: bool = False,
 ) -> dict[str, Any] | None:
+    """Lookup InsCo×ADA estimate. Default: exact tier only (usable/high).
+
+    Inferred cells return None unless ``include_inferred=True`` (staff opt-in).
+    Insufficient / low never returned as dollars (empty != $0).
+    """
     target = Path(db_path) if db_path else resolve_analytics_db()
     if not target or not target.is_file():
         return None
@@ -410,7 +416,11 @@ def lookup_probabilistic_estimate(
     conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
     try:
         ensure_probabilistic_schema(conn)
-        tiers = ("exact", "inferred") if prefer_exact else ("exact", "inferred", "low")
+        tiers: tuple[str, ...]
+        if include_inferred:
+            tiers = ("exact", "inferred") if prefer_exact else ("inferred", "exact")
+        else:
+            tiers = ("exact",)
         for tier in tiers:
             row = conn.execute(
                 """
@@ -448,29 +458,254 @@ def lookup_probabilistic_estimate(
     return None
 
 
-def format_probabilistic_estimate_reply(est: dict[str, Any] | None, *, payer: str, ada: str) -> str:
-    if not est:
-        return (
-            f"No credible ledger-based estimate for {payer or 'that payer'} × {ada or 'that ADA'} yet. "
-            f"Need ≥{CREDIBILITY['exact_publish_n']} exact (single-ADA) events, or "
-            f"≥{CREDIBILITY['inferred_publish_n']} inferred events (labeled). empty ≠ $0."
+def parse_probabilistic_estimate_query(query: str) -> dict[str, Any] | None:
+    """Parse staff queries like 'How much does Delta pay for D1110?' / inferred opt-in."""
+    import re
+
+    q = str(query or "").strip()
+    if not q:
+        return None
+    ql = q.lower()
+    include_inferred = bool(
+        re.search(
+            r"\b(include\s+inferred|show\s+(uncertain|inferred)|inferred\s+ok|"
+            r"uncertain\s+estimates?\s+ok)\b",
+            ql,
         )
-    tier = est.get("tier")
-    cred = est.get("credibility")
-    n = est.get("sample_size")
+    )
+    # Status / report health
+    if re.search(
+        r"\b("
+        r"insco\s*[×x]?\s*ada\s+(status|report|estimates?|data)|"
+        r"probabilistic\s+(insco|ada|estimate|report|status)|"
+        r"ledger\s+based\s+(insco|ada|estimate)|"
+        r"credibility\s+(badge|report|status)|"
+        r"insco\s+ada\s+estimate\s+status"
+        r")\b",
+        ql,
+    ):
+        return {"kind": "status", "includeInferred": include_inferred}
+
+    # "what does X typically pay for D#### / ####"
+    m = re.search(
+        r"(?:how\s+much\s+(?:will|does|did)\s+)?"
+        r"(.+?)\s+(?:typically\s+)?(?:pay|paid|pays|allow|write[\s-]?off)"
+        r".{0,40}?\b(?:for|on)\s+(D?\d{3,5})\b",
+        q,
+        re.IGNORECASE,
+    )
+    if not m:
+        m = re.search(
+            r"\b(delta(?:\s+dental)?(?:\s+of\s+\w+)?|metlife|cigna|bcbs(?:\s+of\s+\w+)?|"
+            r"guardian|aetna|united\s*concordia)\b.{0,60}\b(D?\d{3,5})\b",
+            q,
+            re.IGNORECASE,
+        )
+    if not m:
+        return None
+    payer = str(m.group(1) or "").strip(" ?.,")
+    ada = normalize_ada_code(m.group(2))
+    # Strip leading filler from payer capture
+    payer = re.sub(
+        r"^(?:how\s+much\s+(?:will|does|did)\s+)?",
+        "",
+        payer,
+        flags=re.IGNORECASE,
+    ).strip()
+    if not payer or not ada:
+        return None
+    return {
+        "kind": "lookup",
+        "payer": payer,
+        "adaCode": ada,
+        "includeInferred": include_inferred,
+    }
+
+
+def credibility_badge(credibility: str | None, tier: str | None = None) -> dict[str, str]:
+    cred = str(credibility or "").strip().lower()
+    if cred == "high":
+        return {"badge": "high", "tone": "ok", "label": "High (n>=30) — budgeting OK"}
+    if cred == "usable":
+        return {"badge": "usable", "tone": "warn", "label": "Usable (n>=10) — negotiation ballpark"}
+    if cred in {"usable_inferred", "weak_inferred"} or str(tier or "") == "inferred":
+        return {
+            "badge": "inferred",
+            "tone": "danger",
+            "label": "Inferred — proportional split; never quote to patient",
+        }
+    return {"badge": "insufficient", "tone": "warn", "label": "Insufficient data (empty != $0)"}
+
+
+def format_probabilistic_estimate_reply(
+    est: dict[str, Any] | None,
+    *,
+    payer: str,
+    ada: str,
+    include_inferred: bool = False,
+) -> str:
+    if not est:
+        extra = (
+            " Pass include-inferred / say 'show uncertain estimates' only for directional sense."
+            if not include_inferred
+            else ""
+        )
+        return (
+            f"Insufficient data for {payer or 'that payer'} x {ada or 'that ADA'} "
+            f"(exact usable needs n>={CREDIBILITY['exact_publish_n']}). "
+            f"empty != $0 -- not a $0 estimate.{extra}"
+        )
+    badge = credibility_badge(str(est.get("credibility") or ""), str(est.get("tier") or ""))
     paid = est.get("paid_median") if est.get("paid_median") is not None else est.get("paid_avg")
     wo = est.get("write_off_median") if est.get("write_off_median") is not None else est.get("write_off_avg")
-    warn = ""
-    if tier == "inferred":
-        warn = " Inferred: multi-ADA visit — dollars allocated by billed share (not SoftDent line truth)."
-    elif cred == "high":
-        warn = " High-credibility exact sample."
-    return (
-        f"{est.get('insurance_company')} × {est.get('ada_code')}: "
+    n = est.get("sample_size")
+    lines = [
+        f"InsCo x ADA ledger estimate (HAL-10582/83) · badge=`{badge['badge']}` · {badge['label']}.",
+        f"{est.get('insurance_company')} x {est.get('ada_code')}: "
         f"typical Ins paid ~${float(paid or 0):,.2f}, write-off ~${float(wo or 0):,.2f} "
-        f"(n={n}, tier={tier}, credibility={cred}).{warn} "
-        "Estimate from ledger+coverage — not a contractual guarantee."
+        f"(n={n}, tier={est.get('tier')}, credibility={est.get('credibility')}).",
+        "Estimate from ledger codes 2/51 + coverage -- not a contractual guarantee / not gold payment lines.",
+    ]
+    if str(est.get("tier")) == "inferred":
+        lines.append(
+            "WARNING: inferred proportional allocation across multi-ADA visits "
+            "(invented splits). Do not quote to patients."
+        )
+    return "\n".join(lines)
+
+
+def format_probabilistic_status_reply(status: dict[str, Any] | None = None) -> str:
+    st = status if isinstance(status, dict) else probabilistic_report_status()
+    pub = int(st.get("publishedCells") or 0)
+    high = int(st.get("highCredibilityCells") or 0)
+    total = int(st.get("totalCells") or 0)
+    return (
+        f"InsCo x ADA probabilistic report status: published={pub} "
+        f"(high={high}) · stored cells={total}. "
+        f"Default HAL shows exact usable+ only; inferred requires opt-in. "
+        f"Gold payment lines still separate (hal-10400). empty != $0."
     )
+
+
+def list_published_estimate_rows(
+    *,
+    db_path: Path | None = None,
+    include_inferred: bool = False,
+    limit: int = 40,
+) -> list[dict[str, Any]]:
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    if not target or not target.is_file():
+        return []
+    conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+    try:
+        ensure_probabilistic_schema(conn)
+        if include_inferred:
+            where = "credibility != 'insufficient' AND tier IN ('exact','inferred')"
+        else:
+            where = "credibility IN ('high','usable') AND tier = 'exact'"
+        rows = conn.execute(
+            f"""
+            SELECT insurance_company, ada_code, tier, sample_size,
+                   paid_median, paid_avg, write_off_median, write_off_avg, credibility
+            FROM insco_ada_probabilistic_estimates
+            WHERE {where}
+            ORDER BY
+              CASE credibility WHEN 'high' THEN 0 WHEN 'usable' THEN 1 ELSE 2 END,
+              sample_size DESC
+            LIMIT ?
+            """,
+            (max(1, int(limit)),),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            badge = credibility_badge(str(r[8]), str(r[2]))
+            out.append(
+                {
+                    "insuranceCompany": r[0],
+                    "adaCode": r[1],
+                    "tier": r[2],
+                    "sampleSize": r[3],
+                    "paidMedian": r[4] if r[4] is not None else r[5],
+                    "writeOffMedian": r[6] if r[6] is not None else r[7],
+                    "credibility": r[8],
+                    "badge": badge["badge"],
+                    "badgeLabel": badge["label"],
+                    "tone": badge["tone"],
+                }
+            )
+        return out
+    finally:
+        conn.close()
+
+
+def insco_ada_estimate_widget(*, include_inferred: bool = False) -> dict[str, Any]:
+    """SoftDent page status widget — exact usable+ by default."""
+    st = probabilistic_report_status()
+    rows = list_published_estimate_rows(include_inferred=False, limit=12)
+    pub = int(st.get("publishedCells") or 0)
+    high = int(st.get("highCredibilityCells") or 0)
+    if pub <= 0:
+        status = "empty"
+        message = "No credible InsCo x ADA ledger estimates yet — run probabilistic rebuild / sync."
+    elif high > 0:
+        status = "ok"
+        message = f"InsCo x ADA estimates · published={pub} · high={high} · default=exact only"
+    else:
+        status = "ok"
+        message = f"InsCo x ADA estimates · published={pub} · high=0 · usable exact only (amber)"
+    return {
+        "id": "softdent-insco-ada-estimates",
+        "type": "status",
+        "label": "InsCo x ADA Estimates (HAL-10583)",
+        "size": "full",
+        "status": status,
+        "message": message,
+        "hint": (
+            "Ledger 2/51 + coverage · exact usable+ shown · inferred hidden until "
+            "'show uncertain estimates'. Not contractual / not payment-line gold path. empty != $0."
+        ),
+        "publishedCells": pub,
+        "highCredibilityCells": high,
+        "includeInferredDefault": False,
+        "topExact": rows,
+        "halChips": [
+            {"label": "InsCo x ADA estimate status", "query": "InsCo ADA estimate status"},
+            {
+                "label": "Delta KS pay for D1110?",
+                "query": "How much does Delta Dental of KS typically pay for D1110?",
+            },
+            {
+                "label": "Show uncertain estimates",
+                "query": "Show uncertain estimates: how much does Delta Dental of KS pay for D1110?",
+            },
+        ],
+        "honesty": CREDIBILITY.get("honesty"),
+        "inferredOptIn": bool(include_inferred),
+    }
+
+
+def log_inferred_view_audit(*, payer: str, ada: str, source: str = "hal") -> None:
+    """Best-effort audit when staff opts into inferred estimates."""
+    try:
+        root = resolve_exports_dir()
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / "insco_ada_inferred_view_audit.jsonl"
+        line = json.dumps(
+            {
+                "at": _utc_now(),
+                "source": source,
+                "payer": payer,
+                "ada": ada,
+                "warning": (
+                    "User viewed inferred InsCo×ADA estimate — invented proportional split warning acknowledged."
+                ),
+            },
+            ensure_ascii=True,
+        )
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except Exception:
+        pass
 
 
 def export_probabilistic_report(

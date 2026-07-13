@@ -2298,6 +2298,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_insco_ada_probabilistic import insco_ada_estimate_widget
+
+        widgets.insert(2, insco_ada_estimate_widget())
+    except Exception:
+        pass
+    try:
         from apex_softdent_production_pack import production_widgets
         from apex_softdent_aging_schedule_pack import aging_schedule_widgets
 
@@ -5481,7 +5487,83 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         )
         handled = True
 
-    # --- Treatment planning estimate (InsCo × ADA from payment-line aggregates) ---
+    # --- InsCo x ADA probabilistic ledger estimates (HAL-10582/83) — exact default ---
+    # Prefer ledger probabilistic when gold payment-lines are empty (hal-10400).
+    if not handled:
+        try:
+            from softdent_insco_ada_probabilistic import (
+                format_probabilistic_estimate_reply,
+                format_probabilistic_status_reply,
+                log_inferred_view_audit,
+                lookup_probabilistic_estimate,
+                parse_probabilistic_estimate_query,
+                probabilistic_report_status,
+            )
+
+            parsed_p = parse_probabilistic_estimate_query(query)
+            if parsed_p and parsed_p.get("kind") == "status":
+                st = probabilistic_report_status()
+                notes.append(format_probabilistic_status_reply(st))
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": (
+                            f"InsCo x ADA ledger · published={st.get('publishedCells') or 0} · "
+                            f"high={st.get('highCredibilityCells') or 0}"
+                        ),
+                        "hint": "Exact usable+ only by default; inferred needs opt-in. empty != $0.",
+                        "tone": "ok" if int(st.get("publishedCells") or 0) else "warn",
+                    }
+                )
+                handled = True
+            elif parsed_p and parsed_p.get("kind") == "lookup":
+                include_inf = bool(parsed_p.get("includeInferred"))
+                est = lookup_probabilistic_estimate(
+                    payer=str(parsed_p.get("payer") or ""),
+                    ada_code=str(parsed_p.get("adaCode") or ""),
+                    include_inferred=include_inf,
+                )
+                if include_inf:
+                    log_inferred_view_audit(
+                        payer=str(parsed_p.get("payer") or ""),
+                        ada=str(parsed_p.get("adaCode") or ""),
+                        source="hal-board-action",
+                    )
+                notes.append(
+                    format_probabilistic_estimate_reply(
+                        est,
+                        payer=str(parsed_p.get("payer") or ""),
+                        ada=str(parsed_p.get("adaCode") or ""),
+                        include_inferred=include_inf,
+                    )
+                )
+                tone = "ok"
+                if not est:
+                    tone = "warn"
+                elif str(est.get("tier")) == "inferred":
+                    tone = "danger"
+                elif str(est.get("credibility")) == "usable":
+                    tone = "warn"
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": (
+                            f"InsCo x ADA · {parsed_p.get('payer')} x {parsed_p.get('adaCode')} · "
+                            f"{(est or {}).get('credibility') or 'insufficient'}"
+                        ),
+                        "hint": (
+                            "Inferred opt-in — proportional split warning."
+                            if include_inf
+                            else "Exact usable+ only (ledger estimate, not contractual)."
+                        ),
+                        "tone": tone,
+                    }
+                )
+                handled = True
+        except Exception as exc:  # noqa: BLE001
+            notes.append(f"InsCo x ADA probabilistic lookup unavailable: {exc}")
+
+    # --- Treatment planning estimate (InsCo x ADA from payment-line aggregates / gold path) ---
     if not handled:
         try:
             from softdent_treatment_planning import (
@@ -5494,18 +5576,31 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             parsed = parse_treatment_estimate_query(query)
             if parsed:
                 est = lookup_treatment_estimate(payer=parsed["payer"], ada_code=parsed["adaCode"])
-                reply_txt = format_treatment_estimate_reply(est)
-                notes.append(reply_txt)
-                tone = "ok" if est.get("sufficient") else "warn"
-                actions.append(
-                    {
-                        "type": "set_status_banner",
-                        "message": f"Tx plan estimate · {parsed['payer']} × {parsed['adaCode']}",
-                        "hint": "Historical SoftDent payment-line averages — not a benefits guarantee.",
-                        "tone": tone,
-                    }
-                )
-                handled = True
+                # Only claim this path when payment-line estimates are sufficient;
+                # otherwise leave unhandled so staff see probabilistic/insufficient honestly.
+                if est.get("sufficient"):
+                    reply_txt = format_treatment_estimate_reply(est)
+                    notes.append(reply_txt)
+                    actions.append(
+                        {
+                            "type": "set_status_banner",
+                            "message": f"Tx plan estimate · {parsed['payer']} x {parsed['adaCode']}",
+                            "hint": "Historical SoftDent payment-line averages — not a benefits guarantee.",
+                            "tone": "ok",
+                        }
+                    )
+                    handled = True
+                else:
+                    notes.append(format_treatment_estimate_reply(est))
+                    actions.append(
+                        {
+                            "type": "set_status_banner",
+                            "message": f"Tx plan gold path empty · {parsed['payer']} x {parsed['adaCode']}",
+                            "hint": "Ask InsCo ADA ledger estimate, or export Insurance Payment Analysis CSV.",
+                            "tone": "warn",
+                        }
+                    )
+                    handled = True
             elif re.search(
                 r"\b(treatment plan(ning)? (data|status|ready|estimates?)|insurance payment (analysis|lines)|"
                 r"ada (payer|payment) (data|estimates?))\b",
@@ -5515,7 +5610,7 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
                 notes.append(
                     f"Treatment-planning data: {st.get('paymentLines', 0)} payment lines, "
                     f"{st.get('procedureCodes', 0)} procedure crosswalk rows, "
-                    f"{st.get('estimates', 0)} InsCo×ADA estimates "
+                    f"{st.get('estimates', 0)} InsCo x ADA estimates "
                     f"({st.get('estimatesWithMinSample', 0)} with n>=10). "
                     f"{st.get('hint') or ''}"
                 )
@@ -7060,6 +7155,82 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             )
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.get("/api/apex/insco-ada-estimates/status")
+    def apex_insco_ada_estimates_status_api():
+        try:
+            from softdent_insco_ada_probabilistic import (
+                format_probabilistic_status_reply,
+                probabilistic_report_status,
+            )
+
+            st = probabilistic_report_status()
+            return json_response_fn(
+                {
+                    "ok": True,
+                    **st,
+                    "reply": format_probabilistic_status_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/insco-ada-estimates/estimate")
+    def apex_insco_ada_estimates_estimate_api():
+        try:
+            import bottle
+
+            from softdent_insco_ada_probabilistic import (
+                format_probabilistic_estimate_reply,
+                log_inferred_view_audit,
+                lookup_probabilistic_estimate,
+            )
+
+            payer = str(bottle.request.query.get("payer") or "").strip()
+            ada = str(
+                bottle.request.query.get("ada") or bottle.request.query.get("adaCode") or ""
+            ).strip()
+            include_inferred = str(bottle.request.query.get("includeInferred") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            est = lookup_probabilistic_estimate(
+                payer=payer, ada_code=ada, include_inferred=include_inferred
+            )
+            if include_inferred:
+                log_inferred_view_audit(payer=payer, ada=ada, source="api")
+            if not est:
+                return json_response_fn(
+                    {
+                        "ok": True,
+                        "status": "insufficient_data",
+                        "n": 0,
+                        "estimate": None,
+                        "includeInferred": include_inferred,
+                        "reply": format_probabilistic_estimate_reply(
+                            None, payer=payer, ada=ada, include_inferred=include_inferred
+                        ),
+                        "buildId": BUILD_ID,
+                        "honesty": "empty != $0",
+                    }
+                )
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "status": "ok",
+                    "estimate": est,
+                    "includeInferred": include_inferred,
+                    "reply": format_probabilistic_estimate_reply(
+                        est, payer=payer, ada=ada, include_inferred=include_inferred
+                    ),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
     @app.get("/api/apex/softdent/ledger")
     def apex_softdent_ledger_api():
