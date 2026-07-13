@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10607"
+BUILD_ID = "hal-10608"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2346,21 +2346,27 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_gold_era_settlement_hal10608 import gold_era_settlement_widget
+
+        widgets.insert(9, gold_era_settlement_widget())
+    except Exception:
+        pass
+    try:
         from softdent_print_preview_audit import print_preview_audit_widget
 
-        widgets.insert(9, print_preview_audit_widget())
+        widgets.insert(10, print_preview_audit_widget())
     except Exception:
         pass
     try:
         from ui_honesty_policy import ui_honesty_widget
 
-        widgets.insert(10, ui_honesty_widget())
+        widgets.insert(11, ui_honesty_widget())
     except Exception:
         pass
     try:
         from softdent_visual_ledger_recon import visual_ledger_recon_widget
 
-        widgets.insert(11, visual_ledger_recon_widget())
+        widgets.insert(12, visual_ledger_recon_widget())
     except Exception:
         pass
     try:
@@ -7412,6 +7418,39 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
             result = run_hal10607_ingest()
             result["reply"] = format_hal10607_reply(result)
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/gold-era-settlement/status")
+    def apex_gold_era_settlement_status_api():
+        try:
+            from softdent_gold_era_settlement_hal10608 import (
+                format_hal10608_reply,
+                gold_era_settlement_status,
+            )
+
+            st = gold_era_settlement_status()
+            return json_response_fn(
+                {
+                    **st,
+                    "reply": format_hal10608_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/gold-era-settlement/run")
+    def apex_gold_era_settlement_run_api():
+        try:
+            from softdent_gold_era_settlement_hal10608 import (
+                format_hal10608_reply,
+                run_ops_10608_gold_era_settlement,
+            )
+
+            result = run_ops_10608_gold_era_settlement()
+            result["reply"] = format_hal10608_reply(result)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

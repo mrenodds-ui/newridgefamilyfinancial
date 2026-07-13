@@ -29,7 +29,7 @@ from softdent_treatment_planning import (
 class Hal10605GoldSettlementTests(unittest.TestCase):
     def test_build_id(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10605")
-        self.assertEqual(BUILD_ID, "hal-10607")
+        self.assertEqual(BUILD_ID, "hal-10608")
 
     def test_new_high_aliases_in_package(self) -> None:
         pairs = {m: s for m, s in MOONSHOT_INDUSTRY_HIGH}

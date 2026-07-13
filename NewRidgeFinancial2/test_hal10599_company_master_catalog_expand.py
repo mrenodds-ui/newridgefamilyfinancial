@@ -109,7 +109,7 @@ def _seed(db: Path) -> None:
 class InscoAdaCompanyMasterExpandHal10599Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10599")
-        self.assertEqual(BUILD_ID, "hal-10607")
+        self.assertEqual(BUILD_ID, "hal-10608")
 
     def test_expand_pads_master_companies_with_null_dollars(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
