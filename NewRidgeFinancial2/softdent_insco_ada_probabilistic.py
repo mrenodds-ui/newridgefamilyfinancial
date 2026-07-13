@@ -1,13 +1,12 @@
 """Probabilistic InsCo × ADA paid/write-off estimates from ledger + coverage.
 
-Uses ``sd_account_transactions`` (SoftDent codes ``2``=ins pay, ``51``/``52``=write-off)
-plus ``sd_patient_insurance`` primary carrier. Does **not** invent SoftDent write-back
-or Ins Plan Register dollars.
+Uses the shared HAL-10585 spine (production CDT → SoftDent ``2``/``51`` episodes,
+5-year window). Does **not** invent SoftDent write-back or Ins Plan Register dollars.
 
 Confidence tiers (honest):
-- ``exact`` — only one production ADA in lookback → no allocation guess
+- ``exact`` — only one production ADA in episode → no allocation guess
 - ``inferred`` — 2–3 ADAs, dollars split proportional to billed (labeled inferred)
-- ``low`` — 4+ ADAs in lookback (high ambiguity; stored but not published as credible)
+- ``low`` — 4+ ADAs (high ambiguity; stored but not published as credible)
 - ``insufficient`` — below sample floors (not published)
 
 Payment-analysis CSV lines (hal-10400) remain the gold path when available.
@@ -17,67 +16,30 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import statistics
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from softdent_treatment_planning import normalize_ada_code, resolve_analytics_db, resolve_exports_dir
-
-# SoftDent transactional codes
-INS_PAYMENT_CODES = frozenset({"2"})
-INS_WRITEOFF_CODES = frozenset({"51", "52"})
-NON_PRODUCTION_CODES = frozenset(
-    {
-        "2",
-        "3",
-        "11",
-        "12",
-        "17",
-        "48",
-        "51",
-        "52",
-        "60",
-        "61",
-        "99",
-        "8888",
-    }
+from softdent_insco_ada_spine import (
+    CREDIBILITY,
+    DEFAULT_YEARS,
+    FORWARD_DAYS,
+    GENERIC_PAYERS,
+    INS_PAYMENT_CODES,
+    INS_WRITEOFF_CODES,
+    NON_PRODUCTION_CODES,
+    _carrier_for_account,
+    _load_primary_insurance_map,
+    _table_exists,
+    _utc_now,
+    collect_spine_samples,
+    credibility_label,
+    normalize_cdt,
 )
-
-# Credibility floors — how much data pushes report trustworthiness
-CREDIBILITY = {
-    # Minimum exact events to publish a cell as "usable estimate"
-    "exact_publish_n": 10,
-    # Preferred exact N for "high credibility" badge
-    "exact_high_n": 30,
-    # Inferred (2–3 ADA) publish floor — higher because allocation invents splits
-    "inferred_publish_n": 30,
-    # Preferred inferred N
-    "inferred_high_n": 75,
-    # Low-confidence (4+ ADA) never published as credible; kept for diagnostics only
-    "low_never_publish": True,
-    # Lookback: production charges within this many days before pay/write-off
-    "lookback_days": 45,
-    # Recommended history window for a practice-wide matrix
-    "recommended_history_months": 24,
-    # Rough events needed for a useful top-carrier × hygiene-code matrix
-    "target_exact_cells_n10": 50,
-    "target_exact_cells_n30": 20,
-    "honesty": (
-        "Ledger 51/2 rows have no ADA — exact cells require single-ADA lookback. "
-        "Inferred cells allocate proportionally (invented splits). "
-        "Gold path remains SoftDent payment-line / ERA ingest when available. "
-        "empty != $0."
-    ),
-}
-
-GENERIC_PAYERS = frozenset({"", "insurance", "ins", "payer", "carrier", "unknown", "n/a", "-"})
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+from softdent_treatment_planning import normalize_ada_code, resolve_analytics_db, resolve_exports_dir
 
 
 def ensure_probabilistic_schema(conn: sqlite3.Connection) -> None:
@@ -110,77 +72,16 @@ def ensure_probabilistic_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def _load_primary_insurance_map(conn: sqlite3.Connection) -> dict[str, str]:
-    out: dict[str, str] = {}
-    if not _table_exists(conn, "sd_patient_insurance"):
-        return out
-    rows = conn.execute(
-        """
-        SELECT patient_id, insurance_name, priority
-        FROM sd_patient_insurance
-        WHERE insurance_name IS NOT NULL AND TRIM(insurance_name) != ''
-        ORDER BY priority ASC
-        """
-    ).fetchall()
-    for patient_id, name, _priority in rows:
-        pid = str(patient_id or "").strip()
-        carrier = str(name or "").strip()
-        if not pid or not carrier:
-            continue
-        if carrier.lower() in GENERIC_PAYERS:
-            continue
-        if pid not in out:
-            out[pid] = carrier
-    return out
-
-
-def _carrier_for_account(account_num: str, ins_map: dict[str, str]) -> str | None:
-    acct = str(account_num or "").strip()
-    if not acct:
-        return None
-    if acct in ins_map:
-        return ins_map[acct]
-    if len(acct) > 1:
-        family = acct[:-1] + "0"
-        if family in ins_map:
-            return ins_map[family]
-        if acct[:-1] in ins_map:
-            return ins_map[acct[:-1]]
-    return None
-
-
-def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-        (name,),
-    ).fetchone()
-    return bool(row)
 
 
 def _event_tier(ada_count: int) -> str:
-    if ada_count <= 0:
-        return "none"
-    if ada_count == 1:
-        return "exact"
-    if ada_count <= 3:
-        return "inferred"
-    return "low"
+    from softdent_insco_ada_spine import event_tier
+
+    return event_tier(ada_count)
 
 
 def _credibility_label(tier: str, n: int) -> str:
-    if tier == "exact":
-        if n >= int(CREDIBILITY["exact_high_n"]):
-            return "high"
-        if n >= int(CREDIBILITY["exact_publish_n"]):
-            return "usable"
-        return "insufficient"
-    if tier == "inferred":
-        if n >= int(CREDIBILITY["inferred_high_n"]):
-            return "usable_inferred"
-        if n >= int(CREDIBILITY["inferred_publish_n"]):
-            return "weak_inferred"
-        return "insufficient"
-    return "insufficient"
+    return credibility_label(tier, n)
 
 
 def _mean(vals: list[float]) -> float | None:
@@ -197,121 +98,39 @@ def build_insco_ada_probabilistic_estimates(
     period_start: str | None = None,
     period_end: str | None = None,
     lookback_days: int | None = None,
+    years: int | None = None,
 ) -> dict[str, Any]:
-    """Rebuild InsCo×ADA probabilistic table from ledger + coverage."""
+    """Rebuild InsCo×ADA $ table from the shared 5yr spine."""
+    del period_start  # spine owns uniform window
     ensure_probabilistic_schema(conn)
-    lookback = int(lookback_days if lookback_days is not None else CREDIBILITY["lookback_days"])
-    end = period_end or date.today().isoformat()
-    if period_start:
-        start = period_start
-    else:
-        months = int(CREDIBILITY["recommended_history_months"])
-        end_d = date.fromisoformat(end[:10])
-        # approx months
-        start_d = end_d - timedelta(days=30 * months)
-        start = start_d.isoformat()
+    hist_years = int(years if years is not None else DEFAULT_YEARS)
+    fwd = int(lookback_days if lookback_days is not None else FORWARD_DAYS)
+    samples = collect_spine_samples(
+        conn, years=hist_years, period_end=period_end, forward_days=fwd
+    )
+    start = samples["periodStart"]
+    end = samples["periodEnd"]
 
     result: dict[str, Any] = {
         "ok": False,
         "periodStart": start,
         "periodEnd": end,
-        "lookbackDays": lookback,
+        "lookbackDays": fwd,
+        "years": hist_years,
         "credibilityRules": dict(CREDIBILITY),
-        "eventTiers": {},
+        "eventTiers": samples.get("episodeTiers") or {},
         "publishedCells": 0,
         "totalCells": 0,
-        "warnings": [],
+        "warnings": list(samples.get("warnings") or []),
+        "source": samples.get("source"),
+        "spineEpisodes": samples.get("episodeCount") or 0,
     }
-    if not _table_exists(conn, "sd_account_transactions"):
-        result["warnings"].append("sd_account_transactions missing")
+    if not samples.get("ok"):
         return result
 
-    ins_map = _load_primary_insurance_map(conn)
-    if not ins_map:
-        result["warnings"].append("sd_patient_insurance empty — run Sensei/ODBC insurance populate first")
-        return result
-
-    rows = conn.execute(
-        """
-        SELECT account_num, service_date, procedure,
-               COALESCE(prod, 0) + COALESCE(charges, 0),
-               COALESCE(prod_adj, 0) + COALESCE(pay_adj, 0),
-               COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)
-        FROM sd_account_transactions
-        WHERE service_date >= ? AND service_date <= ?
-        ORDER BY account_num, service_date, row_number
-        """,
-        (start, end),
-    ).fetchall()
-
-    by_acct: dict[str, list[tuple[str, str, float, float, float]]] = defaultdict(list)
-    for account_num, service_date, procedure, billed, adj, paid in rows:
-        by_acct[str(account_num or "").strip()].append(
-            (
-                str(service_date or "")[:10],
-                str(procedure or "").strip(),
-                float(billed or 0),
-                float(adj or 0),
-                float(paid or 0),
-            )
-        )
-
-    # (carrier, ada, tier) -> lists
-    paid_samples: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    wo_samples: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    billed_samples: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    tier_counts: dict[str, int] = defaultdict(int)
-    carrier_miss = 0
-    carrier_hit = 0
-
-    for acct, txs in by_acct.items():
-        carrier = _carrier_for_account(acct, ins_map)
-        for svc_date, proc, _billed, adj, paid in txs:
-            if proc not in INS_PAYMENT_CODES and proc not in INS_WRITEOFF_CODES:
-                continue
-            if not carrier:
-                carrier_miss += 1
-                continue
-            carrier_hit += 1
-            try:
-                event_day = date.fromisoformat(svc_date)
-            except ValueError:
-                continue
-            window_start = event_day - timedelta(days=lookback)
-            look: list[tuple[str, float]] = []
-            for d2, p2, b2, _a2, _pay2 in txs:
-                if p2 in NON_PRODUCTION_CODES or b2 <= 0:
-                    continue
-                try:
-                    charge_day = date.fromisoformat(d2)
-                except ValueError:
-                    continue
-                if window_start <= charge_day <= event_day:
-                    ada = normalize_ada_code(p2) or p2
-                    if ada:
-                        look.append((ada, b2))
-            # collapse duplicate ADA in window (sum billed)
-            by_ada: dict[str, float] = defaultdict(float)
-            for ada, b2 in look:
-                by_ada[ada] += b2
-            look_list = list(by_ada.items())
-            tier = _event_tier(len(look_list))
-            tier_counts[tier] += 1
-            if tier in {"none"} or not look_list:
-                continue
-            total_b = sum(b for _, b in look_list)
-            if total_b <= 0:
-                continue
-            wo_amt = abs(adj) if proc in INS_WRITEOFF_CODES else 0.0
-            pay_amt = paid if proc in INS_PAYMENT_CODES else 0.0
-            for ada, b2 in look_list:
-                share = b2 / total_b
-                key = (carrier, ada, tier)
-                if pay_amt:
-                    paid_samples[key].append(pay_amt * share)
-                if wo_amt:
-                    wo_samples[key].append(wo_amt * share)
-                billed_samples[key].append(b2 * share)
+    paid_samples = samples["paid"]
+    wo_samples = samples["writeOff"]
+    billed_samples = samples["billed"]
 
     updated_at = _utc_now()
     conn.execute("DELETE FROM insco_ada_probabilistic_estimates")
@@ -327,8 +146,6 @@ def build_insco_ada_probabilistic_estimates(
             continue
         total_cells += 1
         cred = _credibility_label(tier, n)
-        # Never publish low-tier as credible rows in the published sense —
-        # still store for diagnostics with credibility=insufficient
         if tier == "low":
             cred = "insufficient"
         if cred != "insufficient":
@@ -354,7 +171,7 @@ def build_insco_ada_probabilistic_estimates(
                 cred,
                 start,
                 end,
-                lookback,
+                fwd,
                 updated_at,
             ),
         )
@@ -363,13 +180,14 @@ def build_insco_ada_probabilistic_estimates(
         "updated_at": updated_at,
         "period_start": start,
         "period_end": end,
-        "lookback_days": str(lookback),
-        "carrier_hit_events": str(carrier_hit),
-        "carrier_miss_events": str(carrier_miss),
-        "insurance_map_size": str(len(ins_map)),
+        "lookback_days": str(fwd),
+        "years": str(hist_years),
+        "spine_episodes": str(samples.get("episodeCount") or 0),
+        "spine_source": str(samples.get("source") or ""),
+        "insurance_map_size": str(samples.get("insuranceMapSize") or 0),
         "published_cells": str(published),
         "total_cells": str(total_cells),
-        "event_tiers": json.dumps(dict(tier_counts)),
+        "event_tiers": json.dumps(dict(samples.get("episodeTiers") or {})),
         "credibility_rules": json.dumps(CREDIBILITY),
     }
     for key, value in meta.items():
@@ -382,12 +200,10 @@ def build_insco_ada_probabilistic_estimates(
     result.update(
         {
             "ok": True,
-            "eventTiers": dict(tier_counts),
+            "eventTiers": dict(samples.get("episodeTiers") or {}),
             "publishedCells": published,
             "totalCells": total_cells,
-            "carrierHitEvents": carrier_hit,
-            "carrierMissEvents": carrier_miss,
-            "insuranceMapSize": len(ins_map),
+            "insuranceMapSize": samples.get("insuranceMapSize") or 0,
         }
     )
     return result
@@ -410,7 +226,7 @@ def lookup_probabilistic_estimate(
     if not target or not target.is_file():
         return None
     payer_l = str(payer or "").strip().lower()
-    ada = normalize_ada_code(ada_code) or str(ada_code or "").strip().upper()
+    ada = normalize_cdt(ada_code) or normalize_ada_code(ada_code) or str(ada_code or "").strip().upper()
     if not payer_l or not ada:
         return None
     conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)

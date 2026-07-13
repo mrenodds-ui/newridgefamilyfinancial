@@ -22,27 +22,25 @@ from __future__ import annotations
 import json
 import sqlite3
 import statistics
-from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from softdent_insco_ada_probabilistic import (
-    GENERIC_PAYERS,
-    INS_PAYMENT_CODES,
-    INS_WRITEOFF_CODES,
-    NON_PRODUCTION_CODES,
-    _carrier_for_account,
-    _load_primary_insurance_map,
+from softdent_insco_ada_spine import (
+    CREDIBILITY,
+    DEFAULT_YEARS,
+    FORWARD_DAYS,
+    collect_spine_samples,
+    credibility_label,
+    normalize_cdt,
+    publishable_pct,
     _table_exists,
     _utc_now,
 )
-from softdent_treatment_planning import normalize_ada_code, resolve_analytics_db, resolve_exports_dir
+from softdent_treatment_planning import resolve_analytics_db, resolve_exports_dir
 
-DEFAULT_YEARS = 5
-FORWARD_DAYS = 60
-MIN_PUBLISH_N = 10
-HIGH_N = 30
+MIN_PUBLISH_N = int(CREDIBILITY["exact_publish_n"])
+HIGH_N = int(CREDIBILITY["exact_high_n"])
 
 
 def ensure_pct_variance_schema(conn: sqlite3.Connection) -> None:
@@ -81,24 +79,6 @@ def ensure_pct_variance_schema(conn: sqlite3.Connection) -> None:
     )
 
 
-def _norm_ada(raw: str) -> str:
-    text = str(raw or "").strip()
-    if not text:
-        return ""
-    # SoftDent often stores 3-digit CDTs (220 -> D0220)
-    if text.isdigit() and len(text) == 3:
-        return f"D{int(text):04d}"
-    return normalize_ada_code(text) or text
-
-
-def _publishable_pct(paid_pct: float | None, wo_pct: float | None) -> bool:
-    """Reject nonsense ratios when pay/WO is not tied to the charge (empty != invent)."""
-    for val in (paid_pct, wo_pct):
-        if val is None:
-            continue
-        if val < -5 or val > 120:
-            return False
-    return True
 
 
 def _mean(vals: list[float]) -> float | None:
@@ -121,29 +101,6 @@ def _pct(part: float, whole: float) -> float | None:
     return round(100.0 * part / whole, 4)
 
 
-def _credibility(tier: str, n: int) -> str:
-    if tier == "exact":
-        if n >= HIGH_N:
-            return "high"
-        if n >= MIN_PUBLISH_N:
-            return "usable"
-        return "insufficient"
-    if tier == "inferred":
-        if n >= HIGH_N:
-            return "usable_inferred"
-        if n >= MIN_PUBLISH_N:
-            return "weak_inferred"
-        return "insufficient"
-    return "insufficient"
-
-
-def _parse_day(raw: str) -> date | None:
-    try:
-        return date.fromisoformat(str(raw or "")[:10])
-    except ValueError:
-        return None
-
-
 def build_insco_ada_pct_variance(
     conn: sqlite3.Connection,
     *,
@@ -151,13 +108,14 @@ def build_insco_ada_pct_variance(
     period_end: str | None = None,
     forward_days: int = FORWARD_DAYS,
 ) -> dict[str, Any]:
-    """Rebuild InsCo x ADA pay%/write-off% with +/- stdev from 5yr episode pairing."""
+    """Rebuild InsCo x ADA pay%/write-off% with +/- stdev from shared spine."""
     ensure_pct_variance_schema(conn)
-    end = period_end or date.today().isoformat()
-    end_d = date.fromisoformat(end[:10])
-    start_d = end_d - timedelta(days=365 * max(1, int(years)))
-    start = start_d.isoformat()
-    fwd = max(1, int(forward_days))
+    samples = collect_spine_samples(
+        conn, years=years, period_end=period_end, forward_days=forward_days
+    )
+    start = samples["periodStart"]
+    end = samples["periodEnd"]
+    fwd = int(samples["forwardDays"])
 
     out: dict[str, Any] = {
         "ok": False,
@@ -165,168 +123,23 @@ def build_insco_ada_pct_variance(
         "periodEnd": end,
         "years": years,
         "forwardDays": fwd,
-        "warnings": [],
-        "episodeTiers": {},
+        "warnings": list(samples.get("warnings") or []),
+        "episodeTiers": samples.get("episodeTiers") or {},
         "publishedCells": 0,
         "totalCells": 0,
+        "source": samples.get("source"),
+        "spineEpisodes": samples.get("episodeCount") or 0,
     }
-    if not _table_exists(conn, "sd_account_transactions"):
-        out["warnings"].append("sd_account_transactions missing")
+    if not samples.get("ok"):
         return out
 
-    ins_map = _load_primary_insurance_map(conn)
-    if not ins_map:
-        out["warnings"].append("sd_patient_insurance empty")
-        return out
-
-    rows = conn.execute(
-        """
-        SELECT account_num, service_date, procedure, row_number,
-               COALESCE(prod, 0) + COALESCE(charges, 0),
-               COALESCE(prod_adj, 0) + COALESCE(pay_adj, 0),
-               COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)
-        FROM sd_account_transactions
-        WHERE service_date >= ? AND service_date <= ?
-        ORDER BY account_num, service_date, row_number
-        """,
-        (start, end),
-    ).fetchall()
-
-    by_acct: dict[str, list[tuple[str, str, int, float, float, float]]] = defaultdict(list)
-    for account_num, service_date, procedure, row_number, billed, adj, paid in rows:
-        by_acct[str(account_num or "").strip()].append(
-            (
-                str(service_date or "")[:10],
-                str(procedure or "").strip(),
-                int(row_number or 0),
-                float(billed or 0),
-                float(adj or 0),
-                float(paid or 0),
-            )
-        )
-
-    # samples[(carrier, ada, tier)] -> lists
-    billed_s: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    paid_s: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    wo_s: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    pay_pct_s: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    wo_pct_s: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    tier_counts: dict[str, int] = defaultdict(int)
-    carrier_hit = 0
-    carrier_miss = 0
-    episodes = 0
-
-    for acct, txs in by_acct.items():
-        carrier = _carrier_for_account(acct, ins_map)
-        if not carrier or carrier.lower() in GENERIC_PAYERS:
-            # still count miss only when money events exist
-            if any(p in INS_PAYMENT_CODES or p in INS_WRITEOFF_CODES for _, p, _, _, _, _ in txs):
-                carrier_miss += 1
-            continue
-        carrier_hit += 1
-
-        i = 0
-        n = len(txs)
-        while i < n:
-            d, proc, _rn, billed, _adj, _paid = txs[i]
-            day = _parse_day(d)
-            if day is None or proc in NON_PRODUCTION_CODES or billed <= 0:
-                i += 1
-                continue
-
-            # Collect contiguous production cluster (same day or within 1 day)
-            prods: list[tuple[str, float]] = []
-            j = i
-            cluster_end = day
-            while j < n:
-                d2, p2, _r2, b2, _a2, _pay2 = txs[j]
-                day2 = _parse_day(d2)
-                if day2 is None:
-                    break
-                if p2 in NON_PRODUCTION_CODES:
-                    # stop cluster at first settlement row
-                    if p2 in INS_PAYMENT_CODES or p2 in INS_WRITEOFF_CODES:
-                        break
-                    j += 1
-                    continue
-                if b2 <= 0:
-                    j += 1
-                    continue
-                if (day2 - cluster_end).days > 1 and prods:
-                    break
-                if (day2 - day).days > 1 and not prods:
-                    break
-                ada = _norm_ada(p2)
-                if ada:
-                    prods.append((ada, b2))
-                    cluster_end = day2
-                j += 1
-
-            if not prods:
-                i += 1
-                continue
-
-            # Forward window: accumulate code 2 / 51 after cluster until next production or fwd days
-            paid_amt = 0.0
-            wo_amt = 0.0
-            k = j
-            window_end = cluster_end + timedelta(days=fwd)
-            while k < n:
-                d3, p3, _r3, b3, a3, pay3 = txs[k]
-                day3 = _parse_day(d3)
-                if day3 is None or day3 > window_end:
-                    break
-                if p3 not in NON_PRODUCTION_CODES and b3 > 0:
-                    # next production episode starts
-                    break
-                if p3 in INS_PAYMENT_CODES and pay3:
-                    paid_amt += float(pay3)
-                if p3 in INS_WRITEOFF_CODES and a3:
-                    wo_amt += abs(float(a3))
-                k += 1
-
-            if paid_amt <= 0 and wo_amt <= 0:
-                i = j
-                continue
-
-            # Collapse duplicate ADAs in cluster
-            by_ada: dict[str, float] = defaultdict(float)
-            for ada, b in prods:
-                by_ada[ada] += b
-            ada_list = list(by_ada.items())
-            total_b = sum(b for _, b in ada_list)
-            if total_b <= 0:
-                i = j
-                continue
-
-            # Skip episodes where settlement dwarfs billed (mis-paired lump payment)
-            if total_b > 0 and (paid_amt + wo_amt) > total_b * 1.25:
-                tier_counts["skipped_overpay"] = tier_counts.get("skipped_overpay", 0) + 1
-                i = max(j, k if k > j else j)
-                continue
-
-            tier = "exact" if len(ada_list) == 1 else "inferred"
-            tier_counts[tier] += 1
-            episodes += 1
-
-            for ada, b in ada_list:
-                share = b / total_b
-                alloc_paid = paid_amt * share
-                alloc_wo = wo_amt * share
-                key = (carrier, ada, tier)
-                billed_s[key].append(b)
-                if alloc_paid:
-                    paid_s[key].append(alloc_paid)
-                    pp = _pct(alloc_paid, b)
-                    if pp is not None:
-                        pay_pct_s[key].append(pp)
-                if alloc_wo:
-                    wo_s[key].append(alloc_wo)
-                    wp = _pct(alloc_wo, b)
-                    if wp is not None:
-                        wo_pct_s[key].append(wp)
-
-            i = max(j, k if k > j else j)
+    billed_s = samples["billed"]
+    paid_s = samples["paid"]
+    wo_s = samples["writeOff"]
+    pay_pct_s = samples["paidPct"]
+    wo_pct_s = samples["writeOffPct"]
+    tier_counts = dict(samples.get("episodeTiers") or {})
+    episodes = int(samples.get("episodeCount") or 0)
 
     updated_at = _utc_now()
     conn.execute("DELETE FROM insco_ada_pct_variance")
@@ -349,8 +162,10 @@ def build_insco_ada_pct_variance(
         wo_sd = _stdev(wps) or 0.0
         pay_med = _median(pps)
         wo_med = _median(wps)
-        cred = _credibility(tier, n)
-        if not _publishable_pct(pay_med, wo_med):
+        cred = credibility_label(tier, n)
+        if tier == "low":
+            cred = "insufficient"
+        if not publishable_pct(pay_med, wo_med):
             cred = "insufficient"
         if cred in {"high", "usable", "usable_inferred", "weak_inferred"}:
             published += 1
@@ -398,14 +213,14 @@ def build_insco_ada_pct_variance(
         "years": str(years),
         "forward_days": str(fwd),
         "episodes": str(episodes),
-        "episode_tiers": json.dumps(dict(tier_counts)),
-        "carrier_accounts_hit": str(carrier_hit),
+        "episode_tiers": json.dumps(tier_counts),
+        "spine_source": str(samples.get("source") or ""),
         "published_cells": str(published),
         "total_cells": str(total_cells),
         "min_publish_n": str(MIN_PUBLISH_N),
         "high_n": str(HIGH_N),
         "honesty": (
-            "Code 2=Ins pay, 51=write-off paired after production ADAs within forward window. "
+            "Unified spine: Code 2=Ins pay, 51=write-off after production CDTs. "
             "Multi-ADA episodes allocate 2/51 by billed share (inferred). "
             "+/- is 1 population stdev of percentages. empty != $0."
         ),
@@ -419,14 +234,14 @@ def build_insco_ada_pct_variance(
     out.update(
         {
             "ok": True,
-            "episodeTiers": dict(tier_counts),
+            "episodeTiers": tier_counts,
             "episodes": episodes,
             "publishedCells": published,
             "totalCells": total_cells,
-            "carrierAccountsHit": carrier_hit,
         }
     )
     return out
+
 
 
 def list_pct_variance_rows(
@@ -503,7 +318,7 @@ def lookup_pct_variance(
     if not target or not target.is_file():
         return None
     carrier = str(payer or "").strip().upper()
-    ada = _norm_ada(ada_code)
+    ada = normalize_cdt(ada_code) or str(ada_code or "").strip().upper()
     if not carrier or not ada:
         return None
     rows = list_pct_variance_rows(

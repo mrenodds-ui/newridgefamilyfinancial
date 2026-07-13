@@ -648,52 +648,149 @@ def lookup_treatment_estimate(
                 (ada, f"%{payer_q}%"),
             ).fetchone()
         if row is None:
-            # Any payer for this ADA (informational)
-            any_row = conn.execute(
-                """
-                SELECT insurance_company, sample_size FROM treatment_planning_estimates
-                WHERE upper(ada_code) = upper(?)
-                ORDER BY sample_size DESC LIMIT 3
-                """,
-                (ada,),
-            ).fetchall()
+            # Gold path empty for this InsCo×ADA — fall through to unified ledger spine
+            pass
+        else:
+            sample = int(row["sample_size"] or 0)
+            estimate = {
+                "insuranceCompany": row["insurance_company"],
+                "adaCode": row["ada_code"],
+                "submittedFeeAvg": row["submitted_fee_avg"],
+                "allowedAmountAvg": row["allowed_amount_avg"],
+                "paidAmountAvg": row["paid_amount_avg"],
+                "writeOffAvg": row["write_off_avg"],
+                "patientPortionAvg": row["patient_portion_avg"],
+                "sampleSize": sample,
+                "updatedAt": row["updated_at"],
+                "source": "gold_payment_lines",
+                "credibility": "gold" if sample >= min_sample else "insufficient",
+                "tier": "exact",
+                "isInferred": False,
+                "goldAvailable": True,
+            }
             out["ok"] = True
-            out["message"] = (
-                f"No historical payment lines for {payer.strip()} × {ada}. "
-                + (
-                    "Other payers with data: "
-                    + ", ".join(f"{r['insurance_company']} (n={r['sample_size']})" for r in any_row)
-                    if any_row
-                    else "Export SoftDent Insurance Payment Analysis CSV to build estimates."
+            out["found"] = True
+            out["sampleSize"] = sample
+            out["estimate"] = estimate
+            out["source"] = "gold_payment_lines"
+            out["sufficient"] = sample >= min_sample
+            if not out["sufficient"]:
+                out["message"] = (
+                    f"Only {sample} historical line(s) for {estimate['insuranceCompany']} × {ada} "
+                    f"(need >={min_sample} for a reliable estimate). Contact payer for pre-auth / benefits."
                 )
+            return out
+    finally:
+        conn.close()
+
+    # Gold path miss → HAL-10585 ledger spine ($ + % +/-)
+    return _ledger_spine_treatment_fallback(
+        payer=payer, ada_code=ada, db_path=Path(db_path), include_inferred=False
+    )
+
+
+def _ledger_spine_treatment_fallback(
+    *,
+    payer: str,
+    ada_code: str,
+    db_path: Path,
+    include_inferred: bool = False,
+) -> dict[str, Any]:
+    """When gold payment lines empty, use unified InsCo×ADA spine ($ + %)."""
+    out: dict[str, Any] = {
+        "ok": True,
+        "found": False,
+        "sufficient": False,
+        "payer": payer.strip(),
+        "adaCode": ada_code,
+        "sampleSize": 0,
+        "estimate": None,
+        "source": "ledger_episode_5yr",
+        "goldAvailable": False,
+        "honesty": (
+            "Estimate from SoftDent ledger episodes (code 2 pay / 51 write-off) over ~5 years — "
+            "not a guarantee of benefits. Gold payment-line path empty. empty != $0. "
+            "Verify deductible, annual max, and plan limits."
+        ),
+    }
+    try:
+        from softdent_insco_ada_probabilistic import lookup_probabilistic_estimate
+        from softdent_insco_ada_pct_variance import lookup_pct_variance
+        from softdent_insco_ada_spine import normalize_cdt
+
+        ada = normalize_cdt(ada_code) or normalize_ada_code(ada_code)
+        out["adaCode"] = ada
+        if not ada:
+            out["message"] = "Need a CDT/ADA code (D####)."
+            return out
+
+        dollar = lookup_probabilistic_estimate(
+            payer=payer,
+            ada_code=ada,
+            db_path=db_path,
+            include_inferred=include_inferred,
+        )
+        pct = lookup_pct_variance(
+            payer=payer,
+            ada_code=ada,
+            include_inferred=include_inferred,
+            db_path=db_path,
+        )
+        if not dollar and not pct:
+            out["message"] = (
+                f"No publishable ledger estimate for {payer.strip()} × {ada}. "
+                "empty != $0 — run Sync / InsCo×ADA rebuild, or export Insurance Payment Analysis."
             )
             return out
 
-        sample = int(row["sample_size"] or 0)
+        n = int((dollar or {}).get("sample_size") or (pct or {}).get("sampleSize") or 0)
+        cred = str(
+            (dollar or {}).get("credibility")
+            or (pct or {}).get("credibility")
+            or "insufficient"
+        )
+        tier = str((dollar or {}).get("tier") or (pct or {}).get("tier") or "exact")
+        billed = (dollar or {}).get("billed_avg") or (pct or {}).get("billedAvg")
+        paid = (dollar or {}).get("paid_median") or (dollar or {}).get("paid_avg")
+        wo = (dollar or {}).get("write_off_median") or (dollar or {}).get("write_off_avg")
         estimate = {
-            "insuranceCompany": row["insurance_company"],
-            "adaCode": row["ada_code"],
-            "submittedFeeAvg": row["submitted_fee_avg"],
-            "allowedAmountAvg": row["allowed_amount_avg"],
-            "paidAmountAvg": row["paid_amount_avg"],
-            "writeOffAvg": row["write_off_avg"],
-            "patientPortionAvg": row["patient_portion_avg"],
-            "sampleSize": sample,
-            "updatedAt": row["updated_at"],
+            "insuranceCompany": (dollar or {}).get("insurance_company")
+            or (pct or {}).get("insuranceCompany")
+            or payer.strip(),
+            "adaCode": ada,
+            "submittedFeeAvg": billed,
+            "allowedAmountAvg": None,
+            "paidAmountAvg": paid if paid is not None else (pct or {}).get("paidAvg"),
+            "writeOffAvg": wo if wo is not None else (pct or {}).get("writeOffAvg"),
+            "patientPortionAvg": None,
+            "paidPctMedian": (pct or {}).get("paidPctMedian"),
+            "paidPctStdev": (pct or {}).get("paidPctStdev"),
+            "writeOffPctMedian": (pct or {}).get("writeOffPctMedian"),
+            "writeOffPctStdev": (pct or {}).get("writeOffPctStdev"),
+            "sampleSize": n,
+            "credibility": cred,
+            "tier": tier,
+            "isInferred": tier == "inferred",
+            "source": "ledger_episode_5yr",
+            "goldAvailable": False,
+            "updatedAt": (dollar or {}).get("period_end") or (pct or {}).get("periodEnd"),
         }
-        out["ok"] = True
         out["found"] = True
-        out["sampleSize"] = sample
+        out["sampleSize"] = n
         out["estimate"] = estimate
-        out["sufficient"] = sample >= min_sample
+        out["sufficient"] = cred in {"high", "usable"} and tier == "exact"
+        out["credibility"] = cred
+        out["tier"] = tier
         if not out["sufficient"]:
             out["message"] = (
-                f"Only {sample} historical line(s) for {estimate['insuranceCompany']} × {ada} "
-                f"(need >={min_sample} for a reliable estimate). Contact payer for pre-auth / benefits."
+                f"Ledger spine has {cred}/{tier} data for {estimate['insuranceCompany']} × {ada} "
+                f"(n={n}). Prefer exact usable+ for treatment quotes; inferred needs opt-in."
             )
         return out
-    finally:
-        conn.close()
+    except Exception as exc:  # noqa: BLE001
+        out["ok"] = False
+        out["message"] = f"Ledger spine fallback failed: {type(exc).__name__}:{exc}"
+        return out
 
 
 def _fmt_money(value: Any) -> str:
@@ -710,12 +807,40 @@ def format_treatment_estimate_reply(result: dict[str, Any]) -> str:
         return str(result.get("message") or "Treatment estimate lookup failed.")
     if not result.get("found"):
         return str(result.get("message") or "No estimate found.")
-    if not result.get("sufficient"):
-        return str(result.get("message") or "Insufficient sample size.")
     est = result.get("estimate") if isinstance(result.get("estimate"), dict) else {}
     co = est.get("insuranceCompany") or result.get("payer")
     ada = est.get("adaCode") or result.get("adaCode")
     n = est.get("sampleSize") or result.get("sampleSize")
+    source = str(est.get("source") or result.get("source") or "")
+    cred = str(est.get("credibility") or result.get("credibility") or "")
+    tier = str(est.get("tier") or result.get("tier") or "")
+    if source == "ledger_episode_5yr":
+        badge = f"[{cred}/{tier}]" if cred else ""
+        pay_pct = est.get("paidPctMedian")
+        wo_pct = est.get("writeOffPctMedian")
+        pct_bit = ""
+        if pay_pct is not None:
+            pct_bit += f" pay% med {pay_pct}"
+            if est.get("paidPctStdev") is not None:
+                pct_bit += f" +/-{est.get('paidPctStdev')}"
+        if wo_pct is not None:
+            pct_bit += f"; WO% med {wo_pct}"
+            if est.get("writeOffPctStdev") is not None:
+                pct_bit += f" +/-{est.get('writeOffPctStdev')}"
+        lines = [
+            f"Treatment plan estimate {badge} from {n} SoftDent ledger episode(s) "
+            f"(source=ledger_episode_5yr): {co} × {ada} typically pays "
+            f"{_fmt_money(est.get('paidAmountAvg'))} with write-off "
+            f"{_fmt_money(est.get('writeOffAvg'))}"
+            + (f" (billed avg {_fmt_money(est.get('submittedFeeAvg'))})" if est.get("submittedFeeAvg") is not None else "")
+            + (f";{pct_bit}." if pct_bit else "."),
+            str(result.get("honesty") or ""),
+        ]
+        if not result.get("sufficient"):
+            lines.insert(1, str(result.get("message") or "Credibility below exact usable+ — verify with payer."))
+        return " ".join(x for x in lines if x).strip()
+    if not result.get("sufficient"):
+        return str(result.get("message") or "Insufficient sample size.")
     lines = [
         f"Based on {n} historical SoftDent insurance payment line(s), "
         f"{co} typically allows {_fmt_money(est.get('allowedAmountAvg'))} for {ada}, "
@@ -817,6 +942,27 @@ def treatment_planning_status(db_path: Path | None = None) -> dict[str, Any]:
             ).fetchone()[0]
             or 0
         )
+        # Spine fallback availability (HAL-10585) when gold path empty
+        try:
+            if out["estimates"] == 0:
+                spine_n = int(
+                    conn.execute(
+                        """
+                        SELECT COUNT(*) FROM insco_ada_probabilistic_estimates
+                        WHERE tier='exact' AND credibility IN ('high','usable')
+                        """
+                    ).fetchone()[0]
+                    or 0
+                )
+                out["ledgerSpineExactUsable"] = spine_n
+                out["fallbackSource"] = "ledger_episode_5yr" if spine_n else None
+                if spine_n:
+                    out["hint"] = (
+                        "Gold payment lines empty — treatment estimates fall back to unified "
+                        "InsCo×ADA ledger spine (code 2/51, 5yr). empty != $0."
+                    )
+        except Exception:
+            pass
     finally:
         conn.close()
     return out
