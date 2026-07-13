@@ -65,7 +65,7 @@ def gold_csv_drop_playbook() -> dict[str, Any]:
             "payment_allocation": "F10 r m p p",
             "insurance_payment_distribution": "F10 r a i",
         },
-        "params": "Last 24 months (or max), all carriers, include write-offs when offered",
+        "params": "Last 12 months (1 year), all carriers, include write-offs when offered",
         "format": "Print Preview only — Excel not available on this SoftDent for these reports. NEVER Printer.",
         "outputMode": "print_preview_only",
         "excelAvailable": False,
@@ -337,7 +337,7 @@ def attempt_softdent_insurance_payment_analysis_export(
         ),
     }
     end = end or date.today()
-    start = start or date(end.year - 2, end.month, end.day)
+    start = start or date(end.year - 1, end.month, end.day)
     _ = dest_root
 
     try:

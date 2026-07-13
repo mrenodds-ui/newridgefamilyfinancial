@@ -181,17 +181,14 @@ def resolve_analytics_db() -> Path | None:
 
 
 def parse_money(value: Any) -> float | None:
-    if value is None or value == "":
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    text = str(value).strip().replace("$", "").replace(",", "").replace("(", "-").replace(")", "")
-    if not text or text in {"-", "—", "N/A", "n/a"}:
-        return None
-    try:
-        return float(text)
-    except ValueError:
-        return None
+    """Parse money via Decimal (cent-quantized); return float for SQLite REAL storage.
+
+    Never invents 0 from blank. Rejects NaN/Inf. Accounting parentheses → negative.
+    CSV string zeros (e.g. Paid Amount 0.00) are kept as 0.0 (observed zero).
+    """
+    from money_cents import money_as_sqlite_real, to_money_from_csv
+
+    return money_as_sqlite_real(to_money_from_csv(value))
 
 
 def normalize_ada_code(raw: Any) -> str:
@@ -318,6 +315,17 @@ def ensure_treatment_planning_schema(conn: sqlite3.Connection) -> None:
             updated_at TEXT,
             PRIMARY KEY (insurance_company, ada_code)
         );
+
+        CREATE TABLE IF NOT EXISTS sd_insurance_payment_ingest_audit (
+            ingest_id TEXT PRIMARY KEY,
+            source_file TEXT NOT NULL,
+            extracted_at TEXT NOT NULL,
+            rows_accepted INTEGER NOT NULL DEFAULT 0,
+            rows_skipped_incomplete INTEGER NOT NULL DEFAULT 0,
+            paid_sum REAL,
+            prior_row_count INTEGER,
+            note TEXT
+        );
         """
     )
 
@@ -328,9 +336,14 @@ def ingest_insurance_payment_csv(
     *,
     extracted_at: str | None = None,
 ) -> int:
+    from decimal import Decimal
+
+    from money_cents import money_as_sqlite_real, money_sub, to_money_from_csv
+
     extracted_at = extracted_at or _utc_now()
     ensure_treatment_planning_schema(conn)
     rows: list[dict[str, Any]] = []
+    skipped_incomplete = 0
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if not reader.fieldnames:
@@ -340,20 +353,32 @@ def ingest_insurance_payment_csv(
             company = _pick(raw, field_lookup, _PAYMENT_COLMAP["insurance_company"])
             ada_raw = _pick(raw, field_lookup, _PAYMENT_COLMAP["ada_code"])
             ada = normalize_ada_code(ada_raw)
-            submitted = parse_money(_pick(raw, field_lookup, _PAYMENT_COLMAP["submitted_fee"]))
-            allowed = parse_money(_pick(raw, field_lookup, _PAYMENT_COLMAP["allowed_amount"]))
-            paid = parse_money(_pick(raw, field_lookup, _PAYMENT_COLMAP["paid_amount"]))
-            write_off = parse_money(_pick(raw, field_lookup, _PAYMENT_COLMAP["write_off_amount"]))
-            patient = parse_money(_pick(raw, field_lookup, _PAYMENT_COLMAP["patient_portion"]))
+            submitted_d = to_money_from_csv(_pick(raw, field_lookup, _PAYMENT_COLMAP["submitted_fee"]))
+            allowed_d = to_money_from_csv(_pick(raw, field_lookup, _PAYMENT_COLMAP["allowed_amount"]))
+            paid_d = to_money_from_csv(_pick(raw, field_lookup, _PAYMENT_COLMAP["paid_amount"]))
+            write_off_d = to_money_from_csv(
+                _pick(raw, field_lookup, _PAYMENT_COLMAP["write_off_amount"])
+            )
+            patient_d = to_money_from_csv(_pick(raw, field_lookup, _PAYMENT_COLMAP["patient_portion"]))
             claim = _pick(raw, field_lookup, _PAYMENT_COLMAP["claim_number"])
             check = _pick(raw, field_lookup, _PAYMENT_COLMAP["check_number"])
             pay_date = _pick(raw, field_lookup, _PAYMENT_COLMAP["payment_date"])
             desc = _pick(raw, field_lookup, _PAYMENT_COLMAP["description"])
-            if not company and not ada and paid is None and submitted is None:
+            # Skip blank CSV noise
+            if not company and not ada and paid_d is None and submitted_d is None:
                 continue
-            # Derive patient portion when missing but allowed+paid present
-            if patient is None and allowed is not None and paid is not None:
-                patient = round(allowed - paid, 2)
+            # Gold line requires InsCo + ADA + Paid (observed; may be 0.00)
+            if not company or not ada or paid_d is None:
+                skipped_incomplete += 1
+                continue
+            # Derive patient portion when missing but allowed+paid present (cent-exact)
+            if patient_d is None and allowed_d is not None and paid_d is not None:
+                patient_d = money_sub(allowed_d, paid_d)
+            submitted = money_as_sqlite_real(submitted_d)
+            allowed = money_as_sqlite_real(allowed_d)
+            paid = money_as_sqlite_real(paid_d)
+            write_off = money_as_sqlite_real(write_off_d)
+            patient = money_as_sqlite_real(patient_d)
             line_id = _sha(company, ada, claim, check, pay_date, paid, submitted, path.name, idx)
             rows.append(
                 {
@@ -375,24 +400,60 @@ def ingest_insurance_payment_csv(
             )
     if not rows:
         return 0
-    conn.execute("DELETE FROM sd_insurance_payment_lines WHERE source_file = ?", (path.name,))
-    # Full replace when ingesting newest file of this type
-    conn.execute("DELETE FROM sd_insurance_payment_lines")
-    conn.executemany(
-        """
-        INSERT OR REPLACE INTO sd_insurance_payment_lines (
-            line_id, insurance_company, ada_code, description, submitted_fee, allowed_amount,
-            paid_amount, write_off_amount, patient_portion, claim_number, check_number,
-            payment_date, source_file, extracted_at
-        ) VALUES (
-            :line_id, :insurance_company, :ada_code, :description, :submitted_fee, :allowed_amount,
-            :paid_amount, :write_off_amount, :patient_portion, :claim_number, :check_number,
-            :payment_date, :source_file, :extracted_at
+
+    # Atomic replace: avoid empty-table window for concurrent Sync/readers
+    prior_count = 0
+    try:
+        prior_count = int(
+            conn.execute("SELECT COUNT(*) FROM sd_insurance_payment_lines").fetchone()[0] or 0
         )
-        """,
-        rows,
-    )
-    _rollup_into_importer_aggregate(conn, rows, path.name, extracted_at)
+    except sqlite3.Error:
+        prior_count = 0
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("DELETE FROM sd_insurance_payment_lines")
+        conn.executemany(
+            """
+            INSERT INTO sd_insurance_payment_lines (
+                line_id, insurance_company, ada_code, description, submitted_fee, allowed_amount,
+                paid_amount, write_off_amount, patient_portion, claim_number, check_number,
+                payment_date, source_file, extracted_at
+            ) VALUES (
+                :line_id, :insurance_company, :ada_code, :description, :submitted_fee, :allowed_amount,
+                :paid_amount, :write_off_amount, :patient_portion, :claim_number, :check_number,
+                :payment_date, :source_file, :extracted_at
+            )
+            """,
+            rows,
+        )
+        paid_sum = sum(
+            (to_money_from_csv(r["paid_amount"]) or Decimal("0.00") for r in rows),
+            Decimal("0.00"),
+        )
+        conn.execute(
+            """
+            INSERT INTO sd_insurance_payment_ingest_audit (
+                ingest_id, source_file, extracted_at, rows_accepted, rows_skipped_incomplete,
+                paid_sum, prior_row_count, note
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                _sha("ingest", path.name, extracted_at, len(rows)),
+                path.name,
+                extracted_at,
+                len(rows),
+                skipped_incomplete,
+                float(paid_sum),
+                prior_count,
+                "full replace of sd_insurance_payment_lines; empty != invent",
+            ),
+        )
+        _rollup_into_importer_aggregate(conn, rows, path.name, extracted_at)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     return len(rows)
 
 

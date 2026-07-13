@@ -7455,6 +7455,46 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/apex/prodbyada/status")
+    def apex_prodbyada_status_api():
+        try:
+            from softdent_prodbyada_xls_ingest import find_prodbyada_xls, format_prodbyada_reply
+
+            path = find_prodbyada_xls()
+            payload = {
+                "ok": True,
+                "def": "HAL-10609",
+                "found": bool(path),
+                "path": str(path) if path else None,
+                "inventedGold": False,
+                "writesPaymentLines": False,
+                "honesty": (
+                    "PRODBYADA.xls = SoftDent CODE rollups; NOT InsCo×ADA gold; "
+                    "empty != $0"
+                ),
+            }
+            payload["reply"] = (
+                f"PRODBYADA: {'found ' + str(path) if path else 'missing'}. "
+                "Not gold. empty != $0."
+            )
+            return json_response_fn({**payload, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/prodbyada/run")
+    def apex_prodbyada_run_api():
+        try:
+            from softdent_prodbyada_xls_ingest import (
+                format_prodbyada_reply,
+                ingest_prodbyada_xls,
+            )
+
+            result = ingest_prodbyada_xls()
+            result["reply"] = format_prodbyada_reply(result)
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
     @app.get("/api/apex/print-preview-audit/status")
     def apex_print_preview_audit_status_api():
         try:

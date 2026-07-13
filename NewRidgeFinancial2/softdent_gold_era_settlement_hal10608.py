@@ -161,12 +161,11 @@ def settlement_hydration_readiness_gate(
     era_pending = bool(e.get("pending"))
     era_gap = e.get("gapCode")
     latest_paid = e.get("latestTotalPaid")
-    has_paid = latest_paid is not None and str(latest_paid).strip() != ""
-    try:
-        if has_paid:
-            has_paid = float(latest_paid) > 0  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        has_paid = False
+    from money_cents import to_money
+    from decimal import Decimal
+
+    paid_d = to_money(latest_paid)
+    has_paid = paid_d is not None and paid_d > Decimal("0.00")
 
     era_inbox_ready = file_count > 0
     era_ingest_ready = (

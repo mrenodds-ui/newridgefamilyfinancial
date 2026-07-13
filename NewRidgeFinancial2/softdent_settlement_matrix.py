@@ -9,7 +9,6 @@ Moonshot: MOONSHOT_DENTAL_INSURANCE_INDUSTRY_KNOWLEDGE_2026-07-13.md
 
 from __future__ import annotations
 
-import math
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -154,9 +153,14 @@ def hydrate_settlement_matrix(
             s.upper(): s for s in list_spine_carriers(db_path=map_db) if s
         }
 
-        buckets: dict[tuple[str, str], list[float]] = {}
+        buckets: dict[tuple[str, str], list[Decimal]] = {}
         orphans = 0
         linked = 0
+        zero_paid_excluded = 0
+        from decimal import Decimal, ROUND_HALF_EVEN
+        from money_cents import TWOPLACES, money_as_sqlite_real, to_money
+        import math
+
         for company, ada, paid in conn.execute(
             """
             SELECT insurance_company, ada_code, paid_amount
@@ -174,9 +178,17 @@ def hydrate_settlement_matrix(
             if not spine:
                 orphans += 1
                 continue
+            paid_d = to_money(paid)
+            if paid_d is None:
+                orphans += 1
+                continue
+            # $0 paid lines are observed denials — exclude from avg_paid (do not invent)
+            if paid_d == Decimal("0.00"):
+                zero_paid_excluded += 1
+                continue
             linked += 1
             key = (spine, str(ada).strip().upper())
-            buckets.setdefault(key, []).append(float(paid))
+            buckets.setdefault(key, []).append(paid_d)
 
         stamp = _utc_now()
         conn.execute("DELETE FROM settlement_matrix")
@@ -186,20 +198,30 @@ def hydrate_settlement_matrix(
             n = len(pays)
             if n < 1:
                 continue
-            avg = sum(pays) / n
+            total = sum(pays, Decimal("0.00"))
+            avg = (total / Decimal(n)).quantize(TWOPLACES, rounding=ROUND_HALF_EVEN)
             if n == 1:
-                std = 0.0
+                std = Decimal("0.00")
             else:
                 mean = avg
-                var = sum((p - mean) ** 2 for p in pays) / (n - 1)
-                std = math.sqrt(var)
+                var = sum((p - mean) ** 2 for p in pays) / Decimal(n - 1)
+                std = Decimal(str(math.sqrt(float(var)))).quantize(
+                    TWOPLACES, rounding=ROUND_HALF_EVEN
+                )
             conn.execute(
                 """
                 INSERT INTO settlement_matrix (
                     spine_carrier, ada_code, avg_paid, n_payments, std_dev, last_updated
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (spine, ada, avg, n, std, stamp),
+                (
+                    spine,
+                    ada,
+                    money_as_sqlite_real(avg),
+                    n,
+                    money_as_sqlite_real(std),
+                    stamp,
+                ),
             )
             cells += 1
             if n >= MIN_N_FOR_DOLLAR:
@@ -215,12 +237,14 @@ def hydrate_settlement_matrix(
                 "cellsNge10": nge10,
                 "orphans": orphans,
                 "linked": linked,
+                "zeroPaidExcluded": zero_paid_excluded,
                 "spineLinkPct": round(link_pct, 2),
                 "lastUpdated": stamp,
                 "message": (
                     f"Hydrated settlement_matrix: {cells} cells "
                     f"({nge10} with n>={MIN_N_FOR_DOLLAR}); "
-                    f"spine link {link_pct:.1f}%."
+                    f"spine link {link_pct:.1f}% "
+                    f"(excluded {zero_paid_excluded} $0 paid lines from avg)."
                 ),
             }
         )

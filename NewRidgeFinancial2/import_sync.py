@@ -1059,6 +1059,29 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         for warning in tp.get("warnings") or []:
             result["warnings"].append(f"SoftDent treatment planning: {warning}")
         try:
+            from softdent_prodbyada_xls_ingest import ingest_prodbyada_xls
+
+            prod_ada = ingest_prodbyada_xls()
+            result["softdent"]["prodByAdaXls"] = {
+                "ok": bool(prod_ada.get("ok")),
+                "rowsIngested": int(prod_ada.get("rowsIngested") or 0),
+                "periodStart": prod_ada.get("periodStart"),
+                "periodEnd": prod_ada.get("periodEnd"),
+                "path": prod_ada.get("path"),
+                "inventedGold": False,
+                "writesPaymentLines": False,
+                "error": prod_ada.get("error"),
+            }
+            if not prod_ada.get("ok") and prod_ada.get("error") not in {
+                None,
+                "PRODBYADA_XLS_MISSING",
+            }:
+                result["warnings"].append(
+                    f"PRODBYADA.xls ingest: {prod_ada.get('error')}"
+                )
+        except Exception as prod_ada_exc:  # noqa: BLE001
+            result["warnings"].append(f"PRODBYADA.xls ingest skipped: {prod_ada_exc}")
+        try:
             from softdent_insco_ada_probabilistic import run_insco_ada_probabilistic_report
 
             prob = run_insco_ada_probabilistic_report()

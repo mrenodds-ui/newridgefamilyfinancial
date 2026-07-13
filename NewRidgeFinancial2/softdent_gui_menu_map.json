@@ -142,6 +142,25 @@
       "excelExport": false,
       "printPreviewAvailable": true,
       "note": "HAL-10589: Excel NOT available. Output Options → Print Preview → Enter → Next/PageDown through pages as needed → LAST page for totals. Never Printer. empty != $0; Print Preview does not populate sd_insurance_payment_lines."
+    },
+    "production_by_ada_code": {
+      "id": "production_by_ada_code",
+      "label": "Production by ADA Code (PRODBYADA.xls)",
+      "menuPath": "Reports → Practice Management → Production Reports → Production by ADA Code",
+      "menu_keys": "a",
+      "menu_keys_env": "SOFTDENT_PRODBYADA_MENU_KEYS",
+      "date_mode": "range",
+      "params": "Last 12 months (1 year)",
+      "short_stem_template": "PRODBYADA",
+      "canonical_template": "production_by_ada_{start}_{end}.xls",
+      "also_copy_as": ["PRODBYADA.xls"],
+      "required": false,
+      "phase": 2,
+      "proven": true,
+      "outputMode": "excel_or_preview",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "note": "Excel available. Saves as PRODBYADA.xls (often D:\\). SoftDent CODE rollups — NOT InsCo×ADA gold payment lines. Prefer 1-year range."
     }
   },
   "phase1_order": ["register", "collections", "transactions", "daysheet", "aging"],
@@ -150,7 +169,6 @@
     "insurance_payment_distribution",
     "insurance_payment_analysis",
     "production_by_provider",
-    "production_by_ada_code",
     "collection_reconciliation"
   ]
 }
