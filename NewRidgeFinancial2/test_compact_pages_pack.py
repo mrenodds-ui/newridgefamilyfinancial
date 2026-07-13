@@ -6,6 +6,7 @@ import unittest
 
 from apex_compact_pages_pack import (
     KPI_BUDGET_ABOVE_FOLD,
+    MAX_MICRO_PX,
     MAX_PRIMARY_PX,
     MAX_SECONDARY_PX,
     TABLE_ROW_CAP,
@@ -91,7 +92,7 @@ class ZeroScrollContractTests(unittest.TestCase):
         self.assertEqual(wb["rowCap"], TABLE_ROW_CAP)
         self.assertLessEqual(wb["maxHeight"], MAX_PRIMARY_PX)
         kpi = next(w for w in out if w["id"] == "c")
-        self.assertEqual(kpi["maxHeight"], 120)
+        self.assertEqual(kpi["maxHeight"], MAX_MICRO_PX)
 
     def test_kanban_subpage_keeps_internal_scroll(self) -> None:
         widgets = [

@@ -7,7 +7,7 @@
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10611";
+  const ASSET_V = "hal-10612";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -33,28 +33,34 @@
   const SUBPAGE_LINKS = {
     financial: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "workpapers", label: "Workpapers" },
       { sub: "providers", label: "Providers" },
       { sub: "periods", label: "Periods" },
     ],
     taxes: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
+      { sub: "planning", label: "Planning" },
       { sub: "entities", label: "Entities" },
       { sub: "calendar", label: "Calendar" },
       { sub: "workpapers", label: "Workpapers" },
     ],
     softdent: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "register", label: "Register" },
       { sub: "schedule", label: "Schedule" },
     ],
     quickbooks: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "coa", label: "COA" },
       { sub: "vendors", label: "Vendors" },
     ],
     claims: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "kanban", label: "Kanban" },
       { sub: "detail", label: "Detail" },
       { sub: "batch", label: "Batch" },
@@ -63,6 +69,7 @@
     ],
     ar: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "collections", label: "Collections" },
       { sub: "aging-detail", label: "Aging Detail" },
       { sub: "forecast", label: "Forecast" },
@@ -85,12 +92,14 @@
     ],
     "office-manager": [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "huddle", label: "Huddle" },
       { sub: "tasks", label: "Tasks" },
       { sub: "operatory", label: "Operatory" },
     ],
     hal: [
       { sub: null, label: "Chat" },
+      { sub: "ops", label: "Ops" },
       { sub: "history", label: "History" },
       { sub: "system-logs", label: "System Logs" },
     ],
@@ -101,6 +110,8 @@
     periods: "Periods",
     entities: "Entities",
     calendar: "Calendar",
+    planning: "Planning",
+    ops: "Ops",
     register: "Register",
     schedule: "Schedule",
     coa: "COA",

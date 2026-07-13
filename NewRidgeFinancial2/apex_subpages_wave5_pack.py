@@ -960,18 +960,70 @@ def build_om_operatory_subpage(reports: dict[str, Any], bundle: dict[str, Any]) 
     return widgets
 
 
+def _build_ops_via_parent(page: str, reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """Reuse parent page builders; surface only demoted widgets on #{page}/ops."""
+    from apex_backend import _PAGE_BUILDERS
+    from apex_compact_pages_pack import select_demoted_widgets
+
+    builder = _PAGE_BUILDERS.get(str(page or "").strip().lower())
+    if not callable(builder):
+        return select_demoted_widgets([], page=page)
+    try:
+        widgets = builder(reports or {}, bundle or {})
+    except Exception:
+        widgets = []
+    return select_demoted_widgets(widgets if isinstance(widgets, list) else [], page=page)
+
+
+def build_financial_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("financial", reports, bundle)
+
+
+def build_claims_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("claims", reports, bundle)
+
+
+def build_taxes_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("taxes", reports, bundle)
+
+
+def build_hal_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("hal", reports, bundle)
+
+
+def build_softdent_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("softdent", reports, bundle)
+
+
+def build_ar_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("ar", reports, bundle)
+
+
+def build_qb_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("quickbooks", reports, bundle)
+
+
+def build_om_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("office-manager", reports, bundle)
+
+
 WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
         ("taxes", "entities"): build_tax_entities,
         ("taxes", "calendar"): build_tax_calendar,
         ("taxes", "planning"): build_taxes_planning,
         ("taxes", "workpapers"): build_tax_workpapers,
+        ("taxes", "ops"): build_taxes_ops,
     ("softdent", "register"): build_softdent_register,
     ("softdent", "schedule"): build_softdent_schedule,
+    ("softdent", "ops"): build_softdent_ops,
     ("quickbooks", "coa"): build_qb_coa,
     ("quickbooks", "vendors"): build_qb_vendors,
+    ("quickbooks", "ops"): build_qb_ops,
     ("ar", "aging-detail"): build_ar_aging_detail,
+    ("ar", "ops"): build_ar_ops,
     ("claims", "attachments"): build_claims_attachments,
     ("claims", "kanban"): build_claims_kanban_subpage,
+    ("claims", "ops"): build_claims_ops,
     ("narratives", "templates"): build_narrative_templates,
     ("narratives", "history"): build_narrative_history,
     ("narratives", "audit"): build_narrative_audit,
@@ -979,6 +1031,9 @@ WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
     ("library", "codes"): build_library_codes,
     ("office-manager", "tasks"): build_om_tasks,
     ("office-manager", "operatory"): build_om_operatory_subpage,
+    ("office-manager", "ops"): build_om_ops,
+    ("financial", "ops"): build_financial_ops,
     ("hal", "history"): build_hal_history,
     ("hal", "system-logs"): build_hal_system_logs,
+    ("hal", "ops"): build_hal_ops,
 }

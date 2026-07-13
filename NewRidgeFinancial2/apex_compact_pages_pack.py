@@ -14,14 +14,106 @@ from __future__ import annotations
 
 from typing import Any
 
-# Moonshot zero-scroll height tiers (px)
+# Moonshot Fibonacci zero-scroll height tiers (px)
 MAX_PRIMARY_PX = 320
 MAX_SECONDARY_PX = 240
-MAX_MICRO_PX = 120
+MAX_MICRO_PX = 80
 TABLE_ROW_CAP = 5
 TABLE_ROW_CAP_HARD = 7
 # Moonshot KPI density (hal-10562)
 KPI_BUDGET_ABOVE_FOLD = 4
+# First-viewport keep sets (hal-10612) — overflow → #{page}/ops
+
+PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
+    "financial": frozenset(
+        {
+            "financial-command-strip",
+            "financial-dual-trend",
+            "provider-hbar",
+            "collections-gauge",
+            "bridge-errors",
+            "ar-aging-chart",
+        }
+    ),
+    "claims": frozenset(
+        {
+            "claims-executive-strip",
+            "claims-aging-exposure",
+            "denial-pareto",
+            "claims-open-kanban",
+            "verification-matrix",
+            "claims-era-gauge",
+        }
+    ),
+    "hal": frozenset(
+        {
+            "hal-import-health",
+            "hal-mosaic-prod",
+            "hal-mosaic-coll",
+            "hal-ask",
+            "hal-recommended-actions",
+            "hal-ai-insight",
+            "hal-full-log",
+        }
+    ),
+    "taxes": frozenset(
+        {
+            "taxes-period-scrubber",
+            "tax-year-status",
+            "tax-core-strip",
+            "tax-open-planning",
+            "tax-disclaimer",
+            "tax-bridge-waterfall",
+        }
+    ),
+    "softdent": frozenset(
+        {
+            "sd-vitals-strip",
+            "collections-gauge",
+            "softdent-visual-ledger-recon",
+            "softdent-gold-csv-drop-ops",
+            "sd-prod-trend",
+            "softdent-tp-estimate-chips",
+        }
+    ),
+    "ar": frozenset(
+        {
+            "ar-vitals-strip",
+            "ar-aging-chart",
+            "collection-bullet",
+            "collections-gauge",
+            "ar-collection-task-list",
+            "ar-follow-up",
+        }
+    ),
+    "quickbooks": frozenset(
+        {
+            "qb-vitals-strip",
+            "qb-net-profit-gap",
+            "qb-payroll-gap",
+            "qb-expense-hbar",
+            "qb-ap-aging",
+        }
+    ),
+    "office-manager": frozenset(
+        {
+            "om-vitals-strip",
+            "om-daily-huddle",
+            "import-health-monitor",
+            "operatory-util-trend",
+            "om-priorities",
+            "om-open-operatory",
+        }
+    ),
+}
+
+# Always keep on parent even if not in page keep set
+_ALWAYS_KEEP_IDS = frozenset(
+    {
+        "warming-bridge",
+        "kpi-data-pending",
+    }
+)
 
 
 def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
@@ -508,3 +600,117 @@ def open_detail_strip(*, page: str, sub: str, label: str, message: str) -> dict[
         "hint": f"Open #{page}/{sub}",
         "navHash": f"{page}/{sub}",
     }
+
+
+def _is_always_keep(wid: str) -> bool:
+    if wid in _ALWAYS_KEEP_IDS:
+        return True
+    if wid.endswith("-open"):
+        return True
+    return False
+
+
+def partition_first_viewport(
+    widgets: list[Any],
+    *,
+    page: str,
+    sub: str = "",
+) -> list[Any]:
+    """Keep ~6 first-viewport widgets; demote the rest to #{page}/ops.
+
+    Parent pages only. Subpages (including ops) are untouched. SoftDent Gold CSV
+    drop OPS stays on main when listed in PAGE_FIRST_VIEW_KEEP.
+    """
+    if not isinstance(widgets, list):
+        return widgets
+    page_key = str(page or "").strip().lower()
+    if str(sub or "").strip():
+        return widgets
+    keep_set = PAGE_FIRST_VIEW_KEEP.get(page_key)
+    if not keep_set:
+        return widgets
+
+    kept: list[Any] = []
+    demoted_labels: list[str] = []
+    for w in widgets:
+        if not isinstance(w, dict):
+            kept.append(w)
+            continue
+        wid = str(w.get("id") or "")
+        if wid in keep_set or _is_always_keep(wid):
+            kept.append(w)
+            continue
+        demoted_labels.append(str(w.get("label") or wid or "widget"))
+
+    if not demoted_labels:
+        return kept
+
+    n = len(demoted_labels)
+    preview = ", ".join(demoted_labels[:4])
+    if n > 4:
+        preview += f" +{n - 4} more"
+    ops = open_detail_strip(
+        page=page_key,
+        sub="ops",
+        label="More Ops",
+        message=f"{n} widget(s) moved to Ops — {preview}",
+    )
+    # Prefer after command/executive strip if present
+    insert_at = len(kept)
+    for i, x in enumerate(kept):
+        if isinstance(x, dict) and str(x.get("type") or "") in {
+            "financial-command-strip",
+            "claims-executive-strip",
+            "executive-strip",
+        }:
+            insert_at = i + 1
+            break
+    kept.insert(insert_at, ops)
+    return kept
+
+
+def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
+    """Build #{page}/ops payload: everything not in first-viewport keep set."""
+    if not isinstance(widgets, list):
+        return []
+    page_key = str(page or "").strip().lower()
+    keep_set = PAGE_FIRST_VIEW_KEEP.get(page_key, frozenset())
+    out: list[Any] = [
+        {
+            "id": f"{page_key}-overview-open",
+            "type": "status",
+            "label": "Back to Overview",
+            "size": "strip",
+            "compact": True,
+            "maxHeight": MAX_MICRO_PX,
+            "zeroScroll": True,
+            "status": "ok",
+            "message": f"Overview keeps the zero-scroll set · #{page_key}",
+            "hint": f"Open #{page_key}",
+            "navHash": page_key,
+        }
+    ]
+
+    for w in widgets:
+        if not isinstance(w, dict):
+            continue
+        wid = str(w.get("id") or "")
+        if wid in keep_set or _is_always_keep(wid):
+            continue
+        out.append(w)
+    if len(out) == 1:
+        out.append(
+            {
+                "id": f"{page_key}-ops-empty",
+                "type": "status",
+                "label": "Ops",
+                "size": "strip",
+                "compact": True,
+                "status": "empty",
+                "message": "No demoted widgets for this page right now.",
+                "emptyMessage": "Nothing to show in Ops — empty stays empty.",
+                "maxHeight": MAX_MICRO_PX,
+                "zeroScroll": True,
+            }
+        )
+    return out

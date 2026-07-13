@@ -1309,7 +1309,7 @@ def treatment_plan_estimate_widget() -> dict[str, Any]:
         "label": "Treatment Plan Estimates (HAL-10587)",
         "size": "strip",
         "compact": True,
-        "maxHeight": 120,
+        "maxHeight": 80,
         "status": status,
         "message": message,
         "hint": (

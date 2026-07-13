@@ -17,7 +17,7 @@ from apex_subpages_wave5_pack import build_taxes_planning
 
 class Hal10610CompactRemapTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10611")
+        self.assertEqual(BUILD_ID, "hal-10612")
 
     def test_taxes_main_moves_planning_to_subpage(self) -> None:
         out = build_apex_widgets("taxes", _fill=True)
@@ -65,7 +65,7 @@ class Hal10610CompactRemapTests(unittest.TestCase):
 
         w = treatment_plan_estimate_widget()
         self.assertEqual(w.get("size"), "strip")
-        self.assertEqual(w.get("maxHeight"), 120)
+        self.assertEqual(w.get("maxHeight"), 80)
 
 
 if __name__ == "__main__":
