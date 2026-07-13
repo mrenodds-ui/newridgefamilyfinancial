@@ -851,6 +851,31 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # UI honesty empty≠$0 (HAL-10591 / HON-001)
+    try:
+        from ui_honesty_policy import (
+            audit_ui_honesty_surfaces,
+            format_honesty_audit_reply,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(empty\s*(!=|≠|not)\s*\$?0|hon-?001|ops-?10591|hal-?10591|"
+            r"ui\s+honesty|honesty\s+audit|"
+            r"what\s+does\s+empty.{0,20}\$?0)",
+            raw_l,
+        ):
+            result = audit_ui_honesty_surfaces()
+            return {
+                "text": format_honesty_audit_reply(result),
+                "intent": "policy:empty-not-zero",
+                "passCount": result.get("passCount"),
+                "failCount": result.get("failCount"),
+                "ok": result.get("ok"),
+            }
+    except Exception:
+        pass
+
     # Gold CSV drop OPS (HAL-10589) — prefer before generic gold pipeline for drop asks
     try:
         from softdent_gold_csv_drop_ops import (

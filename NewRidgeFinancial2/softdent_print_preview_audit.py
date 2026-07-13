@@ -255,13 +255,19 @@ def run_ops_10590_print_preview_audit(
 
 
 def format_print_preview_audit_reply(status: dict[str, Any] | None = None) -> str:
+    from ui_honesty_policy import SOURCE_PRINT_PREVIEW_VISUAL, enforce_empty_not_zero
+
     st = status if isinstance(status, dict) else list_print_preview_audits()
     total = st.get("visualAuditLastPageTotal")
-    total_txt = f"${float(total):,.2f}" if isinstance(total, (int, float)) else "—"
+    total_disp = enforce_empty_not_zero(total, source_tag=SOURCE_PRINT_PREVIEW_VISUAL)
+    total_txt = str(total_disp.get("display") or "—")
+    if total_disp.get("badge") == "visual" and total_disp.get("showDollars"):
+        total_txt = f"[visual] {total_txt}"
     return (
         f"Print Preview visual audit ({DEF_ID}): available={st.get('visualAuditAvailable')}; "
         f"lastPageTotal={total_txt}; records={st.get('count')}; "
-        f"gapCode={st.get('gapCode')}; paymentLines={st.get('paymentLines')}. "
+        f"gapCode={st.get('gapCode')}; paymentLines={st.get('paymentLines')} "
+        f"(gold money display={'—' if int(st.get('paymentLines') or 0) == 0 else 'lines present'}). "
         "Visual audit only — does not create gold lines. "
         f"Playbook: {print_preview_audit_playbook()['f10']} → Print Preview → "
         "PageDown → last page. empty != $0."
@@ -269,20 +275,23 @@ def format_print_preview_audit_reply(status: dict[str, Any] | None = None) -> st
 
 
 def print_preview_audit_widget() -> dict[str, Any]:
+    from ui_honesty_policy import SOURCE_PRINT_PREVIEW_VISUAL, enforce_empty_not_zero
+
     st = list_print_preview_audits(limit=5)
     available = bool(st.get("visualAuditAvailable"))
     total = st.get("visualAuditLastPageTotal")
-    if available and isinstance(total, (int, float)):
+    total_honesty = enforce_empty_not_zero(total, source_tag=SOURCE_PRINT_PREVIEW_VISUAL)
+    if available and total_honesty.get("showDollars"):
         status, tone = "ok", "ok"
         message = (
-            f"Visual audit recorded · last-page total ${float(total):,.2f} · "
-            f"gap still {st.get('gapCode')} (not gold lines)"
+            f"Visual audit recorded · last-page total [visual] {total_honesty.get('display')} · "
+            f"gap still {st.get('gapCode')} (not gold lines; gold=—)"
         )
     else:
         status, tone = "empty", "warn"
         message = (
             "No Print Preview visual audit yet — Insurance Income → Print Preview → "
-            "PageDown → last page → record aggregate (empty != $0)"
+            "PageDown → last page → record aggregate (empty != $0; gold=— not $0.00)"
         )
     return {
         "id": "softdent-print-preview-audit",
@@ -296,8 +305,12 @@ def print_preview_audit_widget() -> dict[str, Any]:
         "playbook": print_preview_audit_playbook(),
         "visualAuditAvailable": available,
         "visualAuditLastPageTotal": total,
+        "visualAuditLastPageTotalDisplay": total_honesty.get("display"),
+        "visualBadge": total_honesty.get("badge"),
+        "visualTooltip": total_honesty.get("tooltip"),
         "gapCode": st.get("gapCode"),
         "paymentLines": st.get("paymentLines"),
+        "goldPaymentLinesDisplay": "—" if int(st.get("paymentLines") or 0) == 0 else str(st.get("paymentLines")),
         "confirmation": (
             "This is a visual audit only; no payment lines will be created"
         ),
@@ -309,6 +322,7 @@ def print_preview_audit_widget() -> dict[str, Any]:
             },
         ],
         "honesty": st.get("honesty"),
+        "emptyIsNotZero": True,
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
         "triggersGoldIngest": False,

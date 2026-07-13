@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10590",
-  "BUILD_ID": "hal-10590",
-  "assetVersion": "hal-10590",
-  "builtAt": "2026-07-13T11:30:00.000Z",
-  "notes": "hal-10590: SoftDent Print Preview visual-audit protocol (PHI-safe last-page aggregates); empty != $0; not gold line ingest.",
+  "schemaVersion": "hal-10591",
+  "BUILD_ID": "hal-10591",
+  "assetVersion": "hal-10591",
+  "builtAt": "2026-07-13T11:45:00.000Z",
+  "notes": "hal-10591: HON-001 empty≠$0 UI honesty enforcement; visual audit ≠ gold; null displays as — never $0.00.",
   "staffRenderMode": "apex",
-  "package": "HAL-10590"
+  "package": "HAL-10591"
 }

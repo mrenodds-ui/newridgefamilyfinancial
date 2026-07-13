@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10590"
+BUILD_ID = "hal-10591"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -144,9 +144,12 @@ def _empty_kpi(widget_id: str, label: str, *, hint: str) -> dict[str, Any]:
         "value": None,
         "status": "empty",
         "emptyMessage": "No data",
+        "display": "—",
         "hint": hint,
         "collapseWhenEmpty": True,
         "omitWhenEmpty": True,
+        "emptyIsNotZero": True,
+        "honestyDef": "HAL-10591",
         "size": "s",
     }
 
@@ -168,7 +171,10 @@ def _money_kpi(
         "label": label,
         "value": float(value),
         "unit": "money",
+        "display": f"${float(value):,.2f}",
         "hint": hint,
+        "emptyIsNotZero": True,
+        "honestyDef": "HAL-10591",
     }
     if delta_label:
         out["deltaLabel"] = delta_label
@@ -2331,6 +2337,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         from softdent_print_preview_audit import print_preview_audit_widget
 
         widgets.insert(7, print_preview_audit_widget())
+    except Exception:
+        pass
+    try:
+        from ui_honesty_policy import ui_honesty_widget
+
+        widgets.insert(8, ui_honesty_widget())
     except Exception:
         pass
     try:
@@ -7331,6 +7343,25 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 body = {}
             result = run_ops_10590_print_preview_audit(body or None)
             return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/ui-honesty/status")
+    def apex_ui_honesty_status_api():
+        try:
+            from ui_honesty_policy import (
+                audit_ui_honesty_surfaces,
+                format_honesty_audit_reply,
+            )
+
+            result = audit_ui_honesty_surfaces()
+            return json_response_fn(
+                {
+                    **result,
+                    "reply": format_honesty_audit_reply(result),
+                    "buildId": BUILD_ID,
+                }
+            )
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 

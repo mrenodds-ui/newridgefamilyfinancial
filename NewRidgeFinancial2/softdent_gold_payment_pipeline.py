@@ -416,7 +416,10 @@ def gold_payment_pipeline_widget() -> dict[str, Any]:
         message = "Payment file on disk but not ingested — run Sync / gold pipeline repair"
     else:
         status, tone = "empty", "warn"
-        message = "Gold CSV missing — SoftDent Insurance Payment Analysis not dropped (empty != $0)"
+        message = (
+            "Gold CSV missing — SoftDent Insurance Payment Analysis not dropped "
+            "(empty != $0; display=— not $0.00)"
+        )
     return {
         "id": "softdent-gold-payment-pipeline",
         "type": "status",
@@ -428,6 +431,8 @@ def gold_payment_pipeline_widget() -> dict[str, Any]:
         "hint": str(audit.get("rootCause") or ""),
         "gapCode": gap,
         "paymentLines": lines,
+        "goldPaymentLinesDisplay": "—" if lines == 0 else str(lines),
+        "emptyIsNotZero": True,
         "playbook": audit.get("playbook"),
         "halChips": [
             {"label": "Gold payment pipeline status", "query": "gold payment pipeline status"},
@@ -439,6 +444,7 @@ def gold_payment_pipeline_widget() -> dict[str, Any]:
         "honesty": audit.get("honesty"),
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
+        "honestyDef": "HAL-10591",
     }
 
 

@@ -776,9 +776,33 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
         if pay_sd is not None:
             variance += f" +/-{pay_sd}"
 
-    display_bits = [f"{_fmt_money(paid)}"]
+    # Never show dollars when paid avg is empty (HON-001)
+    paid_txt = _fmt_money(paid, source_tag=source or "ledger_episode_5yr")
+    if paid is None or paid_txt in {"unknown", "—", "No data"}:
+        return {
+            "badge": "insufficient",
+            "label": "Insufficient data",
+            "tone": "muted",
+            "display": (
+                f"No dollar estimate for {payer or '?'} × {ada or '?'} "
+                f"(n={n}). empty != $0 — verify with payer."
+            ),
+            "showDollars": False,
+            "paidMedian": None,
+            "writeOffMedian": None,
+            "sampleSize": n,
+            "credibility": "insufficient",
+            "tier": tier or None,
+            "source": source or None,
+            "emptyIsNotZero": True,
+            "adaCode": ada,
+            "insuranceCompany": payer,
+            "honestyDef": "HAL-10591",
+        }
+
+    display_bits = [paid_txt]
     if wo is not None:
-        display_bits.append(f"WO {_fmt_money(wo)}")
+        display_bits.append(f"WO {_fmt_money(wo, source_tag=source or 'ledger_episode_5yr')}")
     if variance:
         display_bits.append(f"({variance})")
     display_bits.append(f"n={n}")
@@ -804,6 +828,7 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
         "insuranceCompany": payer,
         "emptyIsNotZero": True,
         "def": "HAL-10587",
+        "honestyDef": "HAL-10591",
     }
 
 
@@ -953,13 +978,19 @@ def _ledger_spine_treatment_fallback(
         return out
 
 
-def _fmt_money(value: Any) -> str:
-    if value is None:
-        return "unknown"
+def _fmt_money(value: Any, *, source_tag: str = "ledger_episode_5yr") -> str:
+    """Format money honestly — empty/null never becomes ``$0.00`` (HAL-10591)."""
     try:
-        return f"${float(value):,.2f}"
-    except (TypeError, ValueError):
-        return "unknown"
+        from ui_honesty_policy import format_display_money
+
+        return format_display_money(value, source_tag=source_tag, empty_display="unknown")
+    except Exception:  # noqa: BLE001
+        if value is None:
+            return "unknown"
+        try:
+            return f"${float(value):,.2f}"
+        except (TypeError, ValueError):
+            return "unknown"
 
 
 def format_treatment_estimate_reply(result: dict[str, Any]) -> str:

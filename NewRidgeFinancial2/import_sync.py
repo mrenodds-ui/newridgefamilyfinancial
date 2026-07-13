@@ -1154,6 +1154,22 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
             }
         except Exception as ppa_exc:  # noqa: BLE001
             result["warnings"].append(f"Print Preview audit skipped: {ppa_exc}")
+        try:
+            from ui_honesty_policy import audit_ui_honesty_surfaces
+
+            hon = audit_ui_honesty_surfaces()
+            result["softdent"]["uiHonesty"] = {
+                "ok": bool(hon.get("ok")),
+                "passCount": hon.get("passCount"),
+                "failCount": hon.get("failCount"),
+                "def": hon.get("def"),
+            }
+            if not hon.get("ok"):
+                result["warnings"].append(
+                    f"UI honesty audit failCount={hon.get('failCount')} — empty must not render as $0.00"
+                )
+        except Exception as hon_exc:  # noqa: BLE001
+            result["warnings"].append(f"UI honesty audit skipped: {hon_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):
