@@ -634,6 +634,22 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
                 "intent": "policy:softdent-account-tx-ledger",
             }
 
+    # SoftDent full product KB (Carestream Help TOC + report catalog) — before
+    # InsCo×ADA "catalog" and other SoftDent ops policies that share keywords.
+    try:
+        from softdent_product_kb import (
+            format_softdent_product_kb_hal_reply,
+            query_touches_softdent_product,
+        )
+
+        if query_touches_softdent_product(raw):
+            return {
+                "text": format_softdent_product_kb_hal_reply(raw),
+                "intent": "policy:softdent-product-kb",
+            }
+    except Exception:
+        pass
+
     # Outstanding Claims by Carrier ↔ Account Aging bridge (HAL-10580)
     if re.search(
         r"\b("

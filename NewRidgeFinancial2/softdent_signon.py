@@ -311,18 +311,26 @@ def _query_touches_softdent_widgets_or_drift(query: str) -> bool:
 def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str:
     """Inject Sign On + UI-only data-path knowledge into HAL LLM context when relevant."""
     prompt = str(system_prompt or "")
+    touches_product = False
+    try:
+        from softdent_product_kb import query_touches_softdent_product
+
+        touches_product = query_touches_softdent_product(query)
+    except Exception:
+        touches_product = False
     if "SOFTDENT_SIGNON_USER" in prompt and "cannot be reached by the database" in prompt:
         # Still append master list if missing from prompt
         if "softdent_master_reports" in prompt.lower() or "master reports:" in prompt.lower():
             if (
                 not _query_touches_softdent_widgets_or_drift(query)
                 and not _query_touches_softdent_account_tx(query)
+                and not touches_product
             ):
                 return ""
     touches_signon = _query_touches_softdent_signon_or_ui_data(query)
     touches_widgets = _query_touches_softdent_widgets_or_drift(query)
     touches_account_tx = _query_touches_softdent_account_tx(query)
-    if not touches_signon and not touches_widgets and not touches_account_tx:
+    if not touches_signon and not touches_widgets and not touches_account_tx and not touches_product:
         return ""
     try:
         from softdent_master_reports import format_master_reports_hal_reply
@@ -353,6 +361,16 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
             parts.append("SOFTDENT PERIOD $ DRIFT: " + format_drift_hal_reply(compare_register_to_daysheet_totals()))
         except Exception:
             pass
+    if touches_product:
+        try:
+            from softdent_product_kb import format_softdent_product_kb_hal_reply
+
+            parts.append(format_softdent_product_kb_hal_reply(query))
+        except Exception:
+            parts.append(
+                "SoftDent product KB: softdent_product_kb.json "
+                "(Carestream Online Help TOC + thirteen report categories)."
+            )
     return " ".join(parts)
 
 

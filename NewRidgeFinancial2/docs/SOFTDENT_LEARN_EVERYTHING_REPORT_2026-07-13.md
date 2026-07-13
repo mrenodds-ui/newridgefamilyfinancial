@@ -196,11 +196,13 @@ Note: `support.carestreamdental.com` has been DNS-dead in recent OPS notes — p
 
 ## 9. What we still do *not* know (honest residual)
 
-1. Full SoftDent product feature matrix (Charting, every Insurance module, EDI setup screens not automated here)  
+1. ~~Full SoftDent product feature matrix~~ → **encoded** in `softdent_product_kb.json` (2040 Help TOC topics + 13 report categories). Full topic *prose* remains in local CHM / F1, not verbatim in git.  
 2. Guaranteed Excel path for Insurance Income / Writeoff on v19.1.4 (product limitation — Preview only)  
 3. Reliable Collections/Daysheet automation every run (Printer/Save dialog flakes remain)  
 4. SoftDent ODBC table maps for gold until Carestream/IT documents them  
 5. Live payer ERA portals (Delta/MetLife/Availity download menus) — OPS files, not SoftDent menu catalog  
+
+Program entry points: `softdent_product_kb.py`, HAL `policy:softdent-product-kb`, `GET /api/apex/hal/softdent-kb`, doc `docs/SOFTDENT_FULL_PRODUCT_KB_2026-07-13.md`.
 
 ---
 
@@ -209,6 +211,8 @@ Note: `support.carestreamdental.com` has been DNS-dead in recent OPS notes — p
 | Doc | What it teaches |
 |-----|-----------------|
 | `docs/SOFTDENT_LEARN_EVERYTHING_REPORT_2026-07-13.md` | **This report** |
+| `docs/SOFTDENT_FULL_PRODUCT_KB_2026-07-13.md` | Full SoftDent product KB wiring |
+| `softdent_product_kb.json` / `softdent_product_kb.py` | Program-readable SoftDent Help TOC + report catalog |
 | `docs/SOFTDENT_WEB_MANUAL_AND_REPORT_2026-07-13.md` | SoftDent Help vs NR2 SoftDent web page |
 | `docs/SOFTDENT_GUI_RESEARCH_EXPORT_2026-07-12.md` | Menus, Output Options, keyboard |
 | `docs/SOFTDENT_WIDGET_DATA_PATHS_2026-07-12.md` | Widget → SoftDent source |

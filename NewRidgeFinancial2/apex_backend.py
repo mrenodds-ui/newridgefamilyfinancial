@@ -6945,6 +6945,46 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/apex/hal/softdent-kb")
+    def apex_hal_softdent_kb():
+        """HAL/program SoftDent full product knowledge base (Help TOC + report catalog)."""
+        try:
+            import bottle
+
+            from softdent_product_kb import (
+                format_softdent_product_kb_hal_reply,
+                load_softdent_product_kb,
+                lookup_help_topics,
+                lookup_report,
+                product_kb_summary,
+            )
+
+            q = str(bottle.request.query.get("q") or "").strip()
+            summary = product_kb_summary()
+            kb = load_softdent_product_kb()
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "buildId": BUILD_ID,
+                    "summary": summary,
+                    "officeDoctrine": kb.get("officeDoctrine"),
+                    "productModules": kb.get("productModules"),
+                    "reportCategoryCounts": summary.get("categoryCounts"),
+                    "endOfDayRecommended": (
+                        (kb.get("reportCatalog") or {}).get("endOfDayRecommended")
+                    ),
+                    "matches": {
+                        "reports": lookup_report(q, limit=12) if q else [],
+                        "helpTopics": lookup_help_topics(q, limit=12) if q else [],
+                    },
+                    "reply": format_softdent_product_kb_hal_reply(q),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn(
+                {"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500
+            )
+
     @app.get("/api/apex/hal/softdent-signon")
     def apex_hal_softdent_signon():
         """HAL/program SoftDent Sign On status — env keys only; never returns password."""

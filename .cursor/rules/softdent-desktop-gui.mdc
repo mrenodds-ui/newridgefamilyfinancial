@@ -13,3 +13,4 @@ alwaysApply: true
 - SoftDent is **32-bit**; prefer keyboard F10 menus when 64-bit `menu_select` fails (`ElementNotEnabled`).
 - Account transactions → Excel: **Reports → Accounting → Trans for a Period** → Excel → Format **1** (List Each Transaction Separately). SoftDent may open temp `SDWIN*.csv` in Excel — SaveCopyAs to `C:\SoftDentReportExports`. One patient: Account/Patient → Transactions → Print Transactions → Excel if offered.
 - HAL knows this playbook via `format_softdent_account_tx_excel_hal_reply` / local SoftDent policy.
+- Full SoftDent **product** map (Help TOC + 13 report categories): `softdent_product_kb.json` / HAL `policy:softdent-product-kb` / `GET /api/apex/hal/softdent-kb`. Automation subset remains `softdent_gui_menu_map.json` + `softdent_master_reports.json`.
