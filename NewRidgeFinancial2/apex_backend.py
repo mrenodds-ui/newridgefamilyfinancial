@@ -2304,6 +2304,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_insco_ada_catalog_matrix import insco_ada_catalog_widget
+
+        widgets.insert(3, insco_ada_catalog_widget())
+    except Exception:
+        pass
+    try:
         from apex_softdent_production_pack import production_widgets
         from apex_softdent_aging_schedule_pack import aging_schedule_widgets
 
@@ -7282,6 +7288,84 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                     "reply": format_pct_variance_reply(row, payer=payer, ada=ada),
                     "buildId": BUILD_ID,
                     "honesty": "empty != $0; code 2/51 episode pairing; +/- 1 SD",
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/insco-ada-catalog/status")
+    def apex_insco_ada_catalog_status_api():
+        try:
+            from softdent_insco_ada_catalog_matrix import (
+                catalog_matrix_status,
+                format_catalog_status_reply,
+            )
+
+            st = catalog_matrix_status()
+            return json_response_fn(
+                {
+                    "ok": bool(st.get("ok")),
+                    **st,
+                    "reply": format_catalog_status_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/insco-ada-catalog")
+    def apex_insco_ada_catalog_api():
+        try:
+            import bottle
+
+            from softdent_insco_ada_catalog_matrix import (
+                list_catalog_matrix_rows,
+                list_ledger_cdt_universe,
+                uncovered_ledger_cdts,
+            )
+
+            q = bottle.request.query
+            include_insufficient = str(q.get("includeInsufficient") or "1").strip().lower() not in {
+                "0",
+                "false",
+                "no",
+                "off",
+            }
+            include_inferred = str(q.get("includeInferred") or "1").strip().lower() not in {
+                "0",
+                "false",
+                "no",
+                "off",
+            }
+            try:
+                limit = int(q.get("limit") or 500)
+            except (TypeError, ValueError):
+                limit = 500
+            try:
+                offset = int(q.get("offset") or 0)
+            except (TypeError, ValueError):
+                offset = 0
+            rows = list_catalog_matrix_rows(
+                include_insufficient=include_insufficient,
+                include_inferred=include_inferred,
+                credibility=str(q.get("credibility") or "").strip() or None,
+                payer=str(q.get("payer") or "").strip() or None,
+                ada=str(q.get("ada") or q.get("adaCode") or "").strip() or None,
+                limit=limit,
+                offset=offset,
+            )
+            return json_response_fn(
+                {
+                    "ok": True,
+                    "def": "HAL-10586",
+                    "count": len(rows),
+                    "includeInsufficient": include_insufficient,
+                    "includeInferred": include_inferred,
+                    "cells": rows,
+                    "ledgerCdtUniverseCount": len(list_ledger_cdt_universe()),
+                    "uncoveredCount": len(uncovered_ledger_cdts()),
+                    "honesty": "empty != $0; insufficient cells are not invented zeros",
+                    "buildId": BUILD_ID,
                 }
             )
         except Exception as exc:  # noqa: BLE001

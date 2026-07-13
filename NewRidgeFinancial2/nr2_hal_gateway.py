@@ -766,6 +766,59 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # InsCo × ADA full catalog matrix (HAL-10586) — includes insufficient
+    try:
+        from softdent_insco_ada_catalog_matrix import (
+            format_catalog_status_reply,
+            catalog_matrix_status,
+            list_catalog_matrix_rows,
+            uncovered_ledger_cdts,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(catalog|full\s+matrix|matrix\s+catalog|insco.{0,20}catalog|"
+            r"every\s+(ada|cdt|code)|insufficient\s+cells|"
+            r"uncovered\s+(ledger\s+)?(cdt|ada))",
+            raw_l,
+        ):
+            if re.search(r"uncovered|no spine|without settlement", raw_l):
+                uncovered = uncovered_ledger_cdts()
+                return {
+                    "text": (
+                        f"Ledger CDTs with no InsCo×ADA spine settlement cell yet "
+                        f"({len(uncovered)}): "
+                        + (", ".join(uncovered[:40]) + ("…" if len(uncovered) > 40 else ""))
+                        + ". empty≠$0 — not the same as $0 write-off."
+                    ),
+                    "intent": "policy:insco-ada-catalog-matrix",
+                    "uncoveredCount": len(uncovered),
+                }
+            if re.search(r"insufficient", raw_l):
+                rows = list_catalog_matrix_rows(
+                    include_insufficient=True,
+                    credibility="insufficient",
+                    limit=15,
+                )
+                lines = [
+                    f"InsCo×ADA insufficient sample (showing {len(rows)}; empty≠$0):",
+                ]
+                for r in rows:
+                    lines.append(
+                        f"- {r['insuranceCompany']} × {r['adaCode']} "
+                        f"n={r['sampleSize']} tier={r['tier']}"
+                    )
+                return {
+                    "text": "\n".join(lines),
+                    "intent": "policy:insco-ada-catalog-matrix",
+                }
+            return {
+                "text": format_catalog_status_reply(catalog_matrix_status()),
+                "intent": "policy:insco-ada-catalog-matrix",
+            }
+    except Exception:
+        pass
+
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
     # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
     # account transactions → Excel playbook

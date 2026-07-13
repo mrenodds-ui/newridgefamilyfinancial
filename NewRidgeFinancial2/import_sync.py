@@ -1087,6 +1087,20 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 result["warnings"].append(f"InsCo×ADA pct variance: {warning}")
         except Exception as pct_exc:  # noqa: BLE001
             result["warnings"].append(f"InsCo×ADA pct variance skipped: {pct_exc}")
+        try:
+            from softdent_insco_ada_catalog_matrix import run_insco_ada_catalog_matrix_report
+
+            cat = run_insco_ada_catalog_matrix_report()
+            result["softdent"]["inscoAdaCatalog"] = {
+                "ok": bool(cat.get("ok")),
+                "totalCells": ((cat.get("status") or {}).get("totalCells")),
+                "exactUsable": ((cat.get("status") or {}).get("exactUsableCells")),
+                "insufficient": ((cat.get("status") or {}).get("insufficientCells")),
+                "ledgerCdtUniverse": ((cat.get("export") or {}).get("ledgerCdtUniverse")),
+                "jsonPath": ((cat.get("export") or {}).get("jsonPath")),
+            }
+        except Exception as cat_exc:  # noqa: BLE001
+            result["warnings"].append(f"InsCo×ADA catalog skipped: {cat_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):
