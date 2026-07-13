@@ -1,4 +1,4 @@
-"""Pull remaining SoftDent Trans-for-a-Period year chunks (2017H2, 2019-2026YTD)."""
+"""Pull remaining SoftDent year TX chunks using proven Select-File-Name Edit path."""
 from __future__ import annotations
 
 import json
@@ -19,34 +19,16 @@ sys.path.insert(0, str(REPO / "NewRidgeFinancial2"))
 
 from softdent_gui_export import (  # noqa: E402
     EXPORT_ROOT_SHORT,
-    _escape_pywinauto_keys,
-    _excel_sdwin_workbook_open,
     _main_softdent_hwnd,
     _open_accounting_report,
-    _save_excel_sdwin_copy,
     cancel_printer_dialogs,
     dismiss_softdent_alerts,
     find_dialog,
 )
-from softdent_signon import ensure_softdent_signed_on  # noqa: E402
 
 DEST = Path(r"C:\SoftDentReportExports")
 TEMP = Path(r"C:\Users\mreno\AppData\Local\Temp")
 LOG = Path(r"C:\SoftDentFinancialExports\softdent_account_tx_year_chunks.json")
-
-
-def fg(h: int) -> None:
-    try:
-        win32gui.ShowWindow(h, win32con.SW_RESTORE)
-        win32gui.SetForegroundWindow(h)
-    except Exception:
-        send_keys("%")
-        time.sleep(0.05)
-        try:
-            win32gui.SetForegroundWindow(h)
-        except Exception:
-            pass
-    time.sleep(0.3)
 
 
 def titles() -> list[tuple[int, str]]:
@@ -63,38 +45,71 @@ def titles() -> list[tuple[int, str]]:
     return out
 
 
-def dismiss_alerts() -> None:
-    for h, t in titles():
-        if t.strip() == "SoftDent":
-            fg(h)
-            send_keys("{ENTER}", pause=0.05)
-            time.sleep(0.35)
+def fg(h: int) -> None:
+    try:
+        win32gui.ShowWindow(h, win32con.SW_RESTORE)
+        win32gui.SetForegroundWindow(h)
+    except Exception:
+        send_keys("%")
+        time.sleep(0.05)
+        try:
+            win32gui.SetForegroundWindow(h)
+        except Exception:
+            pass
+    time.sleep(0.3)
 
 
-def verify(path: Path, start: date) -> dict:
-    text = path.read_text("latin-1", errors="ignore").splitlines()
+def analyze(path: Path) -> dict:
+    raw = path.read_bytes()
     years: Counter[int] = Counter()
-    for ln in text[12:]:
-        part = ln.split(",", 1)[0].strip().strip('"')
-        if len(part) >= 8 and part[2] == "/" and part[5] == "/":
-            yy = int(part[-2:])
-            years[2000 + yy if yy < 50 else 1900 + yy] += 1
+    range_header = ""
+    if raw[:4] == b"\xd0\xcf\x11\xe0":
+        import xlrd
+
+        wb = xlrd.open_workbook(file_contents=raw)
+        sheet = wb.sheet_by_index(0)
+        if sheet.nrows > 2:
+            range_header = str(sheet.cell_value(2, 0) or "")
+        for r in range(12, sheet.nrows):
+            cell = sheet.cell_value(r, 0)
+            if isinstance(cell, float) and cell > 20000:
+                try:
+                    y = xlrd.xldate_as_tuple(cell, wb.datemode)[0]
+                    years[y] += 1
+                except Exception:
+                    pass
+            else:
+                part = str(cell).strip()
+                bits = part.split("/")
+                if len(bits) == 3 and bits[0].isdigit() and bits[2].isdigit():
+                    yy = int(bits[2])
+                    y = yy if yy > 99 else (2000 + yy if yy < 50 else 1900 + yy)
+                    years[y] += 1
+    else:
+        text = raw.decode("latin-1", errors="ignore").splitlines()
+        range_header = (text[2] if len(text) > 2 else "").split(",")[0]
+        for ln in text[12:]:
+            part = ln.split(",", 1)[0].strip().strip('"')
+            bits = part.split("/")
+            if len(bits) == 3 and bits[0].isdigit() and bits[2].isdigit():
+                yy = int(bits[2])
+                y = yy if yy > 99 else (2000 + yy if yy < 50 else 1900 + yy)
+                years[y] += 1
     return {
-        "rangeHeader": text[2] if len(text) > 2 else "",
+        "rangeHeader": range_header,
         "rows": sum(years.values()),
         "years": dict(sorted(years.items())),
         "yearMin": min(years) if years else None,
         "yearMax": max(years) if years else None,
-        "ok": bool(years.get(start.year, 0) > 0 or (years and start.year in years)),
     }
 
 
 def export_year(start: date, end: date, stem: str) -> dict:
     out = DEST / f"{stem}.xls"
     if out.is_file() and out.stat().st_size > 100_000:
-        meta = verify(out, start)
-        if meta.get("ok"):
-            print("SKIP", stem, meta, flush=True)
+        meta = analyze(out)
+        if meta.get("years", {}).get(start.year, 0) > 10:
+            print("SKIP", stem, meta.get("rows"), meta.get("rangeHeader"), flush=True)
             return {"ok": True, "skipped": True, "stem": stem, "saved": str(out), **meta}
 
     dismiss_softdent_alerts()
@@ -102,7 +117,12 @@ def export_year(start: date, end: date, stem: str) -> dict:
     fg(_main_softdent_hwnd())
     print("OPEN", start, end, stem, flush=True)
     _open_accounting_report("transactions", "t")
-    oo = find_dialog("Output Options")
+    oo = None
+    for _ in range(40):
+        oo = find_dialog("Output Options")
+        if oo:
+            break
+        time.sleep(0.25)
     if not oo:
         return {"ok": False, "error": "no Output Options", "stem": stem}
 
@@ -112,21 +132,25 @@ def export_year(start: date, end: date, stem: str) -> dict:
     for b in dlg.descendants(class_name="Button"):
         if (b.window_text() or "").replace("&", "").strip().lower() == "excel":
             b.click()
-            time.sleep(0.35)
+            time.sleep(0.4)
             break
-    else:
-        return {"ok": False, "error": "no Excel", "stem": stem}
     for b in dlg.descendants(class_name="Button"):
         if (b.window_text() or "").replace("&", "").strip().lower() == "ok":
             b.click()
             break
     else:
         send_keys("{ENTER}", pause=0.05)
-    time.sleep(1.0)
+    time.sleep(1.2)
 
-    setup = find_dialog("Transactions For A Period")
+    setup = None
+    for _ in range(50):
+        setup = find_dialog("Transactions For A Period")
+        if setup:
+            break
+        time.sleep(0.25)
     if not setup:
         return {"ok": False, "error": "no setup", "stem": stem}
+
     sh = int(setup.handle)
     fg(sh)
     w = Application(backend="win32").connect(handle=sh).window(handle=sh)
@@ -142,117 +166,182 @@ def export_year(start: date, end: date, stem: str) -> dict:
     print("setup OK", flush=True)
 
     t0 = time.time()
+    known_before = {p.resolve() for p in TEMP.glob("SDWIN*") if p.is_file()}
     save_done = False
-    best: Path | None = None
-    for i in range(200):
-        dismiss_alerts()
+    tracked: Path | None = None
+    last = -1
+    stable = 0
+
+    for i in range(240):
         save_h = next((h for h, t in titles() if t in {"Select File Name", "Save As"}), None)
         if save_h and not save_done:
             fg(save_h)
+            sdlg = Application(backend="win32").connect(handle=save_h).window(handle=save_h)
             short = rf"{EXPORT_ROOT_SHORT}\{stem}"
-            send_keys("^a", pause=0.03)
-            send_keys(_escape_pywinauto_keys(short), pause=0.03)
-            send_keys("{ENTER}", pause=0.05)
+            sedits = sdlg.descendants(class_name="Edit")
+            if sedits:
+                sedits[0].set_edit_text(short)
+            for b in sdlg.descendants(class_name="Button"):
+                if (b.window_text() or "").replace("&", "").strip().lower() == "ok":
+                    b.click()
+                    break
+            else:
+                send_keys("{ENTER}", pause=0.05)
             print("save", short, flush=True)
             save_done = True
             time.sleep(1.5)
             for h, t in titles():
-                if t.strip() == "SoftDent" or "replace" in t.lower():
+                if t.strip() == "SoftDent" or "replace" in t.lower() or "already" in t.lower():
                     fg(h)
                     send_keys("{ENTER}", pause=0.05)
 
         printing = any(t == "Print File" for _, t in titles())
-        cands = []
-        for p in list(DEST.glob(f"{stem}.*")) + list(TEMP.glob("SDWIN*")):
+        # Track NEW SDWIN*.csv created after start
+        try:
+            for p in TEMP.glob("SDWIN*"):
+                try:
+                    if not p.is_file() or p.stat().st_size < 100_000:
+                        continue
+                    if p.resolve() in known_before and p.stat().st_mtime < t0:
+                        continue
+                    if p.stat().st_mtime >= t0 - 1:
+                        if tracked is None or p.stat().st_size >= tracked.stat().st_size:
+                            tracked = p
+                except OSError:
+                    continue
+        except OSError:
+            pass
+        # Also accept DEST stem if SoftDent wrote it
+        for p in DEST.glob(f"{stem}.*"):
             try:
-                if p.is_file() and p.stat().st_mtime >= t0 - 3 and p.stat().st_size > 100_000:
-                    cands.append(p)
+                if p.is_file() and p.stat().st_mtime >= t0 and p.stat().st_size > 100_000:
+                    tracked = p
             except OSError:
                 continue
-        if cands:
-            best = max(cands, key=lambda p: (p.stat().st_mtime, p.stat().st_size))
 
-        excel_open = False
-        if printing or (best and best.stat().st_size > 200_000) or i > 15:
+        size = tracked.stat().st_size if tracked and tracked.is_file() else 0
+        if i % 8 == 0:
+            print(
+                i,
+                "print",
+                printing,
+                "file",
+                tracked.name if tracked else None,
+                "MB",
+                round(size / 1e6, 2),
+                "stable",
+                stable,
+                flush=True,
+            )
+
+        if size == last and size > 200_000 and not printing:
+            stable += 1
+        else:
+            stable = 0
+        last = size
+
+        if tracked and not printing and stable >= 3 and i > 6:
+            # Verify year before accepting
             try:
-                excel_open = bool(_excel_sdwin_workbook_open())
+                meta = analyze(tracked)
             except Exception as exc:
-                print("excel probe", type(exc).__name__, flush=True)
-                excel_open = False
-
-        if excel_open and not printing:
-            try:
-                copied = _save_excel_sdwin_copy(out)
-                if copied and copied.is_file() and copied.stat().st_size > 100_000:
-                    best = copied
-                    print("SaveCopyAs", copied.stat().st_size, flush=True)
-                    break
-            except Exception as exc:
-                print("SaveCopyAs", type(exc).__name__, flush=True)
-
-        if i % 10 == 0:
-            sz = best.stat().st_size if best else 0
-            print(i, "print", printing, "MB", round(sz / 1e6, 2), flush=True)
-
-        if best and not printing and best.stat().st_size > 100_000 and i > 8:
-            break
+                print("analyze fail", type(exc).__name__, flush=True)
+                stable = 0
+                continue
+            if meta.get("years", {}).get(start.year, 0) > 10:
+                break
+            print("reject", tracked.name, meta.get("rangeHeader"), meta.get("years"), flush=True)
+            known_before.add(tracked.resolve())
+            tracked = None
+            stable = 0
         time.sleep(2)
 
-    if not best or not best.is_file():
+    if not tracked or not tracked.is_file():
         return {"ok": False, "error": "no output", "stem": stem}
 
-    if best.resolve() != out.resolve():
-        shutil.copy2(best, out)
-    shutil.copy2(out, DEST / f"transactions_for_period_{start.isoformat()}_{end.isoformat()}.xls")
-    meta = verify(out, start)
-    result = {"ok": meta.get("ok"), "stem": stem, "saved": str(out), "bytes": out.stat().st_size, **meta}
-    print("CHUNK", json.dumps(result, indent=2), flush=True)
+    # SoftDent often writes DEST\STEMxls already — avoid SameFileError on Windows
+    try:
+        same = tracked.resolve() == out.resolve()
+    except OSError:
+        same = str(tracked).lower() == str(out).lower()
+    if not same:
+        shutil.copy2(tracked, out)
+    csv_out = DEST / f"{stem}.csv"
+    try:
+        if tracked.resolve() != csv_out.resolve():
+            shutil.copy2(tracked if tracked.suffix.lower() == ".csv" else out, csv_out)
+    except Exception:
+        pass
+    canon = DEST / f"transactions_for_period_{start.isoformat()}_{end.isoformat()}.xls"
+    try:
+        if out.resolve() != canon.resolve():
+            shutil.copy2(out, canon)
+    except Exception:
+        pass
+    meta = analyze(out)
+    ok = meta.get("years", {}).get(start.year, 0) > 10
+    result = {
+        "ok": ok,
+        "stem": stem,
+        "saved": str(out),
+        "bytes": out.stat().st_size,
+        "source": str(tracked),
+        **meta,
+    }
+    print("CHUNK", json.dumps({k: result.get(k) for k in ("ok", "stem", "rows", "rangeHeader", "years", "bytes")}, indent=2), flush=True)
     return result
 
 
 def main() -> None:
     today = date.today()
     chunks = [
-        (date(2017, 6, 29), date(2017, 12, 31), "TXN2017H2"),
-        (date(2019, 1, 1), date(2019, 12, 31), "TXN2019"),
-        (date(2020, 1, 1), date(2020, 12, 31), "TXN2020"),
-        (date(2021, 1, 1), date(2021, 12, 31), "TXN2021"),
-        (date(2022, 1, 1), date(2022, 12, 31), "TXN2022"),
-        (date(2023, 1, 1), date(2023, 12, 31), "TXN2023"),
         (date(2024, 1, 1), date(2024, 12, 31), "TXN2024"),
         (date(2025, 1, 1), date(2025, 12, 31), "TXN2025"),
         (date(today.year, 1, 1), today, f"TXN{today.year}YTD"),
     ]
-    assist = ensure_softdent_signed_on(timeout_s=30.0)
-    if not assist.get("ok") and not assist.get("signedOn"):
-        fg(next(h for h, t in titles() if "login" in t.lower()))
-        send_keys("^a{BACKSPACE}", pause=0.03)
-        send_keys("COMPUTE", pause=0.04)
-        send_keys("{TAB}", pause=0.05)
-        send_keys("^a{BACKSPACE}", pause=0.03)
-        send_keys("computer", pause=0.04)
-        send_keys("{ENTER}", pause=0.05)
-        time.sleep(2)
-        dismiss_alerts()
-
-    results = [{"ok": True, "skipped": True, "stem": "TXN2018", "saved": str(DEST / "TXN2018.xls")}]
-    if (DEST / "TXN2018.xls").is_file():
-        results[0].update(verify(DEST / "TXN2018.xls", date(2018, 1, 1)))
+    results = []
+    for stem, year in (
+        ("TXN2017H2", 2017),
+        ("TXN2018", 2018),
+        ("TXN2019", 2019),
+        ("TXN2020", 2020),
+        ("TXN2021", 2021),
+        ("TXN2022", 2022),
+        ("TXN2023", 2023),
+    ):
+        p = next((DEST / n for n in (f"{stem}.xls", f"{stem}.XLS") if (DEST / n).is_file()), None)
+        if p is not None:
+            meta = analyze(p)
+            results.append(
+                {
+                    "ok": meta.get("years", {}).get(year, 0) > 10,
+                    "skipped": True,
+                    "stem": stem,
+                    "saved": str(p),
+                    **meta,
+                }
+            )
 
     for start, end, stem in chunks:
         try:
             results.append(export_year(start, end, stem))
         except Exception as exc:
             print("FAIL", stem, type(exc).__name__, exc, flush=True)
-            results.append({"ok": False, "stem": stem, "error": str(exc)})
-        time.sleep(1.5)
+            results.append({"ok": False, "stem": stem, "error": f"{type(exc).__name__}: {exc}"})
+            for h, t in titles():
+                if t in {"Select File Name", "Output Options", "Print File"} or "transactions" in t.lower():
+                    fg(h)
+                    send_keys("%c", pause=0.05)
+                    time.sleep(0.4)
+        print("pause…", flush=True)
+        time.sleep(4)
 
     summary = {
         "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "ok": all(r.get("ok") for r in results),
-        "chunks": results,
         "okCount": sum(1 for r in results if r.get("ok")),
         "failCount": sum(1 for r in results if not r.get("ok")),
+        "chunks": results,
     }
     LOG.parent.mkdir(parents=True, exist_ok=True)
     LOG.write_text(json.dumps(summary, indent=2), encoding="utf-8")
