@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10598",
-  "BUILD_ID": "hal-10598",
-  "assetVersion": "hal-10598",
-  "builtAt": "2026-07-13T13:50:00.000Z",
-  "notes": "hal-10598: load SoftDent insurance companies CSV into insurance_company_reference; catalog surfaces master vs spine; empty != $0.",
+  "schemaVersion": "hal-10599",
+  "BUILD_ID": "hal-10599",
+  "assetVersion": "hal-10599",
+  "builtAt": "2026-07-13T14:00:00.000Z",
+  "notes": "hal-10599: expand InsCo×ADA staff CSV to SoftDent company master (likely_active) × ADA universe; no_settlement pad = null $; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10598"
+  "package": "HAL-10599"
 }

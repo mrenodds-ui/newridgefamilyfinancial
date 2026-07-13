@@ -28,7 +28,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         # Module package remains HAL-10595; global BUILD_ID advanced to 10596
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
-        self.assertEqual(BUILD_ID, "hal-10598")
+        self.assertEqual(BUILD_ID, "hal-10599")
 
     def test_parse_date_range_month_and_span(self) -> None:
         self.assertEqual(parse_date_range("2026-06"), ("2026-06-01", "2026-06-30"))

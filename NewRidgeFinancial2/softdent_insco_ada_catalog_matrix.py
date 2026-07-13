@@ -1,11 +1,14 @@
-"""Full InsCo × ADA catalog matrix (HAL-10596 staff export).
+"""Full InsCo × ADA catalog matrix (HAL-10599 staff export).
 
 Surfaces **every** spine cell — including honest ``insufficient`` — so
 "every code analyzed" is visible. Joins $ and %+/- tables from the unified
 spine; also lists the 5yr ledger CDT universe.
 
 HAL-10596: full-cell CSV export + stable inbox copy + bijective cents fields.
-Honesty: empty != $0; insufficient cells never become $0.00.
+HAL-10599: expand staff CSV to SoftDent company master (likely_active) × ADA
+universe. Companies/ADAs with no ledger settlements stay ``no_settlement``
+(null $, null %) — empty != $0; never invent dollars.
+
 No SoftDent write-back. Gold path unchanged (still GOLD_CSV_MISSING until CSV).
 """
 
@@ -28,9 +31,10 @@ from softdent_insco_ada_spine import (
 )
 from softdent_treatment_planning import resolve_analytics_db, resolve_exports_dir
 
-DEF_ID = "HAL-10596"
-PACKAGE_BUILD_ID = "hal-10596"
-PRIOR_DEF_ID = "HAL-10586"
+DEF_ID = "HAL-10599"
+PACKAGE_BUILD_ID = "hal-10599"
+PRIOR_DEF_ID = "HAL-10596"
+COMPANY_MASTER_DEF = "HAL-10598"
 
 CSV_COLUMNS = (
     "insuranceCompany",
@@ -52,6 +56,7 @@ CSV_COLUMNS = (
     "writeOffPctStdev",
     "periodStart",
     "periodEnd",
+    "source",
     "emptyIsNotZero",
     "floatMoneyDeprecated",
 )
@@ -150,10 +155,15 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
         company_ref = insurance_company_reference_status(db_path=target)
     except Exception as exc:  # noqa: BLE001
         company_ref = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
+    master_expanded = estimate_master_expanded_cell_count(
+        db_path=target,
+        spine_cells=total,
+    )
     out.update(
         {
             "ok": True,
             "totalCells": total,
+            "spineCells": total,
             "publishedCells": published,
             "insufficientCells": insufficient,
             "exactUsableCells": exact_usable,
@@ -161,6 +171,10 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
             "carriers": carriers,
             "ledgerCdtUniverse": len(universe),
             "uncoveredCount": len(uncovered),
+            "masterExpandedCells": master_expanded.get("masterExpandedCells"),
+            "masterAdaUniverse": master_expanded.get("adaUniverse"),
+            "masterCompanyUniverse": master_expanded.get("companyUniverse"),
+            "noSettlementPadCells": master_expanded.get("noSettlementPadCells"),
             "companyReference": {
                 "total": company_ref.get("total"),
                 "likelyActive": company_ref.get("likelyActive"),
@@ -173,12 +187,62 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
             "periodEnd": meta.get("period_end"),
             "spineEpisodes": int(meta.get("spine_episodes") or 0),
             "updatedAt": meta.get("updated_at"),
-            "honesty": CREDIBILITY.get("honesty"),
+            "honesty": (
+                "Spine dollars only from ledger 2/51. Company-master pad cells are "
+                "no_settlement (null $, null %) — empty != $0; no gold invent."
+            ),
             "emptyIsNotZero": True,
             "floatMoneyDeprecated": True,
+            "companyMasterDef": COMPANY_MASTER_DEF,
         }
     )
     return out
+
+
+def estimate_master_expanded_cell_count(
+    *,
+    db_path: Path | None = None,
+    spine_cells: int = 0,
+) -> dict[str, int]:
+    """Exact cartesian size for status (keys only — no full row materialization)."""
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    companies = list_catalog_company_universe(db_path=target)
+    adas = list_catalog_ada_universe(db_path=target)
+    company_u = len(companies)
+    ada_u = len(adas)
+    if company_u == 0 or ada_u == 0:
+        return {
+            "adaUniverse": ada_u,
+            "companyUniverse": company_u,
+            "noSettlementPadCells": 0,
+            "masterExpandedCells": int(spine_cells or 0),
+        }
+    existing: set[str] = set()
+    if target and target.is_file():
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        try:
+            if _table_exists(conn, "insco_ada_probabilistic_estimates"):
+                for company, ada in conn.execute(
+                    "SELECT insurance_company, ada_code FROM insco_ada_probabilistic_estimates"
+                ):
+                    c = str(company or "").strip().upper()
+                    a = str(ada or "").strip().upper()
+                    if c and a:
+                        existing.add(f"{c}|{a}")
+        finally:
+            conn.close()
+    pad = 0
+    for company in companies:
+        cu = company.upper()
+        for ada in adas:
+            if f"{cu}|{ada}" not in existing:
+                pad += 1
+    return {
+        "adaUniverse": ada_u,
+        "companyUniverse": company_u,
+        "noSettlementPadCells": pad,
+        "masterExpandedCells": company_u * ada_u,
+    }
 
 
 def list_ledger_cdt_universe(*, db_path: Path | None = None) -> list[str]:
@@ -334,7 +398,141 @@ def _badge(cred: str, tier: str) -> dict[str, str]:
         return {"badge": "usable", "label": "Usable (n≥10 exact)", "tone": "warn"}
     if "inferred" in cred:
         return {"badge": "inferred", "label": f"Inferred ({tier})", "tone": "danger"}
+    if cred == "no_settlement":
+        return {
+            "badge": "no_settlement",
+            "label": "No settlement (master only; empty != $0)",
+            "tone": "muted",
+        }
     return {"badge": "insufficient", "label": "Insufficient (empty != $0)", "tone": "muted"}
+
+
+def _no_settlement_row(*, company: str, ada: str) -> dict[str, Any]:
+    return _enrich_money_cents(
+        {
+            "insuranceCompany": company,
+            "adaCode": ada,
+            "tier": "exact",
+            "sampleSize": 0,
+            "credibility": "no_settlement",
+            "badge": _badge("no_settlement", "exact"),
+            "paidMedian": None,
+            "writeOffMedian": None,
+            "billedAvg": None,
+            "periodStart": None,
+            "periodEnd": None,
+            "updatedAt": None,
+            "paidPctMedian": None,
+            "paidPctStdev": None,
+            "paidPctMinus": None,
+            "paidPctPlus": None,
+            "writeOffPctMedian": None,
+            "writeOffPctStdev": None,
+            "writeOffPctMinus": None,
+            "writeOffPctPlus": None,
+            "source": "company_master_no_spine",
+            "emptyIsNotZero": True,
+        }
+    )
+
+
+def list_catalog_ada_universe(*, db_path: Path | None = None) -> list[str]:
+    """ADA codes for staff master grid: ledger CDTs ∪ spine estimate ADAs."""
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    adas = set(list_ledger_cdt_universe(db_path=target))
+    if not target or not target.is_file():
+        return sorted(adas)
+    conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+    try:
+        if _table_exists(conn, "insco_ada_probabilistic_estimates"):
+            for (code,) in conn.execute(
+                "SELECT DISTINCT ada_code FROM insco_ada_probabilistic_estimates"
+            ):
+                cdt = normalize_cdt(code) or str(code or "").strip().upper()
+                if cdt:
+                    adas.add(cdt)
+    finally:
+        conn.close()
+    return sorted(adas)
+
+
+def list_catalog_company_universe(*, db_path: Path | None = None) -> list[str]:
+    """Companies for staff master grid: likely_active ∪ spine carriers."""
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    by_upper: dict[str, str] = {}
+    try:
+        from softdent_insurance_company_reference import list_likely_active_companies
+
+        for name in list_likely_active_companies(db_path=target, limit=2000):
+            key = str(name).strip().upper()
+            if key and key not in by_upper:
+                by_upper[key] = str(name).strip()
+    except Exception:
+        pass
+    if target and target.is_file():
+        conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
+        try:
+            if _table_exists(conn, "insco_ada_probabilistic_estimates"):
+                for (name,) in conn.execute(
+                    "SELECT DISTINCT insurance_company FROM insco_ada_probabilistic_estimates"
+                ):
+                    raw = str(name or "").strip()
+                    key = raw.upper()
+                    if key and key not in by_upper:
+                        by_upper[key] = raw
+        finally:
+            conn.close()
+    return sorted(by_upper.values(), key=lambda s: s.upper())
+
+
+def expand_catalog_rows_with_company_master(
+    spine_rows: list[dict[str, Any]],
+    *,
+    db_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Cartesian pad: company master × ADA universe; keep spine $/%% where present.
+
+    Missing pairs become credibility=no_settlement with null dollars (empty != $0).
+    """
+    target = Path(db_path) if db_path else resolve_analytics_db()
+    companies = list_catalog_company_universe(db_path=target)
+    adas = list_catalog_ada_universe(db_path=target)
+    if not companies or not adas:
+        return list(spine_rows)
+
+    # Prefer spine row when present; key by upper(company)|ada
+    by_key: dict[str, dict[str, Any]] = {}
+    for row in spine_rows:
+        company = str(row.get("insuranceCompany") or "").strip()
+        ada = str(row.get("adaCode") or "").strip().upper()
+        if not company or not ada:
+            continue
+        key = f"{company.upper()}|{ada}"
+        enriched = dict(row)
+        enriched.setdefault("source", "ledger_episode_5yr")
+        by_key[key] = enriched
+
+    out: list[dict[str, Any]] = []
+    for company in companies:
+        cu = company.upper()
+        for ada in adas:
+            key = f"{cu}|{ada}"
+            if key in by_key:
+                out.append(by_key[key])
+            else:
+                out.append(_no_settlement_row(company=company, ada=ada))
+
+    # Keep any spine-only rows that somehow fell outside universe (safety)
+    seen = {f"{str(r.get('insuranceCompany') or '').strip().upper()}|{str(r.get('adaCode') or '').strip().upper()}" for r in out}
+    for row in spine_rows:
+        company = str(row.get("insuranceCompany") or "").strip()
+        ada = str(row.get("adaCode") or "").strip().upper()
+        key = f"{company.upper()}|{ada}"
+        if key not in seen:
+            enriched = dict(row)
+            enriched.setdefault("source", "ledger_episode_5yr")
+            out.append(enriched)
+    return out
 
 
 def uncovered_ledger_cdts(*, db_path: Path | None = None) -> list[str]:
@@ -376,11 +574,15 @@ def export_catalog_matrix_report(
     out_dir = Path(dest) if dest else resolve_exports_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     st = catalog_matrix_status(db_path=target)
-    rows = list_catalog_matrix_rows(
+    spine_rows = list_catalog_matrix_rows(
         db_path=target, include_insufficient=True, include_inferred=True, limit=100000
     )
+    rows = expand_catalog_rows_with_company_master(spine_rows, db_path=target)
     universe = list_ledger_cdt_universe(db_path=target)
+    ada_universe = list_catalog_ada_universe(db_path=target)
+    company_universe = list_catalog_company_universe(db_path=target)
     uncovered = uncovered_ledger_cdts(db_path=target)
+    no_settlement = sum(1 for r in rows if r.get("credibility") == "no_settlement")
     payload = {
         "ok": bool(st.get("ok")),
         "def": DEF_ID,
@@ -389,18 +591,34 @@ def export_catalog_matrix_report(
         "status": st,
         "method": {
             "spine": "softdent_insco_ada_spine (HAL-10585)",
+            "companyMaster": "insurance_company_reference (HAL-10598)",
             "includesInsufficient": True,
+            "includesNoSettlementPad": True,
             "emptyIsNotZero": True,
             "joins": "insco_ada_probabilistic_estimates LEFT JOIN insco_ada_pct_variance",
+            "expand": "likely_active ∪ spine carriers × ledger∪spine ADA",
             "floatMoneyDeprecated": True,
             "centsFields": True,
         },
+        "spineCellCount": len(spine_rows),
         "cellCount": len(rows),
+        "noSettlementPadCells": no_settlement,
+        "companyUniverse": company_universe,
+        "companyUniverseCount": len(company_universe),
+        "adaUniverse": ada_universe,
+        "adaUniverseCount": len(ada_universe),
         "ledgerCdtUniverse": universe,
         "ledgerCdtUniverseCount": len(universe),
         "uncoveredLedgerCdts": uncovered,
         "uncoveredCount": len(uncovered),
-        "cells": rows,
+        # Full grid lives in CSV (staff source of truth); JSON stays slim.
+        "cellsInCsvOnly": True,
+        "exactSample": [
+            r
+            for r in rows
+            if r.get("tier") == "exact" and r.get("credibility") in {"high", "usable"}
+        ][:40],
+        "noSettlementSample": [r for r in rows if r.get("credibility") == "no_settlement"][:25],
         "honesty": st.get("honesty"),
     }
     stamp = date.today().isoformat()
@@ -413,14 +631,15 @@ def export_catalog_matrix_report(
     lines = [
         f"# InsCo × ADA Full Catalog Matrix ({stamp})",
         "",
-        f"**{DEF_ID}** · cells **{len(rows)}** · exact usable **{st.get('exactUsableCells')}** · "
-        f"insufficient **{st.get('insufficientCells')}** · ledger CDT universe **{len(universe)}** · "
-        f"uncovered (no 2/51 yet) **{len(uncovered)}**.",
+        f"**{DEF_ID}** · staff cells **{len(rows)}** (spine **{len(spine_rows)}** + "
+        f"no_settlement pad **{no_settlement}**) · companies **{len(company_universe)}** · "
+        f"ADA universe **{len(ada_universe)}** · exact usable **{st.get('exactUsableCells')}** · "
+        f"ledger CDT universe **{len(universe)}** · uncovered (no 2/51 yet) **{len(uncovered)}**.",
         "",
-        f"Staff CSV (all cells): `{csv_path}`",
+        f"Staff CSV (all companies we take × ADA codes): `{csv_path}`",
         "",
-        "Insufficient cells are listed honestly — empty != $0. "
-        "Float $ columns deprecated; prefer *Cents.",
+        "no_settlement / insufficient cells are listed honestly — empty != $0. "
+        "Float $ columns deprecated; prefer *Cents. Dollars only where ledger settlements exist.",
         "",
         "## Top exact usable+",
         "",
@@ -446,6 +665,13 @@ def export_catalog_matrix_report(
             "",
             ", ".join(uncovered[:80]) + (" …" if len(uncovered) > 80 else ""),
             "",
+            "## Company master coverage",
+            "",
+            f"likely_active / company universe: **{len(company_universe)}** · "
+            f"spine carriers: **{st.get('carriers')}** · "
+            f"overlap: **{(st.get('companyReference') or {}).get('spineOverlapLikelyActive')}** · "
+            f"pad cells (null $): **{no_settlement}**",
+            "",
         ]
     )
     md_path.write_text("\n".join(lines), encoding="utf-8")
@@ -458,6 +684,10 @@ def export_catalog_matrix_report(
         "mdPath": str(md_path),
         "csvPath": str(csv_path),
         "cellCount": len(rows),
+        "spineCellCount": len(spine_rows),
+        "noSettlementPadCells": no_settlement,
+        "companyUniverseCount": len(company_universe),
+        "adaUniverseCount": len(ada_universe),
         "exactUsable": st.get("exactUsableCells"),
         "insufficient": st.get("insufficientCells"),
         "ledgerCdtUniverse": len(universe),
@@ -478,8 +708,14 @@ def export_catalog_matrix_report(
             "def": DEF_ID,
             "packageBuildId": PACKAGE_BUILD_ID,
             "status": st,
+            "spineCellCount": len(spine_rows),
+            "cellCount": len(rows),
+            "noSettlementPadCells": no_settlement,
+            "companyUniverseCount": len(company_universe),
+            "adaUniverseCount": len(ada_universe),
             "exactSample": exact[:25],
             "insufficientSample": [r for r in rows if r.get("credibility") == "insufficient"][:15],
+            "noSettlementSample": [r for r in rows if r.get("credibility") == "no_settlement"][:15],
             "uncoveredLedgerCdts": uncovered[:60],
             "uncoveredCount": len(uncovered),
             "fullReport": str(json_path),
@@ -519,16 +755,18 @@ def format_catalog_status_reply(st: dict[str, Any] | None = None) -> str:
         "(insco_ada_catalog_matrix_*.csv or inbox/softdent_insco_ada_catalog_matrix.csv)."
     )
     return (
-        f"InsCo×ADA full catalog ({DEF_ID}): cells={s.get('totalCells')} "
+        f"InsCo×ADA full catalog ({DEF_ID}): spine cells={s.get('spineCells') or s.get('totalCells')} "
         f"(exact usable={s.get('exactUsableCells')}, published={s.get('publishedCells')}, "
         f"insufficient={s.get('insufficientCells')}); "
-        f"spine ADAs={s.get('distinctAdaInSpine')}; "
-        f"ledger CDT universe={s.get('ledgerCdtUniverse')}; "
-        f"uncovered={s.get('uncoveredCount')}; "
+        f"staff master grid={s.get('masterExpandedCells')} "
+        f"({s.get('masterCompanyUniverse')} companies × {s.get('masterAdaUniverse')} ADAs; "
+        f"no_settlement pad={s.get('noSettlementPadCells')}); "
         f"company master likely_active="
         f"{(s.get('companyReference') or {}).get('likelyActive')}; "
+        f"ledger CDT universe={s.get('ledgerCdtUniverse')}; "
+        f"uncovered={s.get('uncoveredCount')}; "
         f"episodes={s.get('spineEpisodes')}. "
-        f"Insufficient listed honestly — empty != $0. {export_hint}"
+        f"Pad cells are null $ — empty != $0. {export_hint}"
     )
 
 
@@ -546,6 +784,7 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
     uncovered_all = uncovered_ledger_cdts()
     uncovered = uncovered_all[:12]
     total = int(st.get("totalCells") or 0)
+    master_cells = int(st.get("masterExpandedCells") or total)
     # Prefer stable inbox CSV when present
     csv_path = None
     inbox_csv = None
@@ -570,25 +809,31 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
     else:
         status = "ok"
         message = (
-            f"Catalog · cells={total} · exact usable={st.get('exactUsableCells')} · "
-            f"insufficient={st.get('insufficientCells')} · uncovered={st.get('uncoveredCount')} · "
+            f"Catalog · staff grid={master_cells} "
+            f"({st.get('masterCompanyUniverse')} cos × {st.get('masterAdaUniverse')} ADAs) · "
+            f"spine={total} · exact usable={st.get('exactUsableCells')} · "
+            f"no_settlement pad={st.get('noSettlementPadCells')} · "
             f"company master likely_active="
-            f"{(st.get('companyReference') or {}).get('likelyActive')} · "
-            f"ledger CDTs={st.get('ledgerCdtUniverse')}"
+            f"{(st.get('companyReference') or {}).get('likelyActive')}"
         )
     return {
         "id": "softdent-insco-ada-catalog",
         "type": "status",
-        "label": "InsCo × ADA Full Catalog (HAL-10596)",
+        "label": "InsCo × ADA Full Catalog (HAL-10599)",
         "size": "full",
         "status": status,
         "message": message,
         "hint": (
-            "All spine cells including insufficient (empty != $0). "
-            "Staff CSV has every cell with *Cents; float $ deprecated. "
-            "Gold CSV still separate (not invented from this ledger matrix)."
+            "Staff CSV = all SoftDent companies we take × ADA universe. "
+            "Dollars only where ledger settlements exist; no_settlement = null $ "
+            "(empty != $0). Gold CSV still separate."
         ),
         "totalCells": total,
+        "spineCells": st.get("spineCells") or total,
+        "masterExpandedCells": master_cells,
+        "noSettlementPadCells": st.get("noSettlementPadCells"),
+        "masterCompanyUniverse": st.get("masterCompanyUniverse"),
+        "masterAdaUniverse": st.get("masterAdaUniverse"),
         "exactUsableCells": st.get("exactUsableCells"),
         "insufficientCells": st.get("insufficientCells"),
         "ledgerCdtUniverse": st.get("ledgerCdtUniverse"),
@@ -623,12 +868,13 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
                 "query": "Where is the InsCo ADA catalog CSV export?",
             },
         ],
-        "honesty": CREDIBILITY.get("honesty"),
+        "honesty": st.get("honesty") or CREDIBILITY.get("honesty"),
         "emptyIsNotZero": True,
         "floatMoneyDeprecated": True,
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
         "priorDef": PRIOR_DEF_ID,
+        "companyMasterDef": COMPANY_MASTER_DEF,
     }
 
 

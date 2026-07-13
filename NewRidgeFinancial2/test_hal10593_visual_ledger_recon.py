@@ -67,7 +67,7 @@ class VisualLedgerReconHal10593Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         # Module advanced to hal-10595; prior 10593 behaviors still covered below
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
-        self.assertEqual(BUILD_ID, "hal-10598")
+        self.assertEqual(BUILD_ID, "hal-10599")
         # Visual-ledger package id stays 10595; global BUILD advanced with catalog package
 
 

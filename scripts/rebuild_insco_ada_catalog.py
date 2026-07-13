@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""HAL-10596 — One-shot InsCo×ADA catalog rebuild (spine → $ → % → matrix).
+"""HAL-10596/10599 — One-shot InsCo×ADA catalog rebuild (spine → $ → % → matrix).
 
 Order:
   1) probabilistic $ estimates (builds from spine samples)
   2) pct variance
   3) catalog matrix export (JSON/MD/CSV + inbox)
+     staff CSV expands SoftDent company master × ADA (HAL-10599)
 
 Does not invent gold payment lines. empty != $0. No SoftDent write-back.
 """
+
 
 from __future__ import annotations
 

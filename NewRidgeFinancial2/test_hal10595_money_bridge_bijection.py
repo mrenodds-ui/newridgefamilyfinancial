@@ -33,7 +33,7 @@ from softdent_visual_ledger_recon import (
 class MoneyBridgeBijectionHal10595Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10595")
-        self.assertEqual(BUILD_ID, "hal-10598")
+        self.assertEqual(BUILD_ID, "hal-10599")
         # Visual-ledger package id stays 10595; global BUILD advanced with catalog package
 
 
