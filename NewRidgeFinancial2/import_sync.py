@@ -537,20 +537,36 @@ def _sync_softdent_pipeline_exports(destination: Path) -> dict[str, Any]:
     aging_jsonl = _find_newest(destination, ("account_aging.jsonl",))
     if not aging_jsonl and _auto_pull_exports_enabled():
         aging_jsonl = _find_newest(SOFTDENT_FINANCIAL_EXPORTS, ("account_aging.jsonl",))
-    if aging_jsonl:
+    ar_rows: list[dict[str, Any]] = []
+    ar_source = ""
+    jsonl_mtime = aging_jsonl.stat().st_mtime if aging_jsonl and aging_jsonl.is_file() else 0.0
+    csv_path = None
+    csv_mtime = 0.0
+    try:
+        from softdent_outstanding_claims_bridge import find_account_aging_export
+
+        csv_path = find_account_aging_export()
+        if csv_path and csv_path.is_file():
+            csv_mtime = csv_path.stat().st_mtime
+    except Exception:
+        csv_path = None
+    # Prefer the newer SoftDent aging artifact (CSV ReportExports vs pipeline jsonl)
+    prefer_csv = bool(csv_path) and (csv_mtime >= jsonl_mtime or not aging_jsonl)
+    if prefer_csv:
+        ar_rows = _build_ar_rows_from_account_aging_csv()
+        ar_source = "account_aging.csv"
+    if not ar_rows and aging_jsonl:
         normalized = _jsonl_practice_total(aging_jsonl)
         if normalized:
             ar_rows = _build_ar_rows_from_normalized(normalized)
-            ar_path = destination / "softdent_ar_aging.csv"
-            _write_csv(ar_path, ar_rows, ["Bucket", "Balance"])
-            written.append(ar_path.name)
-    else:
-        # Moonshot fix-all: SoftDent ReportExports account_aging.csv (fresh) when jsonl absent
-        ar_csv_rows = _build_ar_rows_from_account_aging_csv()
-        if ar_csv_rows:
-            ar_path = destination / "softdent_ar_aging.csv"
-            _write_csv(ar_path, ar_csv_rows, ["Bucket", "Balance"])
-            written.append(ar_path.name)
+            ar_source = "account_aging.jsonl"
+    if not ar_rows and csv_path:
+        ar_rows = _build_ar_rows_from_account_aging_csv()
+        ar_source = "account_aging.csv"
+    if ar_rows:
+        ar_path = destination / "softdent_ar_aging.csv"
+        _write_csv(ar_path, ar_rows, ["Bucket", "Balance"])
+        written.append(ar_path.name if not ar_source else f"{ar_path.name}:{ar_source}")
     try:
         from softdent_dashboard_period_sync import sync_dashboard_period_rows
 

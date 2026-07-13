@@ -1,8 +1,9 @@
-"""Moonshot Better Backend Widgets SHOULD (hal-10576)."""
+"""Moonshot Better Backend Widgets SHOULD (hal-10608)."""
 
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 from apex_backend import BUILD_ID
 from apex_better_backend_widgets_pack import (
@@ -15,10 +16,14 @@ from apex_better_backend_widgets_pack import (
 
 class BetterBackendWidgetsShouldTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10576")
+        self.assertEqual(BUILD_ID, "hal-10608")
 
     def test_hal_action_list(self) -> None:
-        empty = build_hal_action_list({})
+        with mock.patch(
+            "softdent_gold_era_settlement_hal10608.gold_era_settlement_status",
+            return_value={"gold": {"gapCode": "OK"}, "era": {"ready": True, "fileCount": 1}},
+        ):
+            empty = build_hal_action_list({})
         self.assertEqual(empty["type"], "action-list")
         self.assertEqual(empty["id"], "hal-recommended-actions")
         self.assertEqual(empty["status"], "empty")

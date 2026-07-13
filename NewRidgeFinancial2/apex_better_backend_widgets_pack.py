@@ -441,15 +441,8 @@ def build_hal_action_list(bundle: dict[str, Any]) -> dict[str, Any]:
                     "serviceDate": "",
                 }
             )
-    except Exception:
-        pass
-    try:
-        from apex_era835_pack import era835_widget
-
-        era_w = era835_widget(bundle) if callable(era835_widget) else {}
-        msg = str((era_w or {}).get("message") or (era_w or {}).get("hint") or "")
-        gap = str((era_w or {}).get("gapCode") or "").upper()
-        if "ERA" in gap or "ERA_835" in msg.upper() or "REQUIRED" in gap:
+        era = gold.get("era") if isinstance(gold.get("era"), dict) else {}
+        if not era.get("ready") and not (era.get("fileCount") or era.get("ingestedRows")):
             items.append(
                 {
                     "id": "hal-act-era835",
@@ -461,19 +454,26 @@ def build_hal_action_list(bundle: dict[str, Any]) -> dict[str, Any]:
                 }
             )
     except Exception:
-        # Still recommend ERA when SoftDent collections honesty gap is known
-        sd = bundle.get("softdent") if isinstance(bundle.get("softdent"), dict) else {}
-        if sd.get("collectionsGapCode") == "ERA_835_REQUIRED" or stale:
-            items.append(
-                {
-                    "id": "hal-act-era835",
-                    "label": "Import ERA 835 remittance files (collections / DEF-001)",
-                    "payer": "Insurance",
-                    "status": "alert",
-                    "amount": None,
-                    "serviceDate": "",
-                }
-            )
+        items.append(
+            {
+                "id": "hal-act-gold-csv",
+                "label": "Procure SoftDent Insurance Payment Analysis Gold CSV (Carestream)",
+                "payer": "SoftDent",
+                "status": "alert",
+                "amount": None,
+                "serviceDate": "",
+            }
+        )
+        items.append(
+            {
+                "id": "hal-act-era835",
+                "label": "Import ERA 835 remittance files (collections / DEF-001)",
+                "payer": "Insurance",
+                "status": "alert",
+                "amount": None,
+                "serviceDate": "",
+            }
+        )
 
     try:
         from apex_structured_insight_pack import load_last_insight

@@ -1211,13 +1211,23 @@ def append_office_manager_missing(widgets: list[dict[str, Any]], bundle: dict[st
     selected = bundle.get("selectedPatient") if isinstance(bundle.get("selectedPatient"), dict) else None
     widgets.append(build_patient_dossier_card(selected))
     elig = None
-    if selected:
-        elig = selected.get("eligibility") if isinstance(selected.get("eligibility"), dict) else selected
-    widgets.append(build_eligibility_card_widget(elig if selected else None))
+    if selected and isinstance(selected.get("eligibility"), dict):
+        elig = selected.get("eligibility")
+    widgets.append(build_eligibility_card_widget(elig))
     widgets.append(build_patient_dossier_mini(selected))
     estimates = None
     if selected and isinstance(selected.get("treatmentEstimates"), list):
         estimates = selected.get("treatmentEstimates")
     widgets.append(build_active_treatment_plans(estimates))
-    widgets.append(build_claims_review_detail(selected))
-    widgets.append(build_clinical_notes_summary(selected))
+    claim_detail = None
+    if selected:
+        claims = selected.get("claims") if isinstance(selected.get("claims"), list) else []
+        claim_detail = {
+            "items": claims,
+            "patientHash": selected.get("patientHash"),
+        }
+    widgets.append(build_claims_review_detail(claim_detail))
+    notes = None
+    if selected and isinstance(selected.get("clinicalNotes"), list):
+        notes = selected.get("clinicalNotes")
+    widgets.append(build_clinical_notes_summary(notes))

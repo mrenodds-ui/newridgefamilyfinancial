@@ -276,6 +276,32 @@ def build_dashboard_pipeline_dataset() -> dict[str, Any] | None:
 
 def build_ar_pipeline_dataset() -> dict[str, Any] | None:
     aging_path = resolve_aging_jsonl_path()
+    csv_path = None
+    try:
+        from softdent_outstanding_claims_bridge import find_account_aging_export
+
+        csv_path = find_account_aging_export()
+    except Exception:
+        csv_path = None
+    jsonl_mtime = aging_path.stat().st_mtime if aging_path and aging_path.is_file() else 0.0
+    csv_mtime = csv_path.stat().st_mtime if csv_path and csv_path.is_file() else 0.0
+    prefer_csv = bool(csv_path) and (csv_mtime >= jsonl_mtime or not aging_path)
+
+    if prefer_csv:
+        try:
+            from import_sync import _build_ar_rows_from_account_aging_csv
+
+            rows = _build_ar_rows_from_account_aging_csv()
+            if rows and csv_path:
+                return inline_dataset(
+                    rows,
+                    source_path=csv_path,
+                    source_file="softdent_ar_aging.csv",
+                    source_kind="pipeline-account-aging-csv",
+                )
+        except Exception:
+            pass
+
     if aging_path:
         normalized = _jsonl_practice_total(aging_path)
         if normalized:
@@ -287,22 +313,21 @@ def build_ar_pipeline_dataset() -> dict[str, Any] | None:
                     source_file="softdent_ar_aging.csv",
                     source_kind="pipeline-jsonl",
                 )
-    # Moonshot fix-all: SoftDent Account Aging CSV when jsonl absent
-    try:
-        from import_sync import _build_ar_rows_from_account_aging_csv
-        from softdent_outstanding_claims_bridge import find_account_aging_export
 
-        rows = _build_ar_rows_from_account_aging_csv()
-        path = find_account_aging_export()
-        if rows and path:
-            return inline_dataset(
-                rows,
-                source_path=path,
-                source_file="softdent_ar_aging.csv",
-                source_kind="pipeline-account-aging-csv",
-            )
-    except Exception:
-        pass
+    if csv_path:
+        try:
+            from import_sync import _build_ar_rows_from_account_aging_csv
+
+            rows = _build_ar_rows_from_account_aging_csv()
+            if rows:
+                return inline_dataset(
+                    rows,
+                    source_path=csv_path,
+                    source_file="softdent_ar_aging.csv",
+                    source_kind="pipeline-account-aging-csv",
+                )
+        except Exception:
+            pass
     return None
 
 

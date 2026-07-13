@@ -3375,6 +3375,7 @@ def _library_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[di
                 status="empty",
             )
         )
+        widgets[-1]["gapCode"] = "LIBRARY_NOT_INDEXED"
 
     return widgets
 
