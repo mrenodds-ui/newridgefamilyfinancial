@@ -220,13 +220,13 @@
       "id": "writeoff_totals",
       "label": "Writeoff Totals",
       "preferredSource": "gui",
-      "outputMode": "excel_or_preview",
-      "excelExport": true,
+      "outputMode": "print_preview_only",
+      "excelExport": false,
       "printPreviewAvailable": true,
-      "visualReadRequired": false,
+      "visualReadRequired": true,
       "visualReadLastPageForTotals": true,
       "guiRequiredWhenMissing": true,
-      "why": "Verified Excel + Print Preview. Prefer Excel; Preview last page for totals.",
+      "why": "Operator: Excel not available/usable — Print Preview only; read LAST page for InsCo×ADA Total/Allowed/Write-Offs.",
       "dbTables": ["sd_adjustments"],
       "guiMenuPath": "Reports → Practice Management → Insurance Reports → Writeoff Totals",
       "guiWin32Path": "Reports->Practice Management->Insurance Reports->Writeoff Totals",
@@ -235,7 +235,7 @@
       "requiredForFinancialClose": false,
       "phase": 2,
       "verifiedOutputOptions": true,
-      "nr2Uses": ["writeoff / contractual adjustment reporting"]
+      "nr2Uses": ["writeoff / contractual adjustment reporting", "InsCo×ADA visual estimates (HAL-10582)"]
     },
     "outstanding_claims_by_co": {
       "id": "outstanding_claims_by_co",

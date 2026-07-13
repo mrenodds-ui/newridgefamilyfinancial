@@ -1058,6 +1058,20 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         }
         for warning in tp.get("warnings") or []:
             result["warnings"].append(f"SoftDent treatment planning: {warning}")
+        try:
+            from softdent_insco_ada_probabilistic import run_insco_ada_probabilistic_report
+
+            prob = run_insco_ada_probabilistic_report()
+            result["softdent"]["inscoAdaProbabilistic"] = {
+                "ok": bool(prob.get("ok")),
+                "publishedCells": ((prob.get("export") or {}).get("publishedCount")),
+                "buildPublished": ((prob.get("build") or {}).get("publishedCells")),
+                "jsonPath": ((prob.get("export") or {}).get("jsonPath")),
+            }
+            for warning in (prob.get("build") or {}).get("warnings") or []:
+                result["warnings"].append(f"InsCo×ADA probabilistic: {warning}")
+        except Exception as prob_exc:  # noqa: BLE001
+            result["warnings"].append(f"InsCo×ADA probabilistic skipped: {prob_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):
