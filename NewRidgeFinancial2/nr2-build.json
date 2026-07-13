@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10599",
-  "BUILD_ID": "hal-10599",
-  "assetVersion": "hal-10599",
-  "builtAt": "2026-07-13T14:00:00.000Z",
-  "notes": "hal-10599: expand InsCo×ADA staff CSV to SoftDent company master (likely_active) × ADA universe; no_settlement pad = null $; empty != $0.",
+  "schemaVersion": "hal-10600",
+  "BUILD_ID": "hal-10600",
+  "assetVersion": "hal-10600",
+  "builtAt": "2026-07-13T14:15:00.000Z",
+  "notes": "hal-10600: spine↔company-master carrier alias reconcile (rapidfuzz blocked JW); catalog joins masterCompanyId; empty != $0; no invented dollars.",
   "staffRenderMode": "apex",
-  "package": "HAL-10599"
+  "package": "HAL-10600"
 }

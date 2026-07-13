@@ -57,6 +57,8 @@ CSV_COLUMNS = (
     "periodStart",
     "periodEnd",
     "source",
+    "masterCompanyId",
+    "spineCarrierName",
     "emptyIsNotZero",
     "floatMoneyDeprecated",
 )
@@ -181,6 +183,8 @@ def catalog_matrix_status(*, db_path: Path | None = None) -> dict[str, Any]:
                 "discontinued": company_ref.get("discontinued"),
                 "spineOverlapLikelyActive": company_ref.get("spineOverlapLikelyActive"),
                 "likelyActiveNotInSpine": company_ref.get("likelyActiveNotInSpine"),
+                "likelyActiveNotInSpineExact": company_ref.get("likelyActiveNotInSpineExact"),
+                "carrierAlias": company_ref.get("carrierAlias"),
                 "ok": company_ref.get("ok"),
             },
             "periodStart": meta.get("period_start"),
@@ -431,6 +435,8 @@ def _no_settlement_row(*, company: str, ada: str) -> dict[str, Any]:
             "writeOffPctMinus": None,
             "writeOffPctPlus": None,
             "source": "company_master_no_spine",
+            "masterCompanyId": None,
+            "spineCarrierName": None,
             "emptyIsNotZero": True,
         }
     )
@@ -492,7 +498,9 @@ def expand_catalog_rows_with_company_master(
 ) -> list[dict[str, Any]]:
     """Cartesian pad: company master × ADA universe; keep spine $/%% where present.
 
-    Missing pairs become credibility=no_settlement with null dollars (empty != $0).
+    HAL-10600: accepted carrier aliases join master names to spine settlements
+    (masterCompanyId + spineCarrierName). Missing pairs stay no_settlement with
+    null dollars (empty != $0). Does not invent payment lines.
     """
     target = Path(db_path) if db_path else resolve_analytics_db()
     companies = list_catalog_company_universe(db_path=target)
@@ -500,7 +508,18 @@ def expand_catalog_rows_with_company_master(
     if not companies or not adas:
         return list(spine_rows)
 
-    # Prefer spine row when present; key by upper(company)|ada
+    master_to_spine: dict[str, str] = {}
+    master_to_id: dict[str, str] = {}
+    try:
+        from softdent_carrier_alias import load_accepted_alias_maps
+
+        maps = load_accepted_alias_maps(db_path=target)
+        master_to_spine = dict(maps.get("masterToSpine") or {})
+        master_to_id = dict(maps.get("masterToId") or {})
+    except Exception:
+        pass
+
+    # Prefer spine row when present; key by upper(spineCarrier)|ada
     by_key: dict[str, dict[str, Any]] = {}
     for row in spine_rows:
         company = str(row.get("insuranceCompany") or "").strip()
@@ -510,20 +529,40 @@ def expand_catalog_rows_with_company_master(
         key = f"{company.upper()}|{ada}"
         enriched = dict(row)
         enriched.setdefault("source", "ledger_episode_5yr")
+        enriched.setdefault("spineCarrierName", company)
+        enriched.setdefault("masterCompanyId", master_to_id.get(company.upper()))
         by_key[key] = enriched
 
     out: list[dict[str, Any]] = []
     for company in companies:
         cu = company.upper()
+        spine_name = master_to_spine.get(cu, company)
+        mid = master_to_id.get(cu)
         for ada in adas:
-            key = f"{cu}|{ada}"
+            key = f"{spine_name.upper()}|{ada}"
             if key in by_key:
-                out.append(by_key[key])
+                base = dict(by_key[key])
+                base["insuranceCompany"] = company
+                base["spineCarrierName"] = spine_name
+                if mid:
+                    base["masterCompanyId"] = mid
+                elif not base.get("masterCompanyId"):
+                    base["masterCompanyId"] = master_to_id.get(spine_name.upper())
+                if spine_name.upper() != cu:
+                    base["source"] = "alias_spine_settlement"
+                out.append(base)
             else:
-                out.append(_no_settlement_row(company=company, ada=ada))
+                pad = _no_settlement_row(company=company, ada=ada)
+                pad["spineCarrierName"] = None
+                pad["masterCompanyId"] = mid
+                out.append(pad)
 
     # Keep any spine-only rows that somehow fell outside universe (safety)
-    seen = {f"{str(r.get('insuranceCompany') or '').strip().upper()}|{str(r.get('adaCode') or '').strip().upper()}" for r in out}
+    seen = {
+        f"{str(r.get('insuranceCompany') or '').strip().upper()}|"
+        f"{str(r.get('adaCode') or '').strip().upper()}"
+        for r in out
+    }
     for row in spine_rows:
         company = str(row.get("insuranceCompany") or "").strip()
         ada = str(row.get("adaCode") or "").strip().upper()
@@ -531,6 +570,8 @@ def expand_catalog_rows_with_company_master(
         if key not in seen:
             enriched = dict(row)
             enriched.setdefault("source", "ledger_episode_5yr")
+            enriched.setdefault("spineCarrierName", company)
+            enriched.setdefault("masterCompanyId", master_to_id.get(company.upper()))
             out.append(enriched)
     return out
 
@@ -860,6 +901,10 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
                 "query": "Show InsCo ADA catalog insufficient cells",
             },
             {
+                "label": "Pending carrier aliases?",
+                "query": "Show pending carrier alias reconciliations for HAL confirmation",
+            },
+            {
                 "label": "Uncovered ledger CDTs?",
                 "query": "Which ledger CDTs have no InsCo ADA spine settlement?",
             },
@@ -868,6 +913,7 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
                 "query": "Where is the InsCo ADA catalog CSV export?",
             },
         ],
+        "carrierAlias": (st.get("companyReference") or {}).get("carrierAlias") or {},
         "honesty": st.get("honesty") or CREDIBILITY.get("honesty"),
         "emptyIsNotZero": True,
         "floatMoneyDeprecated": True,
@@ -875,6 +921,7 @@ def insco_ada_catalog_widget() -> dict[str, Any]:
         "packageBuildId": PACKAGE_BUILD_ID,
         "priorDef": PRIOR_DEF_ID,
         "companyMasterDef": COMPANY_MASTER_DEF,
+        "carrierAliasDef": "HAL-10600",
     }
 
 

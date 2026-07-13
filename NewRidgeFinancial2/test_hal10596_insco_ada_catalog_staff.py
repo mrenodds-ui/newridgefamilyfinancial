@@ -134,7 +134,7 @@ def _seed(db: Path) -> None:
 class InscoAdaCatalogHal10596Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10599")
-        self.assertEqual(BUILD_ID, "hal-10599")
+        self.assertEqual(BUILD_ID, "hal-10600")
 
     def test_csv_row_count_matches_cells_and_cents(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

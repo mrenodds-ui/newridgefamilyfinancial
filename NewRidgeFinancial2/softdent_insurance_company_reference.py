@@ -268,7 +268,19 @@ def insurance_company_reference_status(*, db_path: Path | None = None) -> dict[s
             if r[0]
         }
         overlap = len(likely_names & spine_names)
-        missing = sorted(likely_names - spine_names)
+        missing_exact = sorted(likely_names - spine_names)
+        # HAL-10600: after accepted aliases, gap shrinks without inventing dollars
+        alias_status: dict[str, Any] = {}
+        missing_after_alias = list(missing_exact)
+        try:
+            from softdent_carrier_alias import carrier_alias_status, load_accepted_alias_maps
+
+            alias_status = carrier_alias_status(db_path=db)
+            maps = load_accepted_alias_maps(db_path=db)
+            linked = set(maps.get("masterToSpine") or {})
+            missing_after_alias = sorted(n for n in missing_exact if n.upper() not in linked)
+        except Exception as exc:  # noqa: BLE001
+            alias_status = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
         src = conn.execute(
             "SELECT source_file, imported_at_utc FROM insurance_company_reference "
             "ORDER BY imported_at_utc DESC LIMIT 1"
@@ -281,14 +293,23 @@ def insurance_company_reference_status(*, db_path: Path | None = None) -> dict[s
                 "discontinued": disc,
                 "spineCarriers": len(spine_names),
                 "spineOverlapLikelyActive": overlap,
-                "likelyActiveNotInSpine": len(missing),
-                "likelyActiveNotInSpineSample": missing[:25],
+                "likelyActiveNotInSpineExact": len(missing_exact),
+                "likelyActiveNotInSpine": len(missing_after_alias),
+                "likelyActiveNotInSpineSample": missing_after_alias[:25],
+                "carrierAlias": {
+                    "ok": alias_status.get("ok"),
+                    "autoAccepted": alias_status.get("autoAccepted"),
+                    "fuzzyAutoAccepted": alias_status.get("fuzzyAutoAccepted"),
+                    "manualPending": alias_status.get("manualPending"),
+                    "rejected": alias_status.get("rejected"),
+                    "acceptanceGateMet": alias_status.get("acceptanceGateMet"),
+                },
                 "sourceFile": src[0] if src else None,
                 "importedAt": src[1] if src else None,
                 "dbPath": str(db),
                 "honesty": (
-                    "Company master from SoftDent CSV. Cells without ledger settlements "
-                    "stay insufficient — empty != $0; no gold invent."
+                    "Company master from SoftDent CSV. Accepted aliases join existing "
+                    "spine settlements only — empty != $0; no gold invent."
                 ),
             }
         )
