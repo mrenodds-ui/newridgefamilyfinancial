@@ -31,7 +31,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10608"
+BUILD_ID = "hal-10610"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2071,7 +2071,7 @@ def _financial_widgets_from_reports(
 
 
 def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """Taxes cockpit (hal-10562): ≤1 status + bridge chart; planning on #taxes/planning."""
+    """Taxes cockpit (hal-10610): micro-strip + bridge; planning table/calendar on #taxes/planning."""
     del reports  # reserved for future tax fields on financial_reports
     widgets: list[dict[str, Any]] = []
     plan: dict[str, Any] = {}
@@ -2094,12 +2094,22 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
     has_book = bool(plan.get("hasBookData"))
     period = str(plan.get("periodLabel") or "")
     book_net = _parse_money(plan.get("bookNetIncome")) if has_book else None
+    owner_tax = _parse_money(plan.get("totalOwnerTaxEstimate")) if has_book else None
+    k1 = _parse_money(plan.get("k1Ordinary")) if has_book else None
+    q_est = None
+    if has_book:
+        q_rows = plan.get("quarterlyEstimates") if isinstance(plan.get("quarterlyEstimates"), list) else []
+        if q_rows and isinstance(q_rows[0], dict):
+            fed = _parse_money(q_rows[0].get("federal"))
+            ks = _parse_money(q_rows[0].get("kansas"))
+            if fed is not None or ks is not None:
+                q_est = float(fed or 0) + float(ks or 0)
 
     widgets.insert(0, build_period_scrubber(bundle, page="taxes"))
 
-    # Single Tax Year Status chip (not a warehouse of planning KPIs)
+    # Single Tax Year Status chip (nav to planning — KPIs live in micro-strip)
     if has_book and book_net is not None:
-        status_msg = f"Book connected · ${book_net:,.0f}"
+        status_msg = "Book connected"
         if period:
             status_msg = f"{period} · {status_msg}"
         widgets.append(
@@ -2148,13 +2158,63 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
             }
         )
 
+    # hal-10610: ≤4 book-backed pills above fold (omit empty — never $0 pad)
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        widgets.append(
+            build_kpi_micro_strip(
+                "tax-core-strip",
+                "Tax core",
+                [
+                    {
+                        "id": "tax-book-net-pill",
+                        "label": "Net income",
+                        "value": book_net,
+                        "format": "money",
+                        "empty": book_net is None,
+                        "sub": period or "",
+                    },
+                    {
+                        "id": "tax-est-owner-pill",
+                        "label": "Est. tax",
+                        "value": owner_tax,
+                        "format": "money",
+                        "tone": "warning",
+                        "empty": owner_tax is None,
+                        "sub": "CPA review",
+                    },
+                    {
+                        "id": "tax-k1-pill",
+                        "label": "K-1",
+                        "value": k1,
+                        "format": "money",
+                        "empty": k1 is None,
+                    },
+                    {
+                        "id": "tax-quarterly-pill",
+                        "label": "Quarterly",
+                        "value": q_est,
+                        "format": "money",
+                        "tone": "warning",
+                        "empty": q_est is None,
+                        "sub": "Q1 est." if q_est is not None else "",
+                    },
+                ],
+                hint="Tax core strip · empty stays empty · full planning on #taxes/planning.",
+                nav_hash="taxes/planning",
+            )
+        )
+    except Exception:
+        pass
+
     widgets.append(
         {
             **_status_widget(
                 "tax-open-planning",
                 "Tax Planning",
-                message="Open planning estimates",
-                hint="Owner tax / K-1 / quarterly / federal+KS · #taxes/planning · CPA review required.",
+                message="Open planning · table · calendar",
+                hint="Owner tax / K-1 / quarterly / data-table / calendar · #taxes/planning · CPA review.",
             ),
             "size": "strip",
             "compact": True,
@@ -2210,7 +2270,9 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
                     "id": "tax-bridge-waterfall",
                     "type": "waterfall",
                     "label": "Book-to-Tax Bridge (planning)",
-                    "size": "l",
+                    "size": "m",
+                    "maxHeight": 320,
+                    "compact": True,
                     "steps": bridge_steps,
                     "status": "ok",
                     "hint": "Planning bridge from tax_engine — citations are import sources, not invented dollars.",
@@ -2236,22 +2298,7 @@ def _taxes_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
     except Exception:
         pass
 
-    # Moonshot MUST: Tax Planning Data-Table
-    try:
-        from apex_better_backend_widgets_pack import build_tax_planning_data_table
-
-        planning_table = build_tax_planning_data_table(bundle)
-        if planning_table:
-            widgets.append(planning_table)
-    except Exception:
-        pass
-    # Moonshot NICE: Tax calendar on taxes MAIN
-    try:
-        from apex_better_backend_widgets_pack import build_tax_calendar_main
-
-        widgets.append(build_tax_calendar_main(bundle))
-    except Exception:
-        pass
+    # Planning data-table + calendar moved to #taxes/planning (hal-10610 compact remap)
     return widgets
 
 
@@ -2290,6 +2337,18 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     for chair in chairs:
         if isinstance(chair, dict) and isinstance(chair.get("slots"), list):
             slot_count += len(chair["slots"])
+
+    def _as_ops_strip(w: dict[str, Any] | None) -> dict[str, Any] | None:
+        """Demote Gold/ERA/audit status widgets to strip height (hal-10610)."""
+        if not isinstance(w, dict):
+            return w
+        out = dict(w)
+        size = str(out.get("size") or "")
+        if size in {"full", "xl", "l", "large", ""} or out.get("type") in {"status", "alert"}:
+            out["size"] = "strip"
+            out["compact"] = True
+            out["maxHeight"] = int(out.get("maxHeight") or 120)
+        return out
 
     try:
         from apex_compact_pages_pack import build_kpi_micro_strip
@@ -2351,20 +2410,22 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
             )
         )
 
-    if chairs:
-        widgets.append(
-            {
-                **_status_widget(
-                    "sd-operatory-status",
-                    "Operatory / daysheet",
-                    message="Schedule loaded",
-                    hint=f"{len(chairs)} chair(s), {slot_count} slot(s) from SoftDent operatory import.",
-                ),
-                "size": "strip",
-                "compact": True,
-            }
-        )
-    else:
+    # Collections efficiency gauge (reuse Financial primitive — no new chart type)
+    try:
+        from apex_better_backend_widgets_pack import build_collections_radial_gauge
+
+        coll_gauge = build_collections_radial_gauge(bundle, {})
+        if coll_gauge:
+            coll_gauge = dict(coll_gauge)
+            coll_gauge["size"] = "m"
+            coll_gauge["maxHeight"] = 240
+            coll_gauge["compact"] = True
+            widgets.append(coll_gauge)
+    except Exception:
+        pass
+
+    # Operatory detail is in vitals Chairs pill — skip redundant status when chairs loaded
+    if not chairs:
         widgets.append(
             {
                 **_status_widget(
@@ -2431,87 +2492,116 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     try:
         from softdent_outstanding_claims_bridge import outstanding_claims_bridge_widget
 
-        widgets.insert(1, outstanding_claims_bridge_widget())
+        w = _as_ops_strip(outstanding_claims_bridge_widget())
+        if w:
+            widgets.insert(1, w)
     except Exception:
         pass
     try:
         from softdent_insco_ada_probabilistic import insco_ada_estimate_widget
 
-        widgets.insert(2, insco_ada_estimate_widget())
+        w = _as_ops_strip(insco_ada_estimate_widget())
+        if w:
+            widgets.insert(2, w)
     except Exception:
         pass
     try:
         from softdent_insco_ada_catalog_matrix import insco_ada_catalog_widget
 
-        widgets.insert(3, insco_ada_catalog_widget())
+        w = _as_ops_strip(insco_ada_catalog_widget())
+        if w:
+            widgets.insert(3, w)
     except Exception:
         pass
     try:
         from softdent_treatment_planning import treatment_plan_estimate_widget
 
-        widgets.insert(4, treatment_plan_estimate_widget())
+        w = _as_ops_strip(treatment_plan_estimate_widget())
+        if w:
+            widgets.insert(4, w)
     except Exception:
         pass
     try:
         from softdent_gold_payment_pipeline import gold_payment_pipeline_widget
 
-        widgets.insert(5, gold_payment_pipeline_widget())
+        w = _as_ops_strip(gold_payment_pipeline_widget())
+        if w:
+            widgets.insert(5, w)
     except Exception:
         pass
     try:
         from softdent_gold_csv_drop_ops import gold_csv_drop_ops_widget
 
-        widgets.insert(6, gold_csv_drop_ops_widget())
+        w = _as_ops_strip(gold_csv_drop_ops_widget())
+        if w:
+            widgets.insert(6, w)
     except Exception:
         pass
     try:
         from softdent_gold_drop_facilitation_hal10606 import gold_drop_facilitation_widget
 
-        widgets.insert(7, gold_drop_facilitation_widget())
+        w = _as_ops_strip(gold_drop_facilitation_widget())
+        if w:
+            widgets.insert(7, w)
     except Exception:
         pass
     try:
         from softdent_pwimages_eligibility_hal10607 import pwimages_eligibility_widget
 
-        widgets.insert(8, pwimages_eligibility_widget())
+        w = _as_ops_strip(pwimages_eligibility_widget())
+        if w:
+            widgets.insert(8, w)
     except Exception:
         pass
     try:
         from softdent_gold_era_settlement_hal10608 import gold_era_settlement_widget
 
-        widgets.insert(9, gold_era_settlement_widget())
+        w = _as_ops_strip(gold_era_settlement_widget())
+        if w:
+            widgets.insert(9, w)
     except Exception:
         pass
     try:
         from softdent_print_preview_audit import print_preview_audit_widget
 
-        widgets.insert(10, print_preview_audit_widget())
+        w = _as_ops_strip(print_preview_audit_widget())
+        if w:
+            widgets.insert(10, w)
     except Exception:
         pass
     try:
         from ui_honesty_policy import ui_honesty_widget
 
-        widgets.insert(11, ui_honesty_widget())
+        w = _as_ops_strip(ui_honesty_widget())
+        if w:
+            widgets.insert(11, w)
     except Exception:
         pass
     try:
         from softdent_visual_ledger_recon import visual_ledger_recon_widget
 
-        widgets.insert(12, visual_ledger_recon_widget())
+        w = _as_ops_strip(visual_ledger_recon_widget())
+        if w:
+            widgets.insert(12, w)
     except Exception:
         pass
     try:
         from apex_softdent_production_pack import production_widgets
         from apex_softdent_aging_schedule_pack import aging_schedule_widgets
+        from apex_financial_console_pack import collapse_empty_large
 
-        widgets.extend(production_widgets(bundle))
-        widgets.extend(aging_schedule_widgets(bundle))
+        for w in production_widgets(bundle):
+            widgets.append(collapse_empty_large(w) if isinstance(w, dict) else w)
+        for w in aging_schedule_widgets(bundle):
+            widgets.append(collapse_empty_large(w) if isinstance(w, dict) else w)
     except Exception:
         pass
     try:
         from apex_softdent_extended_pack import extended_metrics_widgets
+        from apex_financial_console_pack import collapse_empty_large
 
-        widgets.extend(extended_metrics_widgets(bundle))
+        for w in extended_metrics_widgets(bundle):
+            widgets.append(collapse_empty_large(w) if isinstance(w, dict) else w)
     except Exception:
         pass
     try:
@@ -2525,7 +2615,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     try:
         from apex_better_backend_widgets_pack import build_softdent_patient_dossier
 
-        widgets.append(build_softdent_patient_dossier(bundle))
+        dossier = build_softdent_patient_dossier(bundle)
+        if isinstance(dossier, dict):
+            dossier = dict(dossier)
+            dossier["maxHeight"] = int(dossier.get("maxHeight") or 240)
+            dossier["compact"] = True
+        widgets.append(dossier)
     except Exception:
         pass
     # Moonshot NEXT: TXN ledger surface (read-only JSONL / sd_account_transactions)
@@ -2536,7 +2631,13 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         )
 
         widgets.append(build_account_tx_ledger_coverage_chip(bundle, page="softdent"))
-        widgets.append(build_transaction_ledger_table(bundle, page="softdent", limit=25))
+        ledger = build_transaction_ledger_table(bundle, page="softdent", limit=5)
+        if isinstance(ledger, dict):
+            ledger = dict(ledger)
+            ledger["rowCap"] = 5
+            ledger["maxHeight"] = 320
+            ledger["compact"] = True
+        widgets.append(ledger)
     except Exception:
         pass
 
@@ -3131,8 +3232,15 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
                 missing_age=missing_age,
             )
         )
-        widgets.append(claims_critical_actions_widget(kanban_payload))
+        # Demote xl aging matrix for zero-scroll (hal-10610); full detail on #claims/kanban
+        for _w in widgets:
+            if isinstance(_w, dict) and _w.get("id") == "claims-aging-exposure":
+                _w["size"] = "m"
+                _w["maxHeight"] = 320
+                _w["compact"] = True
+                break
         # Moonshot zero-scroll: pipeline + Top 5 on main; full workbench → #claims/kanban
+        # Skip claims_critical_actions when top-critical list is present (duplicate height).
         try:
             from apex_compact_pages_pack import (
                 claims_pipeline_summary_widget,
@@ -3177,11 +3285,18 @@ def _claims_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
                 }
             )
         except Exception:
+            widgets.append(claims_critical_actions_widget(kanban_payload))
             widgets.append(kanban_widget(kanban_payload))
         widgets.append(
             claims_risk_analytics_widget(kmeta, available=bool(kanban_payload.get("available")))
         )
-        widgets.append(claims_era_gauge_widget(kmeta, available=bool(kanban_payload.get("available"))))
+        era_g = claims_era_gauge_widget(kmeta, available=bool(kanban_payload.get("available")))
+        if isinstance(era_g, dict):
+            era_g = dict(era_g)
+            era_g["size"] = "m"
+            era_g["maxHeight"] = 240
+            era_g["compact"] = True
+        widgets.append(era_g)
         apply_aging_threshold_alerts(
             widgets,
             {"counts": summary.get("agingCounts") or {}},

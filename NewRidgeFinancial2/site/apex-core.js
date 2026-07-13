@@ -7,7 +7,7 @@
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10608";
+  const ASSET_V = "hal-10610";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }

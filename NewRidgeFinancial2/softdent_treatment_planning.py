@@ -1307,7 +1307,9 @@ def treatment_plan_estimate_widget() -> dict[str, Any]:
         "id": "softdent-tp-estimate-chips",
         "type": "status",
         "label": "Treatment Plan Estimates (HAL-10587)",
-        "size": "full",
+        "size": "strip",
+        "compact": True,
+        "maxHeight": 120,
         "status": status,
         "message": message,
         "hint": (

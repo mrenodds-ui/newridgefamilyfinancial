@@ -197,9 +197,7 @@ def build_financial_command_strip(bundle: dict[str, Any], reports: dict[str, Any
 
 
 def build_financial_vital_signs(reports: dict[str, Any], bundle: dict[str, Any]) -> dict[str, Any]:
-    """Strip 2: Production / Collections / A/R / Efficiency — dense exec pills."""
-    from apex_backend import build_collection_bullet
-
+    """Strip 2: Production / Collections / A/R — Efficiency lives on collections radial-gauge (hal-10610)."""
     rows = _dashboard_rows(bundle)
     latest = _latest_period_row(rows)
     period = ""
@@ -219,9 +217,7 @@ def build_financial_vital_signs(reports: dict[str, Any], bundle: dict[str, Any])
     ar_total = ar.get("totalOutstanding")
     ninety_pct = ar.get("ninetyPlusPct")
 
-    bullet = build_collection_bullet(bundle)
-    eff = bullet.get("value") if bullet.get("status") == "ok" else None
-
+    # Efficiency / collection ratio shown by build_collections_radial_gauge — avoid duplicate pill.
     pills = [
         {
             "id": "prod-mtd",
@@ -255,15 +251,6 @@ def build_financial_vital_signs(reports: dict[str, Any], bundle: dict[str, Any])
             if isinstance(ninety_pct, (int, float))
             else "",
         },
-        {
-            "id": "collection-bullet",
-            "label": "Efficiency",
-            "value": eff,
-            "format": "pct_points",
-            "tone": "success" if isinstance(eff, (int, float)) and float(eff) >= 85 else "warning",
-            "empty": eff is None,
-            "sub": bullet.get("hint", "")[:48] if eff is None else "",
-        },
     ]
     any_data = any(not p.get("empty") for p in pills)
     return {
@@ -274,8 +261,8 @@ def build_financial_vital_signs(reports: dict[str, Any], bundle: dict[str, Any])
         "pills": pills,
         "status": "ok" if any_data else "empty",
         "emptyMessage": "Import SoftDent dashboard for vital signs",
-        "hint": "Dense financial vitals · never invents dollars.",
-        "aliasIds": ["prod-mtd", "collections-mtd", "ar-outstanding", "collection-bullet"],
+        "hint": "Dense financial vitals · efficiency on radial-gauge · never invents dollars.",
+        "aliasIds": ["prod-mtd", "collections-mtd", "ar-outstanding"],
     }
 
 

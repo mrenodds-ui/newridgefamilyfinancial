@@ -346,6 +346,19 @@ def build_taxes_planning(reports: dict[str, Any], bundle: dict[str, Any]) -> lis
                 "hint": str(plan.get("disclaimer")),
             },
         )
+    # hal-10610: planning data-table + calendar live on this subpage (moved off taxes main)
+    try:
+        from apex_better_backend_widgets_pack import (
+            build_tax_calendar_main,
+            build_tax_planning_data_table,
+        )
+
+        planning_table = build_tax_planning_data_table(bundle)
+        if planning_table:
+            widgets.append(planning_table)
+        widgets.append(build_tax_calendar_main(bundle))
+    except Exception:
+        pass
     return widgets
 
 
