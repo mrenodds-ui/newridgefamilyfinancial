@@ -1101,6 +1101,24 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
             }
         except Exception as cat_exc:  # noqa: BLE001
             result["warnings"].append(f"InsCo×ADA catalog skipped: {cat_exc}")
+        try:
+            from softdent_gold_payment_pipeline import run_gold_payment_pipeline_repair
+
+            gold = run_gold_payment_pipeline_repair()
+            result["softdent"]["goldPaymentPipeline"] = {
+                "ok": bool(gold.get("ok")),
+                "gapCode": ((gold.get("audit") or {}).get("gapCode")),
+                "paymentLines": ((gold.get("audit") or {}).get("paymentLines")),
+                "exactPass": ((gold.get("export") or {}).get("exactPass")),
+                "jsonPath": ((gold.get("export") or {}).get("jsonPath")),
+            }
+            gap = ((gold.get("audit") or {}).get("gapCode")) or ""
+            if gap and gap != "GOLD_OK":
+                result["warnings"].append(
+                    f"Gold payment pipeline: {gap} — {((gold.get('audit') or {}).get('rootCause'))}"
+                )
+        except Exception as gold_exc:  # noqa: BLE001
+            result["warnings"].append(f"Gold payment pipeline skipped: {gold_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):

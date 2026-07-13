@@ -819,6 +819,28 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # Gold payment pipeline (HAL-10588)
+    try:
+        from softdent_gold_payment_pipeline import (
+            audit_gold_payment_pipeline,
+            format_gold_pipeline_reply,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(gold\s+payment|payment\s+pipeline|insurance\s+payment\s+analysis|"
+            r"why.{0,20}payment\s+lines|export.{0,40}insurance\s+payment)",
+            raw_l,
+        ):
+            st = audit_gold_payment_pipeline()
+            return {
+                "text": format_gold_pipeline_reply(st),
+                "intent": "policy:gold-payment-pipeline",
+                "gapCode": st.get("gapCode"),
+            }
+    except Exception:
+        pass
+
     # SoftDent GUI Sign On — credentials in env vars (never echo password)
     # Also: data not in DB → Sign On + UI; widget data paths; period $ drift;
     # account transactions → Excel playbook

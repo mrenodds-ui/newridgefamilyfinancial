@@ -30,6 +30,8 @@ _PAYMENT_GLOBS = (
     "insurance_payment_analysis*.csv",
     "insurance_payment_distribution*.csv",
     "InsurancePayment*.csv",
+    "Insurance*Payment*Analysis*.csv",
+    "*Payment*Analysis*.csv",
 )
 _CODE_GLOBS = (
     "procedure_codes*.csv",
@@ -263,6 +265,8 @@ def find_newest_csv(globs: tuple[str, ...], *, search_dir: Path | None = None) -
             continue
         for pattern in globs:
             candidates.extend(root.glob(pattern))
+            # HAL-10588: recursive drop folders / nested SoftDent exports
+            candidates.extend(root.rglob(pattern))
     files = [p for p in candidates if p.is_file()]
     if not files:
         return None

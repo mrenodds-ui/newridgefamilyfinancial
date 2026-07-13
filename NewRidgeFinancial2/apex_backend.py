@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10576"
+BUILD_ID = "hal-10588"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2313,6 +2313,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         from softdent_treatment_planning import treatment_plan_estimate_widget
 
         widgets.insert(4, treatment_plan_estimate_widget())
+    except Exception:
+        pass
+    try:
+        from softdent_gold_payment_pipeline import gold_payment_pipeline_widget
+
+        widgets.insert(5, gold_payment_pipeline_widget())
     except Exception:
         pass
     try:
@@ -7201,6 +7207,36 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             )
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
+
+    @app.get("/api/apex/gold-payment-pipeline/status")
+    def apex_gold_payment_pipeline_status_api():
+        try:
+            from softdent_gold_payment_pipeline import (
+                audit_gold_payment_pipeline,
+                format_gold_pipeline_reply,
+            )
+
+            st = audit_gold_payment_pipeline()
+            return json_response_fn(
+                {
+                    "ok": bool(st.get("ok")),
+                    **st,
+                    "reply": format_gold_pipeline_reply(st),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/gold-payment-pipeline/repair")
+    def apex_gold_payment_pipeline_repair_api():
+        try:
+            from softdent_gold_payment_pipeline import run_gold_payment_pipeline_repair
+
+            result = run_gold_payment_pipeline_repair()
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
     @app.get("/api/apex/insco-ada-estimates/status")
     def apex_insco_ada_estimates_status_api():
