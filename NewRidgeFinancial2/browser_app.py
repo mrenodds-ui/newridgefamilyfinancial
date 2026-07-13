@@ -46,8 +46,22 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def ensure_singleton() -> None:
+def _port_available(host: str, port: int) -> bool:
+    """Probe if host:port is free to bind (stdlib only; no psutil)."""
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return True
+        except (OSError, socket.error):
+            return False
+
+
+def ensure_singleton(host: str = "127.0.0.1", port: int = 8765) -> None:
     """Moonshot MUST: exit if another browser_app.py is already running."""
+    # Stale PID cleanup and cross-check
     if PIDFILE.is_file():
         old_raw = PIDFILE.read_text(encoding="utf-8", errors="replace").strip()
         try:
@@ -60,6 +74,15 @@ def ensure_singleton() -> None:
                 file=sys.stderr,
             )
             raise SystemExit(1)
+
+    # Port-aware probe: ensure we can bind before claiming PID
+    if not _port_available(host, port):
+        print(
+            f"ERROR: Port {port} already in use on {host} (another instance running?). Exiting.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     PIDFILE.write_text(str(os.getpid()), encoding="utf-8")
 
     def _cleanup_pidfile() -> None:
@@ -75,7 +98,6 @@ def ensure_singleton() -> None:
 
 
 def main() -> int:
-    ensure_singleton()
     if not INDEX_HTML.is_file():
         print(f"Site not found: {INDEX_HTML}", file=sys.stderr)
         return 1
@@ -92,6 +114,10 @@ def main() -> int:
     startup = run_browser_production_checks(REPO_ROOT, DATA_DIR)
     tls_cert = startup.get("tlsCert") or ""
     tls_key = startup.get("tlsKey") or ""
+    bind_host = str(startup.get("bindHost") or "127.0.0.1")
+
+    ensure_singleton(bind_host, http_port)
+
     bind_host = str(startup.get("bindHost") or "127.0.0.1")
     os.environ["NR2_BIND_HOST"] = bind_host
 

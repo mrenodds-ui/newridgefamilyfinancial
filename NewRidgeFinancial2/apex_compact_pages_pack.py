@@ -197,10 +197,25 @@ def apply_kpi_density_contract(
     return out
 
 
-def apply_collapse_empty_all(widgets: list[Any]) -> list[Any]:
+def apply_collapse_empty_all(widgets: list[Any], *, page: str = "") -> list[Any]:
     out: list[Any] = []
+    # Exempt strips and analysis/gap surfaces from empty-omit (hal-10611)
+    exempt_if_empty = {
+        "financial-command-strip",
+        "claims-executive-strip",
+        "status",
+        "import-freshness",
+        "import-health",
+        "analysis",
+        "gap",
+    }
     for w in widgets:
         if isinstance(w, dict):
+            # Financial page: omit non-strip/analysis/gap widgets with status==empty
+            if page == "financial":
+                wtype = str(w.get("type") or "")
+                if w.get("status") == "empty" and wtype not in exempt_if_empty:
+                    continue
             out.append(collapse_empty_large(w))
         else:
             out.append(w)

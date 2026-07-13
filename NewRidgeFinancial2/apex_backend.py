@@ -31,7 +31,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10610"
+BUILD_ID = "hal-10611"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4341,7 +4341,7 @@ def build_apex_widgets(
             normalize_first_viewport,
         )
 
-        widgets = apply_collapse_empty_all(widgets if isinstance(widgets, list) else [])
+        widgets = apply_collapse_empty_all(widgets if isinstance(widgets, list) else [], page=pid)
         widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
             widgets = normalize_first_viewport(widgets, page=pid)

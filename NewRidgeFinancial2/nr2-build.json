@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10608",
-  "BUILD_ID": "hal-10608",
-  "assetVersion": "hal-10608",
-  "builtAt": "2026-07-13T17:15:00.000Z",
-  "notes": "hal-10608: Gold/ERA settlement readiness + page-smoke 429/warming repairs + app-info schema align; empty != $0.",
+  "schemaVersion": "hal-10611",
+  "BUILD_ID": "hal-10611",
+  "assetVersion": "hal-10611",
+  "builtAt": "2026-07-14T00:00:00.000Z",
+  "notes": "hal-10611: Port-aware singleton, financial empty-surface omit via compact pack; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10608"
+  "package": "HAL-10611"
 }
