@@ -440,7 +440,7 @@
             <div class="apex-hal-chat__chips-wrap">
               <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
             </div>
-            <form class="apex-hal-chat__composer" data-hal-form action="javascript:void(0)" method="post">
+            <div class="apex-hal-chat__composer" data-hal-form role="group" aria-label="Ask HAL">
               <div class="apex-hal-chat__input-sizer" data-input-sizer>
                 <textarea class="apex-hal-chat__input" data-hal-input rows="1" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL" maxlength="2000"></textarea>
               </div>
@@ -450,7 +450,7 @@
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
               </button>
-            </form>
+            </div>
             <div class="apex-hal-chat__meta">
               <span class="apex-hal-chat__hint">${this.escape(this.spec.hint || "Local HAL command surface")}</span>
               <span class="apex-hal-chat__indicator" data-hal-indicator hidden>
@@ -5467,7 +5467,10 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           q
         );
         if (!wantsNav) {
-          actions = actions.filter((a) => !(a && a.type === "navigate"));
+          // Stay on HAL chat: no navigate / no mosaic remount via refresh_page.
+          actions = actions.filter(
+            (a) => !(a && (a.type === "navigate" || a.type === "refresh_page"))
+          );
         }
         if (actions.length) {
           boardResults = await runHalBoardActions(actions);
@@ -5605,7 +5608,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
               "run_tool",
             ].includes(a.type)
           );
-          if (safe.length) await runHalBoardActions(safe);
+          const wantsNav = /\b(open|go to|navigate|switch to|take me to)\b/i.test(q);
+          const chatSafe = wantsNav
+            ? safe
+            : safe.filter((a) => !(a && (a.type === "navigate" || a.type === "refresh_page")));
+          if (chatSafe.length) await runHalBoardActions(chatSafe);
         } catch (_err) {
           /* ignore bad marker */
         }
@@ -5751,11 +5758,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     };
 
     if (form && input) {
-      form.addEventListener("submit", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        submitAsk();
-      });
+      // Composer is a div (not <form>) so Enter/click cannot navigate the document.
+      if (form.tagName === "FORM") {
+        form.addEventListener("submit", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          submitAsk();
+        });
+      }
       const sendBtn = panel.querySelector("[data-hal-send]");
       if (sendBtn) {
         sendBtn.addEventListener("click", (ev) => {
@@ -6094,11 +6104,21 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
 
     function applyWidgetPayload(payload, { fromCache }) {
       const list = (payload && payload.widgets) || [];
+      const chatComposerActive = (() => {
+        try {
+          if (halChatBusy) return true;
+          const ae = document.activeElement;
+          return !!(ae && ae.getAttribute && ae.getAttribute("data-hal-input") != null);
+        } catch (_err) {
+          return !!halChatBusy;
+        }
+      })();
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
       } else if (silent && currentPage === "hal" && !currentSub) {
-        // Never full-remount HAL on silent refresh — that wiped chat history on hover/timer races.
-        softRenderHalMain(list);
+        // Never remount HAL main while the chat composer is active — that looked like
+        // a full page refresh every time staff hit the question box / sent a message.
+        if (!chatComposerActive) softRenderHalMain(list);
       } else if (silent) {
         // Silent poll must never wipe the mosaic (instBoot looked like a full page refresh).
         // Keep current widgets; Sync / navigation still remount intentionally.
