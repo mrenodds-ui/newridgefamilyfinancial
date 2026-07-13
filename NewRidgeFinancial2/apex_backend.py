@@ -3910,6 +3910,16 @@ def build_apex_widgets(
             threading.Thread(
                 target=_fill_widgets_cache, daemon=True, name=f"nr2-widgets-warm-{cache_key}"
             ).start()
+        # Moonshot: prevent CDN/browser from caching warming stubs (buildId skew)
+        try:
+            from bottle import response
+
+            response.set_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+            response.set_header("Pragma", "no-cache")
+            response.set_header("Expires", "0")
+            response.set_header("X-NR2-Build-Id", BUILD_ID)
+        except Exception:
+            pass
         return stub
 
     reports, bundle, errors = _load_reports_and_bundle()

@@ -7,7 +7,10 @@
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10563";
+  const ASSET_V = "hal-10608";
+  if (typeof window !== "undefined") {
+    window.NR2_BUILD_ID = ASSET_V;
+  }
   /** Consecutive warming stub polls before hard reload (Moonshot cache pack). */
   let warmingPollStreak = 0;
   const WARMING_POLL_MAX = 5;
@@ -6127,38 +6130,86 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
 
     try {
       const res = await apexFetch(`${config.apiBase}/widgets/${encodeURIComponent(currentPage)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const err = new Error(`HTTP ${res.status}`);
+        err.status = res.status;
+        throw err;
+      }
       const payload = await res.json();
       applyWidgetPayload(payload, { fromCache: false });
-      if (idb && idb.cacheWidgets && !payload.warming && !payload.fillFailed) {
-        idb.cacheWidgets(currentPage, currentSub, currentQuery, payload).catch(() => {});
-      }
-      setMeta(payload);
-      // Moonshot cache pack: re-poll warming stub; hard-reload after streak timeout.
+      // Moonshot warming coherence pack: 429 backoff + buildId skew detection
       if (payload && payload.warming) {
+        // BuildId skew guard: if server build differs from UI chrome, nuke IDB and reload
+        if (
+          payload.buildId &&
+          window.NR2_BUILD_ID &&
+          payload.buildId !== window.NR2_BUILD_ID
+        ) {
+          console.warn(
+            `[NR2] Build skew detected: UI=${window.NR2_BUILD_ID} Server=${payload.buildId}. Purging cache.`
+          );
+          if (idb && idb.clearWidgets) {
+            idb
+              .clearWidgets(currentPage, currentSub, currentQuery)
+              .catch(() => {})
+              .finally(() => window.location.reload());
+          } else {
+            window.location.reload();
+          }
+          return; // Stop processing stale payload
+        }
+
         warmingPollStreak += 1;
+
+        // Exponential backoff capped at 30s to prevent 429 storm
+        const backoffMs = Math.min(1000 * Math.pow(2, warmingPollStreak), 30000);
+
         if (warmingPollStreak >= WARMING_POLL_MAX) {
           warmingPollStreak = 0;
+          // Hard reset: clear IDB and reload to clear potential version skew
           try {
             if (idb && idb.clearWidgets) {
               await idb.clearWidgets(currentPage, currentSub, currentQuery);
             }
-          } catch (_err) {
-            /* optional */
+          } catch (e) {
+            console.error("[NR2] IDB clear failed", e);
           }
-          if (typeof window !== "undefined" && window.location) {
-            window.location.reload();
-          }
-          return;
+          window.location.reload();
+        } else {
+          // Schedule next poll with backoff instead of immediate tight loop
+          setTimeout(() => {
+            loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true }).catch(
+              (err) => {
+                if (err && err.status === 429) {
+                  console.warn("[NR2] Widget 429; backoff active");
+                }
+              }
+            );
+          }, backoffMs);
         }
-        setTimeout(() => {
-          loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true });
-        }, 750);
       } else {
+        // Reset streak when warming resolves
         warmingPollStreak = 0;
+        if (payload && !payload.fillFailed) {
+          if (idb && idb.cacheWidgets) {
+            idb.cacheWidgets(currentPage, currentSub, currentQuery, payload).catch(() => {});
+          }
+        }
+        setMeta(payload);
         startAutoRefresh();
       }
     } catch (err) {
+      const status = Number((err && err.status) || 0);
+      const msg = String((err && err.message) || err || "");
+      if (status === 429 || /HTTP 429/.test(msg)) {
+        warmingPollStreak += 1;
+        const backoffMs = Math.min(1000 * Math.pow(2, warmingPollStreak), 30000);
+        console.warn("[NR2] Widget 429; backoff active");
+        setTimeout(() => {
+          loadPage(formatApexHash(currentPage, currentSub, currentQuery), { silent: true });
+        }, backoffMs);
+        return;
+      }
       warmingPollStreak = 0;
       if (!silent) {
         root.className = "apex-stage apex-mosaic";
