@@ -592,6 +592,11 @@
               this.spec.eraInboxIngestLabel || "Refresh Inbox"
             )}</button>`
           : "";
+        const eraDiscoverBtn = this.spec.eraDiscoverUrl
+          ? `<button type="button" class="apex-btn apex-btn--small" data-era-discover>${this.escape(
+              this.spec.eraDiscoverLabel || "Scan for ERA Files"
+            )}</button>`
+          : "";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
@@ -602,6 +607,7 @@
           ${actionHtml}
           ${refreshBtn}
           ${eraInboxBtn}
+          ${eraDiscoverBtn}
           <div class="apex-kpi-hint" data-kpi-hint>${this.escape(this.spec.hint || "Phased Apex migration.")}</div>
         `;
       }
@@ -3145,6 +3151,58 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
               window.alert(String((err && err.message) || err));
               eraRefreshBtn.disabled = false;
               eraRefreshBtn.textContent = label;
+            }
+          });
+        }
+        const eraDiscoverBtn = this.element.querySelector("[data-era-discover]");
+        if (eraDiscoverBtn && eraDiscoverBtn.dataset.wired !== "1") {
+          eraDiscoverBtn.dataset.wired = "1";
+          eraDiscoverBtn.addEventListener("click", async () => {
+            const label = String(this.spec.eraDiscoverLabel || "Scan for ERA Files");
+            const url = String(this.spec.eraDiscoverUrl || "/api/apex/hal/era-inbox/discover");
+            eraDiscoverBtn.disabled = true;
+            eraDiscoverBtn.textContent = "Scanning…";
+            try {
+              const res = await apexFetch(url, {
+                method: "POST",
+                body: JSON.stringify({}),
+              });
+              const data = await res.json().catch(() => ({}));
+              const meta = metaEl();
+              const count = data.candidateCount != null ? data.candidateCount : 0;
+              const chip = data.chipLabel || "";
+              if (meta) {
+                if (res.status === 403) {
+                  meta.textContent =
+                    "HAL · ERA discovery blocked (session token) — retry Scan for ERA Files";
+                } else if (data.ok) {
+                  meta.textContent = count
+                    ? `HAL · ${chip} — verify paths, copy into era inbox, then Refresh Inbox`
+                    : `HAL · ${chip || "No local ERA files detected"} (empty ≠ $0)`;
+                } else {
+                  meta.textContent = `HAL · ERA discovery issue — ${data.error || res.status}`;
+                }
+                meta.classList.add("is-live");
+              }
+              const hintEl = this.element.querySelector("[data-kpi-hint]");
+              if (hintEl) {
+                const paths = Array.isArray(data.candidates)
+                  ? data.candidates
+                      .slice(0, 3)
+                      .map((c) => c && c.path)
+                      .filter(Boolean)
+                      .join(" · ")
+                  : "";
+                hintEl.textContent = paths
+                  ? `${data.hint || chip} · ${paths}`
+                  : String(data.hint || this.spec.hint || "");
+              }
+              eraDiscoverBtn.disabled = false;
+              eraDiscoverBtn.textContent = label;
+            } catch (err) {
+              window.alert(String((err && err.message) || err));
+              eraDiscoverBtn.disabled = false;
+              eraDiscoverBtn.textContent = label;
             }
           });
         }

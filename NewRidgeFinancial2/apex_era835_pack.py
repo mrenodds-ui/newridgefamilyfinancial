@@ -605,7 +605,7 @@ def era835_status() -> dict[str, Any]:
     return {
         "ok": True,
         "phase": "U1",
-        "buildHint": "hal-10574",
+        "buildHint": "hal-10575",
         "enabled": era835_enabled(),
         "flag": "NR2_ERA835",
         "gapCode": gap.get("gapCode") or GAP_ERA835_PENDING,
@@ -768,11 +768,11 @@ def scan_era_inbox(
 
 
 def era_inbox_status(*, ensure_dirs: bool = True) -> dict[str, Any]:
-    """Read-only ERA inbox status for HAL chips / API (hal-10574)."""
+    """Read-only ERA inbox status for HAL chips / API (hal-10575)."""
     inbox = scan_era_inbox(ensure_dirs=ensure_dirs)
     out: dict[str, Any] = {
         "ok": True,
-        "phase": "hal-10574",
+        "phase": "hal-10575",
         "inbox": inbox,
         "chipStatus": inbox.get("chipStatus"),
         "chipLabel": inbox.get("chipLabel"),
@@ -892,6 +892,327 @@ def ingest_era_inbox(
             "ERA 835 ingested to unified aggregates only — staff post in SoftDent. "
             "Empty ≠ $0; no SoftDent write-back; do not re-export Register hoping Ins Plan > 0."
         ),
+        "refreshedAt": _utc_now(),
+    }
+
+
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 10575 — read-only remittance discovery (locate misplaced 835/EDI; never invent $)
+# ---------------------------------------------------------------------------
+
+_ERA_DISCOVERY_SKIP_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".venv",
+        "venv",
+        "node_modules",
+        "__pycache__",
+        "dashboard_logs",
+        "run_logs",
+        "_derived_archive",
+        "quarantine",
+        "fixtures",
+        "test",
+        "tests",
+        "retired_vite_dashboard_2026-07-09",
+    }
+)
+_ERA_DISCOVERY_SNIFF_MARKERS = (
+    "ST*835",
+    "GS*HP*",
+    "ELECTRONIC REMITTANCE",
+    "HEALTH CARE CLAIM PAYMENT",
+    "835 TRANSACTION",
+)
+_ERA_DISCOVERY_EXCLUDE_NAMES = frozenset(
+    {
+        "daysheet.csv",
+        "daysheet.xls",
+        "daysheet.xlsx",
+        "register.csv",
+        "register.xls",
+        "register.xlsx",
+        "collections.csv",
+        "collections.xls",
+        "operatory_schedule.json",
+    }
+)
+_ERA_DISCOVERY_FALSE_EXTS = frozenset(
+    {
+        ".json",
+        ".tsx",
+        ".ts",
+        ".jsx",
+        ".js",
+        ".py",
+        ".md",
+        ".log",
+        ".html",
+        ".htm",
+        ".css",
+        ".map",
+        ".lock",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".sqlite",
+        ".db",
+        ".pyc",
+        ".xls",
+        ".xlsx",
+        ".doc",
+        ".docx",
+        ".pdf",
+    }
+)
+
+
+def era_discovery_roots() -> list[Path]:
+    """Broad SoftDent/export roots for remittance discovery (read-only)."""
+    candidates = [
+        Path(r"C:\SoftDentFinancialExports"),
+        Path(r"C:\SoftDentReportExports"),
+        Path(r"C:\SoftDent"),
+        Path(r"C:\SoftDent Data"),
+        Path(r"C:\CS SoftDent Software"),
+    ]
+    env_extra = str(os.environ.get("NR2_ERA_DISCOVERY_ROOTS") or "").strip()
+    if env_extra:
+        for part in re.split(r"[;|]", env_extra):
+            part = part.strip()
+            if part:
+                candidates.append(Path(part).expanduser())
+    out: list[Path] = []
+    seen: set[str] = set()
+    for p in candidates:
+        key = str(p).lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(p)
+    return out
+
+
+def _inbox_root_keys() -> set[str]:
+    return {str(p).lower() for p in era_inbox_candidate_roots()}
+
+
+def _path_under_inbox(path: Path) -> bool:
+    try:
+        resolved = str(path.resolve()).lower()
+    except OSError:
+        resolved = str(path).lower()
+    for inbox in _inbox_root_keys():
+        if resolved == inbox or resolved.startswith(inbox + os.sep) or resolved.startswith(inbox + "/"):
+            return True
+    return False
+
+
+def _name_has_era_token(name: str) -> bool:
+    """True when remittance tokens appear as path tokens, not UUID/word substrings."""
+    return bool(
+        re.search(
+            r"(?i)(^|[^a-z0-9])(835|era|remit|remittance|eob|x12)([^a-z0-9]|$)",
+            name,
+        )
+    )
+
+
+def _sniff_era_content(path: Path, *, max_bytes: int = 4096) -> str | None:
+    """Return match reason if file head looks like X12 835 / remittance text."""
+    try:
+        if path.stat().st_size <= 0:
+            return None
+        raw = path.read_bytes()[: max(256, min(int(max_bytes), 16384))]
+    except OSError:
+        return None
+    try:
+        text = raw.decode("utf-8", errors="ignore")
+    except Exception:
+        text = raw.decode("latin-1", errors="ignore")
+    upper = text.upper()
+    # Prefer ST*835 / remittance phrases — bare ISA alone is too common in SoftDent CSVs.
+    for marker in _ERA_DISCOVERY_SNIFF_MARKERS:
+        needle = marker.upper().rstrip("*")
+        if needle in upper:
+            return f"sniff:{marker}"
+    if "ISA" in upper and ("ST*835" in upper or "ST835" in upper.replace("*", "") or "GS*HP" in upper):
+        return "sniff:ISA+835"
+    return None
+
+
+def _candidate_match_reason(path: Path) -> str | None:
+    name = path.name.lower()
+    if "synthetic" in name or name.startswith("sample"):
+        return None
+    if "fixture" in str(path).lower():
+        return None
+    if name in _ERA_DISCOVERY_EXCLUDE_NAMES or name.startswith("daysheet") or name.startswith("register_for"):
+        return None
+    if name.startswith("manifest_"):
+        return None
+    suf = path.suffix.lower()
+    if suf in _ERA_DISCOVERY_FALSE_EXTS:
+        return None
+    if suf in {".835", ".edi", ".x12"}:
+        return f"suffix:{suf}"
+    if suf in {".txt", ".csv"}:
+        if _name_has_era_token(name):
+            sniffed = _sniff_era_content(path)
+            return sniffed or f"name+suffix:{suf}"
+        sniffed = _sniff_era_content(path)
+        if sniffed:
+            return sniffed
+        return None
+    if _name_has_era_token(name):
+        sniffed = _sniff_era_content(path)
+        if sniffed:
+            return sniffed
+    return None
+
+def discover_era_candidates(
+    roots: list[Path] | None = None,
+    *,
+    limit: int = 40,
+    max_depth: int = 5,
+    max_files_visited: int = 8000,
+) -> dict[str, Any]:
+    """Read-only walk of SoftDent/export roots for misplaced ERA remittances.
+
+    Does not move/copy/create files, invent dollars, or write SoftDent.
+    Empty result → procurement still required (honesty=empty_not_zero).
+    """
+    candidate_roots = list(roots) if roots is not None else era_discovery_roots()
+    limit_n = max(1, min(int(limit), 200))
+    depth_n = max(1, min(int(max_depth), 8))
+    visit_cap = max(100, min(int(max_files_visited), 50000))
+
+    scanned_roots: list[str] = []
+    missing_roots: list[str] = []
+    candidates: list[dict[str, Any]] = []
+    visited = 0
+    errors: list[str] = []
+
+    for root in candidate_roots:
+        if not root.exists():
+            missing_roots.append(str(root))
+            continue
+        if not root.is_dir():
+            missing_roots.append(str(root))
+            continue
+        scanned_roots.append(str(root))
+        root_depth = len(root.parts)
+        try:
+            for dirpath, dirnames, filenames in os.walk(root):
+                # Prune noisy / huge trees
+                dirnames[:] = [
+                    d
+                    for d in dirnames
+                    if d.lower() not in _ERA_DISCOVERY_SKIP_DIR_NAMES and not d.startswith(".")
+                ]
+                try:
+                    rel_depth = len(Path(dirpath).parts) - root_depth
+                except Exception:
+                    rel_depth = 0
+                if rel_depth > depth_n:
+                    dirnames[:] = []
+                    continue
+                for fname in filenames:
+                    if len(candidates) >= limit_n or visited >= visit_cap:
+                        break
+                    visited += 1
+                    path = Path(dirpath) / fname
+                    if not path.is_file():
+                        continue
+                    reason = _candidate_match_reason(path)
+                    if not reason:
+                        continue
+                    try:
+                        st = path.stat()
+                        size = int(st.st_size)
+                        mtime = (
+                            datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                            .replace(microsecond=0)
+                            .isoformat()
+                            .replace("+00:00", "Z")
+                        )
+                    except OSError as exc:
+                        errors.append(f"{path}: {exc}")
+                        continue
+                    # Skip empty / huge blobs (likely not staff remittances)
+                    if size <= 0 or size > 50 * 1024 * 1024:
+                        continue
+                    candidates.append(
+                        {
+                            "name": path.name,
+                            "path": str(path),
+                            "root": str(root),
+                            "sizeBytes": size,
+                            "mtime": mtime,
+                            "matchReason": reason,
+                            "inInbox": _path_under_inbox(path),
+                        }
+                    )
+                if len(candidates) >= limit_n or visited >= visit_cap:
+                    break
+        except OSError as exc:
+            errors.append(f"{root}: {exc}")
+        if len(candidates) >= limit_n or visited >= visit_cap:
+            break
+
+    # Prefer non-inbox finds first (misplaced), then newest
+    candidates.sort(
+        key=lambda row: (
+            1 if row.get("inInbox") else 0,
+            str(row.get("mtime") or ""),
+        ),
+        reverse=True,
+    )
+    outside = [c for c in candidates if not c.get("inInbox")]
+    in_inbox = [c for c in candidates if c.get("inInbox")]
+    count = len(candidates)
+    if count == 0:
+        chip_status = "none_found"
+        chip_label = "No local ERA files detected; procurement required"
+        hint = (
+            "Scanned SoftDent/export roots — no .835/.edi remittance candidates. "
+            "Staff must download real payer ERA files into C:\\SoftDentFinancialExports\\era. "
+            "Empty ≠ $0; no SoftDent write-back."
+        )
+    else:
+        chip_status = "candidates"
+        chip_label = f"Found {count} candidate remittance{'s' if count != 1 else ''}"
+        hint = (
+            f"Found {count} candidate ERA file(s) "
+            f"({len(outside)} outside inbox, {len(in_inbox)} already in inbox). "
+            "Verify paths, then copy into C:\\SoftDentFinancialExports\\era and Refresh Inbox. "
+            "Discovery is read-only — Apex does not move files or invent dollars."
+        )
+
+    return {
+        "ok": True,
+        "phase": "hal-10575",
+        "mode": "discovery",
+        "readOnly": True,
+        "writeBack": False,
+        "softDentWriteBack": False,
+        "honesty": "empty_not_zero",
+        "empty": count == 0,
+        "candidateCount": count,
+        "outsideInboxCount": len(outside),
+        "inInboxCount": len(in_inbox),
+        "candidates": candidates[:limit_n],
+        "chipStatus": chip_status,
+        "chipLabel": chip_label,
+        "scannedRoots": scanned_roots,
+        "missingRoots": missing_roots,
+        "filesVisited": visited,
+        "errors": errors[:12],
+        "hint": hint,
         "refreshedAt": _utc_now(),
     }
 

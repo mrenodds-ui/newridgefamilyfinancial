@@ -35,8 +35,12 @@ Wire the browser mutation-token path so staff can trigger ERA inbox ingest from 
 ## Not done (runner-ups — do not deviate)
 
 - Third OPS procurement of real ERA-835 files (still blocked on clearinghouse drop)
-- Standalone browser smoke (bundle with this ship / hard-refresh after restart)
 - Collections Excel-temp / QB payroll/AP OPS
+
+## Browser smoke
+
+Completed on proceed after ship — see `MOONSHOT_ERA_INBOX_MUTATION_TOKEN_BROWSER_SMOKE_2026-07-12.md`  
+(Refresh Inbox UI click → POST 200 with session token; empty honesty preserved).
 
 ## Live verify
 

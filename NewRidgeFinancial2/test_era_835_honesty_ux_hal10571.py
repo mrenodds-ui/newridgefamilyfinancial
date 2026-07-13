@@ -1,4 +1,4 @@
-"""Moonshot ERA-835 Collections Honesty UX Bridge (hal-10574)."""
+"""Moonshot ERA-835 Collections Honesty UX Bridge (hal-10575)."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class Era835HonestyUxTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10574")
+        self.assertEqual(BUILD_ID, "hal-10575")
 
     def test_era_fallback_when_register_zero_insurance(self) -> None:
         gap = assess_collections_gap(_bundle_register_ins_plan_zero())

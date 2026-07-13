@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10574"
+BUILD_ID = "hal-10575"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -6583,7 +6583,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
     @app.get("/api/apex/hal/era-inbox/status")
     def apex_era_inbox_status():
-        """hal-10574 — ERA-835 drop-box status + mutation-auth contract (empty ≠ $0)."""
+        """hal-10575 — ERA-835 drop-box status + mutation-auth contract (empty ≠ $0)."""
         try:
             from apex_era835_pack import era_inbox_status
             from nr2_browser_security import (
@@ -6606,7 +6606,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
     @app.post("/api/apex/hal/era-inbox/ingest")
     def apex_era_inbox_ingest():
-        """hal-10574 — ingest ERA drop-box (requires X-NR2-Session-Token in browser; empty ≠ $0)."""
+        """hal-10575 — ingest ERA drop-box (requires X-NR2-Session-Token in browser; empty ≠ $0)."""
         try:
             from apex_era835_pack import ingest_era_inbox
 
@@ -6614,6 +6614,32 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             result["buildId"] = BUILD_ID
             result["softDentWriteBack"] = False
             result["writeBack"] = False
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/hal/era-inbox/discover")
+    def apex_era_inbox_discover_get():
+        """hal-10575 — read-only remittance discovery across SoftDent/export roots."""
+        try:
+            from apex_era835_pack import discover_era_candidates
+
+            result = discover_era_candidates()
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/hal/era-inbox/discover")
+    def apex_era_inbox_discover_post():
+        """hal-10575 — same discovery via CSRF session POST (UI Scan for ERA Files)."""
+        try:
+            from apex_era835_pack import discover_era_candidates
+
+            result = discover_era_candidates()
+            result["buildId"] = BUILD_ID
+            result["writeBack"] = False
+            result["softDentWriteBack"] = False
             return json_response_fn(result)
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

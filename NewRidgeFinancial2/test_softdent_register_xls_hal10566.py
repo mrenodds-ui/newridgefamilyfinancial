@@ -1,4 +1,4 @@
-"""Moonshot DEF-001 Register XLS ingestion (hal-10574)."""
+"""Moonshot DEF-001 Register XLS ingestion (hal-10575)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _write_register_xlsx(path: Path, *, period_line: str, ins_plan: float, regul
 
 class SoftDentRegisterXlsHal10566Tests(unittest.TestCase):
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10574")
+        self.assertEqual(BUILD_ID, "hal-10575")
 
     def test_parse_xlsx_with_ins_patient_split(self):
         with tempfile.TemporaryDirectory() as tmp:

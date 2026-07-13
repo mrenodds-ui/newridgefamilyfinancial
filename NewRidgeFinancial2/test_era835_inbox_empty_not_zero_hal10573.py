@@ -1,4 +1,4 @@
-"""Moonshot ERA-835 inbox scaffolding — empty ≠ $0 (hal-10574)."""
+"""Moonshot ERA-835 inbox scaffolding — empty ≠ $0 (hal-10575)."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class Era835InboxScaffoldTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10574")
+        self.assertEqual(BUILD_ID, "hal-10575")
 
     def test_era835_inbox_empty_not_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

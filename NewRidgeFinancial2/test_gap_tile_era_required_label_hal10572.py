@@ -1,4 +1,4 @@
-"""Moonshot gap-tile honesty label polish (hal-10574)."""
+"""Moonshot gap-tile honesty label polish (hal-10575)."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def _bundle_register_ins_plan_zero() -> dict:
 
 class GapTileEraRequiredLabelTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10574")
+        self.assertEqual(BUILD_ID, "hal-10575")
 
     def test_widget_message_surfaces_required_not_available(self) -> None:
         w = collections_gap_widget(_bundle_register_ins_plan_zero())

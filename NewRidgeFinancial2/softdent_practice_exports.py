@@ -1439,7 +1439,7 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
 from softdent_odbc_extract import ensure_softdent_odbc_fresh, extract_softdent_odbc, read_extract_status, run_odbc_lane
 
 def stub_era835_ingestion_path() -> dict[str, Any]:
-    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10574).
+    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10575).
 
     Ensures drop-box dirs exist and scans for files. Does not invent dollars or write SoftDent.
     """
@@ -1471,6 +1471,7 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
                 "apex_era835_pack.ingest_era835_to_unified",
                 "apex_era835_pack.scan_era_inbox",
                 "apex_era835_pack.ingest_era_inbox",
+                "apex_era835_pack.discover_era_candidates",
                 "apex_softdent_era_pack.attach_era_to_ingest",
             ],
             "inbox": inbox,
@@ -1513,6 +1514,13 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
         }
 
 
+def discover_era_candidates(**kwargs: Any) -> dict[str, Any]:
+    """hal-10575 — thin export wrapper for remittance discovery (read-only)."""
+    from apex_era835_pack import discover_era_candidates as _discover
+
+    return _discover(**kwargs)
+
+
 __all__ = [
     "ensure_softdent_odbc_fresh",
     "extract_softdent_odbc",
@@ -1525,6 +1533,7 @@ __all__ = [
     "summarize_daysheet_export",
     "parse_softdent_register_xls",
     "stub_era835_ingestion_path",
+    "discover_era_candidates",
 ]
 
 

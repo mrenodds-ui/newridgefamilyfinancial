@@ -1,4 +1,4 @@
-"""Moonshot cache coherence (hal-10574) — stub fill failure + BUILD_ID."""
+"""Moonshot cache coherence (hal-10575) — stub fill failure + BUILD_ID."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class CacheCoherenceTests(unittest.TestCase):
         _WIDGETS_CACHE.clear()
 
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10574")
+        self.assertEqual(BUILD_ID, "hal-10575")
 
     def test_stub_then_fill_success(self) -> None:
         stub = build_apex_widgets("hal", _fill=False)
@@ -32,7 +32,7 @@ class CacheCoherenceTests(unittest.TestCase):
         full = build_apex_widgets("hal", _fill=True)
         self.assertFalse(full.get("warming"))
         self.assertFalse(full.get("fillFailed"))
-        self.assertEqual(full.get("buildId"), "hal-10574")
+        self.assertEqual(full.get("buildId"), "hal-10575")
 
     def test_fill_failure_surfaces_non_warming_payload(self) -> None:
         """On background fill crash, cache a fillFailed payload (exit infinite warming)."""
@@ -68,7 +68,7 @@ class CacheCoherenceTests(unittest.TestCase):
             hit = _WIDGETS_CACHE[cache_key]["payload"]
             self.assertFalse(hit.get("warming"))
             self.assertTrue(hit.get("fillFailed"))
-            self.assertEqual(hit.get("buildId"), "hal-10574")
+            self.assertEqual(hit.get("buildId"), "hal-10575")
 
     def test_fill_failed_cached_served_without_warming_stub(self) -> None:
         """Once fail payload is cached, next cold call within TTL must not re-stub forever."""

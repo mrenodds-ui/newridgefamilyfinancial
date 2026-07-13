@@ -713,7 +713,53 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
 
     # DEF-001 — empty revenue-composition / collections ≠ $0 (local, no LLM)
     # Also: Register Ins Plan $0 → ERA-835 honesty (hal-10571)
-    # Also: Refresh Inbox / ERA inbox ingest guidance (hal-10574)
+    # Also: Refresh Inbox / ERA inbox ingest guidance (hal-10575)
+    # Also: remittance discovery scan (hal-10575)
+    if re.search(
+        r"\b("
+        r"scan\s+for\s+(era|835|remit)|"
+        r"discover\s+(era|835|remit)|"
+        r"find\s+(era|835|remittance)|"
+        r"era\s+files?\s+on\s+disk|"
+        r"local\s+era"
+        r")\b",
+        q,
+    ):
+        try:
+            from apex_era835_pack import discover_era_candidates
+
+            found = discover_era_candidates(limit=8)
+            count = int(found.get("candidateCount") or 0)
+            chip = found.get("chipLabel") or ""
+            lines = [
+                f"ERA remittance discovery (read-only): {chip} (empty ≠ $0).",
+                f"Scanned roots: {', '.join((found.get('scannedRoots') or [])[:4]) or '—'}.",
+            ]
+            for row in list(found.get("candidates") or [])[:5]:
+                lines.append(
+                    f"- {row.get('path')} · {row.get('sizeBytes')}B · {row.get('matchReason')}"
+                    f"{' · in-inbox' if row.get('inInbox') else ''}"
+                )
+            if count == 0:
+                lines.append(
+                    "No local candidates — staff must procure real payer 835 files into "
+                    r"C:\SoftDentFinancialExports\era. Do not invent dollars or re-export Register."
+                )
+            else:
+                lines.append(
+                    "Verify candidates, copy into the ERA inbox, then Refresh Inbox. "
+                    "Discovery does not move files or write SoftDent."
+                )
+            return {"text": "\n".join(lines), "intent": "policy:era-discover"}
+        except Exception:
+            return {
+                "text": (
+                    "Use Collections Gap → Scan for ERA Files (read-only discovery across "
+                    r"SoftDent/export roots). Empty ≠ $0; no SoftDent write-back."
+                ),
+                "intent": "policy:era-discover",
+            }
+
     if re.search(
         r"\b("
         r"refresh\s+(era|835|inbox)|"
