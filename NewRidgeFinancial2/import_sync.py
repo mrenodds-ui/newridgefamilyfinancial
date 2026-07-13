@@ -552,21 +552,35 @@ def _sync_softdent_pipeline_exports(destination: Path) -> dict[str, Any]:
         csv_path = None
     # Prefer the newer SoftDent aging artifact (CSV ReportExports vs pipeline jsonl)
     prefer_csv = bool(csv_path) and (csv_mtime >= jsonl_mtime or not aging_jsonl)
+    source_mtime = 0.0
     if prefer_csv:
         ar_rows = _build_ar_rows_from_account_aging_csv()
         ar_source = "account_aging.csv"
+        source_mtime = csv_mtime
     if not ar_rows and aging_jsonl:
         normalized = _jsonl_practice_total(aging_jsonl)
         if normalized:
             ar_rows = _build_ar_rows_from_normalized(normalized)
             ar_source = "account_aging.jsonl"
+            source_mtime = jsonl_mtime
     if not ar_rows and csv_path:
         ar_rows = _build_ar_rows_from_account_aging_csv()
         ar_source = "account_aging.csv"
+        source_mtime = csv_mtime
+    # Freshness clock for softdent.ar softGap must follow SoftDent OPS export mtime,
+    # even when bucket dollars are unchanged (write_bytes_if_changed would leave mtime stale).
+    source_mtime = max(float(source_mtime or 0.0), float(csv_mtime or 0.0), float(jsonl_mtime or 0.0))
     if ar_rows:
         ar_path = destination / "softdent_ar_aging.csv"
-        _write_csv(ar_path, ar_rows, ["Bucket", "Balance"])
-        written.append(ar_path.name if not ar_source else f"{ar_path.name}:{ar_source}")
+        mutated = _write_csv(ar_path, ar_rows, ["Bucket", "Balance"])
+        if ar_path.is_file() and source_mtime and ar_path.stat().st_mtime < float(source_mtime) - 0.5:
+            os.utime(ar_path, (float(source_mtime), float(source_mtime)))
+            mutated = True
+        written.append(
+            ar_path.name
+            if not ar_source
+            else f"{ar_path.name}:{ar_source}{'' if mutated else ':unchanged'}"
+        )
     try:
         from softdent_dashboard_period_sync import sync_dashboard_period_rows
 

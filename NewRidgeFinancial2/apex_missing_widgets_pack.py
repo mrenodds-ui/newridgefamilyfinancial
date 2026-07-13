@@ -294,7 +294,10 @@ def build_denial_pareto(bundle: dict[str, Any]) -> dict[str, Any]:
         "bars": bars,
         "cumulative": cumulative,
         "threshold": 80,
-        "emptyMessage": "No denials recorded",
+        "emptyMessage": (
+            "No denial reason codes in SoftDent claims import — configure claims "
+            "export to include DenialCode/CARC/ReasonCode (empty ≠ $0)"
+        ),
     }
     return _wrap(
         widget_id="denial-pareto",
@@ -304,11 +307,11 @@ def build_denial_pareto(bundle: dict[str, Any]) -> dict[str, Any]:
         size="l",
         status=status,
         data=data,
-        hint="Denial codes from SoftDent/ERA when present — never invented.",
+        hint="Denial codes from SoftDent/ERA when present — never invented. waiting_for=SoftDent.DenialCode",
         collapse_when_empty=status == "empty",
         extra={
             "denialCodes": [b["code"] for b in bars],
-            **({"gapCode": "ZERO_VOLUME"} if status == "empty" else {}),
+            **({"gapCode": "ZERO_VOLUME", "waitingFor": "SoftDent.DenialCode"} if status == "empty" else {}),
         },
     )
 
@@ -623,7 +626,10 @@ def build_verification_matrix(bundle: dict[str, Any], *, page: str = "claims") -
         "patients": patients if has_tracking else [],
         "columns": ["Elig", "Ben", "Breakdown"],
         "nextDays": 3,
-        "emptyMessage": "Verification tracking disabled",
+        "emptyMessage": (
+            "Verification tracking disabled — SoftDent schedule export needs "
+            "elig/ben/breakdown fields (empty ≠ $0)"
+        ),
     }
     return _wrap(
         widget_id="verification-matrix",
@@ -633,7 +639,7 @@ def build_verification_matrix(bundle: dict[str, Any], *, page: str = "claims") -
         size="m",
         status=status,
         data=data,
-        hint="Eligibility/benefits flags from SoftDent — initials only.",
+        hint="Eligibility/benefits flags from SoftDent — initials only. waiting_for=SoftDent.elig/ben/breakdown",
         collapse_when_empty=status == "empty",
     )
 
