@@ -659,7 +659,9 @@ def format_gold_csv_drop_ops_reply(result: dict[str, Any] | None = None) -> str:
         f"outputMode={play.get('outputMode')}; excelAvailable={play.get('excelAvailable')}. "
         f"Playbook: SoftDent {play['softDentMenu']} → Print Preview → page-through → "
         f"HAL-10590 visual audit (does NOT create gold lines). "
-        f"{play['saveAs']} empty != $0."
+        f"{play['saveAs']} empty != $0. "
+        r"Ticket pack: C:\SoftDentFinancialExports\CARESTREAM_GOLD_CSV_TICKET_PACK_2026-07-13 · "
+        "carestreamCaseNumber pending · drop insurance_payments_*.csv → Sync → settlement fills."
     )
 
 

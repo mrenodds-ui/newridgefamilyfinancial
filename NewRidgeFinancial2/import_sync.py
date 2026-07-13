@@ -919,6 +919,59 @@ def _purge_sample_cache(destination: Path) -> list[str]:
     return removed
 
 
+def _scrub_void_and_dupe_ledgers(destination: Path) -> dict[str, Any]:
+    """Drop void-code ledgers and exact duplicate txn fingerprints when SoftDent exposes them."""
+    summary: dict[str, Any] = {
+        "voidDropped": 0,
+        "dupDropped": 0,
+        "files": [],
+        "note": "Scrub markers only — empty ≠ $0; no invented amounts.",
+    }
+    try:
+        from apex_32b_program_fixes_pack import scrub_import_rows
+    except Exception as exc:  # noqa: BLE001
+        summary["error"] = str(exc)
+        return summary
+
+    targets = [
+        destination / "softdent_dashboard_data.json",
+        destination / "softdent_claims_export.csv",
+        destination / "softdent_transactions_export.csv",
+        destination / "softdent_account_transactions.csv",
+    ]
+    for path in targets:
+        if not path.is_file():
+            continue
+        try:
+            if path.suffix.lower() == ".json":
+                payload = _read_json(path)
+                rows = payload if isinstance(payload, list) else None
+                if not isinstance(rows, list):
+                    continue
+                kept, part = scrub_import_rows([r for r in rows if isinstance(r, dict)])
+                if part["voidDropped"] or part["dupDropped"]:
+                    _write_json(path, kept)
+                    summary["voidDropped"] += int(part["voidDropped"])
+                    summary["dupDropped"] += int(part["dupDropped"])
+                    summary["files"].append({"name": path.name, **part})
+            elif path.suffix.lower() == ".csv":
+                with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                    reader = csv.DictReader(handle)
+                    fieldnames = list(reader.fieldnames or [])
+                    rows = list(reader)
+                if not rows or not fieldnames:
+                    continue
+                kept, part = scrub_import_rows(rows)
+                if part["voidDropped"] or part["dupDropped"]:
+                    _write_csv(path, kept, fieldnames)
+                    summary["voidDropped"] += int(part["voidDropped"])
+                    summary["dupDropped"] += int(part["dupDropped"])
+                    summary["files"].append({"name": path.name, **part})
+        except Exception as exc:  # noqa: BLE001
+            summary.setdefault("errors", []).append(f"{path.name}: {exc}")
+    return summary
+
+
 def _load_dataset_for_diag(directory: Path, names: tuple[str, ...]) -> dict[str, Any] | None:
     path = _find_newest(directory, names) if directory.is_dir() else None
     if path is None:
@@ -994,6 +1047,15 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         result["warnings"].append("Full HAL pull — skipped sample-cache purge so bridge exports can load.")
     else:
         result["softdent"]["removed"] = _purge_sample_cache(softdent_dest)
+
+    scrub = _scrub_void_and_dupe_ledgers(softdent_dest)
+    result["filterSummary"] = scrub
+    if int(scrub.get("voidDropped") or 0) or int(scrub.get("dupDropped") or 0):
+        result["warnings"].append(
+            "Import scrub dropped "
+            f"{scrub.get('voidDropped') or 0} void-marker row(s) and "
+            f"{scrub.get('dupDropped') or 0} exact duplicate fingerprint(s)."
+        )
     migrated = _migrate_legacy_import_dirs()
     if migrated:
         result["warnings"].append(

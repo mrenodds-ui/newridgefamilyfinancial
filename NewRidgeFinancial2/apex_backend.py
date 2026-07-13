@@ -46,6 +46,8 @@ _TICKER_CACHE_TTL_SEC = 10.0
 _WIDGETS_CACHE: dict[str, dict[str, Any]] = {}
 _WIDGETS_CACHE_TTL_SEC = 15.0
 _WIDGETS_FILL_FAILURES = 0  # Moonshot cache coherence — fill-thread crash counter
+_LAST_SYNC_ERROR: str = ""
+_LAST_SYNC_AT: str = ""
 _REPORTS_BUNDLE_CACHE: dict[str, Any] = {"at": 0.0, "reports": None, "bundle": None, "errors": None}
 # Moonshot import-cache KPIs: align TTL with widgets (was 20s → thundering herd)
 _REPORTS_BUNDLE_CACHE_TTL_SEC = 15.0
@@ -1993,12 +1995,37 @@ def _financial_widgets_from_reports(
         widgets.append(deep_audit_widget(bundle))
     except Exception:
         pass
+    # 32B program fixes — import-cache / bridge errors / SoftDent×QB recon / Gold ticket OPS
     try:
-        from apex_reconciliation_pack import reconciliation_widget
+        from apex_32b_program_fixes_pack import (
+            bridge_errors_widget,
+            gold_ticket_hint_widget,
+            import_cache_kpi_widget,
+            import_cache_telemetry,
+            reconciliation_surface_widget,
+        )
 
-        widgets.append(reconciliation_widget(bundle))
+        tele = import_cache_telemetry(
+            widgets_cache=_WIDGETS_CACHE,
+            fill_progress=_FILL_PROGRESS,
+            fill_failures=_WIDGETS_FILL_FAILURES,
+            ttl_sec=_WIDGETS_CACHE_TTL_SEC,
+        )
+        widgets.insert(0, import_cache_kpi_widget(tele))
+        widgets.insert(1, bridge_errors_widget(
+            bundle=bundle,
+            fill_failures=_WIDGETS_FILL_FAILURES,
+            last_sync_error=_LAST_SYNC_ERROR or None,
+        ))
+        widgets.insert(2, reconciliation_surface_widget(bundle))
+        widgets.insert(3, gold_ticket_hint_widget())
     except Exception:
-        pass
+        try:
+            from apex_reconciliation_pack import reconciliation_widget
+
+            widgets.append(reconciliation_widget(bundle))
+        except Exception:
+            pass
     try:
         from apex_import_quarantine_pack import quarantine_widget
 
@@ -3715,6 +3742,32 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
     widgets: list[dict[str, Any]] = []
 
+    try:
+        from apex_32b_program_fixes_pack import (
+            bridge_errors_widget,
+            import_cache_kpi_widget,
+            import_cache_telemetry,
+            reconciliation_surface_widget,
+        )
+
+        tele = import_cache_telemetry(
+            widgets_cache=_WIDGETS_CACHE,
+            fill_progress=_FILL_PROGRESS,
+            fill_failures=_WIDGETS_FILL_FAILURES,
+            ttl_sec=_WIDGETS_CACHE_TTL_SEC,
+        )
+        widgets.append(import_cache_kpi_widget(tele))
+        widgets.append(
+            bridge_errors_widget(
+                bundle=bundle,
+                fill_failures=_WIDGETS_FILL_FAILURES,
+                last_sync_error=_LAST_SYNC_ERROR or None,
+            )
+        )
+        widgets.append(reconciliation_surface_widget(bundle))
+    except Exception:
+        pass
+
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
     connected = summary.get("connected")
@@ -4002,9 +4055,10 @@ def build_apex_widgets(
                     "type": "status",
                     "status": "empty",
                     "label": "Loading bridge instruments…",
-                    "message": "Warming import cache — KPIs appear when ready (empty ≠ $0).",
+                    "message": f"Warming import cache · {fill_pct}% (empty ≠ $0).",
                     "fillProgress": fill_pct,
                     "fillPage": pid,
+                    "showFillProgress": True,
                     "hint": "Direct-first pipeline assembling SoftDent/QuickBooks.",
                 }
             ],
@@ -5959,6 +6013,7 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     Moonshot crash/perf SHOULD: serialize Sync with a non-blocking semaphore.
     Concurrent calls return ok=False / status=sync_locked (HTTP 423 via route).
     """
+    global _LAST_SYNC_ERROR, _LAST_SYNC_AT
     body = payload if isinstance(payload, dict) else {}
     acquired = _SYNC_SEMAPHORE.acquire(blocking=False)
     if not acquired:
@@ -5974,6 +6029,19 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
         sync_page = str(body.get("page") or "financial")
         _update_fill_progress(sync_page, 5)
         started = _utc_now()
+        try:
+            from apex_32b_program_fixes_pack import ensure_reconciliation_env, record_program_mutation
+
+            ensure_reconciliation_env()
+            record_program_mutation(
+                "sync",
+                actor=str(body.get("actor") or "Staff"),
+                detail={"page": sync_page, "fullSync": bool(body.get("fullSync", True))},
+                path="/api/apex/sync/trigger",
+                hal_involved=bool(body.get("halInvolved")),
+            )
+        except Exception:
+            pass
         result: dict[str, Any] = {
             "ok": True,
             "startedAt": started,
@@ -5981,6 +6049,7 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
             "sources": ["softdent", "quickbooks"],
             "page": body.get("page"),
             "buildId": BUILD_ID,
+            "fillProgress": 5,
         }
         # Optional document inbox sync (SoftDent/QB file merge) before reload
         try:
@@ -6002,6 +6071,7 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
 
             sync = bool(body.get("fullSync", True))
             _update_fill_progress(sync_page, 40)
+            result["fillProgress"] = 40
             bundle = load_import_bundle(sync=sync, deep=False)
             # Fresh imports must not serve stale page payloads.
             _WIDGETS_CACHE.clear()
@@ -6031,6 +6101,9 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
                 "stale": summary.get("stale"),
             }
             result["freshness"] = build_import_freshness(bundle)
+            scrub = (bundle.get("filterSummary") if isinstance(bundle, dict) else None) or {}
+            if scrub:
+                result["filterSummary"] = scrub
             # Phase I3 — mirror import bundle into additive unified SQLite
             try:
                 from apex_unified_db_pack import ingest_from_bundle
@@ -6038,12 +6111,18 @@ def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
                 result["unifiedIngest"] = ingest_from_bundle(bundle)
             except Exception as exc:  # noqa: BLE001
                 result["unifiedIngest"] = {"ok": False, "error": str(exc)}
+            _LAST_SYNC_ERROR = ""
+            _LAST_SYNC_AT = str(result.get("completedAt") or started)
         except Exception as exc:  # noqa: BLE001
             result["ok"] = False
             result["status"] = "error"
             result["error"] = str(exc)
             result["completedAt"] = _utc_now()
+            _LAST_SYNC_ERROR = str(exc)[:240]
+            _LAST_SYNC_AT = str(result.get("completedAt") or started)
         _update_fill_progress(sync_page, 100)
+        result["fillProgress"] = 100
+        result["lastSyncError"] = _LAST_SYNC_ERROR or None
         return result
     finally:
         _SYNC_SEMAPHORE.release()

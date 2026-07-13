@@ -600,19 +600,40 @@
               this.spec.eraDiscoverLabel || "Scan for ERA Files"
             )}</button>`
           : "";
+        const fillPct = Number(this.spec.fillProgress);
+        const showFill =
+          this.spec.showFillProgress === true ||
+          (Number.isFinite(fillPct) && fillPct > 0 && fillPct < 100) ||
+          this.id === "warming-bridge";
+        const fillBar = showFill
+          ? `<div class="apex-fill-progress" role="progressbar" aria-valuenow="${Math.max(
+              0,
+              Math.min(100, Number.isFinite(fillPct) ? fillPct : 0)
+            )}" aria-valuemin="0" aria-valuemax="100" data-fill-progress>
+              <div class="apex-fill-progress__bar" style="width:${Math.max(
+                0,
+                Math.min(100, Number.isFinite(fillPct) ? fillPct : 0)
+              )}%"></div>
+              <span class="apex-fill-progress__label">${Math.max(
+                0,
+                Math.min(100, Number.isFinite(fillPct) ? fillPct : 0)
+              )}%</span>
+            </div>`
+          : "";
         return `
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             ${printBtn}
           </header>
           <div class="apex-kpi-value is-empty" data-kpi-value>${this.escape(this.spec.message || "Awaiting migration")}</div>
+          ${fillBar}
           ${checkHtml}
           ${actionHtml}
           ${refreshBtn}
           ${eraInboxBtn}
           ${eraDiscoverBtn}
           <div class="apex-kpi-hint" data-kpi-hint>${this.escape(this.spec.hint || "Phased Apex migration.")}</div>
-        `;
+`;
       }
 
       if (this.type === "chart" || this.type === "bar" || this.type === "line") {
@@ -6179,6 +6200,17 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
             `[NR2] Fill progress for ${payload.fillPage || currentPage}: ${fillPct}%`
           );
         }
+        const metaWarm = metaEl();
+        if (metaWarm) {
+          metaWarm.textContent = `Warming · ${Number.isFinite(fillPct) ? fillPct : 0}% · empty ≠ $0`;
+          metaWarm.classList.add("is-live");
+        }
+        if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
+          window.ApexHal.setHeaderStatus(
+            "syncing",
+            `Warming ${Number.isFinite(fillPct) ? fillPct : 0}%`
+          );
+        }
         // BuildId skew guard: if server build differs from UI chrome, nuke IDB and reload
         if (
           payload.buildId &&
@@ -6311,8 +6343,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
   async function triggerSync() {
     const header = document.getElementById("apex-header");
     if (header) header.classList.add("is-syncing");
+    const metaSync = metaEl();
+    if (metaSync) {
+      metaSync.textContent = "Sync · starting…";
+      metaSync.classList.add("is-live");
+    }
     if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
-      window.ApexHal.setHeaderStatus("syncing", "Syncing…");
+      window.ApexHal.setHeaderStatus("syncing", "Sync 5%…");
     }
     let syncNote = "";
     try {
@@ -6321,10 +6358,18 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         body: JSON.stringify({ page: currentPage, fullSync: true }),
       });
       const data = await res.json().catch(() => ({}));
+      const fillPct = Number(data && data.fillProgress);
+      if (Number.isFinite(fillPct) && fillPct >= 0) {
+        if (metaSync) metaSync.textContent = `Sync · ${fillPct}%`;
+        if (window.ApexHal && typeof window.ApexHal.setHeaderStatus === "function") {
+          window.ApexHal.setHeaderStatus("syncing", `Sync ${fillPct}%`);
+        }
+      }
       const fresh = data && data.freshness;
       if (fresh && fresh.message) syncNote = String(fresh.message);
       else if (data && data.loadedAt) syncNote = `Synced · ${data.loadedAt}`;
       if (data && data.ok === false) syncNote = data.error || "Sync error";
+      else if (!syncNote && data && data.status === "ok") syncNote = "Sync complete";
     } catch (_err) {
       syncNote = "Sync request failed — refreshing anyway";
     }

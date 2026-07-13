@@ -942,7 +942,12 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
             st = checklist_post_ingest()
             play = gold_csv_drop_playbook()
             text = format_gold_csv_drop_ops_reply({"post": st})
-            text += f" Steps: {play.get('softDentMenu')} → {play.get('saveAs')} → Sync."
+            try:
+                from apex_32b_program_fixes_pack import gold_csv_ops_staff_reply
+
+                text = gold_csv_ops_staff_reply()
+            except Exception:
+                text += f" Steps: {play.get('softDentMenu')} → {play.get('saveAs')} → Sync."
             return {
                 "text": text,
                 "intent": "policy:gold-csv-drop-ops",

@@ -198,7 +198,7 @@ def _coerce_amount(payload: dict) -> float | None:
 
 def _audit_mutation(action: str, *, detail: dict | None = None, actor: str | None = None) -> None:
     try:
-        from nr2_audit_log import append_audit_event
+        from nr2_audit_log import FINANCIAL_MUTATION_ACTIONS, append_audit_event, append_financial_mutation
 
         body: dict = {}
         path = ""
@@ -221,26 +221,28 @@ def _audit_mutation(action: str, *, detail: dict | None = None, actor: str | Non
         )
         hal_involved = str(resolved_actor).upper() == "HAL" or bool(body.get("halInvolved"))
         audit_detail = detail if detail is not None else body
+        kind = str(action or "unknown")
+        path_l = (path or "").lower()
+        if kind not in FINANCIAL_MUTATION_ACTIONS:
+            if "consent" in path_l or "consent" in kind.lower():
+                kind = "consent_action"
+            elif "outbound" in path_l:
+                kind = "hal_outbound_consent"
+            elif "claim" in path_l and ("post" in path_l or "action" in path_l or "card" in path_l):
+                kind = "claim_action"
+        if isinstance(audit_detail, dict):
+            audit_detail = dict(audit_detail)
+            audit_detail.setdefault("kind", kind)
         append_audit_event(
-            action,
+            kind,
             actor=resolved_actor,
             detail=audit_detail,
             path=path or None,
         )
-        if str(action or "") in {
-            "posting_queue_enqueue",
-            "posting_queue_review",
-            "posting_queue_bulk_review",
-            "posting_batch_approve",
-            "eob_era_match",
-            "deposit_reconciliation",
-            "qb_journal_post",
-        }:
-            from nr2_audit_log import append_financial_mutation
-
+        if kind in FINANCIAL_MUTATION_ACTIONS:
             result_detail = audit_detail if isinstance(audit_detail, dict) else {}
             append_financial_mutation(
-                str(action or "unknown"),
+                kind,
                 actor=resolved_actor,
                 patient_id=str(result_detail.get("patientId") or result_detail.get("patient_id") or "") or None,
                 before=result_detail.get("before") if isinstance(result_detail.get("before"), dict) else None,

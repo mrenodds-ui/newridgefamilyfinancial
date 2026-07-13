@@ -1,7 +1,7 @@
 # Carestream SoftDent Support Ticket — Line-item Insurance Payment CSV
 
 **Status:** SUBMIT PACK READY — awaiting staff portal submit + case number  
-**Date:** 2026-07-13  
+**Date:** 2026-07-13 (refreshed with 32B program fixes OPS close-out)  
 **Practice:** New Ridge Family Dental  
 **SoftDent:** CS SoftDent Software **v19.1.4**  
 **Product need:** Line-item insurance payment export for analytics ingest (not Print Preview totals)  
@@ -11,6 +11,7 @@
 **SoftDent phone:** (866) 435-7473  
 **OPS log:** `docs/MOONSHOT_OPS_CARESTREAM_TICKET_SUBMIT_2026-07-13.md`  
 **carestreamCaseNumber:** _(pending staff)_  
+**NR2 honesty:** gapCode stays `GOLD_CSV_MISSING` / `paymentLines=0` until a real CSV lands — empty ≠ $0; no invented payment lines.  
 **Note:** `support.carestreamdental.com` does not resolve (DNS NXDOMAIN).
 
 ---
@@ -78,5 +79,11 @@ Thank you — please advise the supported path for v19.1.4 line-item insurance p
 2. [ ] Land file as `C:\SoftDentFinancialExports\insurance_payments_YYYYMMDD.csv`
 3. [ ] Confirm headers include InsCo + ADA + Paid (line items, not one total row)
 4. [ ] Run Apex Sync or `POST /api/apex/gold-era-settlement/run`
-5. [ ] Gate: `paymentLines > 0`, `settlementMatrixReady = true`, `inventedGold = false`
-6. [ ] Optional: sum of Paid Amt within ~1% of Print Preview visual total ($641,566.92) for the same period
+5. [ ] Confirm settlement matrix fills and gapCode leaves `GOLD_CSV_MISSING`
+
+### Staff path until then
+
+1. Open Carestream customer portal (link above)
+2. Submit using this ticket body; record **carestreamCaseNumber** here when assigned
+3. Pack folder already staged — attach screenshots from the pack if portal asks
+4. HAL: ask “gold csv drop ops” for live gapCode / pack path reminder

@@ -577,6 +577,11 @@ def _load_import_bundle_uncached(*, sync: bool, deep: bool, direct_first: bool) 
             sync_status["result"].setdefault("diagnostics", bundle["diagnostics"])
             if bundle["upstreamHealth"] is not None:
                 sync_status["result"].setdefault("upstreamHealth", bundle["upstreamHealth"])
+            filt = sync_status["result"].get("filterSummary")
+            if isinstance(filt, dict):
+                bundle["filterSummary"] = filt
+                if isinstance(bundle.get("diagnostics"), dict):
+                    bundle["diagnostics"]["filterSummary"] = filt
     except Exception as exc:
         sync_status.setdefault("warnings", [])
         if isinstance(sync_status["warnings"], list):
