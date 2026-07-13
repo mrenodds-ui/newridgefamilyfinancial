@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10605"
+BUILD_ID = "hal-10606"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2334,21 +2334,27 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_gold_drop_facilitation_hal10606 import gold_drop_facilitation_widget
+
+        widgets.insert(7, gold_drop_facilitation_widget())
+    except Exception:
+        pass
+    try:
         from softdent_print_preview_audit import print_preview_audit_widget
 
-        widgets.insert(7, print_preview_audit_widget())
+        widgets.insert(8, print_preview_audit_widget())
     except Exception:
         pass
     try:
         from ui_honesty_policy import ui_honesty_widget
 
-        widgets.insert(8, ui_honesty_widget())
+        widgets.insert(9, ui_honesty_widget())
     except Exception:
         pass
     try:
         from softdent_visual_ledger_recon import visual_ledger_recon_widget
 
-        widgets.insert(9, visual_ledger_recon_widget())
+        widgets.insert(10, visual_ledger_recon_widget())
     except Exception:
         pass
     try:
@@ -7297,6 +7303,76 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
             # Default: no GUI from HTTP (operator/desktop owns SoftDent focus)
             result = run_ops_10589_gold_csv_drop(attempt_gui_export=False)
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/gold-drop-facilitation/status")
+    def apex_gold_drop_facilitation_status_api():
+        try:
+            from softdent_gold_drop_facilitation_hal10606 import (
+                format_hal10606_reply,
+                gold_drop_facilitation_playbook,
+                settlement_matrix_gate,
+                staff_briefing,
+                verify_export_path_writable,
+            )
+            from softdent_gold_payment_pipeline import audit_gold_payment_pipeline
+
+            audit = audit_gold_payment_pipeline()
+            matrix = settlement_matrix_gate()
+            path = verify_export_path_writable()
+            if matrix.get("steps"):
+                matrix["steps"][0] = {
+                    "id": "export_path_writable",
+                    "ok": bool(path.get("ok")),
+                    "detail": path.get("path") if path.get("ok") else path.get("error"),
+                }
+                matrix["passCount"] = sum(1 for s in matrix["steps"] if s["ok"])
+            payload = {
+                "ok": True,
+                "def": "HAL-10606",
+                "audit": {
+                    "gapCode": audit.get("gapCode"),
+                    "paymentLines": audit.get("paymentLines"),
+                    "newestPaymentCsv": audit.get("newestPaymentCsv"),
+                },
+                "exportPath": path,
+                "matrixGate": matrix,
+                "playbook": gold_drop_facilitation_playbook(),
+                "staffBriefing": staff_briefing(),
+                "reply": format_hal10606_reply(
+                    {
+                        "acceptance": {
+                            "gapCode": audit.get("gapCode"),
+                            "paymentLines": audit.get("paymentLines"),
+                            "matrixCells": (matrix.get("matrix") or {}).get("matrixCells"),
+                            "cellsNge10": (matrix.get("matrix") or {}).get("cellsNge10"),
+                            "acceptanceGateMet": (matrix.get("matrix") or {}).get(
+                                "acceptanceGateMet"
+                            ),
+                            "blockedReason": (
+                                None
+                                if audit.get("gapCode") == "GOLD_OK"
+                                else "GOLD_CSV_MISSING — drop real line-item CSV; Print Preview ≠ gold"
+                            ),
+                        }
+                    }
+                ),
+                "buildId": BUILD_ID,
+            }
+            return json_response_fn(payload)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/gold-drop-facilitation/run")
+    def apex_gold_drop_facilitation_run_api():
+        try:
+            from softdent_gold_drop_facilitation_hal10606 import (
+                run_ops_10606_gold_drop_facilitation,
+            )
+
+            result = run_ops_10606_gold_drop_facilitation(attempt_gui_export=False)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

@@ -1140,6 +1140,31 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         except Exception as ops_exc:  # noqa: BLE001
             result["warnings"].append(f"Gold CSV drop OPS skipped: {ops_exc}")
         try:
+            from softdent_gold_drop_facilitation_hal10606 import (
+                run_ops_10606_gold_drop_facilitation,
+            )
+
+            fac = run_ops_10606_gold_drop_facilitation(attempt_gui_export=False)
+            acc = fac.get("acceptance") or {}
+            result["softdent"]["goldDropFacilitationHal10606"] = {
+                "ok": bool(fac.get("ok")),
+                "gapCode": acc.get("gapCode"),
+                "paymentLines": acc.get("paymentLines"),
+                "matrixCells": acc.get("matrixCells"),
+                "cellsNge10": acc.get("cellsNge10"),
+                "acceptanceGateMet": acc.get("acceptanceGateMet"),
+                "jsonPath": ((fac.get("export") or {}).get("jsonPath")),
+            }
+            if not acc.get("acceptanceGateMet"):
+                result["warnings"].append(
+                    "HAL-10606 gold drop facilitation: "
+                    f"{acc.get('blockedReason') or acc.get('gapCode')} "
+                    r"— drop insurance_payments_YYYYMMDD.csv under SoftDentFinancialExports "
+                    "(Print Preview ≠ gold; empty != $0)"
+                )
+        except Exception as fac_exc:  # noqa: BLE001
+            result["warnings"].append(f"HAL-10606 gold drop facilitation skipped: {fac_exc}")
+        try:
             from softdent_print_preview_audit import run_ops_10590_print_preview_audit
 
             # Sync: status snapshot only — recording totals is staff/API driven

@@ -23,7 +23,7 @@ PACKAGE_BUILD_ID = "hal-10604"
 class Hal10604MoonshotIndustryAliasTests(unittest.TestCase):
     def test_build_id(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10604")
-        self.assertEqual(BUILD_ID, "hal-10605")
+        self.assertEqual(BUILD_ID, "hal-10606")
 
     def test_apply_high_accepts_medium_pending(self) -> None:
         with tempfile.TemporaryDirectory() as td:
