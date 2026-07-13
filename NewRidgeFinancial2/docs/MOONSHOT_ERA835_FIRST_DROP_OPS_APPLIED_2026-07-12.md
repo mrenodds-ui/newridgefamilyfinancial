@@ -52,3 +52,7 @@ cd C:\NewRidgeFamilyFinancial\NewRidgeFinancial2
 - Live ingest of production payer 835 (blocked — no files)
 - UI mutation-token for browser POST ingest (runner-up)
 - Collections Excel-temp / QB payroll/AP OPS
+
+## Re-verify (operator proceed 2026-07-12 ~19:04 local — attempt 2)
+
+Second **proceed** after commit `7f4c4f9`: inbox still empty; all empty-inbox gates **PASS**. See `MOONSHOT_ERA835_FIRST_DROP_OPS_ATTEMPT2_2026-07-12.md`.
