@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10592"
+BUILD_ID = "hal-10593"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -7402,12 +7402,31 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         try:
             import bottle
 
-            from softdent_visual_ledger_recon import run_ops_10592_visual_ledger_recon
+            from softdent_visual_ledger_recon import run_ops_10593_visual_ledger_recon
 
             body = bottle.request.json if getattr(bottle.request, "json", None) else {}
             if not isinstance(body, dict):
                 body = {}
-            result = run_ops_10592_visual_ledger_recon(period=body.get("period"))
+            result = run_ops_10593_visual_ledger_recon(period=body.get("period"))
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/reconciliation/visual-ledger/history")
+    def apex_visual_ledger_recon_history_api():
+        try:
+            import bottle
+
+            from softdent_visual_ledger_recon import list_recon_variance_history
+
+            months = 3
+            try:
+                raw_m = bottle.request.query.get("months")  # type: ignore[attr-defined]
+                if raw_m is not None and str(raw_m).strip() != "":
+                    months = max(1, min(24, int(raw_m)))
+            except Exception:
+                months = 3
+            result = list_recon_variance_history(months=months)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

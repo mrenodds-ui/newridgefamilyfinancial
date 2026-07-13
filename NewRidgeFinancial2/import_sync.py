@@ -1171,9 +1171,9 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
         except Exception as hon_exc:  # noqa: BLE001
             result["warnings"].append(f"UI honesty audit skipped: {hon_exc}")
         try:
-            from softdent_visual_ledger_recon import run_ops_10592_visual_ledger_recon
+            from softdent_visual_ledger_recon import run_ops_10593_visual_ledger_recon
 
-            recon = run_ops_10592_visual_ledger_recon()
+            recon = run_ops_10593_visual_ledger_recon(persist_history=True)
             cmp_ = recon.get("comparison") if isinstance(recon.get("comparison"), dict) else {}
             result["softdent"]["visualLedgerRecon"] = {
                 "ok": bool(recon.get("ok")),
@@ -1182,6 +1182,10 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 "period": recon.get("period"),
                 "visualTotal": recon.get("visualTotal"),
                 "ledgerTotal": recon.get("ledgerTotal"),
+                "clampedLedgerTotal": recon.get("clampedLedgerTotal"),
+                "scopeMismatch": recon.get("scopeMismatch"),
+                "topCarrierCode": recon.get("topCarrierCode"),
+                "carrierBreakdown": (recon.get("carrierBreakdown") or [])[:5],
                 "triggersGoldIngest": False,
                 "gapCode": recon.get("gapCode"),
                 "paymentLines": recon.get("paymentLines"),

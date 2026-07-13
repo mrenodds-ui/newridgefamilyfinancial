@@ -1,23 +1,31 @@
-"""HAL-10592 / HON-002 — Visual-audit × ledger spine reconciliation.
+"""HAL-10593 / HON-003 — Visual×ledger recon follow-ons (carrier + clamp).
 
-Compare SoftDent Print Preview Insurance Income last-page aggregates
-(HAL-10590) to SoftDent ledger code-2 insurance payment sums for the same
-period. Flag variance only — never invent gold payment lines, never SoftDent
-write-back. empty != $0 (HAL-10591 honesty gate).
+Builds on HAL-10592: Print Preview visual totals vs SoftDent code-2 ledger sums.
+Adds carrier breakdown, period clamp when scopeMismatch, and variance history.
+Flag only — never invent gold payment lines, never SoftDent write-back.
+empty != $0 (HAL-10591 honesty gate).
 """
 
 from __future__ import annotations
 
 import json
+import math
 import re
 import sqlite3
+from calendar import monthrange
+from collections import defaultdict
 from datetime import date, datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from softdent_gold_payment_pipeline import audit_gold_payment_pipeline
-from softdent_insco_ada_spine import INS_PAYMENT_CODES, table_exists
+from softdent_insco_ada_spine import (
+    INS_PAYMENT_CODES,
+    carrier_for_account,
+    load_primary_insurance_map,
+    table_exists,
+)
 from softdent_print_preview_audit import list_print_preview_audits
 from softdent_treatment_planning import resolve_analytics_db, resolve_exports_dir
 from ui_honesty_policy import (
@@ -28,12 +36,15 @@ from ui_honesty_policy import (
     parse_money_or_empty,
 )
 
-DEF_ID = "HAL-10592"
-PACKAGE_BUILD_ID = "hal-10592"
+DEF_ID = "HAL-10593"
+PACKAGE_BUILD_ID = "hal-10593"
+PRIOR_DEF_ID = "HAL-10592"
 
 VARIANCE_THRESHOLD_ABSOLUTE = 5.00
 VARIANCE_THRESHOLD_PERCENT = 5.0
 SOURCE_LEDGER_CODE2 = "ledger_code2_period_sum"
+HISTORY_TABLE = "recon_variance_history"
+UNMAPPED_CARRIER = "(unmapped)"
 
 
 class ReconciliationResult(str, Enum):
@@ -49,36 +60,76 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _valid_iso_day(raw: str) -> str | None:
+    """Return canonical ISO day or None if calendar-invalid."""
+    try:
+        return date.fromisoformat(str(raw).strip()).isoformat()
+    except ValueError:
+        return None
+
+
 def parse_date_range(raw: str | None) -> tuple[str | None, str | None]:
     """Parse visual-audit dateRange into (start, end) ISO dates (inclusive)."""
     text = str(raw or "").strip()
     if not text:
         return None, None
 
-    # YYYY-MM (calendar month)
     m = re.fullmatch(r"(\d{4})-(\d{2})", text)
     if m:
-        from calendar import monthrange
+        try:
+            y, mo = int(m.group(1)), int(m.group(2))
+            start = date(y, mo, 1)
+            end = date(y, mo, monthrange(y, mo)[1])
+            return start.isoformat(), end.isoformat()
+        except ValueError:
+            return None, None
 
-        y, mo = int(m.group(1)), int(m.group(2))
-        start = date(y, mo, 1)
-        end = date(y, mo, monthrange(y, mo)[1])
-        return start.isoformat(), end.isoformat()
-
-    # YYYY-MM-DD..YYYY-MM-DD or with / or " to "
     m2 = re.search(
         r"(\d{4}-\d{2}-\d{2})\s*(?:\.\.|/|–|—|to)\s*(\d{4}-\d{2}-\d{2})",
         text,
         re.I,
     )
     if m2:
-        return m2.group(1), m2.group(2)
+        start = _valid_iso_day(m2.group(1))
+        end = _valid_iso_day(m2.group(2))
+        if start is None or end is None:
+            return None, None
+        return start, end
 
-    # single day
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
-        return text, text
+        day = _valid_iso_day(text)
+        if day is None:
+            return None, None
+        return day, day
 
     return None, None
+
+
+def ensure_recon_variance_history_schema(conn: sqlite3.Connection) -> None:
+    """PHI-safe aggregate history only (no patient/account columns)."""
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {HISTORY_TABLE} (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            period_start TEXT,
+            period_end TEXT,
+            visual_total REAL,
+            ledger_total REAL,
+            clamped_ledger_total REAL,
+            variance_dollars REAL,
+            top_carrier_code TEXT,
+            scope_mismatch INTEGER NOT NULL DEFAULT 0,
+            result_code TEXT,
+            created_at TEXT NOT NULL,
+            package_build_id TEXT,
+            triggers_gold_ingest INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    conn.execute(
+        f"CREATE INDEX IF NOT EXISTS idx_{HISTORY_TABLE}_created "
+        f"ON {HISTORY_TABLE}(created_at DESC)"
+    )
 
 
 def sum_ledger_code2_payments(
@@ -109,23 +160,18 @@ def sum_ledger_code2_payments(
             return out
         codes = sorted(INS_PAYMENT_CODES)
         placeholders = ",".join("?" for _ in codes)
-        rows = conn.execute(
-            f"""
-            SELECT COUNT(*),
-                   SUM(
-                     COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)
-                   )
-            FROM sd_account_transactions
-            WHERE service_date >= ? AND service_date <= ?
-              AND TRIM(procedure) IN ({placeholders})
-            """,
-            (period_start, period_end, *codes),
-        ).fetchone()
+        sql = (
+            "SELECT COUNT(*), "
+            'SUM(COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)) '
+            "FROM sd_account_transactions "
+            "WHERE service_date >= ? AND service_date <= ? "
+            "AND procedure IN (" + placeholders + ")"
+        )
+        rows = conn.execute(sql, (period_start, period_end, *codes)).fetchone()
         count = int((rows or (0, None))[0] or 0)
         total_raw = (rows or (0, None))[1]
         out["rowCount"] = count
         if count == 0 or total_raw is None:
-            # No rows → insufficient, not $0.00
             out["ledgerTotal"] = None
             out["message"] = (
                 f"No SoftDent code-2 payment rows in {period_start}..{period_end} "
@@ -142,6 +188,110 @@ def sum_ledger_code2_payments(
         return out
     finally:
         conn.close()
+
+
+def sum_ledger_code2_by_carrier(
+    *,
+    period_start: str,
+    period_end: str,
+    db_path: Path | None = None,
+    limit: int = 5,
+) -> dict[str, Any]:
+    """Carrier breakdown of SoftDent code-2 payments (primary InsCo map; no PHI)."""
+    out: dict[str, Any] = {
+        "ok": False,
+        "periodStart": period_start,
+        "periodEnd": period_end,
+        "carrierBreakdown": [],
+        "breakdownTotal": None,
+        "topCarrierCode": None,
+        "emptyIsNotZero": True,
+        "sourceTag": SOURCE_LEDGER_CODE2,
+        "message": None,
+    }
+    path = Path(db_path) if db_path else resolve_analytics_db()
+    if path is None or not Path(path).is_file():
+        out["message"] = "Analytics DB missing — carrier breakdown unavailable (empty != $0)"
+        return out
+    conn = sqlite3.connect(str(path))
+    try:
+        if not table_exists(conn, "sd_account_transactions"):
+            out["message"] = "sd_account_transactions missing — empty != $0"
+            return out
+        codes = sorted(INS_PAYMENT_CODES)
+        placeholders = ",".join("?" for _ in codes)
+        sql = (
+            "SELECT account_num, "
+            'COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0) '
+            "FROM sd_account_transactions "
+            "WHERE service_date >= ? AND service_date <= ? "
+            "AND procedure IN (" + placeholders + ")"
+        )
+        rows = conn.execute(sql, (period_start, period_end, *codes)).fetchall()
+        if not rows:
+            out["ok"] = True
+            out["message"] = (
+                f"No code-2 rows for carrier breakdown in {period_start}..{period_end} "
+                "(empty != $0)"
+            )
+            return out
+
+        ins_map = load_primary_insurance_map(conn)
+        by_carrier: dict[str, float] = defaultdict(float)
+        for account_num, amt in rows:
+            try:
+                amount = float(amt or 0)
+            except (TypeError, ValueError):
+                continue
+            if amount == 0:
+                continue
+            carrier = carrier_for_account(str(account_num or ""), ins_map) or UNMAPPED_CARRIER
+            by_carrier[str(carrier)] += amount
+
+        if not by_carrier:
+            out["ok"] = True
+            out["message"] = "Carrier amounts empty after map (empty != $0)"
+            return out
+
+        ranked = sorted(by_carrier.items(), key=lambda kv: kv[1], reverse=True)
+        total = sum(v for _, v in ranked)
+        top_n = [
+            {"carrierCode": c, "amount": round(a, 2)}
+            for c, a in ranked[: max(1, int(limit))]
+        ]
+        out["carrierBreakdown"] = top_n
+        out["breakdownTotal"] = round(total, 2)
+        out["topCarrierCode"] = ranked[0][0]
+        out["ok"] = True
+        out["message"] = (
+            f"Carrier breakdown n={len(ranked)} total={total:,.2f} "
+            f"(top5 shown; codes only, no PHI)"
+        )
+        return out
+    finally:
+        conn.close()
+
+
+def clamp_ledger_to_audit_period(
+    *,
+    audit_start: str,
+    audit_end: str,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Re-query ledger on audit date bounds (distinguishes period drift vs $ drift)."""
+    clamped = sum_ledger_code2_payments(
+        period_start=audit_start, period_end=audit_end, db_path=db_path
+    )
+    return {
+        "ok": bool(clamped.get("ok")),
+        "clampedLedgerTotal": clamped.get("ledgerTotal"),
+        "clampedPeriodStart": audit_start,
+        "clampedPeriodEnd": audit_end,
+        "rowCount": clamped.get("rowCount"),
+        "emptyIsNotZero": True,
+        "message": clamped.get("message"),
+        "sourceTag": SOURCE_LEDGER_CODE2,
+    }
 
 
 def classify_variance(
@@ -168,7 +318,6 @@ def classify_variance(
         "def": DEF_ID,
     }
 
-    # Honesty: null must never be treated as 0 for math
     if is_empty_money(visual):
         result["result"] = ReconciliationResult.INSUFFICIENT_VISUAL.value
         result["honestyCheckPassed"] = True
@@ -198,7 +347,7 @@ def classify_variance(
 
     within_abs = delta_abs <= float(abs_threshold)
     within_pct = delta_pct <= float(pct_threshold)
-    if delta_abs < 0.005:
+    if math.isclose(v, l, abs_tol=0.005):
         result["result"] = ReconciliationResult.MATCH.value
         result["thresholdViolated"] = False
         result["message"] = "Visual audit matches ledger code-2 sum"
@@ -219,20 +368,13 @@ def classify_variance(
     return result
 
 
-def reconcile_visual_vs_ledger(
+def _select_visual_audit(
     *,
-    period: str | None = None,
-    dest: Path | None = None,
-    db_path: Path | None = None,
-    abs_threshold: float = VARIANCE_THRESHOLD_ABSOLUTE,
-    pct_threshold: float = VARIANCE_THRESHOLD_PERCENT,
-) -> dict[str, Any]:
-    """Reconcile latest matching Print Preview visual audit to ledger code-2 sum."""
-    gold = audit_gold_payment_pipeline()
+    period: str | None,
+    dest: Path | None,
+) -> tuple[dict[str, Any] | None, str | None, str | None, str | None]:
     audits = list_print_preview_audits(dest=dest, limit=50)
     rows = list(audits.get("rows") or [])
-
-    # Prefer InsuranceIncome rows; fall back to any with dateRange
     candidates = [
         r
         for r in rows
@@ -241,29 +383,183 @@ def reconcile_visual_vs_ledger(
     ] or [r for r in rows if isinstance(r, dict)]
 
     selected: dict[str, Any] | None = None
-    period_start = period_end = None
+    audit_start = audit_end = None
     period_key = str(period or "").strip() or None
 
     for row in reversed(candidates):
         dr = str(row.get("dateRange") or "")
         start, end = parse_date_range(dr)
         if period_key:
-            # Match YYYY-MM or exact range containing period key
             if period_key in {dr, (start or "")[:7], start, f"{start}..{end}"}:
                 selected = row
-                period_start, period_end = start, end
+                audit_start, audit_end = start, end
                 break
             if start and end and len(period_key) == 7 and start.startswith(period_key):
                 selected = row
-                period_start, period_end = start, end
+                audit_start, audit_end = start, end
                 break
         else:
             if start and end:
                 selected = row
-                period_start, period_end = start, end
+                audit_start, audit_end = start, end
                 break
             if selected is None:
                 selected = row
+                audit_start, audit_end = start, end
+    return selected, audit_start, audit_end, period_key
+
+
+def append_recon_variance_history(
+    recon: dict[str, Any],
+    *,
+    db_path: Path | None = None,
+) -> dict[str, Any]:
+    """Persist PHI-safe variance snapshot. Never touches SoftDent or gold tables."""
+    path = Path(db_path) if db_path else resolve_analytics_db()
+    result: dict[str, Any] = {"ok": False, "triggersGoldIngest": False}
+    if path is None or not Path(path).is_file():
+        result["error"] = "analytics_db_missing"
+        return result
+    cmp_ = recon.get("comparison") if isinstance(recon.get("comparison"), dict) else {}
+    carriers = recon.get("carrierBreakdown") if isinstance(recon.get("carrierBreakdown"), list) else []
+    top = None
+    if carriers and isinstance(carriers[0], dict):
+        top = carriers[0].get("carrierCode")
+    top = top or recon.get("topCarrierCode")
+    conn = sqlite3.connect(str(path))
+    try:
+        ensure_recon_variance_history_schema(conn)
+        conn.execute(
+            f"""
+            INSERT INTO {HISTORY_TABLE} (
+                period_start, period_end, visual_total, ledger_total,
+                clamped_ledger_total, variance_dollars, top_carrier_code,
+                scope_mismatch, result_code, created_at, package_build_id,
+                triggers_gold_ingest
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+            """,
+            (
+                recon.get("periodStart") or recon.get("requestedPeriodStart"),
+                recon.get("periodEnd") or recon.get("requestedPeriodEnd"),
+                recon.get("visualTotal"),
+                recon.get("ledgerTotal"),
+                recon.get("clampedLedgerTotal"),
+                cmp_.get("delta"),
+                top,
+                1 if recon.get("scopeMismatch") else 0,
+                recon.get("result") or cmp_.get("result"),
+                _utc_now(),
+                PACKAGE_BUILD_ID,
+            ),
+        )
+        conn.commit()
+        result["ok"] = True
+        result["id"] = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+        return result
+    finally:
+        conn.close()
+
+
+def list_recon_variance_history(
+    *,
+    months: int = 3,
+    db_path: Path | None = None,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """Read-only variance history (aggregates only)."""
+    path = Path(db_path) if db_path else resolve_analytics_db()
+    out: dict[str, Any] = {
+        "ok": True,
+        "def": DEF_ID,
+        "packageBuildId": PACKAGE_BUILD_ID,
+        "months": int(months),
+        "rows": [],
+        "triggersGoldIngest": False,
+        "emptyIsNotZero": True,
+    }
+    if path is None or not Path(path).is_file():
+        out["ok"] = False
+        out["message"] = "Analytics DB missing (empty != $0)"
+        return out
+    conn = sqlite3.connect(str(path))
+    try:
+        ensure_recon_variance_history_schema(conn)
+        # Approximate months via created_at ISO string compare
+        cutoff = date.today().replace(day=1)
+        y, m = cutoff.year, cutoff.month
+        for _ in range(max(0, int(months) - 1)):
+            m -= 1
+            if m < 1:
+                m = 12
+                y -= 1
+        cutoff_s = f"{y:04d}-{m:02d}-01"
+        rows = conn.execute(
+            f"""
+            SELECT period_start, period_end, visual_total, ledger_total,
+                   clamped_ledger_total, variance_dollars, top_carrier_code,
+                   scope_mismatch, result_code, created_at, package_build_id
+            FROM {HISTORY_TABLE}
+            WHERE created_at >= ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (cutoff_s, max(1, int(limit))),
+        ).fetchall()
+        out["rows"] = [
+            {
+                "periodStart": r[0],
+                "periodEnd": r[1],
+                "visualTotal": r[2],
+                "ledgerTotal": r[3],
+                "clampedLedgerTotal": r[4],
+                "varianceDollars": r[5],
+                "topCarrierCode": r[6],
+                "scopeMismatch": bool(r[7]),
+                "resultCode": r[8],
+                "createdAt": r[9],
+                "packageBuildId": r[10],
+            }
+            for r in rows
+        ]
+        out["count"] = len(out["rows"])
+        return out
+    finally:
+        conn.close()
+
+
+def reconcile_visual_vs_ledger(
+    *,
+    period: str | None = None,
+    dest: Path | None = None,
+    db_path: Path | None = None,
+    abs_threshold: float = VARIANCE_THRESHOLD_ABSOLUTE,
+    pct_threshold: float = VARIANCE_THRESHOLD_PERCENT,
+    include_carrier_breakdown: bool = True,
+) -> dict[str, Any]:
+    """Reconcile visual audit to ledger; carrier breakdown + clamp on mismatch."""
+    gold = audit_gold_payment_pipeline()
+    selected, audit_start, audit_end, period_key = _select_visual_audit(
+        period=period, dest=dest
+    )
+    requested_start, requested_end = (
+        parse_date_range(period_key) if period_key else (None, None)
+    )
+
+    # Primary ledger window: requested period when provided, else audit bounds
+    if requested_start and requested_end:
+        ledger_start, ledger_end = requested_start, requested_end
+    else:
+        ledger_start, ledger_end = audit_start, audit_end
+
+    scope_mismatch = False
+    if (
+        requested_start
+        and requested_end
+        and audit_start
+        and audit_end
+        and (audit_start, audit_end) != (requested_start, requested_end)
+    ):
+        scope_mismatch = True
 
     visual_raw = (selected or {}).get("lastPageAggregateTotal") if selected else None
     visual_honesty = enforce_empty_not_zero(
@@ -274,9 +570,15 @@ def reconcile_visual_vs_ledger(
         "ok": True,
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
-        "period": period_key or (f"{period_start}..{period_end}" if period_start else None),
-        "periodStart": period_start,
-        "periodEnd": period_end,
+        "priorDef": PRIOR_DEF_ID,
+        "period": period_key or (f"{audit_start}..{audit_end}" if audit_start else None),
+        "periodStart": ledger_start,
+        "periodEnd": ledger_end,
+        "auditPeriodStart": audit_start,
+        "auditPeriodEnd": audit_end,
+        "requestedPeriodStart": requested_start,
+        "requestedPeriodEnd": requested_end,
+        "scopeMismatch": scope_mismatch,
         "visualAudit": selected,
         "visualTotal": visual_honesty.get("value"),
         "visualDisplay": visual_honesty.get("display"),
@@ -284,13 +586,17 @@ def reconcile_visual_vs_ledger(
         "ledger": None,
         "ledgerTotal": None,
         "ledgerDisplay": "—",
+        "clampedLedgerTotal": None,
+        "clampedLedgerDisplay": "—",
+        "carrierBreakdown": [],
+        "topCarrierCode": None,
         "comparison": None,
         "gapCode": gold.get("gapCode"),
         "paymentLines": int(gold.get("paymentLines") or 0),
         "triggersGoldIngest": False,
         "emptyIsNotZero": True,
         "honesty": (
-            "Visual audit vs ledger code-2 sum only — flag variance; "
+            "Visual audit vs ledger code-2 sum — flag variance; carrier codes only; "
             "never invent gold payment lines; empty != $0"
         ),
         "checkedAt": _utc_now(),
@@ -300,17 +606,18 @@ def reconcile_visual_vs_ledger(
         out["comparison"] = classify_variance(None, None)
         out["comparison"]["result"] = ReconciliationResult.INSUFFICIENT_VISUAL.value
         out["comparison"]["message"] = "No Print Preview visual audit recorded yet"
-        out["ok"] = True
         return out
 
-    if not period_start or not period_end:
+    if not ledger_start or not ledger_end:
         out["comparison"] = classify_variance(
-            visual_honesty.get("value"), None, abs_threshold=abs_threshold, pct_threshold=pct_threshold
+            visual_honesty.get("value"),
+            None,
+            abs_threshold=abs_threshold,
+            pct_threshold=pct_threshold,
         )
         out["comparison"]["result"] = ReconciliationResult.INSUFFICIENT_VISUAL.value
         out["comparison"]["message"] = (
-            "Visual audit lacks parseable dateRange — cannot align ledger period "
-            "(empty != $0)"
+            "Cannot align ledger period — empty != $0"
         )
         return out
 
@@ -321,15 +628,38 @@ def reconcile_visual_vs_ledger(
         return out
 
     ledger = sum_ledger_code2_payments(
-        period_start=period_start, period_end=period_end, db_path=db_path
+        period_start=ledger_start, period_end=ledger_end, db_path=db_path
     )
     out["ledger"] = ledger
-    ledger_total = ledger.get("ledgerTotal")
     ledger_honesty = enforce_empty_not_zero(
-        ledger_total, source_tag=SOURCE_LEDGER_SPINE
+        ledger.get("ledgerTotal"), source_tag=SOURCE_LEDGER_SPINE
     )
     out["ledgerTotal"] = ledger_honesty.get("value")
     out["ledgerDisplay"] = ledger_honesty.get("display")
+
+    # Clamp to audit bounds when scopes differ (narrower diagnostic window)
+    if scope_mismatch and audit_start and audit_end:
+        clamped = clamp_ledger_to_audit_period(
+            audit_start=audit_start, audit_end=audit_end, db_path=db_path
+        )
+        out["clamp"] = clamped
+        clamped_honesty = enforce_empty_not_zero(
+            clamped.get("clampedLedgerTotal"), source_tag=SOURCE_LEDGER_SPINE
+        )
+        out["clampedLedgerTotal"] = clamped_honesty.get("value")
+        out["clampedLedgerDisplay"] = clamped_honesty.get("display")
+
+    if include_carrier_breakdown:
+        carriers = sum_ledger_code2_by_carrier(
+            period_start=ledger_start, period_end=ledger_end, db_path=db_path, limit=5
+        )
+        out["carrierBreakdown"] = carriers.get("carrierBreakdown") or []
+        out["topCarrierCode"] = carriers.get("topCarrierCode")
+        out["carrierBreakdownMeta"] = {
+            "breakdownTotal": carriers.get("breakdownTotal"),
+            "message": carriers.get("message"),
+            "ok": carriers.get("ok"),
+        }
 
     comparison = classify_variance(
         visual_honesty.get("value"),
@@ -337,20 +667,35 @@ def reconcile_visual_vs_ledger(
         abs_threshold=abs_threshold,
         pct_threshold=pct_threshold,
     )
+    if scope_mismatch:
+        comparison["scopeMismatch"] = True
+        comparison["message"] = (
+            str(comparison.get("message") or "")
+            + " [scopeMismatch: clampedLedgerTotal uses audit dateRange]"
+        ).strip()
     out["comparison"] = comparison
     out["thresholdViolated"] = bool(comparison.get("thresholdViolated"))
     out["result"] = comparison.get("result")
     return out
 
 
-def run_ops_10592_visual_ledger_recon(
+def run_ops_10593_visual_ledger_recon(
     *,
     period: str | None = None,
     dest: Path | None = None,
     db_path: Path | None = None,
+    persist_history: bool = True,
+    include_carrier_breakdown: bool = True,
 ) -> dict[str, Any]:
-    """OPS runner: status snapshot only — never mutates SoftDent or gold tables."""
-    recon = reconcile_visual_vs_ledger(period=period, dest=dest, db_path=db_path)
+    """OPS runner: snapshot + optional history — never mutates SoftDent/gold."""
+    recon = reconcile_visual_vs_ledger(
+        period=period,
+        dest=dest,
+        db_path=db_path,
+        include_carrier_breakdown=include_carrier_breakdown,
+    )
+    if persist_history and recon.get("visualTotal") is not None:
+        recon["historyAppend"] = append_recon_variance_history(recon, db_path=db_path)
     try:
         exports = Path(dest) if dest else resolve_exports_dir()
         exports.mkdir(parents=True, exist_ok=True)
@@ -362,6 +707,10 @@ def run_ops_10592_visual_ledger_recon(
     return recon
 
 
+# Back-compat alias
+run_ops_10592_visual_ledger_recon = run_ops_10593_visual_ledger_recon
+
+
 def format_visual_ledger_recon_reply(result: dict[str, Any] | None = None) -> str:
     r = result if isinstance(result, dict) else reconcile_visual_vs_ledger()
     cmp_ = r.get("comparison") if isinstance(r.get("comparison"), dict) else {}
@@ -369,10 +718,14 @@ def format_visual_ledger_recon_reply(result: dict[str, Any] | None = None) -> st
     if r.get("visualBadge") == "visual" and r.get("visualTotal") is not None:
         v_disp = f"[visual] {v_disp}"
     l_disp = r.get("ledgerDisplay") or "—"
+    clamped = r.get("clampedLedgerDisplay") or "—"
+    top = r.get("topCarrierCode") or "—"
     return (
         f"Visual×ledger recon ({DEF_ID}): result={cmp_.get('result') or r.get('result')}; "
         f"period={r.get('period')}; visual={v_disp}; ledger={l_disp}; "
-        f"delta={cmp_.get('delta')}; thresholdViolated={cmp_.get('thresholdViolated')}; "
+        f"clamped={clamped}; topCarrier={top}; "
+        f"delta={cmp_.get('delta')}; scopeMismatch={r.get('scopeMismatch')}; "
+        f"thresholdViolated={cmp_.get('thresholdViolated')}; "
         f"gapCode={r.get('gapCode')}; paymentLines={r.get('paymentLines')}. "
         "Flag only — does not create gold lines. empty != $0."
     )
@@ -394,14 +747,14 @@ def visual_ledger_recon_widget() -> dict[str, Any]:
     return {
         "id": "softdent-visual-ledger-recon",
         "type": "status",
-        "label": "Visual×Ledger Variance (HAL-10592)",
+        "label": "Visual×Ledger Variance (HAL-10593)",
         "size": "full",
         "status": status,
         "tone": tone,
         "message": message,
         "hint": (
-            "Compares Print Preview Insurance Income last-page total to SoftDent "
-            "ledger code-2 payment sum for the same period. Alert only."
+            "Compares Print Preview Insurance Income to SoftDent code-2 ledger sum; "
+            "shows top carriers and clamped total when period scopes differ. Alert only."
         ),
         "result": result_code,
         "period": r.get("period"),
@@ -410,8 +763,13 @@ def visual_ledger_recon_widget() -> dict[str, Any]:
         "visualBadge": r.get("visualBadge"),
         "ledgerTotal": r.get("ledgerTotal"),
         "ledgerDisplay": r.get("ledgerDisplay"),
+        "clampedLedgerTotal": r.get("clampedLedgerTotal"),
+        "clampedLedgerDisplay": r.get("clampedLedgerDisplay"),
+        "carrierBreakdown": r.get("carrierBreakdown") or [],
+        "topCarrierCode": r.get("topCarrierCode"),
         "delta": cmp_.get("delta"),
         "thresholdViolated": cmp_.get("thresholdViolated"),
+        "scopeMismatch": bool(r.get("scopeMismatch")),
         "gapCode": r.get("gapCode"),
         "paymentLines": r.get("paymentLines"),
         "confirmation": (
@@ -429,8 +787,9 @@ def visual_ledger_recon_widget() -> dict[str, Any]:
         "def": DEF_ID,
         "packageBuildId": PACKAGE_BUILD_ID,
         "triggersGoldIngest": False,
+        "ok": True,
     }
 
 
 if __name__ == "__main__":
-    print(json.dumps(run_ops_10592_visual_ledger_recon(), indent=2, default=str)[:5000])
+    print(json.dumps(run_ops_10593_visual_ledger_recon(), indent=2, default=str)[:6000])

@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10592",
-  "BUILD_ID": "hal-10592",
-  "assetVersion": "hal-10592",
-  "builtAt": "2026-07-13T11:55:00.000Z",
-  "notes": "hal-10592: HON-002 visual-audit × ledger code-2 reconciliation; flag variance only; never invent gold lines; empty != $0.",
+  "schemaVersion": "hal-10593",
+  "BUILD_ID": "hal-10593",
+  "assetVersion": "hal-10593",
+  "builtAt": "2026-07-13T12:10:00.000Z",
+  "notes": "hal-10593: HON-003 visual×ledger follow-ons — carrier breakdown, period clamp, variance history; flag only; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10592"
+  "package": "HAL-10593"
 }

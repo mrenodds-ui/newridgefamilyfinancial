@@ -26,8 +26,9 @@ from softdent_visual_ledger_recon import (
 
 class VisualLedgerReconHal10592Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        self.assertEqual(PACKAGE_BUILD_ID, "hal-10592")
-        self.assertEqual(BUILD_ID, PACKAGE_BUILD_ID)
+        # Module advanced to HAL-10593; prior 10592 behaviors still covered below
+        self.assertEqual(PACKAGE_BUILD_ID, "hal-10593")
+        self.assertEqual(BUILD_ID, "hal-10593")
 
     def test_parse_date_range_month_and_span(self) -> None:
         self.assertEqual(parse_date_range("2026-06"), ("2026-06-01", "2026-06-30"))
@@ -35,6 +36,21 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
             parse_date_range("2026-06-01..2026-06-30"),
             ("2026-06-01", "2026-06-30"),
         )
+
+    def test_parse_date_range_rejects_invalid_calendar(self) -> None:
+        # Moonshot acceptance: invalid calendar → (None, None), never ValueError
+        self.assertEqual(parse_date_range("2026-02-30"), (None, None))
+        self.assertEqual(parse_date_range("2026-13"), (None, None))
+        self.assertEqual(parse_date_range("2026-02-30..2026-03-01"), (None, None))
+
+    def test_classify_explicit_zero_match(self) -> None:
+        out = classify_variance(0.0, 0.0)
+        self.assertEqual(out["result"], ReconciliationResult.MATCH.value)
+        self.assertEqual(out.get("delta"), 0.0)
+
+    def test_classify_isclose_match(self) -> None:
+        out = classify_variance(100.0, 99.996)
+        self.assertEqual(out["result"], ReconciliationResult.MATCH.value)
 
     def test_classify_within_and_exceeds(self) -> None:
         within = classify_variance(100.0, 98.0)
@@ -47,6 +63,74 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
         exceeds = classify_variance(100.0, 50.0)
         self.assertEqual(exceeds["result"], ReconciliationResult.VARIANCE_EXCEEDS_THRESHOLD.value)
         self.assertTrue(exceeds["thresholdViolated"])
+
+    def test_sql_has_no_fstring_interpolation(self) -> None:
+        import inspect
+
+        import softdent_visual_ledger_recon as mod
+
+        src = inspect.getsource(mod.sum_ledger_code2_payments)
+        self.assertNotIn('f"""', src)
+        self.assertNotIn("f'", src)
+        self.assertNotIn("TRIM(procedure)", src)
+        self.assertIn("procedure IN (", src)
+
+    def test_triggers_gold_ingest_never_true(self) -> None:
+        import softdent_visual_ledger_recon as mod
+
+        src = Path(mod.__file__).read_text(encoding="utf-8")
+        self.assertNotIn('triggersGoldIngest": True', src)
+        self.assertNotIn("triggersGoldIngest': True", src)
+
+    def test_scope_mismatch_flag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp)
+            db = dest / "analytics.db"
+            conn = sqlite3.connect(str(db))
+            try:
+                ensure_sd_schema(conn)
+                ensure_treatment_planning_schema(conn)
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS sd_account_transactions (
+                        account_num TEXT, service_date TEXT, procedure TEXT,
+                        row_number INTEGER, prod REAL, charges REAL,
+                        prod_adj REAL, pay_adj REAL, cash REAL, "check" REAL,
+                        credit REAL, period_start TEXT, period_end TEXT, source_file TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO sd_account_transactions
+                    (account_num, service_date, procedure, row_number,
+                     prod, charges, prod_adj, pay_adj, cash, "check", credit)
+                    VALUES ('1','2026-06-10','2',1,0,0,0,0,0,50,0)
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            append_print_preview_audit(
+                {
+                    "reportType": "InsuranceIncome",
+                    "dateRange": "2026-06-01..2026-07-15",
+                    "lastPageAggregateTotal": 50.0,
+                    "pageCount": 2,
+                    "operatorId": "test",
+                },
+                dest=dest,
+            )
+            recon = reconcile_visual_vs_ledger(period="2026-06", dest=dest, db_path=db)
+            self.assertTrue(recon.get("scopeMismatch"))
+            self.assertFalse(recon.get("triggersGoldIngest"))
+
+    def test_widget_returns_without_nameerror(self) -> None:
+        w = visual_ledger_recon_widget()
+        self.assertTrue(w.get("ok"))
+        self.assertIn("result", w)
+        self.assertEqual(w.get("packageBuildId"), "hal-10593")
+        self.assertFalse(w.get("triggersGoldIngest"))
 
     def test_null_visual_never_treated_as_zero(self) -> None:
         out = classify_variance(None, 0.0)
@@ -159,7 +243,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
 
     def test_widget_and_reply(self) -> None:
         w = visual_ledger_recon_widget()
-        self.assertEqual(w.get("packageBuildId"), "hal-10592")
+        self.assertEqual(w.get("packageBuildId"), "hal-10593")
         self.assertTrue(w.get("emptyIsNotZero"))
         self.assertFalse(w.get("triggersGoldIngest"))
         text = format_visual_ledger_recon_reply(
@@ -172,7 +256,7 @@ class VisualLedgerReconHal10592Tests(unittest.TestCase):
                 "comparison": {"result": "INSUFFICIENT_VISUAL", "delta": None, "thresholdViolated": False},
             }
         )
-        self.assertIn("HAL-10592", text)
+        self.assertIn("HAL-10593", text)
         self.assertIn("empty != $0", text)
 
 
