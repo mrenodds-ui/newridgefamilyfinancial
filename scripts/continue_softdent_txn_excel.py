@@ -1,6 +1,7 @@
 """SoftDent Trans for a Period Excel — TXN ingest (JSONL) or GUI continue.
 
 Default / --ingest: parse TXN*.xls → C:\\SoftDentFinancialExports\\tx_parsed\\
+--ingest-year-chunks: TXNALL + TXN2017H2..TXN2026YTD → JSONL + sd_account_transactions
 --gui: legacy SoftDent desktop Excel continue (not used by TXN ingest package)
 """
 from __future__ import annotations
@@ -44,6 +45,56 @@ def ingest_main(path: Path) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
     LOG.write_text(json.dumps(prior, indent=2), encoding="utf-8")
     print("WROTE", LOG, flush=True)
+    raise SystemExit(0 if result.get("ok") else 4)
+
+
+def ingest_year_chunks_main() -> None:
+    from softdent_transaction_extract import ingest_account_transactions_year_chunks
+
+    print("INGEST year-chunks + TXNALL (JSONL + sd_account_transactions)…", flush=True)
+    result = ingest_account_transactions_year_chunks(out_dir=TX_PARSED)
+    # Compact console: avoid dumping every field of huge payloads
+    slim = {
+        k: result.get(k)
+        for k in (
+            "ok",
+            "okCount",
+            "failCount",
+            "dbTotal",
+            "serviceYearMin",
+            "serviceYearMax",
+            "account_tx_multi_year_available",
+            "purgedSupersededRows",
+            "ingestLogPath",
+            "dbPath",
+        )
+    }
+    slim["chunks"] = [
+        {
+            k: c.get(k)
+            for k in ("ok", "stem", "recordCount", "expectedRows", "dbCount", "periodHint", "warnings")
+        }
+        for c in (result.get("chunks") or [])
+    ]
+    print(json.dumps(slim, indent=2, default=str), flush=True)
+    prior: dict = {}
+    if LOG.is_file():
+        try:
+            prior = json.loads(LOG.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            prior = {}
+    prior.update(
+        {
+            "ok": bool(result.get("ok")),
+            "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "mode": "ingest-year-chunks",
+            "yearChunkIngest": slim,
+        }
+    )
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    LOG.write_text(json.dumps(prior, indent=2), encoding="utf-8")
+    print("WROTE", LOG, flush=True)
+    print("WROTE", result.get("ingestLogPath"), flush=True)
     raise SystemExit(0 if result.get("ok") else 4)
 
 
@@ -262,6 +313,11 @@ def main() -> None:
         help=f"Parse TXN XLS into {TX_PARSED} (default file: {DEFAULT_TXN})",
     )
     parser.add_argument(
+        "--ingest-year-chunks",
+        action="store_true",
+        help="Ingest TXNALL + TXN2017H2..TXN2026YTD into JSONL + sd_account_transactions",
+    )
+    parser.add_argument(
         "--gui",
         action="store_true",
         help="Run SoftDent desktop GUI continue (not part of TXN ingest package)",
@@ -275,6 +331,9 @@ def main() -> None:
     args = parser.parse_args()
     if args.gui:
         gui_main()
+        return
+    if args.ingest_year_chunks:
+        ingest_year_chunks_main()
         return
     target = Path(args.ingest or args.path or DEFAULT_TXN)
     ingest_main(target)

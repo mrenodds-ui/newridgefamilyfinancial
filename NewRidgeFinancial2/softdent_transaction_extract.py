@@ -760,15 +760,39 @@ def resolve_tx_parsed_dir() -> Path:
     return DEFAULT_TX_PARSED_DIR
 
 
+def _load_account_tx_csv_rows(path: Path) -> list[list[Any]]:
+    """Load SoftDent TXN CSV (often saved as ``.xls``) as row lists."""
+    import csv
+
+    text = path.read_text(encoding="latin-1", errors="ignore")
+    return [list(row) for row in csv.reader(text.splitlines())]
+
+
 def _load_account_tx_excel_rows(path: Path) -> list[list[Any]]:
-    """Load SoftDent Trans-for-a-Period .xls/.xlsx as row lists (no PHI logging)."""
+    """Load SoftDent Trans-for-a-Period .xls/.xlsx/CSV as row lists (no PHI logging).
+
+    SoftDent often writes CSV bytes under a ``.xls`` name; detect OLE magic first.
+    """
     suffix = path.suffix.lower()
-    if suffix == ".xls":
+    head = b""
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(8)
+    except OSError:
+        head = b""
+    is_ole = head[:4] == b"\xd0\xcf\x11\xe0"
+    if suffix == ".csv" or (suffix == ".xls" and not is_ole and head[:4] in {b"TRAN", b"Date", b'"Dat'}):
+        return _load_account_tx_csv_rows(path)
+    if suffix == ".xls" or is_ole:
         try:
             import xlrd  # type: ignore
         except ImportError as exc:  # pragma: no cover
             raise RuntimeError("xlrd required to parse SoftDent TXN .xls exports") from exc
-        book = xlrd.open_workbook(str(path))
+        try:
+            book = xlrd.open_workbook(str(path))
+        except Exception:
+            # Misnamed CSV or truncated OLE — fall back to CSV text parse
+            return _load_account_tx_csv_rows(path)
         sheet = book.sheet_by_index(0)
         return [[sheet.cell_value(r, c) for c in range(sheet.ncols)] for r in range(sheet.nrows)]
     if suffix in {".xlsx", ".xlsm"}:
@@ -782,6 +806,9 @@ def _load_account_tx_excel_rows(path: Path) -> list[list[Any]]:
             return [list(row) for row in sheet.iter_rows(values_only=True)]
         finally:
             book.close()
+    # Bare SoftDent export without suffix — try CSV then fail
+    if head and not is_ole:
+        return _load_account_tx_csv_rows(path)
     raise ValueError(f"unsupported excel suffix: {suffix}")
 
 
@@ -1050,6 +1077,184 @@ def ingest_account_transactions_xls(
             if "nickel" in str(r.get("patient_name") or "").lower()
         ),
     }
+
+
+YEAR_CHUNK_MANIFEST = DEFAULT_EXPORTS / "softdent_account_tx_year_chunks.json"
+YEAR_CHUNK_INGEST_LOG = DEFAULT_EXPORTS / "softdent_account_tx_year_chunks_ingest.json"
+# Sample Feb export superseded by TXN2026YTD once year chunks are loaded.
+YEAR_CHUNK_SUPERSEDED_SOURCES = ("TXN260201.xls", "TXN260201.XLS")
+
+
+def resolve_txn_export_path(stem: str, inbox: Path | None = None) -> Path | None:
+    """Resolve SoftDent TXN export path for a stem (Windows case-insensitive)."""
+    root = inbox or DEFAULT_TXN_INBOX
+    for name in (f"{stem}.xls", f"{stem}.XLS", f"{stem}.csv", f"{stem}.CSV"):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    matches = sorted(
+        [p for p in root.glob(f"{stem}.*") if p.suffix.lower() in {".xls", ".csv"}],
+        key=lambda p: (0 if p.suffix.lower() == ".xls" else 1, -p.stat().st_size),
+    )
+    return matches[0] if matches else None
+
+
+def _purge_account_tx_sources(db_path: Path, source_files: tuple[str, ...]) -> int:
+    if not source_files or not db_path.is_file():
+        return 0
+    conn = sqlite3.connect(str(db_path))
+    try:
+        ensure_account_transactions_schema(conn)
+        deleted = 0
+        for name in source_files:
+            cur = conn.execute(
+                "DELETE FROM sd_account_transactions WHERE source_file = ?",
+                (name,),
+            )
+            deleted += int(cur.rowcount or 0)
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
+def ingest_account_transactions_year_chunks(
+    *,
+    inbox: Path | None = None,
+    out_dir: Path | None = None,
+    db_path: Path | None = None,
+    manifest_path: Path | None = None,
+    include_txnall: bool = True,
+) -> dict[str, Any]:
+    """Ingest verified year-chunk TX Excel/CSV into JSONL + sd_account_transactions.
+
+    Uses ``softdent_account_tx_year_chunks.json`` as validation manifest (not business
+    truth). Idempotent via purge-by-source_file upsert. Purges TXN260201 after
+    TXN2026YTD so Feb sample does not duplicate YTD rows. empty ≠ $0.
+    """
+    root = inbox or DEFAULT_TXN_INBOX
+    manifest = Path(manifest_path) if manifest_path else YEAR_CHUNK_MANIFEST
+    target_db = Path(db_path) if db_path else resolve_analytics_db()
+    if not target_db:
+        target_db = resolve_exports_dir() / "softdent_financial_analytics.db"
+
+    expected_by_stem: dict[str, int] = {}
+    if manifest.is_file():
+        try:
+            raw = json.loads(manifest.read_text(encoding="utf-8"))
+            for chunk in raw.get("chunks") or []:
+                stem = str(chunk.get("stem") or "")
+                rows = int(chunk.get("rows") or 0)
+                if stem and rows > 0:
+                    expected_by_stem[stem] = rows
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            expected_by_stem = {}
+
+    stems: list[str] = []
+    if include_txnall:
+        stems.append("TXNALL260712")
+    default_stems = [
+        "TXN2017H2",
+        "TXN2018",
+        "TXN2019",
+        "TXN2020",
+        "TXN2021",
+        "TXN2022",
+        "TXN2023",
+        "TXN2024",
+        "TXN2025",
+        "TXN2026YTD",
+    ]
+    for stem in default_stems:
+        if stem not in stems:
+            stems.append(stem)
+
+    results: list[dict[str, Any]] = []
+    for stem in stems:
+        path = resolve_txn_export_path(stem, root)
+        if path is None:
+            results.append(
+                {
+                    "ok": False,
+                    "stem": stem,
+                    "error": "file missing",
+                    "expectedRows": expected_by_stem.get(stem),
+                }
+            )
+            continue
+        ingest = ingest_account_transactions_xls(path, out_dir=out_dir, db_path=target_db)
+        expected = expected_by_stem.get(stem)
+        record_count = int(ingest.get("recordCount") or 0)
+        parity_ok = True
+        warnings = list((ingest.get("db") or {}).get("warnings") or [])
+        if expected is not None:
+            # Allow small parse variance (header/blank rows) but flag large gaps.
+            if abs(record_count - expected) > max(25, int(expected * 0.02)):
+                parity_ok = False
+                warnings.append(f"manifest_rows={expected} ingest_rows={record_count}")
+        results.append(
+            {
+                "ok": bool(ingest.get("ok") and parity_ok),
+                "stem": stem,
+                "sourcePath": ingest.get("sourcePath") or str(path),
+                "jsonlPath": ingest.get("jsonlPath"),
+                "recordCount": record_count,
+                "expectedRows": expected,
+                "periodHint": ingest.get("periodHint"),
+                "dbCount": (ingest.get("db") or {}).get("dbCount"),
+                "nullAmountCount": (ingest.get("db") or {}).get("nullAmountCount"),
+                "warnings": warnings,
+            }
+        )
+
+    purged = 0
+    if any(r.get("ok") and r.get("stem") == "TXN2026YTD" for r in results):
+        purged = _purge_account_tx_sources(target_db, YEAR_CHUNK_SUPERSEDED_SOURCES)
+
+    conn = sqlite3.connect(str(target_db))
+    try:
+        ensure_account_transactions_schema(conn)
+        total = int(conn.execute("SELECT COUNT(*) FROM sd_account_transactions").fetchone()[0])
+        by_source = dict(
+            conn.execute(
+                "SELECT source_file, COUNT(*) FROM sd_account_transactions GROUP BY 1 ORDER BY 1"
+            ).fetchall()
+        )
+        year_min = conn.execute(
+            "SELECT MIN(substr(service_date,1,4)) FROM sd_account_transactions "
+            "WHERE service_date IS NOT NULL AND length(service_date) >= 4"
+        ).fetchone()[0]
+        year_max = conn.execute(
+            "SELECT MAX(substr(service_date,1,4)) FROM sd_account_transactions "
+            "WHERE service_date IS NOT NULL AND length(service_date) >= 4"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    ok = all(r.get("ok") for r in results) and total > 100_000
+    summary = {
+        "ok": ok,
+        "at": _utc_now(),
+        "mode": "ingest-year-chunks",
+        "honesty": "empty != $0; read-only SoftDent Excel/CSV ingest; no write-back",
+        "manifestPath": str(manifest) if manifest.is_file() else None,
+        "dbPath": str(target_db),
+        "chunkCount": len(results),
+        "okCount": sum(1 for r in results if r.get("ok")),
+        "failCount": sum(1 for r in results if not r.get("ok")),
+        "dbTotal": total,
+        "dbBySource": by_source,
+        "serviceYearMin": year_min,
+        "serviceYearMax": year_max,
+        "purgedSupersededRows": purged,
+        "purgedSources": list(YEAR_CHUNK_SUPERSEDED_SOURCES) if purged else [],
+        "account_tx_multi_year_available": bool(ok and year_min and year_max and int(year_min) <= 2017 and int(year_max) >= 2026),
+        "chunks": results,
+    }
+    YEAR_CHUNK_INGEST_LOG.parent.mkdir(parents=True, exist_ok=True)
+    YEAR_CHUNK_INGEST_LOG.write_text(json.dumps(summary, indent=2, default=str), encoding="utf-8")
+    summary["ingestLogPath"] = str(YEAR_CHUNK_INGEST_LOG)
+    return summary
 
 
 def _split_period_hint(period_hint: Any) -> tuple[str | None, str | None]:
