@@ -17,13 +17,16 @@
   --apex-anim-fast: 120ms;
   --apex-anim-medium: 200ms;
   --apex-widget-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --apex-widget-min: 140px;
+  /* Fibonacci mosaic (Moonshot best-fill): 80 | 240 | 320 — no 120/140 orphans */
+  --apex-band-micro: 80px;
+  --apex-band-secondary: 240px;
+  --apex-band-primary: 320px;
+  --apex-widget-min: 80px;
   --apex-body-font-size: 12px;
   --apex-page-title-size: 16px;
-  /* Moonshot zero-scroll (hal-10561) hard height tiers */
-  --apex-widget-max-micro: 120px;
-  --apex-widget-max-secondary: 240px;
-  --apex-widget-max-primary: 320px;
+  --apex-widget-max-micro: var(--apex-band-micro);
+  --apex-widget-max-secondary: var(--apex-band-secondary);
+  --apex-widget-max-primary: var(--apex-band-primary);
   --apex-stage-chrome: 100px;
 }
 
@@ -191,7 +194,8 @@ body {
 
 #apex-stage,
 .apex-stage {
-  min-height: calc(100vh - 60px);
+  /* Height owned by apex-zero-scroll.css (Fibonacci bands); do not force viewport fill */
+  min-height: 0;
 }
 
 .apex-grid {
@@ -256,7 +260,7 @@ body {
 
 .apex-hal-chat__messages {
   flex: 1 1 auto;
-  min-height: 120px;
+  min-height: var(--apex-band-micro);
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 12px;
@@ -584,7 +588,7 @@ body {
 
 .apex-widget--wide {
   grid-column: span 2;
-  min-height: 140px;
+  min-height: 0;
 }
 
 .apex-widget--status {
@@ -667,7 +671,7 @@ body {
 
 .apex-inst--kpi-over-budget {
   opacity: 0.85;
-  max-height: 120px;
+  max-height: var(--apex-band-micro);
 }
 
 .apex-kpi-delta {
@@ -746,7 +750,8 @@ body {
 
 .apex-chart-host {
   width: 100%;
-  height: 120px;
+  height: calc(var(--apex-band-secondary) - 48px);
+  max-height: 192px;
   margin-top: 8px;
 }
 

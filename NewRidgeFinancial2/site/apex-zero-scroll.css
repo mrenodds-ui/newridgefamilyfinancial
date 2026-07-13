@@ -1,0 +1,192 @@
+/* NR2 Apex — Fibonacci zero-scroll mosaic (Moonshot best-fill)
+ * Bands: 80 | 240 | 320 | 240 — loads LAST so it wins over legacy mosaic heights.
+ * Maps existing .apex-inst--* classes until band wrappers land in JS (APPLY gate).
+ */
+
+:root {
+  --apex-band-micro: 80px;
+  --apex-band-secondary: 240px;
+  --apex-band-primary: 320px;
+  --apex-fib-gap: 8px;
+  --apex-fib-stage-pad: 8px;
+}
+
+/* Compact density: hard-cap stage to viewport; no page scroll */
+html[data-apex-density="compact"] {
+  height: 100%;
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] body.apex-bridge {
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+}
+
+html[data-apex-density="compact"] .apex-main {
+  height: calc(100vh - var(--ticker-height, 32px));
+  max-height: calc(100vh - var(--ticker-height, 32px));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+html[data-apex-density="compact"] .apex-stage-header {
+  flex-shrink: 0;
+  padding: 8px 12px;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic,
+html[data-apex-density="compact"] .apex-stage.apex-mosaic {
+  --mosaic-row: var(--apex-band-micro);
+  --mosaic-col: 320px;
+  --mosaic-gap: var(--apex-fib-gap);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  height: auto;
+  overflow: hidden;
+  align-content: start;
+  padding: var(--apex-fib-stage-pad);
+}
+
+/* Utility bands (for future mosaic_layout band wrappers) */
+.band-micro,
+.apex-band--micro {
+  height: var(--apex-band-micro);
+  max-height: var(--apex-band-micro);
+  min-height: var(--apex-band-micro);
+  overflow: hidden;
+}
+
+.band-secondary,
+.apex-band--secondary {
+  height: var(--apex-band-secondary);
+  max-height: var(--apex-band-secondary);
+  min-height: var(--apex-band-secondary);
+  overflow: hidden;
+  display: flex;
+  gap: var(--apex-fib-gap);
+}
+
+.band-primary,
+.apex-band--primary {
+  height: var(--apex-band-primary);
+  max-height: var(--apex-band-primary);
+  min-height: var(--apex-band-primary);
+  overflow: hidden;
+}
+
+.tile-50 {
+  width: 50%;
+  flex: 1 1 50%;
+  min-width: 0;
+}
+
+.tile-33 {
+  width: 33.333%;
+  flex: 1 1 33.333%;
+  min-width: 0;
+}
+
+.tile-100 {
+  width: 100%;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+/* Map existing instrument tiers → Fibonacci heights (row unit = 80px) */
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--strip,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--strip {
+  grid-column: 1 / -1;
+  grid-row: span 1;
+  height: var(--apex-band-micro);
+  max-height: var(--apex-band-micro);
+  min-height: 0;
+  padding: 6px 12px;
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--s,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--s {
+  grid-row: span 1;
+  height: var(--apex-band-micro);
+  max-height: var(--apex-band-micro);
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--m,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--m {
+  grid-row: span 3;
+  height: var(--apex-band-secondary);
+  max-height: var(--apex-band-secondary);
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--l,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--l {
+  grid-row: span 3;
+  height: var(--apex-band-secondary);
+  max-height: var(--apex-band-secondary);
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--xl,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--xl {
+  grid-row: span 4;
+  height: var(--apex-band-primary);
+  max-height: var(--apex-band-primary);
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] #apex-stage.apex-mosaic .apex-inst--full,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst--full {
+  grid-column: 1 / -1;
+  grid-row: span 4;
+  height: var(--apex-band-primary);
+  max-height: var(--apex-band-primary);
+  overflow: hidden;
+}
+
+/* SoftDent OPS / HAL chat: hard primary floor (Moonshot: no collapse below 320) */
+html[data-apex-density="compact"] .apex-inst--hal-chat,
+html[data-apex-density="compact"] .apex-widget--hal-chat,
+html[data-apex-density="compact"] .apex-inst[data-widget-id="hal-ask"],
+html[data-apex-density="compact"] .apex-inst[data-widget-id="softdent-gold-csv-drop-ops"] {
+  height: var(--apex-band-primary);
+  max-height: var(--apex-band-primary);
+  min-height: var(--apex-band-primary);
+  overflow: hidden;
+}
+
+html[data-apex-density="compact"] .apex-hal-rail .apex-widget--hal-chat {
+  max-height: var(--apex-band-primary);
+  min-height: var(--apex-band-primary);
+}
+
+/* Empty collapse: no gray dead tile */
+html[data-apex-density="compact"] .apex-inst[data-empty="true"]:not(.apex-inst--strip),
+html[data-apex-density="compact"] .apex-inst.apex-inst--kpi-omitted,
+html[data-apex-density="compact"] .apex-inst.is-kpi-empty {
+  display: none !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: none !important;
+}
+
+/* Inner tables/charts scroll inside the tile; page does not */
+html[data-apex-density="compact"] .apex-mosaic .apex-data-table-wrap,
+html[data-apex-density="compact"] .apex-mosaic .apex-inst__body {
+  max-height: 100%;
+  overflow: auto;
+}
+
+/* Comfortable: allow page scroll (previous behavior) */
+html[data-apex-density="comfortable"] #apex-stage.apex-mosaic {
+  overflow: auto;
+  max-height: none;
+}
