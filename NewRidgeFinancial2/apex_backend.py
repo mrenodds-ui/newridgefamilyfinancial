@@ -2310,6 +2310,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
+        from softdent_treatment_planning import treatment_plan_estimate_widget
+
+        widgets.insert(4, treatment_plan_estimate_widget())
+    except Exception:
+        pass
+    try:
         from apex_softdent_production_pack import production_widgets
         from apex_softdent_aging_schedule_pack import aging_schedule_widgets
 
@@ -5582,31 +5588,26 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             parsed = parse_treatment_estimate_query(query)
             if parsed:
                 est = lookup_treatment_estimate(payer=parsed["payer"], ada_code=parsed["adaCode"])
-                # Only claim this path when payment-line estimates are sufficient;
-                # otherwise leave unhandled so staff see probabilistic/insufficient honestly.
-                if est.get("sufficient"):
-                    reply_txt = format_treatment_estimate_reply(est)
-                    notes.append(reply_txt)
-                    actions.append(
-                        {
-                            "type": "set_status_banner",
-                            "message": f"Tx plan estimate · {parsed['payer']} x {parsed['adaCode']}",
-                            "hint": "Historical SoftDent payment-line averages — not a benefits guarantee.",
-                            "tone": "ok",
-                        }
-                    )
-                    handled = True
-                else:
-                    notes.append(format_treatment_estimate_reply(est))
-                    actions.append(
-                        {
-                            "type": "set_status_banner",
-                            "message": f"Tx plan gold path empty · {parsed['payer']} x {parsed['adaCode']}",
-                            "hint": "Ask InsCo ADA ledger estimate, or export Insurance Payment Analysis CSV.",
-                            "tone": "warn",
-                        }
-                    )
-                    handled = True
+                chip = est.get("chip") if isinstance(est.get("chip"), dict) else {}
+                reply_txt = format_treatment_estimate_reply(est)
+                notes.append(reply_txt)
+                tone = str(chip.get("tone") or ("ok" if est.get("sufficient") else "warn"))
+                src = str(est.get("source") or chip.get("source") or "")
+                actions.append(
+                    {
+                        "type": "set_status_banner",
+                        "message": (
+                            f"Tx plan [{chip.get('label') or chip.get('badge') or 'estimate'}] · "
+                            f"{parsed['payer']} x {parsed['adaCode']}"
+                        ),
+                        "hint": (
+                            f"{chip.get('display') or ''} · source={src or 'unknown'} · "
+                            "not a benefits guarantee · empty != $0"
+                        ).strip(" ·"),
+                        "tone": tone,
+                    }
+                )
+                handled = True
             elif re.search(
                 r"\b(treatment plan(ning)? (data|status|ready|estimates?)|insurance payment (analysis|lines)|"
                 r"ada (payer|payment) (data|estimates?))\b",
@@ -5616,19 +5617,26 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
                 notes.append(
                     f"Treatment-planning data: {st.get('paymentLines', 0)} payment lines, "
                     f"{st.get('procedureCodes', 0)} procedure crosswalk rows, "
-                    f"{st.get('estimates', 0)} InsCo x ADA estimates "
-                    f"({st.get('estimatesWithMinSample', 0)} with n>=10). "
+                    f"{st.get('estimates', 0)} gold InsCo x ADA estimates "
+                    f"({st.get('estimatesWithMinSample', 0)} with n>=10); "
+                    f"ledger spine exact usable={st.get('ledgerSpineExactUsable') or 0} "
+                    f"(fallback={st.get('fallbackSource') or 'none'}). "
                     f"{st.get('hint') or ''}"
                 )
                 actions.append(
                     {
                         "type": "set_status_banner",
                         "message": (
-                            f"Tx planning: {st.get('estimatesWithMinSample', 0)} ready estimates "
-                            f"/ {st.get('estimates', 0)} total"
+                            f"Tx planning: gold {st.get('estimatesWithMinSample', 0)} · "
+                            f"spine exact {st.get('ledgerSpineExactUsable') or 0}"
                         ),
                         "hint": st.get("hint") or "",
-                        "tone": "ok" if int(st.get("estimatesWithMinSample") or 0) else "warn",
+                        "tone": (
+                            "ok"
+                            if int(st.get("estimatesWithMinSample") or 0)
+                            or int(st.get("ledgerSpineExactUsable") or 0)
+                            else "warn"
+                        ),
                     }
                 )
                 handled = True
@@ -7146,16 +7154,48 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         try:
             import bottle
 
-            from softdent_treatment_planning import format_treatment_estimate_reply, lookup_treatment_estimate
+            from softdent_treatment_planning import (
+                build_tp_estimate_chip,
+                format_treatment_estimate_reply,
+                log_tp_estimate_audit,
+                lookup_treatment_estimate,
+            )
 
             payer = str(bottle.request.query.get("payer") or "").strip()
             ada = str(bottle.request.query.get("ada") or bottle.request.query.get("adaCode") or "").strip()
-            est = lookup_treatment_estimate(payer=payer, ada_code=ada)
+            include_inferred = str(bottle.request.query.get("includeInferred") or "").strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+            if include_inferred:
+                # Opt-in inferred: use spine fallback path with include_inferred via direct call
+                from softdent_treatment_planning import _ledger_spine_treatment_fallback
+                from softdent_treatment_planning import resolve_analytics_db
+                from pathlib import Path as _Path
+
+                db = resolve_analytics_db()
+                if db:
+                    est = _ledger_spine_treatment_fallback(
+                        payer=payer, ada_code=ada, db_path=_Path(db), include_inferred=True
+                    )
+                    est["chip"] = build_tp_estimate_chip(est)
+                    est["def"] = "HAL-10587"
+                else:
+                    est = lookup_treatment_estimate(payer=payer, ada_code=ada)
+            else:
+                est = lookup_treatment_estimate(payer=payer, ada_code=ada)
+            chip = est.get("chip") if isinstance(est.get("chip"), dict) else build_tp_estimate_chip(est)
+            log_tp_estimate_audit(est, source="api")
             return json_response_fn(
                 {
                     "ok": bool(est.get("ok")),
                     "result": est,
+                    "chip": chip,
                     "reply": format_treatment_estimate_reply(est),
+                    "honesty": "empty != $0; not a benefits guarantee",
+                    "def": "HAL-10587",
                     "buildId": BUILD_ID,
                 }
             )

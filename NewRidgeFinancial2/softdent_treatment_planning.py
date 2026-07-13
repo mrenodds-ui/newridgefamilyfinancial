@@ -14,10 +14,11 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import os
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -674,6 +675,10 @@ def lookup_treatment_estimate(
             out["estimate"] = estimate
             out["source"] = "gold_payment_lines"
             out["sufficient"] = sample >= min_sample
+            out["credibility"] = estimate["credibility"]
+            out["tier"] = "exact"
+            out["chip"] = build_tp_estimate_chip(out)
+            out["def"] = "HAL-10587"
             if not out["sufficient"]:
                 out["message"] = (
                     f"Only {sample} historical line(s) for {estimate['insuranceCompany']} × {ada} "
@@ -683,10 +688,119 @@ def lookup_treatment_estimate(
     finally:
         conn.close()
 
-    # Gold path miss → HAL-10585 ledger spine ($ + % +/-)
-    return _ledger_spine_treatment_fallback(
+    # Gold path miss → HAL-10585/87 ledger spine + catalog chip
+    result = _ledger_spine_treatment_fallback(
         payer=payer, ada_code=ada, db_path=Path(db_path), include_inferred=False
     )
+    result["chip"] = build_tp_estimate_chip(result)
+    result["def"] = "HAL-10587"
+    return result
+
+
+def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
+    """Staff-facing TP estimate chip (HAL-10587). Never invents $0 for empty."""
+    r = result if isinstance(result, dict) else {}
+    est = r.get("estimate") if isinstance(r.get("estimate"), dict) else {}
+    cred = str(est.get("credibility") or r.get("credibility") or "insufficient")
+    tier = str(est.get("tier") or r.get("tier") or "")
+    n = int(est.get("sampleSize") or r.get("sampleSize") or 0)
+    source = str(est.get("source") or r.get("source") or "")
+    ada = str(est.get("adaCode") or r.get("adaCode") or "")
+    payer = str(est.get("insuranceCompany") or r.get("payer") or "")
+    paid = est.get("paidAmountAvg")
+    wo = est.get("writeOffAvg")
+    pay_pct = est.get("paidPctMedian")
+    pay_sd = est.get("paidPctStdev")
+
+    if not r.get("ok"):
+        return {
+            "badge": "error",
+            "label": "Unavailable",
+            "tone": "danger",
+            "display": str(r.get("message") or "Estimate unavailable"),
+            "showDollars": False,
+            "emptyIsNotZero": True,
+        }
+    if not r.get("found") or cred == "insufficient" or (
+        not r.get("sufficient") and source == "gold_payment_lines"
+    ) or (not r.get("sufficient") and n < 10 and tier == "exact" and source != "gold_payment_lines"):
+        # Honest insufficient — never show $0.00 as a fake estimate
+        if source == "gold_payment_lines" and r.get("found") and n > 0:
+            display = str(
+                r.get("message")
+                or (
+                    f"Only {n} historical line(s) for {payer or '?'} × {ada or '?'} "
+                    f"(need >=10 for a reliable estimate). Contact payer for pre-auth / benefits."
+                )
+            )
+        else:
+            display = (
+                f"No credible data for {payer or '?'} × {ada or '?'} "
+                f"(n={n}). empty != $0 — verify with payer."
+            )
+        return {
+            "badge": "insufficient",
+            "label": "Insufficient data",
+            "tone": "muted",
+            "display": display,
+            "showDollars": False,
+            "paidMedian": None,
+            "writeOffMedian": None,
+            "sampleSize": n,
+            "credibility": "insufficient" if cred != "gold" else "insufficient",
+            "tier": tier or None,
+            "source": source or None,
+            "emptyIsNotZero": True,
+            "adaCode": ada,
+            "insuranceCompany": payer,
+        }
+
+    if cred == "high":
+        badge, label, tone = "high", "Exact high", "ok"
+    elif cred == "usable":
+        badge, label, tone = "usable", "Exact usable", "warn"
+    elif "inferred" in cred or tier == "inferred":
+        badge, label, tone = "inferred", "Inferred", "danger"
+    elif cred == "gold":
+        badge, label, tone = "gold", "Payment lines", "ok"
+    else:
+        badge, label, tone = cred or "published", "Published", "warn"
+
+    variance = None
+    if pay_pct is not None:
+        variance = f"pay% {pay_pct}"
+        if pay_sd is not None:
+            variance += f" +/-{pay_sd}"
+
+    display_bits = [f"{_fmt_money(paid)}"]
+    if wo is not None:
+        display_bits.append(f"WO {_fmt_money(wo)}")
+    if variance:
+        display_bits.append(f"({variance})")
+    display_bits.append(f"n={n}")
+
+    return {
+        "badge": badge,
+        "label": label,
+        "tone": tone,
+        "display": " · ".join(display_bits),
+        "showDollars": True,
+        "paidMedian": paid,
+        "writeOffMedian": wo,
+        "paidPctMedian": pay_pct,
+        "paidPctStdev": pay_sd,
+        "writeOffPctMedian": est.get("writeOffPctMedian"),
+        "writeOffPctStdev": est.get("writeOffPctStdev"),
+        "varianceBand": variance,
+        "sampleSize": n,
+        "credibility": cred,
+        "tier": tier,
+        "source": source,
+        "adaCode": ada,
+        "insuranceCompany": payer,
+        "emptyIsNotZero": True,
+        "def": "HAL-10587",
+    }
 
 
 def _ledger_spine_treatment_fallback(
@@ -737,6 +851,48 @@ def _ledger_spine_treatment_fallback(
             db_path=db_path,
         )
         if not dollar and not pct:
+            # Catalog may still have an insufficient cell — surface honest empty chip
+            try:
+                from softdent_insco_ada_catalog_matrix import list_catalog_matrix_rows
+
+                cat_rows = list_catalog_matrix_rows(
+                    db_path=db_path,
+                    include_insufficient=True,
+                    include_inferred=True,
+                    payer=payer,
+                    ada=ada,
+                    limit=3,
+                )
+            except Exception:
+                cat_rows = []
+            if cat_rows:
+                row0 = cat_rows[0]
+                n0 = int(row0.get("sampleSize") or 0)
+                out["found"] = True
+                out["sampleSize"] = n0
+                out["credibility"] = "insufficient"
+                out["tier"] = str(row0.get("tier") or "")
+                out["estimate"] = {
+                    "insuranceCompany": row0.get("insuranceCompany") or payer.strip(),
+                    "adaCode": ada,
+                    "submittedFeeAvg": None,
+                    "allowedAmountAvg": None,
+                    "paidAmountAvg": None,  # never invent dollars for insufficient UX
+                    "writeOffAvg": None,
+                    "patientPortionAvg": None,
+                    "sampleSize": n0,
+                    "credibility": "insufficient",
+                    "tier": row0.get("tier"),
+                    "isInferred": str(row0.get("tier") or "") == "inferred",
+                    "source": "ledger_episode_5yr",
+                    "goldAvailable": False,
+                }
+                out["sufficient"] = False
+                out["message"] = (
+                    f"Insufficient catalog data for {payer.strip()} × {ada} (n={n0}). "
+                    "empty != $0 — verify with payer / benefits."
+                )
+                return out
             out["message"] = (
                 f"No publishable ledger estimate for {payer.strip()} × {ada}. "
                 "empty != $0 — run Sync / InsCo×ADA rebuild, or export Insurance Payment Analysis."
@@ -805,54 +961,136 @@ def _fmt_money(value: Any) -> str:
 def format_treatment_estimate_reply(result: dict[str, Any]) -> str:
     if not result.get("ok"):
         return str(result.get("message") or "Treatment estimate lookup failed.")
-    if not result.get("found"):
-        return str(result.get("message") or "No estimate found.")
+    chip = result.get("chip") if isinstance(result.get("chip"), dict) else build_tp_estimate_chip(result)
+    if not result.get("found") or not chip.get("showDollars"):
+        return str(
+            chip.get("display")
+            or result.get("message")
+            or "No credible treatment-plan estimate (empty != $0)."
+        )
     est = result.get("estimate") if isinstance(result.get("estimate"), dict) else {}
     co = est.get("insuranceCompany") or result.get("payer")
     ada = est.get("adaCode") or result.get("adaCode")
-    n = est.get("sampleSize") or result.get("sampleSize")
     source = str(est.get("source") or result.get("source") or "")
-    cred = str(est.get("credibility") or result.get("credibility") or "")
-    tier = str(est.get("tier") or result.get("tier") or "")
-    if source == "ledger_episode_5yr":
-        badge = f"[{cred}/{tier}]" if cred else ""
-        pay_pct = est.get("paidPctMedian")
-        wo_pct = est.get("writeOffPctMedian")
-        pct_bit = ""
-        if pay_pct is not None:
-            pct_bit += f" pay% med {pay_pct}"
-            if est.get("paidPctStdev") is not None:
-                pct_bit += f" +/-{est.get('paidPctStdev')}"
-        if wo_pct is not None:
-            pct_bit += f"; WO% med {wo_pct}"
-            if est.get("writeOffPctStdev") is not None:
-                pct_bit += f" +/-{est.get('writeOffPctStdev')}"
+    badge = f"[{chip.get('label') or chip.get('badge')}]"
+    if source == "ledger_episode_5yr" or source.startswith("ledger"):
         lines = [
-            f"Treatment plan estimate {badge} from {n} SoftDent ledger episode(s) "
-            f"(source=ledger_episode_5yr): {co} × {ada} typically pays "
-            f"{_fmt_money(est.get('paidAmountAvg'))} with write-off "
-            f"{_fmt_money(est.get('writeOffAvg'))}"
-            + (f" (billed avg {_fmt_money(est.get('submittedFeeAvg'))})" if est.get("submittedFeeAvg") is not None else "")
-            + (f";{pct_bit}." if pct_bit else "."),
+            f"Treatment plan estimate {badge}: {co} × {ada} — {chip.get('display')}.",
+            f"Source={source}.",
             str(result.get("honesty") or ""),
         ]
         if not result.get("sufficient"):
-            lines.insert(1, str(result.get("message") or "Credibility below exact usable+ — verify with payer."))
+            lines.insert(1, str(result.get("message") or "Below exact usable+ — verify with payer."))
         return " ".join(x for x in lines if x).strip()
     if not result.get("sufficient"):
-        return str(result.get("message") or "Insufficient sample size.")
+        return str(result.get("message") or chip.get("display") or "Insufficient sample size.")
+    n = est.get("sampleSize") or result.get("sampleSize")
     lines = [
-        f"Based on {n} historical SoftDent insurance payment line(s), "
+        f"Treatment plan estimate {badge} from {n} SoftDent insurance payment line(s): "
         f"{co} typically allows {_fmt_money(est.get('allowedAmountAvg'))} for {ada}, "
-        f"paying {_fmt_money(est.get('paidAmountAvg'))} after contractual write-off "
-        f"of {_fmt_money(est.get('writeOffAvg'))}. "
-        f"Patient portion averages {_fmt_money(est.get('patientPortionAvg'))} "
-        f"(submitted avg {_fmt_money(est.get('submittedFeeAvg'))}).",
+        f"paying {_fmt_money(est.get('paidAmountAvg'))} after write-off "
+        f"{_fmt_money(est.get('writeOffAvg'))}. "
+        f"Patient portion averages {_fmt_money(est.get('patientPortionAvg'))}.",
         str(result.get("honesty") or ""),
     ]
     if est.get("allowedAmountAvg") is None:
-        lines.append("Allowed amount unknown in historical data — verify with payer before quoting the patient.")
+        lines.append("Allowed amount unknown — verify with payer before quoting the patient.")
     return " ".join(x for x in lines if x).strip()
+
+
+def treatment_plan_estimate_widget() -> dict[str, Any]:
+    """SoftDent-page TP estimate surface (HAL-10587) — catalog/spine chips."""
+    from softdent_insco_ada_catalog_matrix import catalog_matrix_status, list_catalog_matrix_rows
+
+    st = treatment_planning_status()
+    cat = catalog_matrix_status()
+    exact_rows = list_catalog_matrix_rows(
+        include_insufficient=False, include_inferred=False, limit=8
+    )
+    chips: list[dict[str, Any]] = []
+    for row in exact_rows:
+        est = lookup_treatment_estimate(
+            payer=str(row.get("insuranceCompany") or ""),
+            ada_code=str(row.get("adaCode") or ""),
+        )
+        chip = est.get("chip") if isinstance(est.get("chip"), dict) else build_tp_estimate_chip(est)
+        chips.append(chip)
+
+    exact_n = int(cat.get("exactUsableCells") or st.get("ledgerSpineExactUsable") or 0)
+    gold_n = int(st.get("estimatesWithMinSample") or 0)
+    if exact_n <= 0 and gold_n <= 0:
+        status = "empty"
+        message = "No credible treatment-plan estimates yet — run Sync / InsCo×ADA rebuild."
+    else:
+        status = "ok"
+        message = (
+            f"Tx plan estimates · spine exact usable={exact_n} · "
+            f"gold ready={gold_n} · catalog cells={cat.get('totalCells') or 0}"
+        )
+    return {
+        "id": "softdent-tp-estimate-chips",
+        "type": "status",
+        "label": "Treatment Plan Estimates (HAL-10587)",
+        "size": "full",
+        "status": status,
+        "message": message,
+        "hint": (
+            "Catalog-enriched InsCo×ADA chips (pay$/WO$ + % +/-). "
+            "Gold payment lines win when present; else ledger_episode_5yr. "
+            "Insufficient never shows $0.00. empty != $0."
+        ),
+        "chips": chips,
+        "exactUsable": exact_n,
+        "goldReady": gold_n,
+        "fallbackSource": st.get("fallbackSource"),
+        "halChips": [
+            {
+                "label": "Delta KS D1110 tx estimate?",
+                "query": "How much will Delta Dental of KS typically pay for D1110?",
+            },
+            {
+                "label": "Treatment planning status",
+                "query": "treatment planning estimates status",
+            },
+            {
+                "label": "InsCo ADA catalog status",
+                "query": "InsCo ADA catalog matrix status",
+            },
+        ],
+        "honesty": (
+            "Historical SoftDent ledger / payment-line averages — not a benefits guarantee. empty != $0."
+        ),
+        "def": "HAL-10587",
+    }
+
+
+def log_tp_estimate_audit(result: dict[str, Any], *, source: str = "api") -> None:
+    """Best-effort debug audit for TP estimate lookups."""
+    try:
+        root = resolve_exports_dir()
+        root.mkdir(parents=True, exist_ok=True)
+        path = root / f"tp_estimate_audit_{date.today().isoformat()}.jsonl"
+        chip = result.get("chip") if isinstance(result.get("chip"), dict) else {}
+        line = json.dumps(
+            {
+                "at": _utc_now(),
+                "source": source,
+                "payer": result.get("payer"),
+                "adaCode": result.get("adaCode"),
+                "found": result.get("found"),
+                "sufficient": result.get("sufficient"),
+                "credibility": result.get("credibility") or chip.get("credibility"),
+                "tier": result.get("tier") or chip.get("tier"),
+                "estimateSource": result.get("source") or chip.get("source"),
+                "showDollars": chip.get("showDollars"),
+                "def": "HAL-10587",
+            },
+            ensure_ascii=True,
+        )
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+    except Exception:
+        pass
 
 
 def parse_treatment_estimate_query(query: str) -> dict[str, str] | None:
