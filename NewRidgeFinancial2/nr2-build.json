@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10593",
-  "BUILD_ID": "hal-10593",
-  "assetVersion": "hal-10593",
-  "builtAt": "2026-07-13T12:10:00.000Z",
-  "notes": "hal-10593: HON-003 visual×ledger follow-ons — carrier breakdown, period clamp, variance history; flag only; empty != $0.",
+  "schemaVersion": "hal-10594",
+  "BUILD_ID": "hal-10594",
+  "assetVersion": "hal-10594",
+  "builtAt": "2026-07-13T12:30:00.000Z",
+  "notes": "hal-10594: sql-null-honesty — NULL-preserving COALESCE CASE for ledger/carrier; inputs-only record_fingerprint with unique fail-fast; flag only; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10593"
+  "package": "HAL-10594"
 }

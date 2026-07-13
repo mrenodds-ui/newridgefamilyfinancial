@@ -1,7 +1,9 @@
-"""HAL-10593 / HON-003 — Visual×ledger recon follow-ons (carrier + clamp).
+"""HAL-10594 / sql-null-honesty — NULL-preserving ledger aggregates + fingerprint.
 
-Builds on HAL-10592: Print Preview visual totals vs SoftDent code-2 ledger sums.
-Adds carrier breakdown, period clamp when scopeMismatch, and variance history.
+Builds on HAL-10593: Print Preview visual totals vs SoftDent code-2 ledger sums,
+carrier breakdown, period clamp, variance history.
+HAL-10594: all-null amount rows must not become $0; record_fingerprint is
+inputs-only with unique-index fail-fast.
 Flag only — never invent gold payment lines, never SoftDent write-back.
 empty != $0 (HAL-10591 honesty gate).
 """
@@ -37,9 +39,9 @@ from ui_honesty_policy import (
     is_empty_money,
 )
 
-DEF_ID = "HAL-10593"
-PACKAGE_BUILD_ID = "hal-10593"
-PRIOR_DEF_ID = "HAL-10592"
+DEF_ID = "HAL-10594"
+PACKAGE_BUILD_ID = "hal-10594"
+PRIOR_DEF_ID = "HAL-10593"
 
 VARIANCE_THRESHOLD_ABSOLUTE = 5.00
 VARIANCE_THRESHOLD_PERCENT = 5.0
@@ -124,14 +126,36 @@ def ensure_recon_variance_history_schema(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             package_build_id TEXT,
             triggers_gold_ingest INTEGER NOT NULL DEFAULT 0,
-            input_fingerprint TEXT,
+            record_fingerprint TEXT,
             money_scale TEXT DEFAULT '0.01'
         )
         """
     )
+    cols = {str(r[1]) for r in conn.execute(f"PRAGMA table_info({HISTORY_TABLE})").fetchall()}
+    # HAL-10594: record_fingerprint = inputs-only hash (legacy input_fingerprint kept if present)
+    if "record_fingerprint" not in cols:
+        conn.execute(f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN record_fingerprint TEXT")
+        if "input_fingerprint" in cols:
+            conn.execute(
+                f"""
+                UPDATE {HISTORY_TABLE}
+                SET record_fingerprint = input_fingerprint
+                WHERE record_fingerprint IS NULL AND input_fingerprint IS NOT NULL
+                """
+            )
+    if "money_scale" not in cols:
+        conn.execute(
+            f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN money_scale TEXT DEFAULT '0.01'"
+        )
     conn.execute(
         f"CREATE INDEX IF NOT EXISTS idx_{HISTORY_TABLE}_created "
         f"ON {HISTORY_TABLE}(created_at DESC)"
+    )
+    # Fail-fast on duplicate inputs (same record_fingerprint) — no silent overwrite
+    conn.execute(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS idx_{HISTORY_TABLE}_record_fp "
+        f"ON {HISTORY_TABLE}(record_fingerprint) "
+        f"WHERE record_fingerprint IS NOT NULL"
     )
 
 
@@ -150,6 +174,7 @@ def sum_ledger_code2_payments(
         "periodEnd": period_end,
         "sourceTag": SOURCE_LEDGER_CODE2,
         "emptyIsNotZero": True,
+        "moneyScale": "0.01",
         "message": None,
     }
     path = Path(db_path) if db_path else resolve_analytics_db()
@@ -163,9 +188,14 @@ def sum_ledger_code2_payments(
             return out
         codes = sorted(INS_PAYMENT_CODES)
         placeholders = ",".join("?" for _ in codes)
+        # HAL-10594: NULL-preserving aggregate — all-null amount rows must NOT become $0.00
         sql = (
             "SELECT COUNT(*), "
-            'SUM(COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)) '
+            "CASE "
+            'WHEN COUNT(cash) + COUNT("check") + COUNT(credit) > 0 '
+            'THEN SUM(COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0)) '
+            "ELSE NULL "
+            "END "
             "FROM sd_account_transactions "
             "WHERE service_date >= ? AND service_date <= ? "
             "AND procedure IN (" + placeholders + ")"
@@ -177,14 +207,13 @@ def sum_ledger_code2_payments(
         if count == 0 or total_raw is None:
             out["ledgerTotal"] = None
             out["message"] = (
-                f"No SoftDent code-2 payment rows in {period_start}..{period_end} "
-                "(empty != $0)"
+                f"No usable SoftDent code-2 payment amounts in {period_start}..{period_end} "
+                f"(rows={count}; empty != $0)"
             )
             out["ok"] = True
             return out
         total_m = to_money(total_raw)
         out["ledgerTotal"] = money_to_api(total_m)
-        out["moneyScale"] = "0.01"
         out["ok"] = True
         out["message"] = (
             f"Ledger code-2 sum {out['ledgerTotal']:,.2f} from {count} row(s) "
@@ -211,6 +240,7 @@ def sum_ledger_code2_by_carrier(
         "breakdownTotal": None,
         "topCarrierCode": None,
         "emptyIsNotZero": True,
+        "moneyScale": "0.01",
         "sourceTag": SOURCE_LEDGER_CODE2,
         "message": None,
     }
@@ -225,9 +255,14 @@ def sum_ledger_code2_by_carrier(
             return out
         codes = sorted(INS_PAYMENT_CODES)
         placeholders = ",".join("?" for _ in codes)
+        # HAL-10594: per-row NULL-preserving CASE (all-null → NULL, not $0.00)
         sql = (
             "SELECT account_num, "
-            'COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0) '
+            "CASE "
+            'WHEN cash IS NOT NULL OR "check" IS NOT NULL OR credit IS NOT NULL '
+            'THEN COALESCE(cash, 0) + COALESCE("check", 0) + COALESCE(credit, 0) '
+            "ELSE NULL "
+            "END "
             "FROM sd_account_transactions "
             "WHERE service_date >= ? AND service_date <= ? "
             "AND procedure IN (" + placeholders + ")"
@@ -246,7 +281,7 @@ def sum_ledger_code2_by_carrier(
         skipped_null = 0
         has_negative = False
         for account_num, amt in rows:
-            # Honesty: never coerce null amount to 0.0
+            # Honesty: never coerce null amount to 0.0; no zero "(unmapped)" from NULL
             if amt is None:
                 skipped_null += 1
                 continue
@@ -263,7 +298,6 @@ def sum_ledger_code2_by_carrier(
 
         out["skippedNullAmounts"] = skipped_null
         out["hasNegative"] = has_negative
-        out["moneyScale"] = "0.01"
         if not by_carrier:
             out["ok"] = True
             out["message"] = "Carrier amounts empty after map (empty != $0)"
@@ -448,15 +482,15 @@ def append_recon_variance_history(
     if carriers and isinstance(carriers[0], dict):
         top = carriers[0].get("carrierCode")
     top = top or recon.get("topCarrierCode")
+    # HAL-10594: record_fingerprint hashes INPUTS only (no clamped/delta/result outputs)
     payload = {
         "periodStart": recon.get("periodStart") or recon.get("requestedPeriodStart"),
         "periodEnd": recon.get("periodEnd") or recon.get("requestedPeriodEnd"),
+        "auditPeriodStart": recon.get("auditPeriodStart"),
+        "auditPeriodEnd": recon.get("auditPeriodEnd"),
         "visual": money_to_api(to_money(recon.get("visualTotal"))),
         "ledger": money_to_api(to_money(recon.get("ledgerTotal"))),
-        "clamped": money_to_api(to_money(recon.get("clampedLedgerTotal"))),
-        "delta": cmp_.get("delta"),
         "scopeMismatch": bool(recon.get("scopeMismatch")),
-        "result": recon.get("result") or cmp_.get("result"),
         "build": PACKAGE_BUILD_ID,
         "scale": "0.01",
     }
@@ -467,21 +501,26 @@ def append_recon_variance_history(
     try:
         conn.execute("PRAGMA busy_timeout=30000")
         ensure_recon_variance_history_schema(conn)
-        cols = {str(r[1]) for r in conn.execute(f"PRAGMA table_info({HISTORY_TABLE})").fetchall()}
-        if "input_fingerprint" not in cols:
-            conn.execute(f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN input_fingerprint TEXT")
-        if "money_scale" not in cols:
-            conn.execute(
-                f"ALTER TABLE {HISTORY_TABLE} ADD COLUMN money_scale TEXT DEFAULT '0.01'"
-            )
         conn.execute("BEGIN IMMEDIATE")
+        # Fail-fast on duplicate inputs (unique record_fingerprint)
+        existing = conn.execute(
+            f"SELECT id FROM {HISTORY_TABLE} WHERE record_fingerprint = ? LIMIT 1",
+            (fingerprint,),
+        ).fetchone()
+        if existing:
+            conn.rollback()
+            result["ok"] = False
+            result["error"] = "record_fingerprint_collision"
+            result["existingId"] = int(existing[0])
+            result["recordFingerprint"] = fingerprint
+            return result
         conn.execute(
             f"""
             INSERT INTO {HISTORY_TABLE} (
                 period_start, period_end, visual_total, ledger_total,
                 clamped_ledger_total, variance_dollars, top_carrier_code,
                 scope_mismatch, result_code, created_at, package_build_id,
-                triggers_gold_ingest, input_fingerprint, money_scale
+                triggers_gold_ingest, record_fingerprint, money_scale
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, '0.01')
             """,
             (
@@ -489,11 +528,11 @@ def append_recon_variance_history(
                 payload["periodEnd"],
                 payload["visual"],
                 payload["ledger"],
-                payload["clamped"],
+                money_to_api(to_money(recon.get("clampedLedgerTotal"))),
                 cmp_.get("delta"),
                 top,
                 1 if recon.get("scopeMismatch") else 0,
-                payload["result"],
+                recon.get("result") or cmp_.get("result"),
                 _utc_now(),
                 PACKAGE_BUILD_ID,
                 fingerprint,
@@ -502,7 +541,15 @@ def append_recon_variance_history(
         conn.commit()
         result["ok"] = True
         result["id"] = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
-        result["inputFingerprint"] = fingerprint
+        result["recordFingerprint"] = fingerprint
+        return result
+    except sqlite3.IntegrityError as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        result["error"] = f"record_fingerprint_collision:{exc}"
+        result["recordFingerprint"] = fingerprint
         return result
     except Exception as exc:  # noqa: BLE001
         try:
@@ -802,7 +849,7 @@ def visual_ledger_recon_widget() -> dict[str, Any]:
     return {
         "id": "softdent-visual-ledger-recon",
         "type": "status",
-        "label": "Visual×Ledger Variance (HAL-10593)",
+        "label": "Visual×Ledger Variance (HAL-10594)",
         "size": "full",
         "status": status,
         "tone": tone,
