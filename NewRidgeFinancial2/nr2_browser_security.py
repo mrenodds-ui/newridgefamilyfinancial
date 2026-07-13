@@ -83,6 +83,8 @@ SYSTEM_STATUS_PREFIXES = (
     "/api/apex/hal/import-watcher-status",
     "/api/apex/hal/import-cron-status",
     "/api/apex/hal/import-dq-status",
+    # hal-10574 — ERA inbox status is telemetry (empty ≠ $0); ingest POST still needs session token.
+    "/api/apex/hal/era-inbox/status",
 )
 
 # Backward-compatible alias (tests / callers).
@@ -324,6 +326,48 @@ def mutation_auth_failure_reason(session_token: str | None) -> str | None:
             return None
         return "origin_rejected"
     return None
+
+
+ERA_INBOX_INGEST_URL = "/api/apex/hal/era-inbox/ingest"
+ERA_INBOX_STATUS_URL = "/api/apex/hal/era-inbox/status"
+MUTATION_HEADER = "X-NR2-Session-Token"
+
+
+def era_inbox_mutation_contract(*, mutation_token: str | None = None) -> dict[str, Any]:
+    """hal-10574 — browser CSRF contract for ERA inbox ingest (session token = mutation token).
+
+    POST /api/apex/hal/era-inbox/ingest requires X-NR2-Session-Token (same as other Apex mutations).
+    UI acquires via GET /api/app-info → sessionToken / X-NR2-Refresh-Token.
+    """
+    out: dict[str, Any] = {
+        "mutationAuthRequired": True,
+        "mutationHeader": MUTATION_HEADER,
+        "mutationAcquireVia": "/api/app-info",
+        "mutationTtlHintSec": int(_TOKEN_ROTATE_SECONDS),
+        "ingestUrl": ERA_INBOX_INGEST_URL,
+        "ingestMethod": "POST",
+        "statusUrl": ERA_INBOX_STATUS_URL,
+        "cliFallback": "scripts/run_era_inbox_ingest_ops.py",
+    }
+    token = str(mutation_token or "").strip()
+    if token:
+        out["mutationToken"] = token
+        out["sessionToken"] = token
+    return out
+
+
+def request_mutation_token_if_bound(expected_session: str | None = None) -> str | None:
+    """Return the request's session token when it matches the vault / expected session."""
+    hdr = str(bottle.request.headers.get(MUTATION_HEADER) or "").strip()
+    if not hdr:
+        return None
+    if expected_session and hdr != str(expected_session).strip():
+        return None
+    if not _session_vault.has_session(hdr):
+        return None
+    if not user_agent_binding_valid(hdr):
+        return None
+    return hdr
 
 
 def maybe_rotate_session_token(current: str) -> tuple[str, bool]:

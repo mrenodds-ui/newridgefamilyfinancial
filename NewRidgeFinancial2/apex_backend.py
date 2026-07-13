@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10573"
+BUILD_ID = "hal-10574"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -6583,11 +6583,22 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
     @app.get("/api/apex/hal/era-inbox/status")
     def apex_era_inbox_status():
-        """hal-10573 — read-only ERA-835 drop-box status (empty ≠ $0)."""
+        """hal-10574 — ERA-835 drop-box status + mutation-auth contract (empty ≠ $0)."""
         try:
             from apex_era835_pack import era_inbox_status
+            from nr2_browser_security import (
+                era_inbox_mutation_contract,
+                request_mutation_token_if_bound,
+            )
 
             result = era_inbox_status(ensure_dirs=True)
+            token = None
+            try:
+                token = request_mutation_token_if_bound()
+            except Exception:
+                token = None
+            # Always expose CSRF contract; attach live token when request already bound.
+            result.update(era_inbox_mutation_contract(mutation_token=token))
             result["buildId"] = BUILD_ID
             return json_response_fn(result)
         except Exception as exc:  # noqa: BLE001
@@ -6595,12 +6606,14 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
     @app.post("/api/apex/hal/era-inbox/ingest")
     def apex_era_inbox_ingest():
-        """hal-10573 — scan ERA drop-box and ingest files (empty ≠ $0; no SoftDent write-back)."""
+        """hal-10574 — ingest ERA drop-box (requires X-NR2-Session-Token in browser; empty ≠ $0)."""
         try:
             from apex_era835_pack import ingest_era_inbox
 
             result = ingest_era_inbox(ensure_dirs=True)
             result["buildId"] = BUILD_ID
+            result["softDentWriteBack"] = False
+            result["writeBack"] = False
             return json_response_fn(result)
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)

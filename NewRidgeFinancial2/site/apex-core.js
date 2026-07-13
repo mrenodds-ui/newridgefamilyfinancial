@@ -583,7 +583,14 @@
               .join("")}</ol>`
           : "";
         const refreshBtn = this.spec.refreshUrl
-          ? `<button type="button" class="apex-btn apex-btn--small" data-c0-refresh>Refresh SoftDent period imports</button>`
+          ? `<button type="button" class="apex-btn apex-btn--small" data-c0-refresh>${this.escape(
+              this.spec.refreshLabel || "Refresh SoftDent period imports"
+            )}</button>`
+          : "";
+        const eraInboxBtn = this.spec.eraInboxIngestUrl
+          ? `<button type="button" class="apex-btn apex-btn--small" data-era-inbox-refresh>${this.escape(
+              this.spec.eraInboxIngestLabel || "Refresh Inbox"
+            )}</button>`
           : "";
         return `
           <header class="apex-widget-header">
@@ -594,6 +601,7 @@
           ${checkHtml}
           ${actionHtml}
           ${refreshBtn}
+          ${eraInboxBtn}
           <div class="apex-kpi-hint" data-kpi-hint>${this.escape(this.spec.hint || "Phased Apex migration.")}</div>
         `;
       }
@@ -3095,6 +3103,48 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
               window.alert(String((err && err.message) || err));
               refreshBtn.disabled = false;
               refreshBtn.textContent = "Refresh SoftDent period imports";
+            }
+          });
+        }
+        const eraRefreshBtn = this.element.querySelector("[data-era-inbox-refresh]");
+        if (eraRefreshBtn && eraRefreshBtn.dataset.wired !== "1") {
+          eraRefreshBtn.dataset.wired = "1";
+          eraRefreshBtn.addEventListener("click", async () => {
+            const label = String(this.spec.eraInboxIngestLabel || "Refresh Inbox");
+            const url = String(this.spec.eraInboxIngestUrl || "/api/apex/hal/era-inbox/ingest");
+            eraRefreshBtn.disabled = true;
+            eraRefreshBtn.textContent = "Refreshing…";
+            try {
+              const res = await apexFetch(url, {
+                method: "POST",
+                body: JSON.stringify({}),
+              });
+              const data = await res.json().catch(() => ({}));
+              const meta = metaEl();
+              const chip = data.chipLabel || (data.inbox && data.inbox.chipLabel) || "";
+              const count = data.fileCount != null ? data.fileCount : (data.inbox && data.inbox.fileCount);
+              if (meta) {
+                if (res.status === 403) {
+                  meta.textContent =
+                    "HAL · ERA inbox ingest blocked (session token) — retry Refresh Inbox or use CLI";
+                } else if (data.ok) {
+                  meta.textContent = data.empty
+                    ? `HAL · ERA inbox empty — ${chip || "Awaiting first 835 drop"} (empty ≠ $0)`
+                    : `HAL · ERA inbox ingest — ${chip || "ready"} · files=${count != null ? count : "—"}`;
+                } else {
+                  meta.textContent = `HAL · ERA inbox issue — ${data.error || data.reason || res.status}`;
+                }
+                meta.classList.add("is-live");
+              }
+              const hintEl = this.element.querySelector("[data-kpi-hint]");
+              if (hintEl && data.hint) hintEl.textContent = String(data.hint);
+              eraRefreshBtn.disabled = false;
+              eraRefreshBtn.textContent = label;
+              await loadPage(currentPage, { silent: true });
+            } catch (err) {
+              window.alert(String((err && err.message) || err));
+              eraRefreshBtn.disabled = false;
+              eraRefreshBtn.textContent = label;
             }
           });
         }

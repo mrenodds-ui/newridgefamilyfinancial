@@ -713,6 +713,42 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
 
     # DEF-001 — empty revenue-composition / collections ≠ $0 (local, no LLM)
     # Also: Register Ins Plan $0 → ERA-835 honesty (hal-10571)
+    # Also: Refresh Inbox / ERA inbox ingest guidance (hal-10574)
+    if re.search(
+        r"\b("
+        r"refresh\s+(era|835|inbox)|"
+        r"(era|835)\s+inbox\s+(ingest|refresh|status)|"
+        r"ingest\s+(era|835)|"
+        r"awaiting\s+first\s+835"
+        r")\b",
+        q,
+    ):
+        try:
+            from apex_era835_pack import scan_era_inbox
+
+            scanned = scan_era_inbox(ensure_dirs=True)
+            chip = scanned.get("chipLabel") or "Awaiting first 835 drop"
+            files = scanned.get("fileCount") or 0
+            return {
+                "text": (
+                    f"ERA inbox: {chip} (files={files}; empty ≠ $0). "
+                    "Use Collections Gap → Refresh Inbox (session token / CSRF) or "
+                    "`scripts/run_era_inbox_ingest_ops.py` after dropping real payer 835 files "
+                    "into C:\\SoftDentFinancialExports\\era. No SoftDent write-back; "
+                    "do not re-export Register hoping Ins Plan > 0."
+                ),
+                "intent": "policy:era-inbox-refresh",
+            }
+        except Exception:
+            return {
+                "text": (
+                    "ERA inbox Refresh Inbox uses the browser session token "
+                    "(X-NR2-Session-Token). Drop real 835 files, then click Refresh Inbox "
+                    "or run scripts/run_era_inbox_ingest_ops.py. Empty ≠ $0."
+                ),
+                "intent": "policy:era-inbox-refresh",
+            }
+
     if re.search(
         r"\b("
         r"revenue.?composition|payer mix|insurance.?patient|"

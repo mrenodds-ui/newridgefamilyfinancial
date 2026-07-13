@@ -1,8 +1,8 @@
 {
-  "schemaVersion": "hal-10573",
-  "BUILD_ID": "hal-10573",
-  "assetVersion": "hal-10573",
-  "builtAt": "2026-07-12T22:55:00Z",
-  "notes": "hal-10573: ERA-835 inbox ingest wiring — empty-inbox safe drop-box + ingest_era_inbox (empty ≠ $0).",
+  "schemaVersion": "hal-10574",
+  "BUILD_ID": "hal-10574",
+  "assetVersion": "hal-10574",
+  "builtAt": "2026-07-13T00:10:00.000Z",
+  "notes": "hal-10574: ERA inbox Refresh Inbox mutation-token wiring — session CSRF for ingest POST; empty ≠ $0.",
   "staffRenderMode": "apex"
 }

@@ -563,7 +563,7 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
     hint = gap.get("fixHint") or FIX_HINT
     if code == GAP_ERA_835_REQUIRED:
         hint = str(gap.get("fixHint") or ERA_REGISTER_ZERO_HINT)
-    return {
+    out: dict[str, Any] = {
         "id": "softdent-collections-gap",
         "type": "status",
         "label": "Collections Gap (DEF-001)",
@@ -577,6 +577,12 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "eraInbox": gap.get("eraInbox"),
         "halChips": chips,
     }
+    if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
+        # hal-10574 — browser Refresh Inbox uses apexFetch + X-NR2-Session-Token (CSRF).
+        out["eraInboxIngestUrl"] = "/api/apex/hal/era-inbox/ingest"
+        out["eraInboxIngestLabel"] = "Refresh Inbox"
+        out["eraInboxStatusUrl"] = "/api/apex/hal/era-inbox/status"
+    return out
 
 
 def enrich_widget_with_collections_gap(widget: dict[str, Any], gap: dict[str, Any] | None) -> dict[str, Any]:
@@ -655,6 +661,10 @@ def format_collections_gap_reply(gap: dict[str, Any] | None = None) -> str:
                 f"ERA inbox: {inbox.get('chipLabel') or 'Awaiting first 835 drop'} "
                 f"(files={inbox.get('fileCount') or 0}; empty ≠ $0)."
             )
+        lines.append(
+            "UI: Collections Gap tile → Refresh Inbox (session token) "
+            "or CLI `scripts/run_era_inbox_ingest_ops.py` after dropping real 835 files."
+        )
         return "\n".join(lines)
     issues = g.get("issues") if isinstance(g.get("issues"), list) else []
     lines = [

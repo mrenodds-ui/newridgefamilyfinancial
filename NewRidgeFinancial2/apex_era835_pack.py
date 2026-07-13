@@ -605,7 +605,7 @@ def era835_status() -> dict[str, Any]:
     return {
         "ok": True,
         "phase": "U1",
-        "buildHint": "hal-10573",
+        "buildHint": "hal-10574",
         "enabled": era835_enabled(),
         "flag": "NR2_ERA835",
         "gapCode": gap.get("gapCode") or GAP_ERA835_PENDING,
@@ -768,19 +768,36 @@ def scan_era_inbox(
 
 
 def era_inbox_status(*, ensure_dirs: bool = True) -> dict[str, Any]:
-    """Read-only ERA inbox status for HAL chips / API (hal-10573)."""
+    """Read-only ERA inbox status for HAL chips / API (hal-10574)."""
     inbox = scan_era_inbox(ensure_dirs=ensure_dirs)
-    return {
+    out: dict[str, Any] = {
         "ok": True,
-        "phase": "hal-10573",
+        "phase": "hal-10574",
         "inbox": inbox,
         "chipStatus": inbox.get("chipStatus"),
         "chipLabel": inbox.get("chipLabel"),
         "empty": inbox.get("empty"),
+        "fileCount": inbox.get("fileCount") or 0,
         "honesty": "empty_not_zero",
         "writeBack": False,
         "refreshedAt": _utc_now(),
     }
+    try:
+        from nr2_browser_security import era_inbox_mutation_contract
+
+        out.update(era_inbox_mutation_contract())
+    except Exception:
+        out.update(
+            {
+                "mutationAuthRequired": True,
+                "mutationHeader": "X-NR2-Session-Token",
+                "mutationAcquireVia": "/api/app-info",
+                "ingestUrl": "/api/apex/hal/era-inbox/ingest",
+                "ingestMethod": "POST",
+                "cliFallback": "scripts/run_era_inbox_ingest_ops.py",
+            }
+        )
+    return out
 
 
 def ingest_era_inbox(

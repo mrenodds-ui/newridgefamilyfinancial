@@ -1439,7 +1439,7 @@ def summarize_daysheet_export(path: Path | str) -> dict[str, Any] | None:
 from softdent_odbc_extract import ensure_softdent_odbc_fresh, extract_softdent_odbc, read_extract_status, run_odbc_lane
 
 def stub_era835_ingestion_path() -> dict[str, Any]:
-    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10573).
+    """ERA-835 insurance detail path (scaffold beyond stub — Moonshot hal-10574).
 
     Ensures drop-box dirs exist and scans for files. Does not invent dollars or write SoftDent.
     """
