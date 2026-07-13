@@ -2966,7 +2966,8 @@ function coderModelReady() {
 }
 
 function ossModelConfig() {
-  return HalCore.laneRuntime(halModels, "oss120b");
+  // Hard 32B-only — never return gpt-oss:120b.
+  return HalCore.laneRuntime(halModels, "reason21b") || HalCore.laneRuntime(halModels, "chat8b");
 }
 
 const ollamaModelCache = { at: 0, names: null, loading: null };

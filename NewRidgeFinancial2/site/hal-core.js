@@ -4009,7 +4009,16 @@ const HalCore = (function () {
     }
 
     if (/\b(120b|gpt-oss|oss120b)\b/i.test(query) || /\brun\b.*\b120b\b/i.test(query)) {
-      return { intent: "oss", lane: "oss120b", text: "", useOss: true, prompt: rawQuery, actions: [] };
+      // Hard 32B-only: never route to gpt-oss / 120B on the office GPU.
+      return {
+        intent: "reasoning",
+        lane: "reason21b",
+        text: "",
+        useReasoning: true,
+        prompt: rawQuery,
+        actions: [],
+        note: "120B disabled — using local 32B only",
+      };
     }
 
     if (/second opinion|escalat|double[\s-]?check|high[\s-]?risk|complex case|deep review|review carefully|sanity check|scrutin/.test(query)) {

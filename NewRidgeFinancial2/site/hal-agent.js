@@ -4286,45 +4286,13 @@ const HalAgent = (function () {
       return { text, lane: "escalate30b" };
     }
     if (route.useOss) {
-      if (!ctx.ossModelReady()) return { text: ctx.offlineModelMessage("oss120b"), lane: "oss120b · offline" };
-      const om = ctx.ossModelConfig();
-      const text = await ctx.runModel(om, combinedPrompt, userText, "Local OSS draft", onToken);
-      return { text, lane: "oss120b" };
+      // Hard 32B-only: OSS/120B path remapped to shared local pin.
+      if (!ctx.reasoningModelReady()) return { text: ctx.offlineModelMessage("reason21b"), lane: "reason21b · offline" };
+      const om = Object.assign({ reasoningLane: true }, ctx.reasoningModelConfig());
+      const text = await ctx.runModel(om, combinedPrompt, userText, "Local 32B draft", onToken);
+      return { text, lane: "hal-local:32b" };
     }
-    const useCloudAgent =
-      plan &&
-      plan.agentToolLoop &&
-      cloudAgentEligible(plan, ctx) &&
-      (!browserCloudHalBlocked() || (await cloudHalEnabledAsync(ctx)));
-    if (useCloudAgent && browserCloudHalBlocked() && !(await cloudHalEnabledAsync(ctx))) {
-      return {
-        text: "Cloud HAL is disabled. Enable it from server settings with operator confirmation (ENABLE CLOUD HAL).",
-        lane: "cloud · blocked",
-      };
-    }
-    if (useCloudAgent) {
-      const cloudPolicy = (ctx.halModels && ctx.halModels.config && ctx.halModels.config.cloudReasoning) || {};
-      const shouldSanitize = cloudPolicy.sanitizeBeforeCloud !== false;
-      let sysPrompt = combinedPrompt;
-      let usrText = userText;
-      if (shouldSanitize && typeof ctx.sanitizeForCloud === "function") {
-        sysPrompt = ctx.sanitizeForCloud(sysPrompt);
-        usrText = ctx.sanitizeForCloud(usrText);
-      }
-      const cm = Object.assign({ cloud: true, agentLoop: true, structuredAgent: true }, ctx.cloudModelConfig());
-      cm.options = Object.assign({}, cm.options || {}, { max_tokens: 2048, temperature: 0.2 });
-      cm.cloudTools = buildCloudToolSchemas(agentLoopToolIds(plan));
-      const raw = await ctx.runModel(cm, sysPrompt, usrText, "Cloud agent", onToken);
-      if (raw && typeof raw === "object" && (raw.toolCalls || raw.text != null)) {
-        return {
-          text: String(raw.text || ""),
-          toolCalls: raw.toolCalls || [],
-          lane: "cloud",
-        };
-      }
-      const text = typeof raw === "string" ? raw : String((raw && raw.text) || "");
-      return { text, lane: "cloud" };
-    }
+    // Cloud AI deliberately removed — office program is local hal-local:32b only.
     const wantAgentReasoning =
       plan &&
       plan.agentToolLoop &&

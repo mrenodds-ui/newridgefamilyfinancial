@@ -16,13 +16,15 @@ SOFT_STALE_TTL_HOURS = float(os.environ.get("NR2_SOFT_STALE_TTL_HOURS", "24"))
 SOFT_STALE_WATERMARK = (
     "[DATA SOFT-STALE — analytical guidance only; verify amounts against fresh imports before acting]"
 )
+# Hard single-GPU policy: the office program may only call this local model.
+APPROVED_LOCAL_MODEL = "hal-local:32b"
 LANE_MODELS = {
     # R9700 32 GB single-model layout: all approved local lanes → hal-local:32b (qwen3:32b Q4_K_M).
     # Lane keys preserved for routing policy; do not load 8B/30B/coder concurrently.
-    "chat8b": "hal-local:32b",
-    "reason21b": "hal-local:32b",
-    "escalate30b": "hal-local:32b",
-    "coder32b": "hal-local:32b",
+    "chat8b": APPROVED_LOCAL_MODEL,
+    "reason21b": APPROVED_LOCAL_MODEL,
+    "escalate30b": APPROVED_LOCAL_MODEL,
+    "coder32b": APPROVED_LOCAL_MODEL,
 }
 LANE_HISTORY_KEY = "nr2:hal:lane-history"
 LANE_OVERRIDE_KEY = "nr2:hal:lane-override-log"
@@ -1662,7 +1664,54 @@ def resolve_lane(lane_key: str) -> dict[str, str]:
     key = str(lane_key or "chat8b").lower()
     if key not in LANE_MODELS:
         key = "chat8b"
-    return {"lane": key, "model": LANE_MODELS[key]}
+    return {"lane": key, "model": APPROVED_LOCAL_MODEL}
+
+
+def is_approved_local_model(model: str | None) -> bool:
+    return str(model or "").strip().lower() == APPROVED_LOCAL_MODEL.lower()
+
+
+def enforce_approved_local_model(
+    model: str | None = None,
+    *,
+    override_header: str | None = None,
+    allow_missing: bool = True,
+) -> dict[str, Any]:
+    """Hard allowlist: only hal-local:32b may run on the office GPU.
+
+    Explicit payload.model / X-HAL-Model-Override that name another model → reject.
+    Missing override → force APPROVED_LOCAL_MODEL.
+    """
+    explicit = str(model or "").strip()
+    header = str(override_header or "").strip()
+    # Header historically carried a *lane* id (e.g. chat8b); treat known lanes as non-model.
+    if header and header.lower() not in LANE_MODELS and ":" in header:
+        if not is_approved_local_model(header):
+            return {
+                "ok": False,
+                "error": "model_not_allowed",
+                "approvedModel": APPROVED_LOCAL_MODEL,
+                "requestedModel": header,
+                "source": "X-HAL-Model-Override",
+            }
+    if explicit:
+        if not is_approved_local_model(explicit):
+            return {
+                "ok": False,
+                "error": "model_not_allowed",
+                "approvedModel": APPROVED_LOCAL_MODEL,
+                "requestedModel": explicit,
+                "source": "payload.model",
+            }
+        return {"ok": True, "model": APPROVED_LOCAL_MODEL}
+    if not allow_missing:
+        return {
+            "ok": False,
+            "error": "model_not_allowed",
+            "approvedModel": APPROVED_LOCAL_MODEL,
+            "requestedModel": "",
+        }
+    return {"ok": True, "model": APPROVED_LOCAL_MODEL}
 
 
 def redact_financial_numbers(text: str) -> str:
@@ -2019,6 +2068,16 @@ def call_ollama_chat(
     keep_alive: int | str | None = None,
     format: Any | None = None,
 ) -> dict[str, Any]:
+    gate = enforce_approved_local_model(model)
+    if not gate.get("ok"):
+        return {
+            "ok": False,
+            "error": "model_not_allowed",
+            "detail": f"only {APPROVED_LOCAL_MODEL} is permitted",
+            "approvedModel": APPROVED_LOCAL_MODEL,
+            "requestedModel": str(model or ""),
+        }
+    model = APPROVED_LOCAL_MODEL
     payload: dict[str, Any] = {"model": model, "messages": messages, "stream": bool(stream)}
     think = _ollama_think_flag(model)
     if think is not None:
@@ -2105,7 +2164,17 @@ def evaluate_query_stream(
         requested_lane or route_by_complexity(query, shift_context=shift_context, store=store)
     )
     resolved = resolve_lane(lane_key)
-    model = str(model or resolved["model"])
+    model_gate = enforce_approved_local_model(model)
+    if not model_gate.get("ok"):
+        return {
+            "ok": False,
+            "error": "model_not_allowed",
+            "approvedModel": APPROVED_LOCAL_MODEL,
+            "requestedModel": model_gate.get("requestedModel"),
+            "resolvedLane": resolved["lane"],
+            "blocked": True,
+        }
+    model = APPROVED_LOCAL_MODEL
     routing_reason = "financial_math_policy" if requires_financial_reasoning(query) else ""
 
     if financial and level != "fresh":
@@ -2225,7 +2294,11 @@ def evaluate_query_sse_frames(
         requested_lane or route_by_complexity(query, shift_context=shift_context, store=store)
     )
     resolved = resolve_lane(lane_key)
-    model = str(model or resolved["model"])
+    model_gate = enforce_approved_local_model(model)
+    if not model_gate.get("ok"):
+        yield f"event: error\ndata: {json.dumps({'error': 'model_not_allowed', 'approvedModel': APPROVED_LOCAL_MODEL, 'requestedModel': model_gate.get('requestedModel'), 'done': True})}\n\n"
+        return
+    model = APPROVED_LOCAL_MODEL
 
     if financial and level != "fresh" and (intent == "transactional" or not soft_stale):
         yield f"event: error\ndata: {json.dumps({'error': 'HAL_UNAVAILABLE_STALE_DATA', 'blocked': True, 'done': True})}\n\n"
@@ -2315,7 +2388,17 @@ def evaluate_query(
         requested_lane or route_by_complexity(query, shift_context=shift_context, store=store)
     )
     resolved = resolve_lane(lane_key)
-    model = str(model or resolved["model"])
+    model_gate = enforce_approved_local_model(model)
+    if not model_gate.get("ok"):
+        return {
+            "ok": False,
+            "error": "model_not_allowed",
+            "approvedModel": APPROVED_LOCAL_MODEL,
+            "requestedModel": model_gate.get("requestedModel"),
+            "resolvedLane": resolved["lane"],
+            "blocked": True,
+        }
+    model = APPROVED_LOCAL_MODEL
     routing_reason = "financial_math_policy" if requires_financial_reasoning(query) else ""
 
     if financial and level != "fresh":

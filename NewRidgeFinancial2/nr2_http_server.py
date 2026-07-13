@@ -786,7 +786,6 @@ class NR2BottleServer(BottleServer):
             from employee_actions import get_current_shift_context
             from nr2_hal_gateway import evaluate_query, resolve_lane, route_by_complexity
             from nr2_audit_log import record_hal_session
-            from nr2_settings_store import read_cloud_hal_settings
 
             if bottle.request.headers.get("X-Direct-Ollama"):
                 return _json_response({"ok": False, "error": "direct_ollama_rejected"}, status=403)
@@ -801,12 +800,24 @@ class NR2BottleServer(BottleServer):
                     {"ok": False, "error": "financial_lane_downgrade_rejected", "minimumLane": "reason21b"},
                     status=403,
                 )
+            from nr2_hal_gateway import APPROVED_LOCAL_MODEL, enforce_approved_local_model
+
+            model_gate = enforce_approved_local_model(
+                payload.get("model"),
+                override_header=bottle.request.headers.get("X-HAL-Model-Override"),
+            )
+            if not model_gate.get("ok"):
+                return _json_response(model_gate, status=403)
             if payload.get("cloud") or str(payload.get("lane") or "").lower() == "cloud":
-                settings = read_cloud_hal_settings(_local_store())
-                if not settings.get("enabled"):
-                    return _json_response({"ok": False, "error": "cloud_hal_disabled"}, status=400)
-                if not settings.get("baaSignedAt"):
-                    return _json_response({"ok": False, "error": "cloud_hal_baa_required"}, status=400)
+                return _json_response(
+                    {
+                        "ok": False,
+                        "error": "cloud_hal_disabled",
+                        "approvedModel": APPROVED_LOCAL_MODEL,
+                        "detail": "Office HAL is local 32B only",
+                    },
+                    status=403,
+                )
             store = _local_store()
             readiness = _get_import_readiness()
             shift_context = payload.get("shiftContext") if isinstance(payload.get("shiftContext"), dict) else None
@@ -815,7 +826,7 @@ class NR2BottleServer(BottleServer):
             requested_lane = payload.get("lane") or payload.get("requestedLane")
             lane_key = str(requested_lane or route_by_complexity(query, shift_context=shift_context, store=store))
             resolved = resolve_lane(lane_key)
-            model = str(payload.get("model") or resolved["model"])
+            model = APPROVED_LOCAL_MODEL
             session_id = str(payload.get("sessionId") or payload.get("session_id") or "")
             use_stream = bool(payload.get("stream"))
             if use_stream:
@@ -2277,6 +2288,24 @@ class NR2BottleServer(BottleServer):
                 bottle.response.set_header("Cache-Control", "no-cache")
                 bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
                 return f"event: error\ndata: {json.dumps({'error': 'financial_lane_downgrade_rejected', 'done': True})}\n\n"
+            from nr2_hal_gateway import APPROVED_LOCAL_MODEL, enforce_approved_local_model
+
+            model_gate = enforce_approved_local_model(
+                payload.get("model"),
+                override_header=bottle.request.headers.get("X-HAL-Model-Override"),
+            )
+            if not model_gate.get("ok"):
+                bottle.response.content_type = "text/event-stream; charset=utf-8"
+                bottle.response.set_header("Cache-Control", "no-cache")
+                bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
+                return f"event: error\ndata: {json.dumps({**model_gate, 'done': True})}\n\n"
+            if payload.get("cloud") or str(payload.get("lane") or "").lower() == "cloud":
+                bottle.response.content_type = "text/event-stream; charset=utf-8"
+                bottle.response.set_header("Cache-Control", "no-cache")
+                bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
+                return (
+                    f"event: error\ndata: {json.dumps({'error': 'cloud_hal_disabled', 'approvedModel': APPROVED_LOCAL_MODEL, 'done': True})}\n\n"
+                )
             store = _local_store()
             readiness = _get_import_readiness()
             shift_context = payload.get("shiftContext") if isinstance(payload.get("shiftContext"), dict) else None
@@ -2299,7 +2328,7 @@ class NR2BottleServer(BottleServer):
                 yield from evaluate_query_sse_frames(
                     query=query,
                     readiness=readiness,
-                    model=str(payload.get("model") or resolved["model"]),
+                    model=APPROVED_LOCAL_MODEL,
                     system_prompt=str(payload.get("systemPrompt") or payload.get("system") or ""),
                     messages=payload.get("messages") if isinstance(payload.get("messages"), list) else None,
                     options=payload.get("options") if isinstance(payload.get("options"), dict) else None,
