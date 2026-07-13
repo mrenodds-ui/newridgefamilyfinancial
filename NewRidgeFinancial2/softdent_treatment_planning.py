@@ -578,6 +578,19 @@ def run_treatment_planning_ingest(
                 "No procedure_codes*.csv found — optional SoftDent Procedure Code Listing crosswalk."
             )
         result["estimates"] = rebuild_treatment_planning_estimates(conn)
+        try:
+            from softdent_settlement_matrix import hydrate_settlement_matrix
+
+            matrix = hydrate_settlement_matrix(db_path=Path(db_path), conn=conn)
+            result["settlementMatrix"] = {
+                "matrixCells": matrix.get("matrixCells"),
+                "cellsNge10": matrix.get("cellsNge10"),
+                "gapCode": matrix.get("gapCode"),
+            }
+        except Exception as mx_exc:  # noqa: BLE001
+            result.setdefault("warnings", []).append(
+                f"settlement_matrix hydrate: {type(mx_exc).__name__}:{mx_exc}"
+            )
         conn.commit()
         result["ok"] = True
     except Exception as exc:  # noqa: BLE001
@@ -627,6 +640,71 @@ def lookup_treatment_estimate(
         out["message"] = "Need a specific insurance company and ADA/CDT code (e.g. Delta Dental + D0274)."
         return out
 
+    # HAL-10605: viaGold (settlement_matrix) before gold estimates / alias / ledger
+    try:
+        from softdent_settlement_matrix import lookup_settlement_matrix
+
+        gold_cell = lookup_settlement_matrix(
+            payer=payer, ada_code=ada, db_path=Path(db_path), min_sample=min_sample
+        )
+    except Exception as exc:  # noqa: BLE001
+        gold_cell = {"found": False, "error": f"{type(exc).__name__}:{exc}"}
+
+    if gold_cell.get("blockedPending"):
+        # Fall through to alias pending handler below via normal path
+        pass
+    elif gold_cell.get("found"):
+        n = int(gold_cell.get("sampleSize") or 0)
+        sufficient = bool(gold_cell.get("sufficient"))
+        estimate = {
+            "insuranceCompany": payer.strip(),
+            "adaCode": ada,
+            "submittedFeeAvg": None,
+            "allowedAmountAvg": None,
+            "paidAmountAvg": gold_cell.get("avgPaid"),
+            "writeOffAvg": None,
+            "patientPortionAvg": None,
+            "sampleSize": n,
+            "updatedAt": gold_cell.get("lastUpdated"),
+            "source": "viaGold",
+            "credibility": "gold" if sufficient else "insufficient",
+            "tier": "exact",
+            "isInferred": False,
+            "goldAvailable": True,
+            "spineCarrierName": gold_cell.get("spineCarrierName"),
+            "stdDev": gold_cell.get("stdDev"),
+            "viaAlias": bool(gold_cell.get("viaAlias")),
+        }
+        out.update(
+            {
+                "ok": True,
+                "found": True,
+                "sampleSize": n,
+                "estimate": estimate,
+                "source": "viaGold",
+                "viaGold": True,
+                "viaAlias": bool(gold_cell.get("viaAlias")),
+                "spineCarrierName": gold_cell.get("spineCarrierName"),
+                "sufficient": sufficient,
+                "credibility": estimate["credibility"],
+                "tier": "exact",
+                "emptyIsNotZero": True,
+                "def": "HAL-10605",
+                "honesty": (
+                    "Estimate from SoftDent gold payment lines (settlement_matrix). "
+                    "Not a guarantee of benefits. empty != $0."
+                ),
+            }
+        )
+        if not sufficient:
+            out["message"] = (
+                f"Only {n} gold payment line(s) for "
+                f"{gold_cell.get('spineCarrierName') or payer} × {ada} "
+                f"(need >={min_sample}). empty != $0."
+            )
+        out["chip"] = build_tp_estimate_chip(out)
+        return out
+
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     try:
@@ -667,7 +745,7 @@ def lookup_treatment_estimate(
                 "patientPortionAvg": row["patient_portion_avg"],
                 "sampleSize": sample,
                 "updatedAt": row["updated_at"],
-                "source": "gold_payment_lines",
+                "source": "viaGold",
                 "credibility": "gold" if sample >= min_sample else "insufficient",
                 "tier": "exact",
                 "isInferred": False,
@@ -677,12 +755,14 @@ def lookup_treatment_estimate(
             out["found"] = True
             out["sampleSize"] = sample
             out["estimate"] = estimate
-            out["source"] = "gold_payment_lines"
+            out["source"] = "viaGold"
+            out["viaGold"] = True
             out["sufficient"] = sample >= min_sample
             out["credibility"] = estimate["credibility"]
             out["tier"] = "exact"
+            out["emptyIsNotZero"] = True
             out["chip"] = build_tp_estimate_chip(out)
-            out["def"] = "HAL-10587"
+            out["def"] = "HAL-10605"
             if not out["sufficient"]:
                 out["message"] = (
                     f"Only {sample} historical line(s) for {estimate['insuranceCompany']} × {ada} "
@@ -812,10 +892,15 @@ def build_tp_estimate_chip(result: dict[str, Any] | None) -> dict[str, Any]:
             "emptyIsNotZero": True,
         }
     if not r.get("found") or cred == "insufficient" or (
-        not r.get("sufficient") and source == "gold_payment_lines"
-    ) or (not r.get("sufficient") and n < 10 and tier == "exact" and source != "gold_payment_lines"):
+        not r.get("sufficient") and source in ("gold_payment_lines", "viaGold")
+    ) or (
+        not r.get("sufficient")
+        and n < 10
+        and tier == "exact"
+        and source not in ("gold_payment_lines", "viaGold")
+    ):
         # Honest insufficient — never show $0.00 as a fake estimate
-        if source == "gold_payment_lines" and r.get("found") and n > 0:
+        if source in ("gold_payment_lines", "viaGold") and r.get("found") and n > 0:
             display = str(
                 r.get("message")
                 or (

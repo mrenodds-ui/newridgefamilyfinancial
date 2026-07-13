@@ -110,7 +110,7 @@ def _seed(db: Path) -> None:
 
 class TreatmentPlanningAliasHal10601Tests(unittest.TestCase):
     def test_build_id_coupled(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10604")
+        self.assertEqual(BUILD_ID, "hal-10605")
         st = treatment_planning_status()
         self.assertTrue(st.get("tpCodeUsesCarrierAlias") or st.get("ok") is False)
 

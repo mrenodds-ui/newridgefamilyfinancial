@@ -787,7 +787,7 @@ def _table_exists_alias(conn: sqlite3.Connection) -> bool:
     )
 
 
-# HAL-10604 — Moonshot industry HIGH (+ optional MEDIUM pending)
+# HAL-10604 / HAL-10605 — Moonshot industry HIGH (+ optional MEDIUM pending)
 MOONSHOT_INDUSTRY_HIGH: list[tuple[str, str]] = [
     ("Assurant", "SUN LIFE FINANCIAL"),
     ("Connecticut General", "CIGNA DENTAL"),
@@ -796,6 +796,9 @@ MOONSHOT_INDUSTRY_HIGH: list[tuple[str, str]] = [
     ("Met Life/ Pepsico", "METLIFE DENTAL"),
     ("UniCare", "ANTHEM - 1115"),
     ("Unicare Life & Health Insurance Co", "ANTHEM - 1115"),
+    # HAL-10605 industry knowledge consult — NEW HIGH only
+    ("Great-west", "CIGNA DENTAL"),
+    ("Kanawha Benefit Solutions, Inc", "HUMANA DENTAL"),
 ]
 MOONSHOT_INDUSTRY_MEDIUM: list[tuple[str, str]] = [
     ("Coventry", "AETNA"),
@@ -832,8 +835,15 @@ def apply_moonshot_industry_aliases(
         high_n = 0
         for master, spine_name in MOONSHOT_INDUSTRY_HIGH:
             exact = spine_map.get(spine_name.upper())
+            master_exists = conn.execute(
+                "SELECT 1 FROM carrier_alias WHERE upper(master_company_name)=upper(?) LIMIT 1",
+                (master,),
+            ).fetchone()
             if not exact:
-                out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                if master_exists:
+                    out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                continue
+            if not master_exists:
                 continue
             cur = conn.execute(
                 """
@@ -852,8 +862,15 @@ def apply_moonshot_industry_aliases(
         if include_medium_as_pending:
             for master, spine_name in MOONSHOT_INDUSTRY_MEDIUM:
                 exact = spine_map.get(spine_name.upper())
+                master_exists = conn.execute(
+                    "SELECT 1 FROM carrier_alias WHERE upper(master_company_name)=upper(?) LIMIT 1",
+                    (master,),
+                ).fetchone()
                 if not exact:
-                    out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                    if master_exists:
+                        out.setdefault("errors", []).append(f"spine_missing:{spine_name}")
+                    continue
+                if not master_exists:
                     continue
                 cur = conn.execute(
                     """
@@ -871,9 +888,10 @@ def apply_moonshot_industry_aliases(
         conn.commit()
         out.update(
             {
-                "ok": high_n == len(MOONSHOT_INDUSTRY_HIGH),
+                "ok": not bool(out.get("errors")),
                 "highAccepted": high_n,
                 "mediumPending": med_n,
+                "highExpected": len(MOONSHOT_INDUSTRY_HIGH),
                 "dbPath": str(target),
             }
         )

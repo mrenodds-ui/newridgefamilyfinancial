@@ -360,6 +360,13 @@ def run_gold_payment_pipeline_repair(
                     try:
                         n = ingest_insurance_payment_csv(path, conn)
                         est = rebuild_treatment_planning_estimates(conn) if n else 0
+                        if n:
+                            try:
+                                from softdent_settlement_matrix import hydrate_settlement_matrix
+
+                                hydrate_settlement_matrix(db_path=target, conn=conn)
+                            except Exception:
+                                pass
                         conn.commit()
                         ingest["paymentLines"] = n
                         ingest["estimates"] = est
@@ -378,6 +385,14 @@ def run_gold_payment_pipeline_repair(
                 if int(ingest.get("paymentLines") or 0) > 0:
                     break
 
+    # HAL-10605: always attempt hydrate (clears matrix honestly when gold missing)
+    try:
+        from softdent_settlement_matrix import hydrate_settlement_matrix
+
+        matrix = hydrate_settlement_matrix(db_path=db_path)
+    except Exception as exc:  # noqa: BLE001
+        matrix = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
+
     report = export_gold_pipeline_report(
         db_path=db_path, search_dir=search_dir
     )
@@ -389,6 +404,7 @@ def run_gold_payment_pipeline_repair(
         "ingest": ingest,
         "audit": audit,
         "export": report,
+        "settlementMatrix": matrix,
     }
 
 
