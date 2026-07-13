@@ -6139,6 +6139,12 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       applyWidgetPayload(payload, { fromCache: false });
       // Moonshot warming coherence pack: 429 backoff + buildId skew detection
       if (payload && payload.warming) {
+        // Moonshot crash/perf SHOULD: visual progress if fill is running (empty ≠ crash)
+        if (payload.fillProgress > 0 && payload.fillProgress < 100) {
+          console.info(
+            `[NR2] Fill progress for ${payload.fillPage}: ${payload.fillProgress}%`
+          );
+        }
         // BuildId skew guard: if server build differs from UI chrome, nuke IDB and reload
         if (
           payload.buildId &&

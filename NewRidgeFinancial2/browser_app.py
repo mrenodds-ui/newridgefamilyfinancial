@@ -8,6 +8,7 @@ Staff open https://127.0.0.1:8765/ in a browser.
 
 from __future__ import annotations
 
+import atexit
 import os
 import sys
 import threading
@@ -19,11 +20,62 @@ REPO_ROOT = ROOT.parent
 SITE_DIR = ROOT / "site"
 DATA_DIR = REPO_ROOT / "app_data" / "nr2"
 INDEX_HTML = SITE_DIR / "index.html"
+# Moonshot crash/perf MUST: prevent dual browser_app launches (port/cache contention).
+PIDFILE = ROOT / ".nr2_browser_app.pid"
 
 from desktop_app import ASSET_VERSION, DESIGN_SCHEMA_VERSION  # noqa: E402
 
 
+def _pid_alive(pid: int) -> bool:
+    """True if pid is a live process (Windows-safe; Moonshot singleton intent)."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        # PROCESS_QUERY_LIMITED_INFORMATION — os.kill(pid, 0) is not portable on Windows.
+        handle = ctypes.windll.kernel32.OpenProcess(0x1000, False, int(pid))
+        if handle:
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except (OSError, ProcessLookupError):
+        return False
+
+
+def ensure_singleton() -> None:
+    """Moonshot MUST: exit if another browser_app.py is already running."""
+    if PIDFILE.is_file():
+        old_raw = PIDFILE.read_text(encoding="utf-8", errors="replace").strip()
+        try:
+            old_pid = int(old_raw)
+        except ValueError:
+            old_pid = 0
+        if old_pid and old_pid != os.getpid() and _pid_alive(old_pid):
+            print(
+                f"ERROR: browser_app.py already running (PID {old_pid}). Exiting.",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+    PIDFILE.write_text(str(os.getpid()), encoding="utf-8")
+
+    def _cleanup_pidfile() -> None:
+        try:
+            if PIDFILE.is_file() and PIDFILE.read_text(encoding="utf-8").strip() == str(
+                os.getpid()
+            ):
+                PIDFILE.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    atexit.register(_cleanup_pidfile)
+
+
 def main() -> int:
+    ensure_singleton()
     if not INDEX_HTML.is_file():
         print(f"Site not found: {INDEX_HTML}", file=sys.stderr)
         return 1

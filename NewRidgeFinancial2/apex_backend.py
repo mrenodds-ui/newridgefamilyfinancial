@@ -11,6 +11,8 @@ import json
 import os
 import random
 import re
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -46,6 +48,9 @@ _WIDGETS_CACHE_TTL_SEC = 15.0
 _WIDGETS_FILL_FAILURES = 0  # Moonshot cache coherence — fill-thread crash counter
 _REPORTS_BUNDLE_CACHE: dict[str, Any] = {"at": 0.0, "reports": None, "bundle": None, "errors": None}
 _REPORTS_BUNDLE_CACHE_TTL_SEC = 20.0
+# Moonshot crash/perf SHOULD: Sync back-pressure + fill-progress telemetry
+_SYNC_SEMAPHORE = threading.Semaphore(1)
+_FILL_PROGRESS: dict[str, Any] = {"page": None, "pct": 0, "ts": 0.0}
 
 
 def _utc_now() -> str:
@@ -3837,12 +3842,21 @@ def build_apex_widgets(
     }
     warming_key = f"{cache_key}:warming"
     if not skip_cache and not _fill and stub_on:
+        # Moonshot crash/perf SHOULD: expose fill progress (empty mosaic ≠ crash)
+        progress = (
+            dict(_FILL_PROGRESS)
+            if _FILL_PROGRESS.get("page") == pid
+            else {"page": pid, "pct": 0, "ts": 0.0}
+        )
+        fill_pct = int(progress.get("pct") or 0)
         stub = {
             "page": pid,
             "sub": sub_key,
             "refreshedAt": _utc_now(),
             "buildId": BUILD_ID,
             "warming": True,
+            "fillProgress": fill_pct,
+            "fillPage": progress.get("page"),
             "widgets": [
                 {
                     "id": "warming-bridge",
@@ -3850,6 +3864,8 @@ def build_apex_widgets(
                     "status": "empty",
                     "label": "Loading bridge instruments…",
                     "message": "Warming import cache — KPIs appear when ready (empty ≠ $0).",
+                    "fillProgress": fill_pct,
+                    "fillPage": progress.get("page"),
                     "hint": "Direct-first pipeline assembling SoftDent/QuickBooks.",
                 }
             ],
@@ -3861,8 +3877,13 @@ def build_apex_widgets(
 
             def _fill_widgets_cache() -> None:
                 global _WIDGETS_FILL_FAILURES
+                _FILL_PROGRESS["page"] = pid
+                _FILL_PROGRESS["pct"] = 5
+                _FILL_PROGRESS["ts"] = time.time()
                 try:
+                    _FILL_PROGRESS["pct"] = 40
                     build_apex_widgets(pid, sub=sub_key, claim_id=cid, _fill=True)
+                    _FILL_PROGRESS["pct"] = 100
                 except Exception as exc:  # noqa: BLE001
                     import traceback
 
@@ -3905,6 +3926,9 @@ def build_apex_widgets(
                     }
                 finally:
                     _WIDGETS_CACHE.pop(warming_key, None)
+                    if _FILL_PROGRESS.get("page") == pid:
+                        _FILL_PROGRESS["pct"] = 100
+                        _FILL_PROGRESS["ts"] = time.time()
 
             _WIDGETS_CACHE[warming_key] = {"at": now}
             threading.Thread(
@@ -5777,77 +5801,100 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
 
 
 def apex_sync_trigger(payload: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Trigger import refresh using existing NR2 sync path when available."""
+    """Trigger import refresh using existing NR2 sync path when available.
+
+    Moonshot crash/perf SHOULD: serialize Sync with a non-blocking semaphore.
+    Concurrent calls return ok=False / status=sync_locked (HTTP 423 via route).
+    """
     body = payload if isinstance(payload, dict) else {}
-    started = _utc_now()
-    result: dict[str, Any] = {
-        "ok": True,
-        "startedAt": started,
-        "status": "syncing",
-        "sources": ["softdent", "quickbooks"],
-        "page": body.get("page"),
-        "buildId": BUILD_ID,
-    }
-    # Optional document inbox sync (SoftDent/QB file merge) before reload
+    acquired = _SYNC_SEMAPHORE.acquire(blocking=False)
+    if not acquired:
+        return {
+            "ok": False,
+            "error": "Sync already in progress",
+            "status": "sync_locked",
+            "retryAfter": 30,
+            "buildId": BUILD_ID,
+            "page": body.get("page"),
+        }
     try:
-        from document_sync import NR2_DATA_DIR, sync_accounting_documents
-        from local_store import LocalStore
-
-        store = LocalStore(NR2_DATA_DIR)
-        doc_sync = sync_accounting_documents(store)
-        result["documentSync"] = {
+        _FILL_PROGRESS["page"] = body.get("page")
+        _FILL_PROGRESS["pct"] = 5
+        _FILL_PROGRESS["ts"] = time.time()
+        started = _utc_now()
+        result: dict[str, Any] = {
             "ok": True,
-            "imported": doc_sync.get("imported") if isinstance(doc_sync, dict) else None,
-            "updated": doc_sync.get("updated") if isinstance(doc_sync, dict) else None,
-            "warnings": (doc_sync.get("warnings") if isinstance(doc_sync, dict) else None) or [],
+            "startedAt": started,
+            "status": "syncing",
+            "sources": ["softdent", "quickbooks"],
+            "page": body.get("page"),
+            "buildId": BUILD_ID,
         }
-    except Exception as exc:  # noqa: BLE001
-        result["documentSync"] = {"ok": False, "error": str(exc)}
-    try:
-        from import_loader import load_import_bundle
-
-        sync = bool(body.get("fullSync", True))
-        bundle = load_import_bundle(sync=sync, deep=False)
-        # Fresh imports must not serve stale page payloads.
-        _WIDGETS_CACHE.clear()
-        _REPORTS_BUNDLE_CACHE["at"] = 0.0
-        _REPORTS_BUNDLE_CACHE["reports"] = None
-        _REPORTS_BUNDLE_CACHE["bundle"] = None
-        _REPORTS_BUNDLE_CACHE["errors"] = None
-        _TICKER_CACHE["at"] = 0.0
-        _TICKER_CACHE["payload"] = None
+        # Optional document inbox sync (SoftDent/QB file merge) before reload
         try:
-            from apex_reconciliation_pack import invalidate_explain_cache
+            from document_sync import NR2_DATA_DIR, sync_accounting_documents
+            from local_store import LocalStore
 
-            result["explainCache"] = invalidate_explain_cache(reason="import")
+            store = LocalStore(NR2_DATA_DIR)
+            doc_sync = sync_accounting_documents(store)
+            result["documentSync"] = {
+                "ok": True,
+                "imported": doc_sync.get("imported") if isinstance(doc_sync, dict) else None,
+                "updated": doc_sync.get("updated") if isinstance(doc_sync, dict) else None,
+                "warnings": (doc_sync.get("warnings") if isinstance(doc_sync, dict) else None) or [],
+            }
         except Exception as exc:  # noqa: BLE001
-            result["explainCache"] = {"ok": False, "error": str(exc)}
-        result["status"] = "ok"
-        result["completedAt"] = _utc_now()
-        result["importMode"] = bundle.get("importMode")
-        result["loadedAt"] = bundle.get("loadedAt")
-        diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
-        summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
-        result["diagnostics"] = {
-            "connected": summary.get("connected"),
-            "total": summary.get("total"),
-            "missing": summary.get("missing"),
-            "stale": summary.get("stale"),
-        }
-        result["freshness"] = build_import_freshness(bundle)
-        # Phase I3 — mirror import bundle into additive unified SQLite
+            result["documentSync"] = {"ok": False, "error": str(exc)}
         try:
-            from apex_unified_db_pack import ingest_from_bundle
+            from import_loader import load_import_bundle
 
-            result["unifiedIngest"] = ingest_from_bundle(bundle)
+            sync = bool(body.get("fullSync", True))
+            _FILL_PROGRESS["pct"] = 40
+            bundle = load_import_bundle(sync=sync, deep=False)
+            # Fresh imports must not serve stale page payloads.
+            _WIDGETS_CACHE.clear()
+            _REPORTS_BUNDLE_CACHE["at"] = 0.0
+            _REPORTS_BUNDLE_CACHE["reports"] = None
+            _REPORTS_BUNDLE_CACHE["bundle"] = None
+            _REPORTS_BUNDLE_CACHE["errors"] = None
+            _TICKER_CACHE["at"] = 0.0
+            _TICKER_CACHE["payload"] = None
+            try:
+                from apex_reconciliation_pack import invalidate_explain_cache
+
+                result["explainCache"] = invalidate_explain_cache(reason="import")
+            except Exception as exc:  # noqa: BLE001
+                result["explainCache"] = {"ok": False, "error": str(exc)}
+            result["status"] = "ok"
+            result["completedAt"] = _utc_now()
+            result["importMode"] = bundle.get("importMode")
+            result["loadedAt"] = bundle.get("loadedAt")
+            diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
+            summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
+            result["diagnostics"] = {
+                "connected": summary.get("connected"),
+                "total": summary.get("total"),
+                "missing": summary.get("missing"),
+                "stale": summary.get("stale"),
+            }
+            result["freshness"] = build_import_freshness(bundle)
+            # Phase I3 — mirror import bundle into additive unified SQLite
+            try:
+                from apex_unified_db_pack import ingest_from_bundle
+
+                result["unifiedIngest"] = ingest_from_bundle(bundle)
+            except Exception as exc:  # noqa: BLE001
+                result["unifiedIngest"] = {"ok": False, "error": str(exc)}
         except Exception as exc:  # noqa: BLE001
-            result["unifiedIngest"] = {"ok": False, "error": str(exc)}
-    except Exception as exc:  # noqa: BLE001
-        result["ok"] = False
-        result["status"] = "error"
-        result["error"] = str(exc)
-        result["completedAt"] = _utc_now()
-    return result
+            result["ok"] = False
+            result["status"] = "error"
+            result["error"] = str(exc)
+            result["completedAt"] = _utc_now()
+        _FILL_PROGRESS["pct"] = 100
+        _FILL_PROGRESS["ts"] = time.time()
+        return result
+    finally:
+        _SYNC_SEMAPHORE.release()
 
 
 def build_apex_ticker(*, force: bool = False) -> dict[str, Any]:
@@ -6377,7 +6424,11 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
 
             raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
             payload = json.loads(raw or "{}")
-            return json_response_fn(apex_sync_trigger(payload))
+            result = apex_sync_trigger(payload)
+            # Moonshot crash/perf SHOULD: HTTP 423 when Sync semaphore is held
+            if isinstance(result, dict) and result.get("status") == "sync_locked":
+                return json_response_fn(result, status=423)
+            return json_response_fn(result)
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc)}, status=500)
 
