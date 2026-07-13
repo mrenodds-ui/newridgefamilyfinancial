@@ -649,6 +649,12 @@ def _open_accounting_report(report_id: str, menu_keys: str) -> None:
             "Reports->Accounting->Insurance Payment Distribution",
             "Reports->Accounting->Insurance Check Distribution",
         ],
+        "insurance_payment_analysis": [
+            "Reports->Practice Management->Insurance Reports->Insurance Income",
+            "Reports->Practice Management->Insurance Reports->Contractual Plan Analysis",
+            "Reports->Practice Management->Production Reports->Payment Allocation",
+            "Reports->Accounting->Insurance Payment Distribution",
+        ],
     }
     for path in win32_paths.get(report_id) or []:
         if _open_report_via_win32_menu(path):
@@ -1104,25 +1110,150 @@ def export_report_by_id(
     )
 
 
+def navigate_softdent_print_preview_pages(
+    *,
+    max_next_pages: int = 40,
+    pause_s: float = 0.45,
+) -> dict[str, Any]:
+    """Page through SoftDent Print Preview / MDI report for a complete visual read.
+
+    SoftDent insurance/writeoff previews often hide detail on later pages — Page 1 is
+    incomplete. Walk forward with PageDown (Next page), then Ctrl+End / End for the
+    LAST page totals. Never invent dollars. Never Esc on SoftDent main.
+    """
+    out: dict[str, Any] = {
+        "ok": False,
+        "pagesAdvanced": 0,
+        "maxNextPages": int(max_next_pages),
+        "endedOnLastPage": False,
+        "method": "PageDown then Ctrl+End/End",
+        "honesty": "empty != $0; page 1 alone is incomplete — read next pages and last page",
+    }
+    try:
+        hwnd = _main_softdent_hwnd()
+        _force_foreground(hwnd)
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"focus_failed:{type(exc).__name__}:{exc}"
+        return out
+
+    advanced = 0
+    for _ in range(max(0, int(max_next_pages))):
+        cancel_printer_dialogs(max_rounds=1)
+        # Page Down = next preview page on SoftDent MDI / Print Preview
+        _send_softdent_keys("{PGDN}")
+        time.sleep(pause_s)
+        advanced += 1
+    out["pagesAdvanced"] = advanced
+
+    # Final totals live on the last page
+    try:
+        _send_softdent_keys("^{END}")
+        time.sleep(0.4)
+        _send_softdent_keys("{END}")
+        time.sleep(0.3)
+        # Some SoftDent previews use Ctrl+PageDown to last page
+        _send_softdent_keys("^{PGDN}")
+        time.sleep(0.35)
+        out["endedOnLastPage"] = True
+    except Exception as exc:  # noqa: BLE001
+        out["lastPageError"] = f"{type(exc).__name__}:{exc}"
+
+    out["ok"] = True
+    out["nextStep"] = (
+        "Visually read SoftDent Print Preview: intermediate pages for line detail, "
+        "LAST page for exact totals. Do not invent dollars from page 1 alone."
+    )
+    return out
+
+
+def list_softdent_window_titles() -> list[str]:
+    """SoftDent-owned window titles (for Print Preview / MDI report detection)."""
+    from pywinauto import Desktop
+
+    titles: list[str] = []
+    pids = _softdent_pids()
+    for w in Desktop(backend="win32").windows():
+        try:
+            t = (w.window_text() or "").strip()
+            if not t:
+                continue
+            if pids and _window_pid(int(w.handle)) not in pids:
+                continue
+            titles.append(t)
+        except Exception:
+            continue
+    return titles
+
+
+def softdent_report_preview_visible(titles: list[str] | None = None) -> bool:
+    """True when Print Preview dialog or SoftDent MDI report window is showing."""
+    titles = titles if titles is not None else list_softdent_window_titles()
+    for t in titles:
+        low = t.lower()
+        if "sorting" in low:
+            continue
+        if "preview" in low:
+            return True
+        # MDI: "CS SoftDent Software v19.1.4 - [INSURANCE INCOME REPORT]"
+        if "[" in t and "report" in low:
+            return True
+        if any(
+            key in low
+            for key in (
+                "insurance income",
+                "contractual plan",
+                "payment allocation",
+                "payment distribution",
+                "writeoff",
+                "write-off",
+            )
+        ):
+            return True
+    return False
+
+
 def open_report_print_preview(
     report_id: str,
     *,
     start: date,
     end: date,
     menu_keys: str | None = None,
+    page_through: bool = True,
+    max_next_pages: int = 40,
 ) -> dict[str, Any]:
     """Open SoftDent report via Print Preview for visual read (no file ingest).
 
     Output Options: click **Print Preview** prompt, then Enter (same pattern as Excel).
-    After SoftDent shows the preview, navigate to the **last page** for exact totals.
-    Never invent dollars from a partial first page.
+    After SoftDent shows the preview, page through with Next/PageDown (detail often
+    spans pages), then go to the **last page** for exact totals.
+    Never invent dollars from page 1 alone. Never use Printer.
+    Some reports (Insurance Income / writeoff) have Excel unavailable.
     """
     catalog = load_menu_map()
     report = (catalog.get("reports") or {}).get(report_id)
     if not isinstance(report, dict):
         raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
     keys = resolve_menu_keys(report, menu_keys)
-    _open_accounting_report(report_id, keys)
+    # Practice Management insurance reports: prefer win32 path (not Accounting F10 r a)
+    opened = False
+    win32_paths: dict[str, list[str]] = {
+        "insurance_payment_analysis": [
+            "Reports->Practice Management->Insurance Reports->Insurance Income",
+            "Reports->Practice Management->Insurance Reports->Contractual Plan Analysis",
+        ],
+        "writeoff_totals": [
+            "Reports->Practice Management->Insurance Reports->Writeoff Totals",
+        ],
+        "insurance_payment_distribution": [
+            "Reports->Accounting->Insurance Payment Distribution",
+        ],
+    }
+    for path in win32_paths.get(report_id) or []:
+        if _open_report_via_win32_menu(path):
+            opened = True
+            break
+    if not opened:
+        _open_accounting_report(report_id, keys)
     _select_output_option_prompt("print_preview")
     # Setup if it appears — fill dates then OK into preview
     setup = None
@@ -1141,7 +1272,7 @@ def open_report_print_preview(
                     break
             except Exception:
                 continue
-        if setup or find_dialog("Print Preview"):
+        if setup or find_dialog("Print Preview") or softdent_report_preview_visible():
             break
         time.sleep(0.25)
     if setup:
@@ -1162,32 +1293,34 @@ def open_report_print_preview(
         _keyboard_press_ok(hwnd=h)
         time.sleep(1.2)
         cancel_printer_dialogs()
-    preview = bool(find_dialog("Print Preview")) or any(
-        "print preview" in t.lower()
-        for t in []
-    )
-    # Best-effort: SoftDent preview may use a different title
-    from pywinauto import Desktop
 
-    titles = []
-    pids = _softdent_pids()
-    for w in Desktop(backend="win32").windows():
-        try:
-            t = (w.window_text() or "").strip()
-            if t and (not pids or _window_pid(int(w.handle)) in pids):
-                titles.append(t)
-        except Exception:
+    # Wait out SoftDent "Sorting Report" splash
+    for _ in range(60):
+        titles = list_softdent_window_titles()
+        if any("sorting" in t.lower() for t in titles):
+            time.sleep(0.5)
             continue
-    preview = any("preview" in t.lower() for t in titles)
+        break
+
+    titles = list_softdent_window_titles()
+    preview = softdent_report_preview_visible(titles)
+    nav: dict[str, Any] | None = None
+    if preview and page_through:
+        nav = navigate_softdent_print_preview_pages(max_next_pages=max_next_pages)
+        titles = list_softdent_window_titles()
+        preview = softdent_report_preview_visible(titles) or preview
+
     return {
         "ok": True,
         "reportId": report_id,
         "outputMode": "print_preview",
         "printPreviewOpen": preview,
         "titles": titles[:12],
+        "pageNavigation": nav,
         "nextStep": (
-            "SoftDent Print Preview is open (or pending). Go to the LAST page of the "
-            "report to read exact totals. Do not invent dollars from the first page."
+            "SoftDent Print Preview / MDI report is open (or pending). "
+            "Page through with Next/PageDown for detail; LAST page for exact totals. "
+            "Do not invent dollars from page 1 alone."
         ),
     }
 

@@ -12,6 +12,7 @@ from softdent_gui_export import (
     resolve_menu_keys,
     run_catalog_exports,
     run_safe_period_exports,
+    softdent_report_preview_visible,
 )
 
 
@@ -25,6 +26,20 @@ class SoftDentGuiExportTests(unittest.TestCase):
             self.assertIn(rid, catalog["reports"])
             keys = resolve_menu_keys(catalog["reports"][rid])
             self.assertTrue(keys)
+
+    def test_print_preview_mdi_and_page_rule(self):
+        self.assertTrue(
+            softdent_report_preview_visible(
+                ["CS SoftDent Software v19.1.4 - [INSURANCE INCOME REPORT]"]
+            )
+        )
+        self.assertFalse(softdent_report_preview_visible(["Sorting Report"]))
+        self.assertFalse(softdent_report_preview_visible(["CS SoftDent Software v19.1.4"]))
+        note = (load_menu_map().get("notes") or [])[4]
+        self.assertIn("PageDown", note)
+        ipa = load_menu_map()["reports"]["insurance_payment_analysis"]
+        self.assertEqual(ipa.get("outputMode"), "print_preview_only")
+        self.assertFalse(ipa.get("excelExport"))
 
     def test_run_safe_period_exports_never_returns_password(self):
         with mock.patch(

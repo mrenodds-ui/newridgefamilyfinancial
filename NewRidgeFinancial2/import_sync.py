@@ -1119,6 +1119,26 @@ def sync_imports(full_pull: bool | None = None) -> dict[str, Any]:
                 )
         except Exception as gold_exc:  # noqa: BLE001
             result["warnings"].append(f"Gold payment pipeline skipped: {gold_exc}")
+        try:
+            from softdent_gold_csv_drop_ops import run_ops_10589_gold_csv_drop
+
+            # Sync path: verify/ingest only — SoftDent GUI owned by desktop OPS
+            ops = run_ops_10589_gold_csv_drop(attempt_gui_export=False)
+            result["softdent"]["goldCsvDropOps"] = {
+                "ok": bool(ops.get("ok")),
+                "gapCode": ((ops.get("post") or {}).get("audit") or {}).get("gapCode"),
+                "paymentLines": ((ops.get("post") or {}).get("audit") or {}).get("paymentLines"),
+                "postPass": ((ops.get("post") or {}).get("passCount")),
+                "jsonPath": ((ops.get("export") or {}).get("jsonPath")),
+            }
+            if not ops.get("ok"):
+                gap = ((ops.get("post") or {}).get("audit") or {}).get("gapCode") or ""
+                result["warnings"].append(
+                    f"Gold CSV drop OPS: gap={gap} — SoftDent Insurance Payment Analysis "
+                    r"→ C:\SoftDentFinancialExports\insurance_payments_YYYYMMDD.csv (empty != $0)"
+                )
+        except Exception as ops_exc:  # noqa: BLE001
+            result["warnings"].append(f"Gold CSV drop OPS skipped: {ops_exc}")
     except Exception as exc:
         result["warnings"].append(f"SoftDent transaction/CSV extract skipped: {exc}")
     if pipeline.get("practiceSync") and not (pipeline["practiceSync"].get("written") or []):

@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10588",
-  "BUILD_ID": "hal-10588",
-  "assetVersion": "hal-10588",
-  "builtAt": "2026-07-13T03:00:00.000Z",
-  "notes": "hal-10588: Gold payment pipeline audit/repair + BUILD_ID coupled to package; empty != $0.",
+  "schemaVersion": "hal-10589",
+  "BUILD_ID": "hal-10589",
+  "assetVersion": "hal-10589",
+  "builtAt": "2026-07-13T09:45:00.000Z",
+  "notes": "hal-10589: SoftDent gold CSV drop facilitation + ingest verification checklist; empty != $0.",
   "staffRenderMode": "apex",
-  "package": "HAL-10588"
+  "package": "HAL-10589"
 }

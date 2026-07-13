@@ -819,6 +819,34 @@ def try_local_policy_reply(query: str) -> dict[str, str] | None:
     except Exception:
         pass
 
+    # Gold CSV drop OPS (HAL-10589) — prefer before generic gold pipeline for drop asks
+    try:
+        from softdent_gold_csv_drop_ops import (
+            checklist_post_ingest,
+            format_gold_csv_drop_ops_reply,
+            gold_csv_drop_playbook,
+        )
+
+        raw_l = raw.lower()
+        if re.search(
+            r"\b(gold\s+csv\s+drop|ops-?10589|csv\s+drop\s+ops|"
+            r"drop.{0,20}insurance\s+payment|"
+            r"how.{0,40}export.{0,40}insurance\s+payment\s+analysis)",
+            raw_l,
+        ):
+            st = checklist_post_ingest()
+            play = gold_csv_drop_playbook()
+            text = format_gold_csv_drop_ops_reply({"post": st})
+            text += f" Steps: {play.get('softDentMenu')} → {play.get('saveAs')} → Sync."
+            return {
+                "text": text,
+                "intent": "policy:gold-csv-drop-ops",
+                "gapCode": (st.get("audit") or {}).get("gapCode"),
+                "playbook": play,
+            }
+    except Exception:
+        pass
+
     # Gold payment pipeline (HAL-10588)
     try:
         from softdent_gold_payment_pipeline import (

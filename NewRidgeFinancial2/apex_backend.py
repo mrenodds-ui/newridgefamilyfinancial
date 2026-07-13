@@ -29,7 +29,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10588"
+BUILD_ID = "hal-10589"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -2319,6 +2319,12 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         from softdent_gold_payment_pipeline import gold_payment_pipeline_widget
 
         widgets.insert(5, gold_payment_pipeline_widget())
+    except Exception:
+        pass
+    try:
+        from softdent_gold_csv_drop_ops import gold_csv_drop_ops_widget
+
+        widgets.insert(6, gold_csv_drop_ops_widget())
     except Exception:
         pass
     try:
@@ -7234,6 +7240,39 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
             from softdent_gold_payment_pipeline import run_gold_payment_pipeline_repair
 
             result = run_gold_payment_pipeline_repair()
+            return json_response_fn({**result, "buildId": BUILD_ID})
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.get("/api/apex/gold-csv-drop-ops/status")
+    def apex_gold_csv_drop_ops_status_api():
+        try:
+            from softdent_gold_csv_drop_ops import (
+                checklist_post_ingest,
+                format_gold_csv_drop_ops_reply,
+                gold_csv_drop_playbook,
+            )
+
+            st = checklist_post_ingest()
+            return json_response_fn(
+                {
+                    "ok": bool(st.get("ok")),
+                    **st,
+                    "playbook": gold_csv_drop_playbook(),
+                    "reply": format_gold_csv_drop_ops_reply({"post": st}),
+                    "buildId": BUILD_ID,
+                }
+            )
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
+    @app.post("/api/apex/gold-csv-drop-ops/run")
+    def apex_gold_csv_drop_ops_run_api():
+        try:
+            from softdent_gold_csv_drop_ops import run_ops_10589_gold_csv_drop
+
+            # Default: no GUI from HTTP (operator/desktop owns SoftDent focus)
+            result = run_ops_10589_gold_csv_drop(attempt_gui_export=False)
             return json_response_fn({**result, "buildId": BUILD_ID})
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
