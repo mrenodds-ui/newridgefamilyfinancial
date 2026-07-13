@@ -756,12 +756,19 @@ def build_transaction_ledger_table(
         )
 
     hint = (
-        f"{len(rows)} row(s) from SoftDent TXN Excel JSONL (read-only; empty != $0)."
+        f"{len(rows)} row(s) from SoftDent account-tx ledger "
+        f"({result.get('source') or 'parsed TXN'}; read-only; empty != $0)."
         if rows
         else "No transactions found."
     )
     if filtered:
         hint += f" Filters: {result.get('filters') or {}}."
+    cov = result.get("availableRange") or {}
+    if result.get("account_tx_multi_year_available") and result.get("dbTotal"):
+        hint += (
+            f" Coverage: {int(result['dbTotal']):,} rows"
+            f" ({cov.get('min') or '?'} → {cov.get('max') or '?'})."
+        )
 
     return {
         "id": f"{page}-transaction-ledger",
@@ -776,6 +783,82 @@ def build_transaction_ledger_table(
         "hint": hint,
         "filters": result.get("filters") or {},
         "matchCount": int(result.get("matchCount") or len(rows)),
+        "account_tx_multi_year_available": bool(
+            result.get("account_tx_multi_year_available")
+        ),
+        "dbTotal": result.get("dbTotal"),
+        "availableRange": result.get("availableRange") or {},
+        "source": result.get("source"),
+    }
+
+
+def build_account_tx_ledger_coverage_chip(
+    bundle: dict[str, Any] | None = None,
+    *,
+    page: str = "softdent",
+) -> dict[str, Any]:
+    """Status chip: multi-year account-tx ledger coverage (counts/dates only; empty ≠ $0)."""
+    del bundle  # coverage is DB/ingest-backed, not import-bundle dollars
+    try:
+        from softdent_transaction_extract import account_tx_ledger_coverage
+    except Exception:
+        return {
+            "id": f"{page}-account-tx-coverage",
+            "type": "status",
+            "label": "Account TX Ledger Coverage",
+            "size": "m",
+            "status": "empty",
+            "message": "Account transaction coverage unavailable.",
+            "emptyMessage": "No transactions — empty ≠ $0.",
+            "hint": "Ingest SoftDent year-chunk TX Excel first.",
+            "account_tx_multi_year_available": False,
+        }
+
+    cov = account_tx_ledger_coverage()
+    total = int(cov.get("dbTotal") or 0)
+    dmin = cov.get("serviceDateMin")
+    dmax = cov.get("serviceDateMax")
+    multi = bool(cov.get("account_tx_multi_year_available"))
+    if total <= 0 or not dmin or not dmax:
+        return {
+            "id": f"{page}-account-tx-coverage",
+            "type": "status",
+            "label": "Account TX Ledger Coverage",
+            "size": "m",
+            "status": "empty",
+            "message": "No account transactions ingested yet.",
+            "emptyMessage": "No transactions — empty ≠ $0.",
+            "hint": (
+                r"Pull TXN year chunks → ingest with "
+                r"continue_softdent_txn_excel.py --ingest-year-chunks"
+            ),
+            "account_tx_multi_year_available": False,
+            "dbTotal": 0,
+        }
+
+    ymin = str(dmin)[:4]
+    ymax = str(dmax)[:4]
+    message = f"{total:,} account transactions ({ymin}–{ymax})"
+    if multi:
+        message = f"{total:,} account transactions ({ymin}–{ymax}) · multi-year ledger live"
+    return {
+        "id": f"{page}-account-tx-coverage",
+        "type": "status",
+        "label": "Account TX Ledger Coverage",
+        "size": "m",
+        "status": "ok",
+        "message": message,
+        "hint": (
+            "Ask HAL: “Show account 27002 transactions in 2018”. "
+            "Scoped by account/patient — never invents $0 for empty accounts. "
+            f"Source: {cov.get('source') or 'sd_account_transactions'} (read-only)."
+        ),
+        "account_tx_multi_year_available": multi,
+        "dbTotal": total,
+        "availableRange": {"min": dmin, "max": dmax},
+        "serviceDateMin": dmin,
+        "serviceDateMax": dmax,
+        "honesty": "empty != $0; counts/dates only — no dollar rollups",
     }
 
 

@@ -2319,10 +2319,14 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
         widgets.append(build_softdent_patient_dossier(bundle))
     except Exception:
         pass
-    # Moonshot NEXT: TXN ledger surface (read-only JSONL)
+    # Moonshot NEXT: TXN ledger surface (read-only JSONL / sd_account_transactions)
     try:
-        from apex_better_backend_widgets_pack import build_transaction_ledger_table
+        from apex_better_backend_widgets_pack import (
+            build_account_tx_ledger_coverage_chip,
+            build_transaction_ledger_table,
+        )
 
+        widgets.append(build_account_tx_ledger_coverage_chip(bundle, page="softdent"))
         widgets.append(build_transaction_ledger_table(bundle, page="softdent", limit=25))
     except Exception:
         pass
@@ -3506,8 +3510,12 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
         pass
     # Moonshot NEXT: TXN ledger surface on Office Manager
     try:
-        from apex_better_backend_widgets_pack import build_transaction_ledger_table
+        from apex_better_backend_widgets_pack import (
+            build_account_tx_ledger_coverage_chip,
+            build_transaction_ledger_table,
+        )
 
+        widgets.append(build_account_tx_ledger_coverage_chip(bundle, page="office-manager"))
         widgets.append(build_transaction_ledger_table(bundle, page="office-manager", limit=25))
     except Exception:
         pass

@@ -1491,7 +1491,25 @@ def _query_account_transactions_db(
         for tok in name_tokens:
             sql += " AND LOWER(COALESCE(patient_name,'')) LIKE ?"
             params.append(f"%{tok}%")
-    sql += " ORDER BY service_date, row_number"
+    if start:
+        sql += " AND service_date >= ?"
+        params.append(start[:10])
+    if end:
+        # YYYY-MM expand uses exclusive next-month-01; keep that behavior
+        if (
+            len(end) == 10
+            and end.endswith("-01")
+            and start
+            and start.endswith("-01")
+            and start[:7] != end[:7]
+        ):
+            sql += " AND service_date < ?"
+            params.append(end[:10])
+        else:
+            sql += " AND service_date <= ?"
+            params.append(end[:10])
+    sql += " ORDER BY service_date DESC, row_number DESC LIMIT ?"
+    params.append(max(1, int(limit)))
 
     conn = sqlite3.connect(f"file:{target}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
@@ -1502,34 +1520,32 @@ def _query_account_transactions_db(
 
     matches: list[dict[str, Any]] = []
     for row in rows:
-        rec = {
-            "date": row["service_date"],
-            "account_num": row["account_num"],
-            "patient_name": row["patient_name"],
-            "provider": row["provider"],
-            "procedure": row["procedure"],
-            "amount": row["amount"],
-            "note_flag": row["note_flag"],
-            "row_number": row["row_number"],
-            "source_file": row["source_file"],
-            "prod": row["prod"],
-            "charges": row["charges"],
-            "prod_adj": row["prod_adj"],
-            "cash": row["cash"],
-            "check": row["check"],
-            "credit": row["credit"],
-            "pay_adj": row["pay_adj"],
-            "period_start": row["period_start"],
-            "period_end": row["period_end"],
-            "stable_id": row["stable_id"],
-            "_source": "sd_account_transactions",
-        }
-        if start or end:
-            if not _date_in_range(rec.get("date"), start, end):
-                continue
-        matches.append(rec)
-        if len(matches) >= max(1, int(limit)):
-            break
+        matches.append(
+            {
+                "date": row["service_date"],
+                "account_num": row["account_num"],
+                "patient_name": row["patient_name"],
+                "provider": row["provider"],
+                "procedure": row["procedure"],
+                "amount": row["amount"],
+                "note_flag": row["note_flag"],
+                "row_number": row["row_number"],
+                "source_file": row["source_file"],
+                "prod": row["prod"],
+                "charges": row["charges"],
+                "prod_adj": row["prod_adj"],
+                "cash": row["cash"],
+                "check": row["check"],
+                "credit": row["credit"],
+                "pay_adj": row["pay_adj"],
+                "period_start": row["period_start"],
+                "period_end": row["period_end"],
+                "stable_id": row["stable_id"],
+                "_source": "sd_account_transactions",
+            }
+        )
+    # Newest-first from SQL; HAL samples often prefer chronological — reverse for display
+    matches.reverse()
 
     return {
         "ok": True,
