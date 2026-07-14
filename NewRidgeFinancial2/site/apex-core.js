@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10618 (OPS debris cleanup + Content hub + freshness)
+ * Build: hal-10619 (blank all page widgets)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10618";
+  const ASSET_V = "hal-10619";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }

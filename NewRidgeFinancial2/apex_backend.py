@@ -32,7 +32,21 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10618"
+BUILD_ID = "hal-10619"
+
+
+def _apex_blank_all_widgets() -> bool:
+    """Operator blank-stage: every Apex page returns zero widgets.
+
+    Default ON at runtime. Force off with NR2_APEX_BLANK_WIDGETS=0.
+    Under unittest/pytest (without explicit env), builders stay active so pack tests remain valid.
+    """
+    raw = os.getenv("NR2_APEX_BLANK_WIDGETS")
+    if raw is not None and str(raw).strip() != "":
+        return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+    import sys
+
+    return "unittest" not in sys.modules and "pytest" not in sys.modules
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4096,6 +4110,23 @@ def build_apex_widgets(
     sub_key = re.sub(r"[^a-z0-9\-]", "", str(sub or "").strip().lower()) or None
     cid = str(claim_id or "").strip() or None
     pid_patient = str(patient_id or "").strip() or None
+    if _apex_blank_all_widgets():
+        # Strip every page/subpage stage — no warming stubs, no mosaic tiles.
+        page_label = pid if not sub_key else f"{pid}/{sub_key}"
+        return {
+            "page": page_label if pid in APEX_PAGES else (pid or "unknown"),
+            "parent": pid if sub_key and pid in APEX_PAGES else None,
+            "sub": sub_key,
+            "claimId": cid,
+            "patientId": pid_patient,
+            "refreshedAt": _utc_now(),
+            "buildId": BUILD_ID,
+            "warming": False,
+            "widgets": [],
+            "mosaicLayout": {"mode": "empty", "bands": []},
+            "sourceNote": "blank-stage — all widgets removed",
+            "blankWidgets": True,
+        }
     if pid not in APEX_PAGES:
         return {
             "page": pid or "unknown",

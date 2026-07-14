@@ -1,4 +1,4 @@
-"""hal-10618 — Fibonacci band packing so widgets fit edge-to-edge on all pages."""
+"""hal-10619 — Fibonacci band packing so widgets fit edge-to-edge on all pages."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from apex_compact_pages_pack import pack_fibonacci_bands
 
 class Hal10617FibonacciBandsTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10618")
+        self.assertEqual(BUILD_ID, "hal-10619")
 
     def test_pack_strip_then_pairs(self) -> None:
         widgets = [
@@ -59,7 +59,7 @@ class Hal10617FibonacciBandsTests(unittest.TestCase):
         )
         for page in pages:
             payload = build_apex_widgets(page, _fill=True)
-            self.assertEqual(payload.get("buildId"), "hal-10618", page)
+            self.assertEqual(payload.get("buildId"), "hal-10619", page)
             layout = payload.get("mosaicLayout") or {}
             self.assertEqual(layout.get("mode"), "fibonacci", page)
             bands = layout.get("bands") or []

@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10618",
-  "BUILD_ID": "hal-10618",
-  "assetVersion": "hal-10618",
-  "builtAt": "2026-07-14T02:30:00.000Z",
-  "notes": "hal-10618: OPS debris cleanup, Content hub, freshness strip, theme/mobile re-link.",
+  "schemaVersion": "hal-10619",
+  "BUILD_ID": "hal-10619",
+  "assetVersion": "hal-10619",
+  "builtAt": "2026-07-14T11:45:00.000Z",
+  "notes": "hal-10619: blank all Apex page widgets (empty stages).",
   "staffRenderMode": "apex",
-  "package": "HAL-10618"
+  "package": "HAL-10619"
 }
