@@ -22,17 +22,15 @@ TABLE_ROW_CAP = 5
 TABLE_ROW_CAP_HARD = 7
 # Moonshot KPI density (hal-10562)
 KPI_BUDGET_ABOVE_FOLD = 4
-# First-viewport keep sets (hal-10612) — overflow → #{page}/ops
-
+# First-viewport keep sets — tight zero-scroll (hal-10616). Target ≤5 tiles/page.
 PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
     "financial": frozenset(
         {
             "financial-command-strip",
             "financial-dual-trend",
             "provider-hbar",
-            "collections-gauge",
-            "bridge-errors",
             "ar-aging-chart",
+            "bridge-errors",
         }
     ),
     "claims": frozenset(
@@ -41,14 +39,11 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
             "claims-aging-exposure",
             "claims-pipeline-summary",
             "claims-top-critical",
-            "claims-open-kanban",
         }
     ),
     "hal": frozenset(
         {
             "hal-import-health",
-            "hal-mosaic-prod",
-            "hal-mosaic-coll",
             "hal-ask",
             "hal-recommended-actions",
             "hal-ai-insight",
@@ -57,22 +52,20 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
     ),
     "taxes": frozenset(
         {
-            "taxes-period-scrubber",
-            "tax-year-status",
             "tax-core-strip",
+            "tax-year-status",
+            "tax-bridge-waterfall",
             "tax-open-planning",
             "tax-disclaimer",
-            "tax-bridge-waterfall",
         }
     ),
     "softdent": frozenset(
         {
             "sd-vitals-strip",
             "collections-gauge",
-            "softdent-visual-ledger-recon",
-            "softdent-gold-csv-drop-ops",
             "sd-prod-trend",
-            "softdent-tp-estimate-chips",
+            "softdent-collections-gap",
+            "softdent-outstanding-claims-bridge",
         }
     ),
     "ar": frozenset(
@@ -80,7 +73,6 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
             "ar-vitals-strip",
             "ar-aging-chart",
             "collection-bullet",
-            "collections-gauge",
             "ar-collection-task-list",
             "ar-follow-up",
         }
@@ -105,49 +97,74 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
     ),
 }
 
-# Ops subpages stay zero-scroll: only these demoted ids surface (hal-10615).
+# Ops subpages: money/detail only — no scroll fluff (hal-10616).
 PAGE_OPS_KEEP: dict[str, frozenset[str]] = {
     "softdent": frozenset(
         {
-            "softdent-collections-gap",
-            "softdent-outstanding-claims-bridge",
             "softdent-aging-gap",
             "softdent-production-gap",
-            "softdent-account-tx-coverage",
-            "softdent-transaction-ledger",
-            "stale-import-alert",
-            "v-patient-aging",
+            "softdent-case-acceptance-gap",
+            "softdent-scheduling-gap",
         }
     ),
     "claims": frozenset(
         {
             "claims-risk-analytics",
-            "eob-posting-backlog",
-            "clinical-signoff-queue",
             "claim-status-lanes",
-            "claims-open-kanban",
         }
     ),
     "financial": frozenset(
         {
-            "ebitda-station",
-            "expense-treemap",
-            "revenue-composition",
-            "deep-audit-status",
             "reconciliation-status",
-            "bridge-errors",
+            "revenue-composition",
+            "ebitda-station",
         }
     ),
     "hal": frozenset(
         {
-            "hal-full-log",
             "hal-recommended-actions",
             "hal-ai-insight",
-            "stale-import-alert",
-            "import-health-timeline",
+        }
+    ),
+    "ar": frozenset(
+        {
+            "ar-heatmap-grid",
+            "ar-waterfall",
+            "collectible-remainder",
         }
     ),
 }
+
+# Hard-omit for zero-scroll (optional playbooks / dupes / overview kanban / HAL mosaics).
+OMIT_OPTIONAL_ZERO_SCROLL_IDS = frozenset(
+    {
+        "softdent-gold-csv-drop-ops",
+        "softdent-visual-ledger-recon",
+        "softdent-tp-estimate-chips",
+        "softdent-account-tx-coverage",
+        "softdent-transaction-ledger",
+        "softdent-gold-payment-pipeline",
+        "softdent-patient-dossier",
+        "softdent-print-preview-audit",
+        "softdent-ui-honesty",
+        "stale-import-alert",
+        "v-patient-aging",
+        "v-case-acceptance",
+        "v-scheduling-efficiency",
+        "claims-open-kanban",
+        "hal-mosaic-prod",
+        "hal-mosaic-coll",
+        "taxes-period-scrubber",
+        "eob-posting-backlog",
+        "clinical-signoff-queue",
+        "expense-treemap",
+        "deep-audit-status",
+        "ar-aging-outlook",
+        "ar-aging-pareto",
+        "import-health-timeline",
+        "era835-ingest-gap",
+    }
+)
 
 # Chronic empty until SoftDent source lands — omit (do not scroll empty tiles).
 # warming-bridge stays for cold stub only; final payloads omit it via omit_until_source.
@@ -167,12 +184,12 @@ OMIT_UNTIL_SOURCE_IDS = frozenset(
     }
 )
 
+# Cap tiles per overview (incl. More Ops strip) for Fibonacci stage
+MAX_FIRST_VIEWPORT_WIDGETS = 5
+MAX_OPS_VIEWPORT_WIDGETS = 5
+
 # Always keep on parent even if not in page keep set
-_ALWAYS_KEEP_IDS = frozenset(
-    {
-        # warming-bridge removed (hal-10615) — omit until fill done
-    }
-)
+_ALWAYS_KEEP_IDS = frozenset()
 
 
 def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
@@ -199,10 +216,11 @@ def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
 
 
 def omit_until_source_widgets(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
-    """Drop chronic empty SoftDent-source widgets so pages do not scroll blanks (hal-10615)."""
-    del page, sub  # reserved for future page-scoped exceptions
+    """Drop chronic empty + optional zero-scroll clutter (hal-10616)."""
+    del sub  # reserved
     if not isinstance(widgets, list):
         return widgets
+    page_key = str(page or "").strip().lower()
     out: list[Any] = []
     for w in widgets:
         if not isinstance(w, dict):
@@ -210,6 +228,12 @@ def omit_until_source_widgets(widgets: list[Any], *, page: str = "", sub: str = 
             continue
         wid = str(w.get("id") or "")
         status = str(w.get("status") or "").lower()
+        if wid in OMIT_OPTIONAL_ZERO_SCROLL_IDS:
+            continue
+        if wid.endswith("-ops-more-omitted"):
+            continue
+        if wid == "collections-gauge" and page_key not in {"", "softdent"}:
+            continue
         if wid in OMIT_UNTIL_SOURCE_IDS:
             # Omit while empty / warming. Show only when real status arrives (ok/warn with data).
             if status in {"empty", "awaiting-migration", "warming", ""}:
@@ -224,6 +248,59 @@ def omit_until_source_widgets(widgets: list[Any], *, page: str = "", sub: str = 
                     continue
         out.append(w)
     return out
+
+
+def omit_cross_page_duplicates(widgets: list[Any], *, page: str = "") -> list[Any]:
+    """Keep collections-gauge on SoftDent only (hal-10616)."""
+    if not isinstance(widgets, list):
+        return widgets
+    page_key = str(page or "").strip().lower()
+    if page_key in {"", "softdent"}:
+        return widgets
+    return [
+        w
+        for w in widgets
+        if not (isinstance(w, dict) and str(w.get("id") or "") == "collections-gauge")
+    ]
+
+
+# Preferred mosaic order within each page keep set (Fibonacci stage left→right / top→bottom)
+PAGE_FIRST_VIEW_ORDER: dict[str, tuple[str, ...]] = {
+    "softdent": (
+        "sd-vitals-strip",
+        "collections-gauge",
+        "softdent-collections-gap",
+        "softdent-outstanding-claims-bridge",
+        "sd-prod-trend",
+    ),
+    "financial": (
+        "financial-command-strip",
+        "financial-dual-trend",
+        "provider-hbar",
+        "ar-aging-chart",
+        "bridge-errors",
+    ),
+    "claims": (
+        "claims-executive-strip",
+        "claims-pipeline-summary",
+        "claims-aging-exposure",
+        "claims-top-critical",
+    ),
+    "hal": (
+        "hal-import-health",
+        "hal-ask",
+        "hal-recommended-actions",
+        "hal-ai-insight",
+        "hal-full-log",
+    ),
+    "ar": (
+        "ar-vitals-strip",
+        "ar-aging-chart",
+        "collection-bullet",
+        "ar-collection-task-list",
+        "ar-follow-up",
+    ),
+}
 
 
 def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
@@ -743,11 +820,7 @@ def partition_first_viewport(
     page: str,
     sub: str = "",
 ) -> list[Any]:
-    """Keep ~6 first-viewport widgets; demote the rest to #{page}/ops.
-
-    Parent pages only. Subpages (including ops) are untouched. SoftDent Gold CSV
-    drop OPS stays on main when listed in PAGE_FIRST_VIEW_KEEP.
-    """
+    """Keep ≤MAX_FIRST_VIEWPORT_WIDGETS; demote the rest to #{page}/ops (hal-10616)."""
     if not isinstance(widgets, list):
         return widgets
     page_key = str(page or "").strip().lower()
@@ -759,28 +832,70 @@ def partition_first_viewport(
 
     kept: list[Any] = []
     demoted_labels: list[str] = []
+    # Prefer keep-set order for stable Fibonacci mosaic
+    by_id = {
+        str(w.get("id") or ""): w
+        for w in widgets
+        if isinstance(w, dict) and str(w.get("id") or "")
+    }
+    order = PAGE_FIRST_VIEW_ORDER.get(page_key) or tuple(sorted(keep_set))
+    for wid in order:
+        if wid not in keep_set:
+            continue
+        w = by_id.get(wid)
+        if w is None:
+            continue
+        if wid in OMIT_OPTIONAL_ZERO_SCROLL_IDS:
+            continue
+        kept.append(w)
+        # SoftDent: use full five-tile money set (no reserved More Ops slot).
+        soft_cap = (
+            MAX_FIRST_VIEWPORT_WIDGETS
+            if page_key == "softdent"
+            else max(1, MAX_FIRST_VIEWPORT_WIDGETS - 1)
+        )
+        if len(kept) >= soft_cap:
+            break
+    # Any remaining keep-set members not in preferred order
+    soft_cap = (
+        MAX_FIRST_VIEWPORT_WIDGETS
+        if page_key == "softdent"
+        else max(1, MAX_FIRST_VIEWPORT_WIDGETS - 1)
+    )
+    if len(kept) < soft_cap:
+        for wid in keep_set:
+            if wid in by_id and all(str(x.get("id")) != wid for x in kept if isinstance(x, dict)):
+                if wid in OMIT_OPTIONAL_ZERO_SCROLL_IDS:
+                    continue
+                kept.append(by_id[wid])
+                if len(kept) >= soft_cap:
+                    break
     for w in widgets:
         if not isinstance(w, dict):
-            kept.append(w)
             continue
         wid = str(w.get("id") or "")
         if wid in keep_set or _is_always_keep(wid):
-            kept.append(w)
+            continue
+        if wid in OMIT_OPTIONAL_ZERO_SCROLL_IDS or wid in OMIT_UNTIL_SOURCE_IDS:
             continue
         demoted_labels.append(str(w.get("label") or wid or "widget"))
 
-    if not demoted_labels:
-        return kept
+    if page_key == "softdent":
+        # Money truth on SoftDent overview; Ops is optional (#softdent/ops).
+        return kept[:MAX_FIRST_VIEWPORT_WIDGETS]
+
+    if not demoted_labels and len(kept) <= MAX_FIRST_VIEWPORT_WIDGETS:
+        return kept[:MAX_FIRST_VIEWPORT_WIDGETS]
 
     n = len(demoted_labels)
-    preview = ", ".join(demoted_labels[:4])
-    if n > 4:
-        preview += f" +{n - 4} more"
+    preview = ", ".join(demoted_labels[:3]) if demoted_labels else "ops"
+    if n > 3:
+        preview += f" +{n - 3} more"
     ops = open_detail_strip(
         page=page_key,
         sub="ops",
         label="More Ops",
-        message=f"{n} widget(s) moved to Ops — {preview}",
+        message=f"{n} widget(s) in Ops — {preview}" if n else "Open Ops",
     )
     # Prefer after command/executive strip if present
     insert_at = len(kept)
@@ -793,11 +908,11 @@ def partition_first_viewport(
             insert_at = i + 1
             break
     kept.insert(insert_at, ops)
-    return kept
+    return kept[:MAX_FIRST_VIEWPORT_WIDGETS]
 
 
 def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
-    """Build #{page}/ops payload: demoted keep-set for zero-scroll Ops (hal-10615)."""
+    """Build #{page}/ops payload: demoted keep-set capped for zero-scroll (hal-10616)."""
     if not isinstance(widgets, list):
         return []
     page_key = str(page or "").strip().lower()
@@ -819,12 +934,14 @@ def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
         }
     ]
 
-    skipped_ops = 0
+    body: list[Any] = []
     for w in widgets:
         if not isinstance(w, dict):
             continue
         wid = str(w.get("id") or "")
         if wid in keep_set or _is_always_keep(wid):
+            continue
+        if wid in OMIT_OPTIONAL_ZERO_SCROLL_IDS:
             continue
         if wid in OMIT_UNTIL_SOURCE_IDS and str(w.get("status") or "").lower() in {
             "empty",
@@ -834,24 +951,12 @@ def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
         }:
             continue
         if ops_keep is not None and wid not in ops_keep:
-            skipped_ops += 1
             continue
-        out.append(w)
-    if skipped_ops:
-        out.append(
-            {
-                "id": f"{page_key}-ops-more-omitted",
-                "type": "status",
-                "label": "Compact Ops",
-                "size": "strip",
-                "compact": True,
-                "maxHeight": MAX_MICRO_PX,
-                "zeroScroll": True,
-                "status": "ok",
-                "message": f"{skipped_ops} optional SoftDent/ops tile(s) hidden for zero-scroll",
-                "hint": "Ask HAL for gold/ERA/print-preview playbooks when needed.",
-            }
-        )
+        body.append(w)
+        if len(body) >= max(1, MAX_OPS_VIEWPORT_WIDGETS - 1):
+            break
+
+    out.extend(body)
     if len(out) == 1:
         out.append(
             {
@@ -867,4 +972,4 @@ def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
                 "zeroScroll": True,
             }
         )
-    return out
+    return out[:MAX_OPS_VIEWPORT_WIDGETS]

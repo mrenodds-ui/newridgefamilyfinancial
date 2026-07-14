@@ -31,7 +31,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10615"
+BUILD_ID = "hal-10616"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4341,6 +4341,7 @@ def build_apex_widgets(
             apply_zero_scroll_contract,
             compact_widget_sizes,
             normalize_first_viewport,
+            omit_cross_page_duplicates,
             omit_until_source_widgets,
             partition_first_viewport,
         )
@@ -4348,6 +4349,7 @@ def build_apex_widgets(
         widgets = omit_until_source_widgets(
             widgets if isinstance(widgets, list) else [], page=pid, sub=sub_key or ""
         )
+        widgets = omit_cross_page_duplicates(widgets, page=pid)
         widgets = apply_collapse_empty_all(widgets, page=pid)
         widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
@@ -4356,6 +4358,7 @@ def build_apex_widgets(
         if not sub_key:
             widgets = partition_first_viewport(widgets, page=pid, sub="")
         widgets = omit_until_source_widgets(widgets, page=pid, sub=sub_key or "")
+        widgets = omit_cross_page_duplicates(widgets, page=pid)
         widgets = compact_widget_sizes(widgets, page=pid, sub=sub_key or "")
         source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty"
     except Exception:
