@@ -106,9 +106,9 @@ class IndexBuildIdAlignmentTests(unittest.TestCase):
         html = (Path(__file__).resolve().parent / "site" / "index.html").read_text(
             encoding="utf-8"
         )
-        self.assertIn("hal-10608", html)
+        self.assertIn("hal-10629", html)
         self.assertNotIn("hal-10576", html)
-        self.assertIn("hal-10608 · bridge", html)
+        self.assertIn("hal-10629 · bridge", html)
 
 
 if __name__ == "__main__":

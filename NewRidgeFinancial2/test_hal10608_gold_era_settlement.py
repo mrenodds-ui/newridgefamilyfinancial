@@ -21,7 +21,7 @@ from softdent_gold_era_settlement_hal10608 import (
 class Hal10608GoldEraSettlementTests(unittest.TestCase):
     def test_build_id(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10608")
-        self.assertEqual(BUILD_ID, "hal-10608")
+        self.assertEqual(BUILD_ID, "hal-10629")
 
     def test_stop_ocr_policy(self) -> None:
         self.assertTrue(STOP_OCR_POLICY.get("ocrExpansionStopped"))

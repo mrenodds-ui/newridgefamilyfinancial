@@ -14,14 +14,14 @@ from import_sync import _build_ar_rows_from_account_aging_csv
 
 class FixAllPageInspectAppliedTests(unittest.TestCase):
     def test_build_id_and_site_manifest_aligned(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10608")
+        self.assertEqual(BUILD_ID, "hal-10629")
         site = Path(__file__).resolve().parent / "site" / "nr2-build.json"
         root = Path(__file__).resolve().parent / "nr2-build.json"
         for path in (site, root):
             data = json.loads(path.read_text(encoding="utf-8"))
-            self.assertEqual(data.get("schemaVersion"), "hal-10608")
-            self.assertEqual(data.get("BUILD_ID"), "hal-10608")
-            self.assertEqual(data.get("assetVersion"), "hal-10608")
+            self.assertEqual(data.get("schemaVersion"), "hal-10629")
+            self.assertEqual(data.get("BUILD_ID"), "hal-10629")
+            self.assertEqual(data.get("assetVersion"), "hal-10629")
 
     def test_account_aging_csv_maps_to_ar_rows(self) -> None:
         rows = _build_ar_rows_from_account_aging_csv()

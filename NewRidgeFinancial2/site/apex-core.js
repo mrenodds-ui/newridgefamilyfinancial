@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10628 (HAL spine ↔ HAL chat wire harden)
+ * Build: hal-10629 (HAL trust: hub-offline UX · Sync CTA · Logs by owner · History range · Ops checklist)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10628";
+  const ASSET_V = "hal-10629";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -471,6 +471,9 @@
             <span class="apex-hal-chat__live-indicator" data-hal-live aria-hidden="true"></span>
           </header>
           <div class="apex-hal-chat" data-hal-chat>
+            <div class="apex-hal-hub-banner" data-hal-hub-banner hidden role="status">
+              HAL hub offline — grounded tools only
+            </div>
             <div class="apex-hal-chat__messages" data-hal-messages role="log" aria-live="polite" aria-label="HAL conversation history"></div>
             <div class="apex-hal-chat__chips-wrap">
               <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
@@ -506,6 +509,9 @@
               ${printBtn}
             </header>
             <div class="apex-kpi-value is-empty">${this.escape(this.spec.emptyMessage || "No structured insight")}</div>
+            <button type="button" class="apex-btn apex-btn--small apex-btn--primary" data-hal-insight-ask>
+              Ask HAL for a health audit
+            </button>
             <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
           `;
         }
@@ -635,6 +641,11 @@
               this.spec.eraDiscoverLabel || "Scan for ERA Files"
             )}</button>`
           : "";
+        const syncBtn = this.spec.syncImports
+          ? `<button type="button" class="apex-btn apex-btn--primary apex-btn--small" data-hal-sync-cta>${this.escape(
+              this.spec.syncImportsLabel || "Sync & review missing imports"
+            )}</button>`
+          : "";
         const fillPct = Number(this.spec.fillProgress);
         const showFill =
           this.spec.showFillProgress === true ||
@@ -664,6 +675,7 @@
           ${fillBar}
           ${checkHtml}
           ${actionHtml}
+          ${syncBtn}
           ${refreshBtn}
           ${eraInboxBtn}
           ${eraDiscoverBtn}
@@ -1619,7 +1631,9 @@
 
       if (this.type === "hal-history-feed") {
         const entries = Array.isArray(this.spec.entries) ? this.spec.entries : [];
-        const filters = Array.isArray(this.spec.filters) ? this.spec.filters : ["all", "operator", "hal", "system"];
+        const filters = Array.isArray(this.spec.filters)
+          ? this.spec.filters
+          : ["all", "today", "week", "operator", "hal", "system"];
         const counts = this.spec.counts && typeof this.spec.counts === "object" ? this.spec.counts : {};
         const empty = this.spec.status === "empty" || !entries.length;
         const chips = filters
@@ -1636,6 +1650,7 @@
             const role = String((e && e.role) || "hal");
             const text = String((e && (e.text || e.preview)) || "");
             const at = String((e && e.at) || "—");
+            const range = String((e && e.range) || "older");
             const actions =
               role === "operator"
                 ? `<button type="button" class="apex-hal-feed__replay" data-hal-replay="${this.escape(
@@ -1649,7 +1664,9 @@
                    )}">Copy</button>`;
             return `<article class="apex-hal-feed__row apex-hal-feed__row--${this.escape(
               role
-            )}" data-hal-hist-role="${this.escape(role)}">
+            )}" data-hal-hist-role="${this.escape(role)}" data-hal-hist-range="${this.escape(
+              range
+            )}" data-hal-hist-at="${this.escape(at)}">
               <div class="apex-hal-feed__meta">
                 <span class="apex-hal-feed__role">${this.escape(role)}</span>
                 <time class="apex-hal-feed__at">${this.escape(at)}</time>
@@ -1670,6 +1687,9 @@
                    <div class="apex-kpi-value is-empty">${this.escape(
                      this.spec.emptyMessage || "No history yet"
                    )}</div>
+                   <button type="button" class="apex-btn apex-btn--small apex-btn--primary" data-hal-hist-ask>
+                     Ask HAL in the rail
+                   </button>
                  </div>`
               : `<div class="apex-hal-feed" data-hal-hist-feed>${rows}</div>`
           }
@@ -1679,14 +1699,28 @@
 
       if (this.type === "hal-sys-console") {
         const lines = Array.isArray(this.spec.lines) ? this.spec.lines : [];
+        const ownerFilters = Array.isArray(this.spec.ownerFilters)
+          ? this.spec.ownerFilters
+          : ["all", "softdent", "quickbooks", "era", "bridge", "other"];
         const filters = Array.isArray(this.spec.filters) ? this.spec.filters : ["all", "error", "warn", "info"];
         const empty = this.spec.status === "empty" || !lines.length;
-        const chips = filters
+        const ownerChips = ownerFilters
           .map((f, i) => {
             const n =
-              f === "all" ? lines.length : lines.filter((ln) => String((ln && ln.level) || "") === f).length;
+              f === "all"
+                ? lines.length
+                : lines.filter((ln) => String((ln && ln.owner) || "other") === f).length;
             const active = i === 0 ? " is-active" : "";
-            return `<button type="button" class="apex-hal-filter${active}" data-hal-log-filter="${this.escape(
+            return `<button type="button" class="apex-hal-filter${active}" data-hal-log-owner="${this.escape(
+              f
+            )}">${this.escape(f)} · ${this.escape(String(n))}</button>`;
+          })
+          .join("");
+        const chips = filters
+          .map((f) => {
+            const n =
+              f === "all" ? lines.length : lines.filter((ln) => String((ln && ln.level) || "") === f).length;
+            return `<button type="button" class="apex-hal-filter" data-hal-log-filter="${this.escape(
               f
             )}">${this.escape(f)} · ${this.escape(String(n))}</button>`;
           })
@@ -1695,12 +1729,17 @@
           .map((ln) => {
             const level = String((ln && ln.level) || "info");
             const source = String((ln && ln.source) || "—");
+            const owner = String((ln && ln.owner) || "other");
+            const gapCode = String((ln && ln.gapCode) || "");
             const message = String((ln && ln.message) || "");
-            const askQ = `Explain this system log and the safest next staff action: [${level}] ${source} — ${message}`;
+            const askQ = `Explain this system log and the safest next staff OPS step: [${level}] owner=${owner} source=${source}${
+              gapCode ? ` gap=${gapCode}` : ""
+            } — ${message}`;
             return `<div class="apex-hal-console__line apex-hal-console__line--${this.escape(
               level
-            )}" data-hal-log-level="${this.escape(level)}">
+            )}" data-hal-log-level="${this.escape(level)}" data-hal-log-owner="${this.escape(owner)}">
               <span class="apex-hal-console__lvl">${this.escape(level)}</span>
+              <span class="apex-hal-console__owner">${this.escape(owner)}</span>
               <span class="apex-hal-console__src">${this.escape(source)}</span>
               <span class="apex-hal-console__msg">${this.escape(message)}</span>
               <button type="button" class="apex-hal-console__ask" data-hal-ask="${this.escape(
@@ -1713,7 +1752,8 @@
           <header class="apex-widget-header apex-widget-header--plain">
             <span class="apex-widget-label">${label}</span>
           </header>
-          <div class="apex-hal-filters" data-hal-log-filters>${chips}</div>
+          <div class="apex-hal-filters" data-hal-log-owners>${ownerChips}</div>
+          <div class="apex-hal-filters apex-hal-filters--secondary" data-hal-log-filters>${chips}</div>
           ${
             empty
               ? `<div class="apex-kpi-value is-empty">${this.escape(
@@ -3279,6 +3319,34 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         }
       }
       if (this.type === "status") {
+        const syncCta = this.element.querySelector("[data-hal-sync-cta]");
+        if (syncCta && syncCta.dataset.wired !== "1") {
+          syncCta.dataset.wired = "1";
+          syncCta.addEventListener("click", async () => {
+            syncCta.disabled = true;
+            const prev = syncCta.textContent;
+            syncCta.textContent = "Syncing…";
+            try {
+              await runHalBoardActions([
+                { type: "sync_imports", fullSync: true },
+                { type: "set_status_banner", message: "Sync requested — review missing imports", tone: "warn" },
+              ]);
+              try {
+                persistHalHistoryEntry("system", "Sync & review missing imports requested from HAL.");
+              } catch (_err) {
+                /* optional */
+              }
+              const reloadHash =
+                currentPage === "hal" ? (currentSub ? `hal/${currentSub}` : "hal") : currentPage;
+              await loadPage(reloadHash, { silent: false });
+            } catch (err) {
+              window.alert(String((err && err.message) || err));
+            } finally {
+              syncCta.disabled = false;
+              syncCta.textContent = prev;
+            }
+          });
+        }
         const refreshBtn = this.element.querySelector("[data-c0-refresh]");
         if (refreshBtn && refreshBtn.dataset.wired !== "1") {
           refreshBtn.dataset.wired = "1";
@@ -3401,6 +3469,18 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           });
         }
       }
+      if (this.type === "ai-insight") {
+        const askInsight = this.element.querySelector("[data-hal-insight-ask]");
+        if (askInsight && askInsight.dataset.wired !== "1") {
+          askInsight.dataset.wired = "1";
+          askInsight.addEventListener("click", () => {
+            const q = "Run a health audit of import posture and the safest next staff action.";
+            if (currentPage === "hal" && currentSub) askHalOnSubpage(q);
+            else askHal(q);
+          });
+        }
+      }
+
       if (this.type === "hal-chat") {
         wireHalChat(this.element);
       }
@@ -5322,8 +5402,16 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     if (!q) return;
     const logEl = halSubChatLogEl();
     if (logEl && currentPage === "hal" && currentSub) {
+      const rail = logEl.closest(".apex-hal-rail") || logEl.closest("[data-hal-chat]");
+      const input = rail && rail.querySelector("[data-hal-input]");
+      if (input) {
+        try {
+          input.focus();
+        } catch (_err) {
+          /* ignore */
+        }
+      }
       askHal(q, logEl);
-      const rail = logEl.closest(".apex-hal-rail");
       if (rail && typeof rail.scrollIntoView === "function") {
         rail.scrollIntoView({ behavior: "smooth", block: "nearest" });
       }
@@ -5348,8 +5436,24 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         if (!feed) return;
         feed.querySelectorAll("[data-hal-hist-role]").forEach((row) => {
           const role = row.getAttribute("data-hal-hist-role") || "";
-          row.hidden = filter !== "all" && role !== filter;
+          const range = row.getAttribute("data-hal-hist-range") || "older";
+          let show = true;
+          if (filter === "today" || filter === "week") show = range === filter || (filter === "week" && range === "today");
+          else if (filter !== "all") show = role === filter;
+          row.hidden = !show;
         });
+      });
+    });
+    root.querySelectorAll("[data-hal-hist-ask]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const input = document.querySelector(".apex-hal-rail [data-hal-input], [data-hal-input]");
+        if (input) {
+          try {
+            input.focus();
+          } catch (_err) {
+            /* ignore */
+          }
+        }
       });
     });
     root.querySelectorAll("[data-hal-replay]").forEach((btn) => {
@@ -5381,15 +5485,30 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     if (!root || root.dataset.halLogWired === "1") return;
     root.dataset.halLogWired = "1";
     const consoleEl = root.querySelector("[data-hal-log-console]");
+    let ownerFilter = "all";
+    let levelFilter = "all";
+    const applyLogFilters = () => {
+      if (!consoleEl) return;
+      consoleEl.querySelectorAll("[data-hal-log-level]").forEach((row) => {
+        const level = row.getAttribute("data-hal-log-level") || "";
+        const owner = row.getAttribute("data-hal-log-owner") || "other";
+        const ownerOk = ownerFilter === "all" || owner === ownerFilter;
+        const levelOk = levelFilter === "all" || level === levelFilter;
+        row.hidden = !(ownerOk && levelOk);
+      });
+    };
+    root.querySelectorAll("[data-hal-log-owner]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        ownerFilter = btn.getAttribute("data-hal-log-owner") || "all";
+        root.querySelectorAll("[data-hal-log-owner]").forEach((b) => b.classList.toggle("is-active", b === btn));
+        applyLogFilters();
+      });
+    });
     root.querySelectorAll("[data-hal-log-filter]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const filter = btn.getAttribute("data-hal-log-filter") || "all";
+        levelFilter = btn.getAttribute("data-hal-log-filter") || "all";
         root.querySelectorAll("[data-hal-log-filter]").forEach((b) => b.classList.toggle("is-active", b === btn));
-        if (!consoleEl) return;
-        consoleEl.querySelectorAll("[data-hal-log-level]").forEach((row) => {
-          const level = row.getAttribute("data-hal-log-level") || "";
-          row.hidden = filter !== "all" && level !== filter;
-        });
+        applyLogFilters();
       });
     });
     root.querySelectorAll("[data-hal-ask]").forEach((btn) => {
@@ -5806,6 +5925,40 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }
   }
 
+  function isHalHubOfflineError(errOrText) {
+    const s = String(errOrText || "").toLowerCase();
+    return (
+      s.includes("connection refused") ||
+      s.includes("econnrefused") ||
+      s.includes("failed to fetch") ||
+      s.includes("networkerror") ||
+      s.includes("err_connection_refused") ||
+      s.includes("errno 111")
+    );
+  }
+
+  function formatHalHubOfflineReply() {
+    return "HAL hub offline — grounded tools only. Sync imports or ask about Import Health / System Logs while the hub is down.";
+  }
+
+  function setHalHubOfflineBanner(chatRoot, offline) {
+    try {
+      const root = chatRoot || document;
+      const banner =
+        (root.querySelector && root.querySelector("[data-hal-hub-banner]")) ||
+        document.querySelector("[data-hal-hub-banner]");
+      if (!banner) return;
+      if (offline) {
+        banner.hidden = false;
+        banner.textContent = "HAL hub offline — grounded tools only";
+      } else {
+        banner.hidden = true;
+      }
+    } catch (_err) {
+      /* optional */
+    }
+  }
+
   async function askHal(query, logEl) {
     const q = String(query || "").trim();
     if (!q) return;
@@ -5875,6 +6028,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           finalizeHalPending(pending, reply);
         } else appendHalMessage(logEl, "hal", reply);
         if (boardResults) appendHalReceipt(logEl, actions, boardResults);
+        setHalHubOfflineBanner(chatRoot, false);
         if (window.ApexHalBrain && typeof window.ApexHalBrain.setState === "function") {
           window.ApexHalBrain.setState("reply");
         }
@@ -5917,7 +6071,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           },
         });
         reply = String((data && (data.text || (data.message && data.message.content))) || "");
-        if (!reply && data && data.error) reply = `HAL unavailable: ${data.error}`;
+        if (!reply && data && data.error) {
+          if (isHalHubOfflineError(data.error)) {
+            setHalHubOfflineBanner(chatRoot, true);
+            reply = formatHalHubOfflineReply();
+          } else {
+            reply = `HAL unavailable: ${data.error}`;
+          }
+        }
         if (!reply) reply = "HAL returned no text for that query.";
       } else {
         const chatUrl = useOrch ? `${config.apiBase}/hal/orchestrate` : config.halChatEndpoint;
@@ -5961,8 +6122,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
             }
           }
         } else if (data && data.error) {
-          const reason = data.reason ? ` (${data.reason})` : "";
-          reply = `HAL unavailable: ${data.error}${reason}`;
+          if (isHalHubOfflineError(data.error) || isHalHubOfflineError(data.reason)) {
+            setHalHubOfflineBanner(chatRoot, true);
+            reply = formatHalHubOfflineReply();
+          } else {
+            const reason = data.reason ? ` (${data.reason})` : "";
+            reply = `HAL unavailable: ${data.error}${reason}`;
+          }
         } else if (!res.ok) {
           let reason = "";
           try {
@@ -6022,6 +6188,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         reply = reply.replace(/<!--HAL_ACTIONS:\[[\s\S]*?\]-->/, "").trim();
       }
       if (pendingTextEl) pendingTextEl.classList.remove("apex-hal-chat__msg-text--streaming");
+      if (!isHalHubOfflineError(reply)) setHalHubOfflineBanner(chatRoot, false);
       if (pending) {
         finalizeHalPending(pending, reply);
       } else appendHalMessage(logEl, "hal", reply);
@@ -6029,7 +6196,10 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         window.ApexHalBrain.setState("reply");
       }
     } catch (err) {
-      const msg = `HAL bridge error: ${String((err && err.message) || err)}`;
+      const raw = String((err && err.message) || err);
+      const offline = isHalHubOfflineError(raw);
+      if (offline) setHalHubOfflineBanner(chatRoot, true);
+      const msg = offline ? formatHalHubOfflineReply() : `HAL bridge error: ${raw}`;
       if (pending) {
         const textEl = pending.querySelector && pending.querySelector(".apex-hal-chat__msg-text");
         if (textEl) textEl.classList.remove("apex-hal-chat__msg-text--streaming");

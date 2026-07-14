@@ -19,7 +19,7 @@ from softdent_gold_drop_facilitation_hal10606 import (
 class Hal10606GoldDropFacilitationTests(unittest.TestCase):
     def test_build_id(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10606")
-        self.assertEqual(BUILD_ID, "hal-10608")
+        self.assertEqual(BUILD_ID, "hal-10629")
 
     def test_export_path_writable(self) -> None:
         out = verify_export_path_writable()

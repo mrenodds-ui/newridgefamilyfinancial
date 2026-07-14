@@ -32,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10628"
+BUILD_ID = "hal-10629"
 
 
 def _apex_blank_all_widgets() -> bool:
@@ -3867,7 +3867,7 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL medium spine (hal-10624): trust pair → insight + chat rail."""
+    """HAL medium spine (hal-10629): Sync CTA → trust pair → insight + chat rail."""
     del reports  # HAL spine is import/insight oriented
     widgets: list[dict[str, Any]] = []
 
@@ -3889,6 +3889,38 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     connected = summary.get("connected")
     total = summary.get("total")
     missing = summary.get("missing")
+    partial = summary.get("partial")
+    missing_n = int(missing) if isinstance(missing, int) else 0
+    partial_n = int(partial) if isinstance(partial, int) else 0
+
+    # Primary next-action when imports are incomplete (hal-10629)
+    if isinstance(total, int) and total > 0 and (missing_n > 0 or partial_n > 0):
+        sync_cta = _status_widget(
+            "hal-sync-cta",
+            "Next action",
+            message=f"Review {missing_n} missing import dataset(s) before trusting empty KPIs.",
+            hint="One Sync story: sidebar, ticker, and System Logs use the same import summary.",
+            status="ok",
+        )
+        sync_cta["chrome"] = "hal-medium"
+        sync_cta["layoutRole"] = "action"
+        sync_cta["badge"] = "warn"
+        sync_cta["size"] = "m"
+        sync_cta["syncImports"] = True
+        sync_cta["syncImportsLabel"] = "Sync & review missing imports"
+        sync_cta["checks"] = [
+            {
+                "ok": missing_n == 0,
+                "label": f"Missing datasets · {missing_n}",
+                "detail": f"{connected}/{total} connected" if isinstance(connected, int) else "",
+            },
+            {
+                "ok": partial_n == 0,
+                "label": f"Partial datasets · {partial_n}",
+                "detail": "Refresh SoftDent/QuickBooks exports, then Sync.",
+            },
+        ]
+        widgets.append(sync_cta)
 
     # Trust pair (Import Health | Program Posture)
     if isinstance(connected, int) and isinstance(total, int) and total > 0:
@@ -3897,11 +3929,12 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
             "Import Health",
             connected,
             hint=f"{connected}/{total} datasets connected"
-            + (f"; {missing} missing" if missing else "")
-            + ".",
+            + (f"; {missing_n} missing" if missing_n else "")
+            + (f"; {partial_n} partial" if partial_n else "")
+            + ". Summary counts are the staff-facing truth (empty ≠ $0).",
             delta_label=f"{round(100.0 * connected / total, 0):.0f}%",
         )
-        health["badge"] = "connected" if not missing else "partial"
+        health["badge"] = "connected" if not missing_n else "partial"
     else:
         health = _empty_kpi(
             "hal-import-health",
@@ -3914,14 +3947,18 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     health["size"] = "m"
     widgets.append(health)
 
-    if isinstance(connected, int) and isinstance(total, int) and total > 0 and missing == 0:
+    if isinstance(connected, int) and isinstance(total, int) and total > 0 and missing_n == 0 and partial_n == 0:
         posture_msg = "Operational"
         posture_hint = "Imports connected — HAL answers stay grounded to live imports."
         posture_status = "ok"
         posture_badge = "ok"
     elif isinstance(connected, int):
         posture_msg = "Degraded"
-        posture_hint = "Some imports missing/partial — answers stay grounded to available data."
+        posture_hint = (
+            f"Import summary: {connected}/{total} connected · {missing_n} missing"
+            + (f" · {partial_n} partial" if partial_n else "")
+            + " — answers stay grounded to available data (empty ≠ $0)."
+        )
         posture_status = "ok"
         posture_badge = "warn"
     else:
@@ -3947,7 +3984,9 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     try:
         from apex_structured_insight_pack import ai_insight_widget
 
-        insight = ai_insight_widget()
+        insight = ai_insight_widget(
+            empty_hint="No structured insight yet — ask HAL for a health audit of import posture."
+        )
         if isinstance(insight, dict):
             insight["chrome"] = "hal-medium"
             insight["layoutRole"] = "insight"
