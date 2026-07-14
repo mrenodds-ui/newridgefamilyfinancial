@@ -3071,13 +3071,36 @@ body.apex-claim-drawer-open::after {
   font-size: 11px;
 }
 
+.apex-hal-filters--secondary {
+  opacity: 0.92;
+  margin-top: -4px;
+}
+
+.apex-hal-hub-banner {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(220, 180, 60, 0.45);
+  background: rgba(220, 180, 60, 0.1);
+  color: #e0c35a;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .apex-hal-console__line {
   display: grid;
-  grid-template-columns: 56px minmax(80px, 140px) 1fr auto;
+  grid-template-columns: 56px 72px minmax(80px, 130px) 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 5px 12px;
   border-left: 2px solid transparent;
+}
+
+.apex-hal-console__owner {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 9px;
+  color: var(--apex-text-secondary, #9ab);
 }
 
 .apex-hal-console__ask {
@@ -3141,7 +3164,7 @@ body.apex-claim-drawer-open::after {
 
 @media (max-width: 900px) {
   .apex-hal-console__line {
-    grid-template-columns: 48px 1fr auto;
+    grid-template-columns: 48px 64px 1fr auto;
   }
   .apex-hal-console__msg {
     grid-column: 1 / -1;

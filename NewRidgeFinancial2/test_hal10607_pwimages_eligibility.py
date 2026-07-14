@@ -25,7 +25,7 @@ from softdent_pwimages_eligibility_hal10607 import (
 class Hal10607PwimagesEligibilityTests(unittest.TestCase):
     def test_build_id(self) -> None:
         self.assertEqual(PACKAGE_BUILD_ID, "hal-10607")
-        self.assertEqual(BUILD_ID, "hal-10608")
+        self.assertEqual(BUILD_ID, "hal-10629")
 
     def test_parse_plan_parameters_null_not_zero(self) -> None:
         empty = parse_plan_parameters("hello world no numbers")
