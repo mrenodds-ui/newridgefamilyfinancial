@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from softdent_gui_export import (
+    _is_softdent_excel_workbook_name,
     load_menu_map,
     resolve_menu_keys,
     run_catalog_exports,
@@ -89,6 +90,14 @@ class SoftDentGuiExportTests(unittest.TestCase):
 
         self.assertTrue(callable(cancel_stale_report_dialogs))
         self.assertTrue(callable(prepare_softdent_for_next_report))
+
+    def test_softdent_excel_workbook_names(self):
+        self.assertTrue(_is_softdent_excel_workbook_name("SDWIN12.csv"))
+        self.assertTrue(_is_softdent_excel_workbook_name("REG2607.XLS"))
+        self.assertTrue(_is_softdent_excel_workbook_name("COL260714.XLS"))
+        self.assertTrue(_is_softdent_excel_workbook_name("AGE260713.XLS"))
+        self.assertFalse(_is_softdent_excel_workbook_name("Budget.xlsx"))
+        self.assertFalse(_is_softdent_excel_workbook_name("Book1"))
 
 
 if __name__ == "__main__":

@@ -192,21 +192,56 @@ def _send_softdent_keys(keys: str, *, pause: float = 0.05, hwnd: int | None = No
 
 
 def _desktop_dialogs() -> Iterable[Any]:
-    """SoftDent-owned #32770 dialogs only (never AMD / other apps)."""
-    from pywinauto import Desktop
+    """SoftDent-owned #32770 dialogs only (never AMD / other apps).
+
+    Enumerate via win32gui first — Desktop().windows() can raise InvalidWindowHandle
+    when ephemeral dialogs close mid-scan (common on 64-bit Python × 32-bit SoftDent).
+    """
+    import win32gui
+    from pywinauto.controls.hwndwrapper import HwndWrapper
 
     pids = _softdent_pids()
-    for w in Desktop(backend="win32").windows():
+    handles: list[int] = []
+
+    def _cb(hwnd: int, _: Any) -> bool:
         try:
-            if not w.is_visible() or w.class_name() != "#32770":
+            if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
+                return True
+            if (win32gui.GetClassName(hwnd) or "") != "#32770":
+                return True
+            handles.append(int(hwnd))
+        except Exception:
+            pass
+        return True
+
+    try:
+        win32gui.EnumWindows(_cb, None)
+    except Exception:
+        # Last resort: pywinauto desktop scan (may raise — swallow)
+        try:
+            from pywinauto import Desktop
+
+            for w in Desktop(backend="win32").windows():
+                try:
+                    handles.append(int(w.handle))
+                except Exception:
+                    continue
+        except Exception:
+            return
+
+    for hwnd in handles:
+        try:
+            if not win32gui.IsWindow(hwnd) or not win32gui.IsWindowVisible(hwnd):
                 continue
-            title = (w.window_text() or "").strip()
+            if (win32gui.GetClassName(hwnd) or "") != "#32770":
+                continue
+            title = (win32gui.GetWindowText(hwnd) or "").strip()
             if _is_blocked_focus_title(title):
                 continue
-            pid = _window_pid(w.handle)
+            pid = _window_pid(hwnd)
             if pids and pid not in pids:
                 continue
-            yield w
+            yield HwndWrapper(hwnd)
         except Exception:
             continue
 
@@ -469,28 +504,22 @@ def cancel_stale_report_dialogs(*, max_rounds: int = 8) -> int:
     (ElementNotEnabled / missing Output Options). Keyboard Cancel (Alt+C) only.
     Never Escape (SoftDent quit). Never cancel SoftDent Login.
     """
-    from pywinauto import Desktop
-
     cancelled = 0
-    pids = _softdent_pids()
     for _ in range(max_rounds):
         hit = False
         cancel_printer_dialogs(max_rounds=2)
-        for w in Desktop(backend="win32").windows():
+        for w in list(_desktop_dialogs()):
             try:
-                if not w.is_visible() or w.class_name() != "#32770":
-                    continue
                 title = (w.window_text() or "").strip()
                 if not title or title == "SoftDent Login":
-                    continue
-                pid = _window_pid(int(w.handle))
-                if pids and pid not in pids:
                     continue
                 low = title.lower()
                 is_stale = (
                     title in _EXPORT_DIALOG_TITLES
                     or _is_export_flow_dialog(title)
                     or low == "output options"
+                    or low == "date wizard"
+                    or "date wizard" in low
                     or low.endswith(" setup")
                     or " for a period" in low
                     or low in {"daysheet", "account aging", "collection summary"}
@@ -809,22 +838,24 @@ def _type_keys_clear_and_text(text: str, *, hwnd: int | None = None) -> None:
 
 
 def _select_output_option_prompt(kind: str = "excel") -> None:
-    """SoftDent Output Options: click Excel or Print Preview prompt only, then Enter.
+    """SoftDent Output Options: Excel, File, or Print Preview — never Printer.
 
-    HARD RULE (user): never use Printer — only the Excel prompt or the Print Preview
-    prompt. Printer causes offline hang ("Waiting for printer connection…").
-    Same click pattern for both: click the prompt, then Enter.
-    SoftDent often defaults the Printer radio — never Enter until Excel/Preview is selected.
+    HARD RULE: never use Printer (offline hang). Prefer enabled Excel; when Excel is
+    disabled SoftDent often still offers File (Select File Name) — use that for
+    machine-readable period exports. Print Preview is visual-only.
+    SoftDent often defaults Printer — never Enter until a safe prompt is selected.
     """
     raw = str(kind or "excel").strip().lower()
     if raw in {"printer", "print", "lpt", "spool"}:
         raise RuntimeError(
-            "Refusing SoftDent Output Options 'Printer' — use Excel or Print Preview only."
+            "Refusing SoftDent Output Options 'Printer' — use Excel, File, or Print Preview only."
         )
-    want = "excel" if raw in {"excel", "xls", "file", "xlsx"} else "print preview"
-    if want not in {"excel", "print preview"}:
+    # excel kind: prefer Excel, fall back to File when Excel control is disabled
+    want_file_export = raw in {"excel", "xls", "file", "xlsx"}
+    want_preview = raw in {"print preview", "print_preview", "preview"}
+    if not want_file_export and not want_preview:
         raise RuntimeError(
-            f"SoftDent Output Options kind must be excel or print_preview (got {kind!r})"
+            f"SoftDent Output Options kind must be excel/file or print_preview (got {kind!r})"
         )
 
     out = None
@@ -840,13 +871,21 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
     _keyboard_activate_dialog(out)
     hwnd = int(out.handle)
 
-    def _pick_button() -> bool:
+    def _btn_enabled(btn) -> bool:
+        try:
+            return bool(btn.is_enabled())
+        except Exception:
+            return True
+
+    def _pick_button() -> str | None:
+        """Click a safe output radio. Returns 'excel'|'file'|'preview' or None."""
         try:
             from pywinauto import Application
 
             app_out = Application(backend="win32").connect(handle=out.handle)
             d_out = app_out.window(handle=out.handle)
             excel_btn = None
+            file_btn = None
             preview_btn = None
             for b in d_out.descendants(class_name="Button"):
                 label = (b.window_text() or "").replace("&", "").strip()
@@ -855,69 +894,102 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
                     continue
                 if lab == "excel":
                     excel_btn = b
+                elif lab == "file":
+                    file_btn = b
                 elif "preview" in lab:
                     preview_btn = b
-            target = excel_btn if want == "excel" else preview_btn
-            if target is None:
-                return False
-            # SoftDent radios: click twice then verify checked when possible.
+
+            chosen = None
+            target = None
+            if want_preview:
+                target, chosen = preview_btn, "preview"
+            elif excel_btn is not None and _btn_enabled(excel_btn):
+                target, chosen = excel_btn, "excel"
+            elif file_btn is not None and _btn_enabled(file_btn):
+                # Excel greyed out on some SoftDent states — File → Select File Name
+                target, chosen = file_btn, "file"
+                logger.info("SoftDent Output Options: Excel disabled — using File export")
+            elif preview_btn is not None and _btn_enabled(preview_btn):
+                # Last safe option for visual; caller may not ingest
+                target, chosen = preview_btn, "preview"
+                logger.warning(
+                    "SoftDent Output Options: Excel/File unavailable — Print Preview only"
+                )
+            if target is None or chosen is None:
+                return None
             _softdent_click(target)
             time.sleep(0.15)
             _softdent_click(target)
             time.sleep(0.12)
-            try:
-                if hasattr(target, "get_check_state") and int(target.get_check_state()) == 1:
-                    return True
-            except Exception:
-                pass
-            try:
-                if hasattr(target, "is_checked") and bool(target.is_checked()):
-                    return True
-            except Exception:
-                pass
-            return True  # clicked; SoftDent often lacks readable check state
+            return chosen
         except Exception as exc:
-            logger.warning("Output Options %s click failed: %s", want, type(exc).__name__)
-            return False
+            logger.warning("Output Options click failed: %s", type(exc).__name__)
+            return None
 
-    clicked = _pick_button()
-    if not clicked:
-        # Accelerators: E=Excel. Never send P (hits Printer). V ≈ Pre&view when available.
-        if want == "excel":
-            _send_softdent_keys("e", hwnd=hwnd)
-        else:
+    chosen = _pick_button()
+    if not chosen:
+        # Accelerators: E=Excel, F=File. Never send P (Printer). V ≈ Pre&view.
+        if want_preview:
             _send_softdent_keys("v", hwnd=hwnd)
-        time.sleep(0.25)
-        # Tab away from Printer if focus landed badly, then re-hit accelerator
-        if want == "excel":
+            chosen = "preview"
+        else:
             _send_softdent_keys("e", hwnd=hwnd)
-        time.sleep(0.2)
+            time.sleep(0.2)
+            # If Excel is disabled, SoftDent may ignore E — try File (F)
+            _send_softdent_keys("f", hwnd=hwnd)
+            chosen = "file"
+        time.sleep(0.25)
 
     # Sweep printer again BEFORE Enter — default Printer can still steal focus
     cancel_printer_dialogs(max_rounds=2)
     if not find_dialog("Output Options"):
-        # Dialog closed into printer wait already
         cancelled_early = cancel_printer_dialogs(max_rounds=4)
         if cancelled_early:
             raise RuntimeError(
-                "SoftDent selected Printer before OK — cancelled wait. Retry Excel/Preview only."
+                "SoftDent selected Printer before OK — cancelled wait. Retry Excel/File/Preview only."
             )
         raise RuntimeError("Output Options closed unexpectedly before OK")
 
     time.sleep(0.2)
     _send_softdent_keys("{ENTER}", hwnd=hwnd)
     time.sleep(1.0)
-    # If SoftDent still went to printer wait, cancel and fail loudly
     cancelled = cancel_printer_dialogs(max_rounds=6)
     if cancelled:
         raise RuntimeError(
             "SoftDent opened a printer-wait dialog after Output Options — "
-            "Printer must not be used. Click Excel or Print Preview only, then Enter."
+            "Printer must not be used. Click Excel, File, or Print Preview only, then Enter."
         )
 
 
+# SoftDent Excel titles/stems: temp SDWIN*.csv OR classic short names (REG2607.XLS).
+_SOFTDENT_EXCEL_STEM_PREFIXES = (
+    "SDWIN",
+    "REG",
+    "COL",
+    "AGE",
+    "DAY",
+    "TXN",
+    "TRA",
+    "WOF",
+    "IPA",
+    "INS",
+)
+
+
+def _is_softdent_excel_workbook_name(name: str, full: str = "") -> bool:
+    """True for SoftDent-produced Excel workbook names (not arbitrary office files)."""
+    blob = f"{name} {full}".upper()
+    if "SDWIN" in blob:
+        return True
+    stem = Path(str(name or "").strip() or "x").stem.upper()
+    if not stem:
+        return False
+    # Classic SoftDent short export: REGyyMM / COL / AGE260713 etc.
+    return any(stem.startswith(p) for p in _SOFTDENT_EXCEL_STEM_PREFIXES)
+
+
 def _excel_sdwin_workbook_open() -> bool:
-    """True when SoftDent has an Excel workbook open (temp SDWIN*.csv / SDWINn - Excel)."""
+    """True when SoftDent has an Excel workbook open (SDWIN* temp or REG*/COL* short)."""
     try:
         import win32gui
 
@@ -926,7 +998,12 @@ def _excel_sdwin_workbook_open() -> bool:
         def _cb(h, _):
             if win32gui.IsWindowVisible(h):
                 t = (win32gui.GetWindowText(h) or "").strip()
-                if "SDWIN" in t.upper() and "EXCEL" in t.upper():
+                tu = t.upper()
+                if "EXCEL" not in tu:
+                    return True
+                # "REG2607 - Excel" / "SDWIN12 - Excel" / full path in title
+                left = tu.split(" - EXCEL")[0].strip()
+                if _is_softdent_excel_workbook_name(left, t):
                     found.append(t)
             return True
 
@@ -941,9 +1018,9 @@ def _excel_sdwin_workbook_open() -> bool:
         excel = win32com.client.GetObject(Class="Excel.Application")
         for i in range(1, int(excel.Workbooks.Count) + 1):
             wb = excel.Workbooks(i)
-            name = str(wb.Name or "").upper()
-            full = str(wb.FullName or "").upper()
-            if "SDWIN" in name or "SDWIN" in full:
+            name = str(wb.Name or "")
+            full = str(wb.FullName or "")
+            if _is_softdent_excel_workbook_name(name, full):
                 return True
     except Exception:
         return False
@@ -951,9 +1028,9 @@ def _excel_sdwin_workbook_open() -> bool:
 
 
 def _save_excel_sdwin_copy(dest: Path) -> Path | None:
-    """SaveCopyAs SoftDent Excel temp workbook into dest (hal-10576 atomic + retry).
+    """SaveCopyAs SoftDent Excel workbook into dest (hal-10576 atomic + retry).
 
-    SoftDent often opens ``%TEMP%\\SDWIN*.csv`` in Excel and skips Select File Name.
+    SoftDent often opens ``%TEMP%\\SDWIN*.csv`` or short ``REG*.XLS`` and skips Select File Name.
     Finalize via NamedTemporaryFile + os.replace (empty ≠ $0; no SoftDent write-back).
     """
     try:
@@ -970,7 +1047,7 @@ def _save_excel_sdwin_copy(dest: Path) -> Path | None:
         wb = excel.Workbooks(i)
         name = str(wb.Name or "")
         full = str(wb.FullName or "")
-        if "SDWIN" not in name.upper() and "SDWIN" not in full.upper():
+        if not _is_softdent_excel_workbook_name(name, full):
             continue
         try:
             mtime = Path(full).stat().st_mtime if full and Path(full).is_file() else time.time()
@@ -1047,10 +1124,8 @@ def _complete_output_setup_and_save(
         setup = find_dialog("Report Setup")
         if not setup:
             # SoftDent titles vary: "Collection Summary Report Setup", "Register Setup", …
-            from pywinauto import Desktop
-
             pids = _softdent_pids()
-            for w in Desktop(backend="win32").windows():
+            for w in _desktop_dialogs():
                 try:
                     t = (w.window_text() or "").strip()
                     if not t or "softdent software" in t.lower():
@@ -1101,28 +1176,65 @@ def _complete_output_setup_and_save(
             break
         time.sleep(0.25)
     if save:
-        short_path = rf"{EXPORT_ROOT_SHORT}\{short_stem}"
+        # SoftDent File mode: "Takes only file name" — letters/numbers only (no path).
+        # Excel mode historically accepted C:\SOFTDE~1\STEM; File rejects \ and ~.
+        stem_only = "".join(ch for ch in str(short_stem) if ch.isalnum())[:8]
+        if not stem_only:
+            raise RuntimeError(f"SoftDent File export stem invalid: {short_stem!r}")
         _keyboard_activate_dialog(save)
         sh = int(save.handle)
-        # Filename field is usually focused on open; clear and type short path
-        _type_keys_clear_and_text(short_path, hwnd=sh)
+        _type_keys_clear_and_text(stem_only, hwnd=sh)
         time.sleep(0.15)
         _keyboard_press_ok(hwnd=sh)
-        time.sleep(3.0)
+        time.sleep(1.0)
+        # SoftDent alert if path typed: dismiss + retry name-only once
+        for w in list(_desktop_dialogs()):
+            try:
+                blob = _dialog_text_blob(w)
+                if "invalid character" in blob or "takes only file name" in blob:
+                    _force_foreground(int(w.handle))
+                    _send_softdent_keys("{ENTER}", hwnd=int(w.handle))
+                    time.sleep(0.35)
+                    if find_dialog("Select File Name"):
+                        _keyboard_activate_dialog(find_dialog("Select File Name"))
+                        sh2 = int(find_dialog("Select File Name").handle)
+                        _type_keys_clear_and_text(stem_only, hwnd=sh2)
+                        time.sleep(0.1)
+                        _keyboard_press_ok(hwnd=sh2)
+                        time.sleep(1.0)
+                    break
+            except Exception:
+                continue
         cancel_printer_dialogs()
         dismiss_softdent_alerts()
+        time.sleep(2.0)
 
         dest_root.mkdir(parents=True, exist_ok=True)
+        search_roots = [
+            dest_root,
+            MIRROR_ROOT,
+            Path(r"C:\SoftDentFinancialExports"),
+            Path(r"C:\SoftDent"),
+            Path(r"C:\SoftDent\softdentexportreports"),
+        ]
         candidates: list[Path] = []
-        for root in (dest_root, MIRROR_ROOT):
+        for root in search_roots:
             if not root.is_dir():
                 continue
-            for cand in root.glob(f"{short_stem}.*"):
-                if cand.is_file() and cand.suffix.lower() in {".xls", ".xlsx", ".csv"}:
-                    candidates.append(cand)
+            for pattern in (f"{stem_only}.*", f"{stem_only.upper()}.*"):
+                for cand in root.glob(pattern):
+                    if cand.is_file() and cand.suffix.lower() in {
+                        ".xls",
+                        ".xlsx",
+                        ".csv",
+                        ".txt",
+                        ".rep",
+                    }:
+                        candidates.append(cand)
         if not candidates:
             raise RuntimeError(
-                f"Expected export not found under {dest_root} or {MIRROR_ROOT} ({short_stem}.*)"
+                f"Expected export not found for File stem {stem_only} under "
+                f"{dest_root}, {MIRROR_ROOT}, or SoftDent dirs"
             )
         produced = max(candidates, key=lambda p: p.stat().st_mtime)
     else:
@@ -1132,7 +1244,7 @@ def _complete_output_setup_and_save(
         if not produced or not produced.is_file():
             raise RuntimeError(
                 "Select File Name dialog did not appear and no SoftDent Excel "
-                "(SDWIN*) workbook was available to SaveCopyAs"
+                "(SDWIN*/REG*/COL*) workbook was available to SaveCopyAs"
             )
 
     canonical = dest_root / canonical_name
@@ -1319,20 +1431,28 @@ def navigate_softdent_print_preview_pages(
 
 def list_softdent_window_titles() -> list[str]:
     """SoftDent-owned window titles (for Print Preview / MDI report detection)."""
-    from pywinauto import Desktop
+    import win32gui
 
     titles: list[str] = []
     pids = _softdent_pids()
-    for w in Desktop(backend="win32").windows():
+
+    def _cb(hwnd: int, _: Any) -> bool:
         try:
-            t = (w.window_text() or "").strip()
-            if not t:
-                continue
-            if pids and _window_pid(int(w.handle)) not in pids:
-                continue
-            titles.append(t)
+            if not win32gui.IsWindowVisible(hwnd):
+                return True
+            if pids and _window_pid(int(hwnd)) not in pids:
+                return True
+            t = (win32gui.GetWindowText(hwnd) or "").strip()
+            if t:
+                titles.append(t)
         except Exception:
-            continue
+            pass
+        return True
+
+    try:
+        win32gui.EnumWindows(_cb, None)
+    except Exception:
+        pass
     return titles
 
 

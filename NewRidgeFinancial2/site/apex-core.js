@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10627 (HAL spine ↔ HAL chat wire harden)
+ * Build: hal-10628 (HAL spine ↔ HAL chat wire harden)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10627";
+  const ASSET_V = "hal-10628";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -469,17 +469,17 @@
             <div class="apex-hal-chat__chips-wrap">
               <div class="apex-hal-chat__chips" data-hal-chips role="list" aria-label="Suggested commands"></div>
             </div>
-            <div class="apex-hal-chat__composer" data-hal-form role="group" aria-label="Ask HAL">
+            <form class="apex-hal-chat__composer" data-hal-form action="#" method="get" aria-label="Ask HAL">
               <div class="apex-hal-chat__input-sizer" data-input-sizer>
                 <textarea class="apex-hal-chat__input" data-hal-input rows="1" enterkeyhint="send" placeholder="Ask HAL… (Enter to send · Shift+Enter for new line)" aria-label="Ask HAL" maxlength="2000"></textarea>
               </div>
-              <button type="button" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
+              <button type="submit" class="apex-hal-chat__send" data-hal-send aria-label="Send command">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
               </button>
-            </div>
+            </form>
             <div class="apex-hal-chat__meta">
               <span class="apex-hal-chat__hint">${this.escape(this.spec.hint || "Local HAL command surface")}</span>
               <span class="apex-hal-chat__indicator" data-hal-indicator hidden>
@@ -5901,34 +5901,43 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     };
 
     if (form && input) {
-      // Composer is a div (not <form>) so Enter/click cannot navigate the document.
-      if (form.tagName === "FORM") {
-        form.addEventListener("submit", (ev) => {
+      // Always preventDefault on form submit — Enter in WebView/IME can otherwise reload the page.
+      form.addEventListener(
+        "submit",
+        (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
           submitAsk();
-        });
-      }
+        },
+        true
+      );
       const sendBtn = panel.querySelector("[data-hal-send]");
       if (sendBtn) {
         sendBtn.addEventListener("click", (ev) => {
           ev.preventDefault();
           ev.stopPropagation();
+          // Form submit handler also fires for type=submit; avoid double-send.
+          if (form.tagName === "FORM") return;
           submitAsk();
         });
       }
       // Enter sends; Shift+Enter inserts a newline; Ctrl/Cmd+Enter also sends
-      input.addEventListener("keydown", (ev) => {
-        if (ev.key !== "Enter" || ev.isComposing) return;
-        if (ev.metaKey || ev.ctrlKey) {
+      input.addEventListener(
+        "keydown",
+        (ev) => {
+          if (ev.key !== "Enter" || ev.isComposing) return;
+          if (ev.shiftKey) return;
           ev.preventDefault();
+          ev.stopPropagation();
+          // Prefer native form submit so one path owns send (and preventDefault).
+          if (form.tagName === "FORM" && typeof form.requestSubmit === "function") {
+            form.requestSubmit();
+            return;
+          }
           submitAsk();
-          return;
-        }
-        if (ev.shiftKey) return;
-        ev.preventDefault();
-        submitAsk();
-      });
+        },
+        true
+      );
     }
   }
 
@@ -6207,6 +6216,15 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     currentQuery = parsed.query && typeof parsed.query === "object" ? parsed.query : {};
     // Never wipe HAL chat while a reply is in flight (auto-refresh / nav race).
     if (halChatBusy && currentPage === "hal") silent = true;
+    // Once Ask HAL is mounted, never hard-remount the stage (looked like a full page refresh).
+    if (
+      currentPage === "hal" &&
+      !currentSub &&
+      !(opts && opts.force) &&
+      document.querySelector("[data-hal-chat]")
+    ) {
+      silent = true;
+    }
     setHash(currentPage, currentSub, currentQuery);
     setPageTitle(currentPage, currentSub, { silent });
     if (!silent) renderSubnav(currentPage, currentSub);
@@ -6268,11 +6286,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           return !!halChatBusy;
         }
       })();
+      const halChatMounted = currentPage === "hal" && !currentSub && !!document.querySelector("[data-hal-chat]");
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
+      } else if (silent && halChatMounted) {
+        // HAL chat is live: never softRenderHalMain (destroys neural core + spine and feels
+        // like a page refresh). Best-effort patch only; keep the composer DOM intact.
+        patchWidgets(list);
       } else if (silent && currentPage === "hal" && !currentSub) {
-        // Never remount HAL while Ask HAL is focused/busy — remount looked like a full
-        // page refresh and wiped the question box (insight SSE + board refresh races).
         if (!chatComposerActive) softRenderHalMain(list);
       } else if (silent) {
         // Silent poll must never wipe the stage (instBoot looked like a full page refresh).
