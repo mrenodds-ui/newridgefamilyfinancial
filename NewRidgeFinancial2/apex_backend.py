@@ -3867,8 +3867,8 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL medium spine (hal-10624): cache → errors → trust pair → recon → insight + chat rail."""
-    del reports  # HAL spine is import/recon/actions oriented
+    """HAL medium spine (hal-10624): trust pair → recon → insight + chat rail."""
+    del reports  # HAL spine is import/recon oriented
     widgets: list[dict[str, Any]] = []
 
     # A rail: Ask HAL (client mounts into sticky right rail)
@@ -3884,39 +3884,15 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
         }
     )
 
-    # B: Import cache + bridge errors
     try:
-        from apex_32b_program_fixes_pack import (
-            bridge_errors_widget,
-            import_cache_kpi_widget,
-            import_cache_telemetry,
-            reconciliation_surface_widget,
-        )
+        from apex_32b_program_fixes_pack import reconciliation_surface_widget
 
-        tele = import_cache_telemetry(
-            widgets_cache=_WIDGETS_CACHE,
-            fill_progress=_FILL_PROGRESS,
-            fill_failures=_WIDGETS_FILL_FAILURES,
-            ttl_sec=_WIDGETS_CACHE_TTL_SEC,
-        )
-        cache = import_cache_kpi_widget(tele)
-        cache["chrome"] = "hal-medium"
-        cache["badge"] = "freshness"
-        widgets.append(cache)
-        errs = bridge_errors_widget(
-            bundle=bundle,
-            fill_failures=_WIDGETS_FILL_FAILURES,
-            last_sync_error=_LAST_SYNC_ERROR or None,
-        )
-        errs["chrome"] = "hal-medium"
-        widgets.append(errs)
         recon = reconciliation_surface_widget(bundle)
         if isinstance(recon, dict):
             recon["chrome"] = "hal-medium"
             recon["layoutRole"] = "recon"
     except Exception:
         recon = None
-        tele = {}
 
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}

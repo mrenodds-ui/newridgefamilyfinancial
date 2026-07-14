@@ -20,10 +20,10 @@ class Hal10624MediumSpineTests(unittest.TestCase):
         self.assertIn("hal-ask", ids)
         self.assertIn("hal-import-health", ids)
         self.assertIn("hal-program-posture", ids)
-        # Spine order: chat first (rail), then cache/errors/trust/recon/actions/insight
+        # Spine order: chat first (rail), then trust/recon/insight
         self.assertEqual(ids[0], "hal-ask")
         self.assertLess(ids.index("hal-import-health"), ids.index("hal-program-posture"))
-        # Dropped clutter / unwired actions
+        # Dropped clutter / noise tiles
         for gone in (
             "hal-mosaic-prod",
             "hal-mosaic-coll",
@@ -32,6 +32,8 @@ class Hal10624MediumSpineTests(unittest.TestCase):
             "hal-suggestion",
             "hal-categorize-assist",
             "hal-recommended-actions",
+            "import-cache-kpi",
+            "bridge-errors",
         ):
             self.assertNotIn(gone, ids)
         # Medium chrome markers on trust pair
