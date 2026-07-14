@@ -86,16 +86,16 @@
 
     <nav class="nav">
       <button class="active" type="button" data-nav="desk">DESK</button>
-      <button type="button" data-nav="softdent" data-ask="go to softdent and focus collections">SD</button>
-      <button type="button" data-nav="quickbooks" data-ask="go to quickbooks">QB</button>
-      <button type="button" data-nav="ar" data-ask="go to a/r">AR</button>
-      <button type="button" data-nav="claims" data-ask="go to claims and show denied">CLM</button>
-      <button type="button" data-nav="hal" data-ask="open import health">HAL</button>
+      <button type="button" data-nav="softdent">SD</button>
+      <button type="button" data-nav="quickbooks">QB</button>
+      <button type="button" data-nav="ar">AR</button>
+      <button type="button" data-nav="claims">CLM</button>
+      <button type="button" data-nav="hal">HAL</button>
     </nav>
 
     <section class="main">
-      <div class="pane wide" data-pane="prod" data-widget="revenue-composition" data-page="financial" data-ask="explain this widget — production vs collections; do not invent dollars">
-        <div class="ph"><span>Production vs collections · 13 sessions</span><span class="val" id="prodVal">Period live</span></div>
+      <div class="pane wide" data-pane="prod" data-widget="financial-dual-trend" data-page="financial">
+        <div class="ph"><span>Production vs collections</span><span class="val" id="prodVal">…</span></div>
         <div class="pb">
           <div class="legend"><span style="color:var(--amber)">Production</span><span style="color:var(--blue)">Collections</span><span class="blocked" id="prodGate">Click pane → HAL focus</span></div>
           <svg class="chart" viewBox="0 0 640 160" preserveAspectRatio="none">
@@ -107,7 +107,7 @@
         </div>
       </div>
 
-      <div class="pane" data-pane="posture" data-widget="hal-program-posture" data-page="hal" data-ask="explain this widget — program posture and import health">
+      <div class="pane" data-pane="posture" data-widget="hal-program-posture" data-page="hal">
         <div class="ph"><span>Posture</span><span class="val" id="postureVal">…</span></div>
         <div class="pb">
           <div class="kpis">
@@ -119,32 +119,22 @@
         </div>
       </div>
 
-      <div class="pane" data-pane="sd" data-widget="softdent-collections-gap" data-page="softdent" data-ask="explain this widget — SoftDent day sheet / collections gaps; sync if missing">
-        <div class="ph"><span>SoftDent · day strip</span><span class="val">Owner SD</span></div>
+      <div class="pane" data-pane="sd" data-widget="softdent-collections-gap" data-page="softdent">
+        <div class="ph"><span>SoftDent · day strip</span><span class="val">…</span></div>
         <div class="pb">
           <div class="bars" id="sdBars"></div>
           <div class="legend"><span>Mon–Sun index</span><span class="blocked" id="sdGate">gated cells = no invent $</span></div>
         </div>
       </div>
 
-      <div class="pane" data-pane="claims" data-widget="claims-kanban-board" data-page="claims" data-ask="focus claims denied and explain velocity">
-        <div class="ph"><span>Claims velocity</span><span class="val" id="claimsVal">In flight</span></div>
+      <div class="pane" data-pane="claims" data-widget="claims-aging-exposure" data-page="claims">
+        <div class="ph"><span>Claims aging</span><span class="val" id="claimsVal">…</span></div>
         <div class="pb">
-          <svg class="chart" viewBox="0 0 300 120" preserveAspectRatio="none">
-            <rect x="20" y="70" width="36" height="40" fill="#4da3ff"/><rect x="68" y="48" width="36" height="62" fill="#4da3ff"/>
-            <rect x="116" y="36" width="36" height="74" fill="#f5a623"/><rect x="164" y="58" width="36" height="52" fill="#f5a623"/>
-            <rect x="212" y="84" width="36" height="26" fill="#ff5c5c"/><rect x="260" y="92" width="24" height="18" fill="#ff5c5c"/>
-            <text x="20" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">Sub</text>
-            <text x="68" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">Pay</text>
-            <text x="116" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">ERA</text>
-            <text x="164" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">Pend</text>
-            <text x="212" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">Den</text>
-            <text x="260" y="14" fill="#8b97a8" font-size="9" font-family="IBM Plex Mono">Hold</text>
-          </svg>
+          <svg class="chart" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
         </div>
       </div>
 
-      <div class="pane" data-pane="ar" data-widget="ar-aging-chart" data-page="ar" data-ask="explain this widget — A/R aging; keep gated if SoftDent missing; never invent dollars">
+      <div class="pane" data-pane="ar" data-widget="ar-aging-chart" data-page="ar">
         <div class="ph"><span>A/R aging mix</span><span class="val blocked" id="arVal">GATED</span></div>
         <div class="pb">
           <svg class="chart" viewBox="0 0 220 120">
@@ -159,7 +149,7 @@
         </div>
       </div>
 
-      <div class="pane" data-pane="tape" data-widget="hal-sys-console" data-page="hal" data-ask="open system logs and explain the top import gaps">
+      <div class="pane" data-pane="tape" data-widget="hal-sys-console" data-page="hal">
         <div class="ph"><span>Tape · exceptions</span><span class="val">Live</span></div>
         <div class="pb" style="padding-top:4px">
           <table class="dense"><thead><tr><th>Time</th><th>Owner</th><th>Event</th><th>Lvl</th></tr></thead>
@@ -168,15 +158,15 @@
         </div>
       </div>
 
-      <div class="pane" data-pane="qb" data-widget="qb-ap-aging" data-page="quickbooks" data-ask="go to quickbooks and explain P&L / COA posture; never invent dollars">
-        <div class="ph"><span>QB linkage</span><span class="val" id="qbVal">COA</span></div>
+      <div class="pane" data-pane="qb" data-widget="qb-ap-aging" data-page="quickbooks">
+        <div class="ph"><span>QB linkage</span><span class="val" id="qbVal">…</span></div>
         <div class="pb">
           <div class="bars" id="qbBars"></div>
           <div class="legend"><span>Period completeness</span><span class="dn" id="qbGate">—</span></div>
         </div>
       </div>
 
-      <div class="pane" data-pane="heat" data-widget="om-daily-huddle" data-page="office-manager" data-ask="go to office manager and focus daily huddle">
+      <div class="pane" data-pane="heat" data-widget="om-daily-huddle" data-page="office-manager">
         <div class="ph"><span>Operatory heat</span><span class="val">Today</span></div>
         <div class="pb">
           <div class="heat" id="heat"></div>
@@ -185,21 +175,21 @@
     </section>
 
     <aside class="side">
-      <div class="pane" data-pane="movers" data-widget="hal-ai-insight" data-page="hal" data-ask="what should I prioritize next on the practice desk? ranked action list">
-        <div class="ph"><span>Book · top movers</span><span class="val">Watch</span></div>
+      <div class="pane" data-pane="movers" data-widget="hal-ai-insight" data-page="hal">
+        <div class="ph"><span>Book · top movers</span><span class="val">Live</span></div>
         <div class="pb" style="padding-top:4px">
           <table class="dense"><thead><tr><th>Signal</th><th>Δ</th><th>State</th></tr></thead>
             <tbody id="moversBody"></tbody>
           </table>
         </div>
       </div>
-      <div class="pane" data-pane="trust" data-widget="hal-import-health" data-page="hal" data-ask="explain import health and sync missing SoftDent / QB / ERA sources">
-        <div class="ph"><span>Trust ladder</span><span class="val">Owners</span></div>
+      <div class="pane" data-pane="trust" data-widget="hal-import-health" data-page="hal">
+        <div class="ph"><span>Trust ladder</span><span class="val">…</span></div>
         <div class="pb">
           <div id="trustLadder" style="display:flex;flex-direction:column;gap:6px;flex:1;justify-content:center"></div>
         </div>
       </div>
-      <div class="pane" data-pane="hal" data-widget="hal-ask" data-page="hal" data-ask="what tools still work when hub is offline?">
+      <div class="pane" data-pane="hal" data-widget="hal-ask" data-page="hal">
         <div class="ph"><span>HAL · last print</span><span class="val" id="halMode">…</span></div>
         <div class="pb">
           <div class="hal-print" id="halPrint"><div class="who">HAL // DESK</div>Connecting to board-actions…</div>
@@ -217,6 +207,6 @@
   </div>
   <div class="toast" id="toast"></div>
 
-    <script src="/terminal-desk.js?v=hal-10629"></script>
+    <script src="/terminal-desk.js?v=hal-10629-desk4"></script>
 </body>
 </html>
