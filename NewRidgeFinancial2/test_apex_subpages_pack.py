@@ -213,11 +213,14 @@ def test_hal_history_feed_empty_honest():
     _save_json(STORE_KEY_HAL_HISTORY, {"entries": []})
     widgets = build_hal_history({}, {})
     types = [w.get("type") for w in widgets]
+    assert "hal-sub-strip" in types
     assert "hal-history-feed" in types
+    assert "hal-chat" in types
     feed = next(w for w in widgets if w.get("type") == "hal-history-feed")
     assert feed.get("status") == "empty"
     assert feed.get("size") == "full"
     assert "operator" in (feed.get("filters") or [])
+    assert next(w for w in widgets if w.get("type") == "hal-chat").get("id") == "hal-ask"
 
 
 def test_hal_history_append_and_feed():
@@ -237,7 +240,7 @@ def test_hal_history_append_and_feed():
     assert any(e.get("role") == "hal" for e in entries)
 
 
-def test_hal_system_logs_console_and_gaps():
+def test_hal_system_logs_console_and_hal_rail():
     from apex_subpages_wave5_pack import build_hal_system_logs
 
     bundle = {
@@ -265,12 +268,11 @@ def test_hal_system_logs_console_and_gaps():
     }
     widgets = build_hal_system_logs({}, bundle)
     types = {w.get("type") for w in widgets}
-    assert "hal-sys-console" in types
+    assert types == {"hal-sub-strip", "hal-sys-console", "hal-chat"}
     console = next(w for w in widgets if w.get("type") == "hal-sys-console")
     assert console.get("status") == "ok"
     assert console.get("lines")
-    gaps = next(w for w in widgets if w.get("id") == "hal-sys-gaps")
-    assert gaps.get("status") == "ok"
-    assert len(gaps.get("rows") or []) >= 1
-    posture = next(w for w in widgets if w.get("id") == "hal-sys-posture")
-    assert posture.get("message") == "Degraded"
+    strip = next(w for w in widgets if w.get("type") == "hal-sub-strip")
+    posture = next(m for m in strip.get("metrics") or [] if m.get("key") == "posture")
+    assert posture.get("value") == "Degraded"
+    assert next(w for w in widgets if w.get("type") == "hal-chat").get("id") == "hal-ask"

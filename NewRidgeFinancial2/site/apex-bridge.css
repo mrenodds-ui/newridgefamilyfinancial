@@ -2796,18 +2796,111 @@ body.apex-claim-drawer-open::after {
   gap: 6px;
 }
 
-/* ——— HAL subpages: History + System Logs ——— */
-.apex-stage--hal-sub {
-  animation: apex-hal-sub-in 320ms ease-out;
+/* ——— HAL subpages: History + System Logs (stable, no tilt) ——— */
+.apex-stage--hal-sub .apex-hal-main--sub {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  grid-template-columns: none;
+  grid-auto-rows: auto;
+  align-content: stretch;
 }
 
-@keyframes apex-hal-sub-in {
-  from {
-    transform: translateY(6px);
-  }
-  to {
-    transform: none;
-  }
+.apex-stage--hal-sub .apex-hal-main--sub > .apex-inst,
+.apex-stage--hal-sub .apex-hal-main--sub > .apex-widget {
+  width: 100%;
+  grid-column: auto;
+  grid-row: auto;
+  min-height: 0;
+  transform: none !important;
+}
+
+.apex-stage--hal-sub .apex-inst--strip {
+  min-height: 0;
+}
+
+.apex-stage--hal-sub .apex-inst--full {
+  flex: 1 1 auto;
+  min-height: 280px;
+  max-height: calc(100vh - var(--ticker-height) - 220px);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Kill chrome-flash perspective + hover lift (reads as wobble on these pages). */
+.apex-stage--hal-sub,
+.apex-stage--hal-sub .apex-mosaic,
+.apex-stage--hal-sub .apex-hal-main {
+  perspective: none !important;
+  transform: none !important;
+}
+
+.apex-stage--hal-sub .apex-holo-tilt,
+.apex-stage--hal-sub .apex-inst,
+.apex-stage--hal-sub .apex-widget,
+.apex-stage--hal-sub .apex-inst:hover,
+.apex-stage--hal-sub .apex-widget:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  transition: border-color 160ms !important;
+  will-change: auto !important;
+}
+
+.apex-hal-substrip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 20px;
+  padding: 4px 2px 2px;
+}
+
+.apex-hal-substrip__title {
+  font-family: "Orbitron", "JetBrains Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--apex-cyan, #00f0ff);
+}
+
+.apex-hal-substrip__sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--apex-text-secondary, #9ab);
+  max-width: 42ch;
+}
+
+.apex-hal-substrip__metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+}
+
+.apex-hal-substrip__cell {
+  min-width: 64px;
+}
+
+.apex-hal-substrip__label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--apex-text-secondary, #9ab);
+  margin-bottom: 2px;
+}
+
+.apex-hal-substrip__value {
+  font-size: 16px;
+  font-family: "Orbitron", "JetBrains Mono", monospace;
+  color: var(--apex-text-primary, #e8f0f4);
+}
+
+.apex-hal-substrip__cell.is-alert .apex-hal-substrip__value {
+  color: #ff6b7a;
+}
+
+.apex-widget-header--plain {
+  margin-bottom: 6px;
 }
 
 .apex-hal-filters {
@@ -2841,6 +2934,12 @@ body.apex-claim-drawer-open::after {
   border-color: var(--apex-cyan, #00f0ff);
   color: var(--apex-cyan, #00f0ff);
   background: rgba(0, 240, 255, 0.1);
+}
+
+.apex-stage--hal-sub .apex-inst--full .apex-hal-feed,
+.apex-stage--hal-sub .apex-inst--full .apex-hal-console {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .apex-hal-feed {
@@ -2907,6 +3006,12 @@ body.apex-claim-drawer-open::after {
   color: var(--apex-text-secondary, #9ab);
 }
 
+.apex-hal-feed__actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+
 .apex-hal-feed__role {
   color: var(--apex-cyan, #00f0ff);
   font-family: "Orbitron", "JetBrains Mono", monospace;
@@ -2925,7 +3030,6 @@ body.apex-claim-drawer-open::after {
 }
 
 .apex-hal-feed__replay {
-  margin-left: auto;
   appearance: none;
   border: 1px solid rgba(0, 240, 255, 0.28);
   background: transparent;
@@ -2971,9 +3075,27 @@ body.apex-claim-drawer-open::after {
   display: grid;
   grid-template-columns: 56px minmax(80px, 140px) 1fr auto;
   gap: 10px;
-  align-items: baseline;
+  align-items: center;
   padding: 5px 12px;
   border-left: 2px solid transparent;
+}
+
+.apex-hal-console__ask {
+  appearance: none;
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  background: transparent;
+  color: var(--apex-cyan, #00f0ff);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.apex-hal-console__ask:hover {
+  background: rgba(0, 240, 255, 0.08);
 }
 
 .apex-hal-console__line--error {
@@ -3017,23 +3139,11 @@ body.apex-claim-drawer-open::after {
   min-width: 0;
 }
 
-.apex-hal-console__at {
-  color: rgba(154, 170, 187, 0.7);
-  font-size: 10px;
-}
-
 @media (max-width: 900px) {
   .apex-hal-console__line {
-    grid-template-columns: 48px 1fr;
-    grid-template-rows: auto auto;
-  }
-  .apex-hal-console__src {
-    grid-column: 2;
+    grid-template-columns: 48px 1fr auto;
   }
   .apex-hal-console__msg {
     grid-column: 1 / -1;
-  }
-  .apex-hal-console__at {
-    display: none;
   }
 }

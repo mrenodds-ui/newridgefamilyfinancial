@@ -273,7 +273,12 @@
       return "full";
     if (type === "claims-kanban" || type === "claims-workbench" || type === "claims-header-stats" || type === "daily-huddle")
       return "full";
-    if (type === "claims-executive-strip" || type === "executive-strip" || type === "financial-command-strip")
+    if (
+      type === "claims-executive-strip" ||
+      type === "executive-strip" ||
+      type === "financial-command-strip" ||
+      type === "hal-sub-strip"
+    )
       return "strip";
     if (type === "claims-aging-exposure") return "xl";
     if (type === "claims-critical-actions") return "m";
@@ -1580,6 +1585,38 @@
         `;
       }
 
+      if (this.type === "hal-sub-strip") {
+        const metrics = Array.isArray(this.spec.metrics) ? this.spec.metrics : [];
+        const cells = metrics
+          .map((m) => {
+            const key = String((m && m.key) || "");
+            const tone =
+              key === "missing" || key === "posture"
+                ? String((m && m.value) || "").toLowerCase().includes("degrad") ||
+                  key === "missing"
+                  ? " is-alert"
+                  : ""
+                : "";
+            return `<div class="apex-hal-substrip__cell${tone}">
+              <span class="apex-hal-substrip__label">${this.escape(String((m && m.label) || ""))}</span>
+              <span class="apex-hal-substrip__value">${this.escape(String((m && m.value) ?? "—"))}</span>
+            </div>`;
+          })
+          .join("");
+        return `
+          <div class="apex-hal-substrip">
+            <div class="apex-hal-substrip__head">
+              <div>
+                <div class="apex-hal-substrip__title">${this.escape(this.spec.title || label)}</div>
+                <div class="apex-hal-substrip__sub">${this.escape(this.spec.subtitle || "")}</div>
+              </div>
+            </div>
+            <div class="apex-hal-substrip__metrics">${cells}</div>
+          </div>
+          <div class="apex-kpi-hint">${this.escape(this.spec.hint || "")}</div>
+        `;
+      }
+
       if (this.type === "hal-history-feed") {
         const entries = Array.isArray(this.spec.entries) ? this.spec.entries : [];
         const filters = Array.isArray(this.spec.filters) ? this.spec.filters : ["all", "operator", "hal", "system"];
@@ -1599,30 +1636,32 @@
             const role = String((e && e.role) || "hal");
             const text = String((e && (e.text || e.preview)) || "");
             const at = String((e && e.at) || "—");
-            const replay =
+            const actions =
               role === "operator"
                 ? `<button type="button" class="apex-hal-feed__replay" data-hal-replay="${this.escape(
                     text
-                  )}">Replay</button>`
-                : `<button type="button" class="apex-hal-feed__replay" data-hal-copy="${this.escape(
+                  )}">Ask again</button>`
+                : `<button type="button" class="apex-hal-feed__replay" data-hal-ask="${this.escape(
                     text
-                  )}">Copy</button>`;
+                  )}">Ask HAL</button>
+                   <button type="button" class="apex-hal-feed__replay" data-hal-copy="${this.escape(
+                     text
+                   )}">Copy</button>`;
             return `<article class="apex-hal-feed__row apex-hal-feed__row--${this.escape(
               role
             )}" data-hal-hist-role="${this.escape(role)}">
               <div class="apex-hal-feed__meta">
                 <span class="apex-hal-feed__role">${this.escape(role)}</span>
                 <time class="apex-hal-feed__at">${this.escape(at)}</time>
-                ${replay}
+                <div class="apex-hal-feed__actions">${actions}</div>
               </div>
               <p class="apex-hal-feed__text">${this.escape(text)}</p>
             </article>`;
           })
           .join("");
         return `
-          <header class="apex-widget-header">
+          <header class="apex-widget-header apex-widget-header--plain">
             <span class="apex-widget-label">${label}</span>
-            ${printBtn}
           </header>
           <div class="apex-hal-filters" data-hal-hist-filters>${chips}</div>
           ${
@@ -1631,7 +1670,6 @@
                    <div class="apex-kpi-value is-empty">${this.escape(
                      this.spec.emptyMessage || "No history yet"
                    )}</div>
-                   <button type="button" class="apex-btn apex-btn--small" data-hal-goto-chat>Open Chat</button>
                  </div>`
               : `<div class="apex-hal-feed" data-hal-hist-feed>${rows}</div>`
           }
@@ -1656,20 +1694,24 @@
         const rows = lines
           .map((ln) => {
             const level = String((ln && ln.level) || "info");
+            const source = String((ln && ln.source) || "—");
+            const message = String((ln && ln.message) || "");
+            const askQ = `Explain this system log and the safest next staff action: [${level}] ${source} — ${message}`;
             return `<div class="apex-hal-console__line apex-hal-console__line--${this.escape(
               level
             )}" data-hal-log-level="${this.escape(level)}">
               <span class="apex-hal-console__lvl">${this.escape(level)}</span>
-              <span class="apex-hal-console__src">${this.escape(String((ln && ln.source) || "—"))}</span>
-              <span class="apex-hal-console__msg">${this.escape(String((ln && ln.message) || ""))}</span>
-              <time class="apex-hal-console__at">${this.escape(String((ln && ln.at) || ""))}</time>
+              <span class="apex-hal-console__src">${this.escape(source)}</span>
+              <span class="apex-hal-console__msg">${this.escape(message)}</span>
+              <button type="button" class="apex-hal-console__ask" data-hal-ask="${this.escape(
+                askQ
+              )}">Ask HAL</button>
             </div>`;
           })
           .join("");
         return `
-          <header class="apex-widget-header">
+          <header class="apex-widget-header apex-widget-header--plain">
             <span class="apex-widget-label">${label}</span>
-            ${printBtn}
           </header>
           <div class="apex-hal-filters" data-hal-log-filters>${chips}</div>
           ${
@@ -3162,8 +3204,14 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           if (hash) loadPage(hash);
         });
       }
+      const skipChromeAsk =
+        this.type === "hal-chat" ||
+        this.type === "hal-sub-strip" ||
+        this.type === "hal-history-feed" ||
+        this.type === "hal-sys-console" ||
+        (currentPage === "hal" && currentSub);
       const header = this.element.querySelector(".apex-widget-header");
-      if (header && this.type !== "hal-chat" && !header.querySelector('[data-action="ask-hal"]')) {
+      if (header && !skipChromeAsk && !header.querySelector('[data-action="ask-hal"]')) {
         const ask = document.createElement("button");
         ask.type = "button";
         ask.className = "apex-icon-btn apex-ask-hal-btn";
@@ -5260,6 +5308,35 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }).catch(() => {});
   }
 
+  function halSubChatLogEl() {
+    const stageEl = stage();
+    return (
+      (stageEl && stageEl.querySelector(".apex-hal-rail [data-hal-messages]")) ||
+      document.querySelector(".apex-stage--hal-sub [data-hal-messages]") ||
+      document.querySelector("[data-hal-messages]")
+    );
+  }
+
+  function askHalOnSubpage(query) {
+    const q = String(query || "").trim();
+    if (!q) return;
+    const logEl = halSubChatLogEl();
+    if (logEl && currentPage === "hal" && currentSub) {
+      askHal(q, logEl);
+      const rail = logEl.closest(".apex-hal-rail");
+      if (rail && typeof rail.scrollIntoView === "function") {
+        rail.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+      return;
+    }
+    try {
+      sessionStorage.setItem("nr2-apex-hal-seed", q);
+    } catch (_err) {
+      /* optional */
+    }
+    loadPage("hal");
+  }
+
   function wireHalHistoryFeed(root) {
     if (!root || root.dataset.halHistWired === "1") return;
     root.dataset.halHistWired = "1";
@@ -5275,18 +5352,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         });
       });
     });
-    root.querySelectorAll("[data-hal-goto-chat]").forEach((btn) => {
-      btn.addEventListener("click", () => loadPage("hal"));
-    });
     root.querySelectorAll("[data-hal-replay]").forEach((btn) => {
+      btn.addEventListener("click", () => askHalOnSubpage(btn.getAttribute("data-hal-replay") || ""));
+    });
+    root.querySelectorAll("[data-hal-ask]").forEach((btn) => {
       btn.addEventListener("click", () => {
-        const q = btn.getAttribute("data-hal-replay") || "";
-        try {
-          sessionStorage.setItem("nr2-apex-hal-seed", q);
-        } catch (_err) {
-          /* optional */
-        }
-        loadPage("hal");
+        const text = btn.getAttribute("data-hal-ask") || "";
+        askHalOnSubpage(`Follow up on this HAL reply: ${text}`);
       });
     });
     root.querySelectorAll("[data-hal-copy]").forEach((btn) => {
@@ -5319,6 +5391,9 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           row.hidden = filter !== "all" && level !== filter;
         });
       });
+    });
+    root.querySelectorAll("[data-hal-ask]").forEach((btn) => {
+      btn.addEventListener("click", () => askHalOnSubpage(btn.getAttribute("data-hal-ask") || ""));
     });
   }
 
@@ -6232,22 +6307,29 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
 
     const isHal = currentPage === "hal";
     const isHalChat = isHal && !currentSub;
+    const isHalSub = isHal && !!currentSub;
     const specs = list || [];
-    const chatSpec = isHalChat ? specs.find((s) => s && s.type === "hal-chat") : null;
+    const chatSpec =
+      isHalChat || isHalSub ? specs.find((s) => s && s.type === "hal-chat") : null;
     const mainSpecs = chatSpec ? specs.filter((s) => s !== chatSpec) : specs;
 
-    if (isHalChat && chatSpec) {
-      root.className = "apex-stage apex-stage--hal";
+    if ((isHalChat || isHalSub) && chatSpec) {
+      root.className = isHalSub
+        ? "apex-stage apex-stage--hal apex-stage--hal-sub"
+        : "apex-stage apex-stage--hal";
       root.dataset.page = "hal";
-      root.dataset.sub = "";
+      if (currentSub) root.dataset.sub = currentSub;
+      else delete root.dataset.sub;
       const main = document.createElement("div");
-      main.className = "apex-hal-main apex-stage-stack";
+      main.className = isHalSub
+        ? "apex-hal-main apex-stage-stack apex-hal-main--sub"
+        : "apex-hal-main apex-stage-stack";
       const rail = document.createElement("aside");
       rail.className = "apex-hal-rail";
       root.appendChild(main);
       root.appendChild(rail);
 
-      if (window.ApexHalBrain && typeof window.ApexHalBrain.mount === "function") {
+      if (isHalChat && window.ApexHalBrain && typeof window.ApexHalBrain.mount === "function") {
         window.ApexHalBrain.mount(main);
       }
 
@@ -6255,16 +6337,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       const chatWidget = new Widget(chatSpec);
       widgets.set(chatWidget.id, chatWidget);
       rail.appendChild(chatWidget.render(mainSpecs.length));
-      if (window.ApexMotion && typeof window.ApexMotion.enableHoloTilt === "function") {
-        window.ApexMotion.enableHoloTilt(main);
-      }
+      // No holo-tilt on HAL surfaces — tilt read as wobble/refresh.
       return;
     }
 
-    root.className =
-      isHal && currentSub
-        ? "apex-stage apex-stage-stack apex-stage--hal-sub"
-        : "apex-stage apex-stage-stack";
+    root.className = "apex-stage apex-stage-stack";
     root.dataset.page = currentPage;
     if (currentSub) root.dataset.sub = currentSub;
     else delete root.dataset.sub;
@@ -6462,8 +6539,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }
 
     if (!silent) {
-      root.className =
-        currentPage === "hal" && !currentSub ? "apex-stage apex-stage--hal" : "apex-stage apex-stage-stack";
+      if (currentPage === "hal" && currentSub) {
+        root.className = "apex-stage apex-stage--hal apex-stage--hal-sub";
+      } else if (currentPage === "hal") {
+        root.className = "apex-stage apex-stage--hal";
+      } else {
+        root.className = "apex-stage apex-stage-stack";
+      }
       root.dataset.page = currentPage;
       if (currentSub) root.dataset.sub = currentSub;
       else delete root.dataset.sub;
@@ -6497,13 +6579,17 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         // like a page refresh). Best-effort patch only; keep the composer DOM intact.
         patchWidgets(list);
       } else if (silent && currentPage === "hal" && !currentSub) {
+        // Never full-remount HAL on silent refresh — that wiped chat history on hover/timer races.
         if (!chatComposerActive) softRenderHalMain(list);
+      } else if (silent && currentPage === "hal" && currentSub) {
+        // Keep History/System Logs + live rail; silent polls must not remount chat.
+        patchWidgets(list);
       } else if (silent) {
         // Silent poll must never wipe the stage (instBoot looked like a full page refresh).
         // Keep current widgets; Sync / navigation still remount intentionally.
       } else {
         renderWidgets(list);
-        if (currentPage === "hal" && !currentSub) {
+        if (currentPage === "hal") {
           restoreHalTranscript(document.querySelector("[data-hal-messages]"));
         }
         root.classList.add("is-entering");

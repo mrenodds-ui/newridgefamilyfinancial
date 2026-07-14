@@ -863,61 +863,41 @@ def append_hal_history_entry(
     return {"ok": True, "entry": entry, "count": len(payload["entries"])}
 
 
+def _hal_ask_widget() -> dict[str, Any]:
+    """Live Ask HAL rail — same chat surface as #hal, mounted on History/System Logs."""
+    return {
+        "id": "hal-ask",
+        "type": "hal-chat",
+        "label": "Ask HAL",
+        "status": "ok",
+        "hint": "Live HAL — asks here persist to History.",
+    }
+
+
 def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL History — searchable operator/HAL interaction log (#hal/history)."""
+    """HAL History — conversation log + live Ask HAL rail (#hal/history)."""
     del reports, bundle
     entries = _hal_history_entries(80)
     op_n = sum(1 for e in entries if e.get("role") == "operator")
     hal_n = sum(1 for e in entries if e.get("role") == "hal")
     sys_n = sum(1 for e in entries if e.get("role") == "system")
     last_at = entries[-1]["at"] if entries else "—"
-    widgets: list[dict[str, Any]] = [
-        _nav(
-            "HAL · History",
-            "Past asks, replies, and board actions",
-            "Hash #hal/history · local audit only · never invents turns.",
-        ),
+    return [
         {
-            "id": "hal-history-kpi-ops",
-            "type": "kpi",
-            "label": "Operator asks",
-            "size": "s",
-            "value": op_n,
-            "unit": "count",
-            "status": "ok" if op_n else "empty",
-            "emptyMessage": "0",
-            "hint": "Persisted operator prompts this workstation.",
-        },
-        {
-            "id": "hal-history-kpi-hal",
-            "type": "kpi",
-            "label": "HAL replies",
-            "size": "s",
-            "value": hal_n,
-            "unit": "count",
-            "status": "ok" if hal_n else "empty",
-            "emptyMessage": "0",
-            "hint": "Persisted HAL answers (Thinking… omitted).",
-        },
-        {
-            "id": "hal-history-kpi-sys",
-            "type": "kpi",
-            "label": "System events",
-            "size": "s",
-            "value": sys_n,
-            "unit": "count",
-            "status": "ok" if sys_n else "empty",
-            "emptyMessage": "0",
-            "hint": "Board actions and receipts.",
-        },
-        {
-            "id": "hal-history-last",
-            "type": "status",
-            "label": "Last interaction",
-            "size": "m",
+            "id": "hal-history-strip",
+            "type": "hal-sub-strip",
+            "label": "History",
+            "size": "strip",
             "status": "ok" if entries else "empty",
-            "message": last_at if entries else "No history yet",
-            "hint": "Open Chat to start a session — turns save locally.",
+            "title": "HAL · History",
+            "subtitle": "Local audit of asks, replies, and board actions",
+            "metrics": [
+                {"key": "operator", "label": "Asks", "value": op_n},
+                {"key": "hal", "label": "Replies", "value": hal_n},
+                {"key": "system", "label": "System", "value": sys_n},
+                {"key": "last", "label": "Last", "value": last_at if entries else "—"},
+            ],
+            "hint": "Replay sends the ask to the HAL rail on this page.",
         },
         {
             "id": "hal-history-feed",
@@ -925,18 +905,18 @@ def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
             "label": "Conversation log",
             "size": "full",
             "status": "ok" if entries else "empty",
-            "emptyMessage": "No persisted HAL history yet. Ask HAL on Chat — turns land here.",
-            "hint": "Filter by role · Replay opens Chat with the prompt seeded.",
+            "emptyMessage": "No history yet — ask HAL in the rail; turns land here.",
+            "hint": "Filter by role · Replay asks HAL here · Copy for replies.",
             "entries": list(reversed(entries)),
             "filters": ["all", "operator", "hal", "system"],
             "counts": {"all": len(entries), "operator": op_n, "hal": hal_n, "system": sys_n},
         },
+        _hal_ask_widget(),
     ]
-    return widgets
 
 
 def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL System Logs — import telemetry & freshness diagnostics (#hal/system-logs)."""
+    """HAL System Logs — diagnostic console + live Ask HAL rail (#hal/system-logs)."""
     del reports
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
@@ -947,13 +927,13 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
     total = int(summary.get("total") or 0) if summary else 0
 
     if total > 0 and missing == 0 and partial == 0 and stale == 0:
-        posture, posture_status = "Operational", "ok"
+        posture = "Operational"
         posture_hint = "All tracked datasets connected."
     elif total > 0:
-        posture, posture_status = "Degraded", "ok"
+        posture = "Degraded"
         posture_hint = "Missing or partial imports — refresh Sync before posting."
     else:
-        posture, posture_status = "Standby", "empty"
+        posture = "Standby"
         posture_hint = "Awaiting import diagnostics."
 
     alerts: list[dict[str, Any]] = []
@@ -979,9 +959,8 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
     except Exception:
         pass
 
-    # Surface critical dataset gaps as console lines when alert list is thin.
     datasets = diag.get("datasets") if isinstance(diag.get("datasets"), list) else []
-    gap_rows: list[dict[str, Any]] = []
+    gap_n = 0
     for row in datasets:
         if not isinstance(row, dict):
             continue
@@ -991,14 +970,7 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
             continue
         status = str(row.get("status") or "")
         if status in {"missing", "stale", "partial"} or int(row.get("rowCount") or 0) <= 0:
-            gap_rows.append(
-                {
-                    "dataset": str(row.get("datasetKey") or "—")[:48],
-                    "status": status or "unknown",
-                    "rows": int(row.get("rowCount") or 0),
-                    "detail": str(row.get("detail") or "")[:120],
-                }
-            )
+            gap_n += 1
             if len(alerts) < 40:
                 alerts.append(
                     {
@@ -1010,64 +982,24 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
                 )
 
     log_lines = alerts[:60]
-    widgets: list[dict[str, Any]] = [
-        _nav(
-            "HAL · System Logs",
-            "Import telemetry, sync failures, freshness",
-            "Hash #hal/system-logs · diagnostics from import_loader only.",
-        ),
+    return [
         {
-            "id": "hal-sys-posture",
-            "type": "status",
-            "label": "System posture",
-            "size": "m",
-            "status": posture_status,
-            "message": posture,
-            "hint": posture_hint,
-        },
-        {
-            "id": "hal-sys-kpi-connected",
-            "type": "kpi",
-            "label": "Connected",
-            "size": "s",
-            "value": connected if summary else None,
-            "unit": "count",
+            "id": "hal-sys-strip",
+            "type": "hal-sub-strip",
+            "label": "System Logs",
+            "size": "strip",
             "status": "ok" if summary else "empty",
-            "emptyMessage": "—",
-            "hint": f"{connected}/{total} datasets" if total else "Bundle summary unavailable.",
-        },
-        {
-            "id": "hal-sys-kpi-partial",
-            "type": "kpi",
-            "label": "Partial",
-            "size": "s",
-            "value": partial if summary else None,
-            "unit": "count",
-            "status": "ok" if summary else "empty",
-            "emptyMessage": "—",
-            "hint": "Loaded but required fields missing.",
-        },
-        {
-            "id": "hal-sys-kpi-missing",
-            "type": "kpi",
-            "label": "Missing",
-            "size": "s",
-            "value": missing if summary else None,
-            "unit": "count",
-            "status": "ok" if summary else "empty",
-            "emptyMessage": "—",
-            "hint": "Required export files not found.",
-        },
-        {
-            "id": "hal-sys-kpi-stale",
-            "type": "kpi",
-            "label": "Stale",
-            "size": "s",
-            "value": stale if summary else None,
-            "unit": "count",
-            "status": "ok" if summary else "empty",
-            "emptyMessage": "—",
-            "hint": "Past freshness window — refresh Sync.",
+            "title": "HAL · System Logs",
+            "subtitle": posture_hint,
+            "metrics": [
+                {"key": "posture", "label": "Posture", "value": posture},
+                {"key": "connected", "label": "Connected", "value": f"{connected}/{total}" if total else "—"},
+                {"key": "partial", "label": "Partial", "value": partial if summary else "—"},
+                {"key": "missing", "label": "Missing", "value": missing if summary else "—"},
+                {"key": "stale", "label": "Stale", "value": stale if summary else "—"},
+                {"key": "gaps", "label": "Gaps", "value": gap_n},
+            ],
+            "hint": "Ask HAL about a console line from the Ask button on each row.",
         },
         {
             "id": "hal-sys-console",
@@ -1076,23 +1008,12 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
             "size": "full",
             "status": "ok" if log_lines else "empty",
             "emptyMessage": "No import health alerts — Sync looks quiet.",
-            "hint": "Import-backed lines only · Sync to refresh.",
+            "hint": "Import-backed lines only · Ask HAL about a row · Sync to refresh.",
             "lines": log_lines,
             "filters": ["all", "error", "warn", "info"],
         },
-        {
-            "id": "hal-sys-gaps",
-            "type": "data-table",
-            "label": "Critical dataset gaps",
-            "size": "full",
-            "status": "ok" if gap_rows else "empty",
-            "emptyMessage": "No critical gaps in required datasets",
-            "columns": ["dataset", "status", "rows", "detail"],
-            "rows": gap_rows[:40],
-            "hint": "Required (non-optional) automated datasets only.",
-        },
+        _hal_ask_widget(),
     ]
-    return widgets
 
 
 def build_claims_kanban_subpage(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
