@@ -49,10 +49,17 @@ class CollapseEmptyTests(unittest.TestCase):
         widgets = [
             {"id": "a", "size": "xl", "status": "empty"},
             {"id": "b", "size": "m", "status": "ok"},
+            {"id": "c", "type": "status", "size": "l", "status": "empty"},
         ]
         out = apply_collapse_empty_all(widgets)
-        self.assertEqual(out[0]["size"], "strip")
-        self.assertEqual(out[1]["size"], "m")
+        # Non-exempt empties are omitted (hal-10615); status empties still collapse→strip.
+        ids = [w.get("id") for w in out if isinstance(w, dict)]
+        self.assertNotIn("a", ids)
+        self.assertIn("b", ids)
+        self.assertIn("c", ids)
+        by_id = {w["id"]: w for w in out if isinstance(w, dict)}
+        self.assertEqual(by_id["b"]["size"], "m")
+        self.assertEqual(by_id["c"]["size"], "strip")
 
 
 class FirstViewportTests(unittest.TestCase):

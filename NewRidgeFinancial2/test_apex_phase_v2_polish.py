@@ -34,7 +34,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         invalidate_explain_cache(reason="test_teardown")
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10616")
+        self.assertEqual(BUILD_ID, "hal-10617")
 
     def test_explain_cache_default_off(self):
         os.environ.pop("NR2_EXPLAIN_CACHE", None)

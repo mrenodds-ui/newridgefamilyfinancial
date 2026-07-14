@@ -31,7 +31,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10616"
+BUILD_ID = "hal-10617"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4333,7 +4333,8 @@ def build_apex_widgets(
         except Exception:
             pass
 
-    # Moonshot compact + zero-scroll (hal-10561) + KPI density (hal-10562)
+    # Moonshot compact + zero-scroll (hal-10561) + KPI density (hal-10562) + fib bands (hal-10617)
+    _mosaic_layout: dict[str, Any] | None = None
     try:
         from apex_compact_pages_pack import (
             apply_collapse_empty_all,
@@ -4343,6 +4344,7 @@ def build_apex_widgets(
             normalize_first_viewport,
             omit_cross_page_duplicates,
             omit_until_source_widgets,
+            pack_fibonacci_bands,
             partition_first_viewport,
         )
 
@@ -4360,9 +4362,12 @@ def build_apex_widgets(
         widgets = omit_until_source_widgets(widgets, page=pid, sub=sub_key or "")
         widgets = omit_cross_page_duplicates(widgets, page=pid)
         widgets = compact_widget_sizes(widgets, page=pid, sub=sub_key or "")
-        source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty"
+        widgets, _mosaic_layout = pack_fibonacci_bands(
+            widgets, page=pid, sub=sub_key or ""
+        )
+        source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty+fib-bands"
     except Exception:
-        pass
+        _mosaic_layout = None
 
     page_label = f"{pid}/{sub_key}" if sub_key else pid
     payload = {
@@ -4373,6 +4378,7 @@ def build_apex_widgets(
         "refreshedAt": reports.get("generatedAt") or bundle.get("loadedAt") or _utc_now(),
         "buildId": BUILD_ID,
         "widgets": widgets,
+        "mosaicLayout": _mosaic_layout,
         "sourceNote": source_note,
         "errors": errors or None,
         "widgetCensus": summarize_widget_census(widgets),

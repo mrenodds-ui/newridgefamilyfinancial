@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10563 (Moonshot cache coherence + KPI density + zero-scroll)
+ * Build: hal-10617 (Fibonacci band mosaic + KPI density + zero-scroll)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10613";
+  const ASSET_V = "hal-10617";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -383,6 +383,10 @@
       const el = document.createElement("article");
       const size = instrumentSize(this.spec);
       el.className = `apex-widget apex-inst apex-inst--${size}`;
+      const tileClass = String((this.spec && this.spec.tileClass) || "").trim();
+      if (tileClass) el.classList.add(tileClass);
+      const band = String((this.spec && (this.spec.band || this.spec.mosaicBand)) || "").trim();
+      if (band) el.dataset.band = band;
       el.dataset.widgetId = this.id;
       if (Array.isArray(this.spec.aliasIds) && this.spec.aliasIds.length) {
         el.dataset.aliasIds = this.spec.aliasIds.map(String).join(" ");
@@ -5845,7 +5849,148 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     return true;
   }
 
-  function softRenderHalMain(list) {
+  let lastMosaicLayout = null;
+
+  function synthesizeMosaicLayout(specs) {
+    const bands = [];
+    const list = (specs || []).filter((s) => s && typeof s === "object");
+    let i = 0;
+    while (i < list.length) {
+      const spec = list[i];
+      const size = instrumentSize(spec);
+      const id = String(spec.id || `w${i}`);
+      if (spec.type === "hal-chat" || id === "hal-ask") {
+        bands.push({ band: "primary", height: 320, tiles: [{ id, tileClass: "tile-100" }] });
+        i += 1;
+        continue;
+      }
+      if (size === "strip" || size === "xs") {
+        bands.push({ band: "micro", height: 80, tiles: [{ id, tileClass: "tile-100" }] });
+        i += 1;
+        continue;
+      }
+      if (size === "s") {
+        const group = [spec];
+        let j = i + 1;
+        while (j < list.length && group.length < 3) {
+          const nxt = list[j];
+          if (!nxt || instrumentSize(nxt) !== "s" || nxt.type === "hal-chat") break;
+          group.push(nxt);
+          j += 1;
+        }
+        const tileClass = group.length === 1 ? "tile-100" : group.length === 2 ? "tile-50" : "tile-33";
+        bands.push({
+          band: "micro",
+          height: 80,
+          tiles: group.map((g) => ({ id: String(g.id || ""), tileClass })),
+        });
+        i = j;
+        continue;
+      }
+      const group = [spec];
+      let j = i + 1;
+      const alonePrimary = size === "l" || size === "xl" || size === "full";
+      while (j < list.length && group.length < 2 && !alonePrimary) {
+        const nxt = list[j];
+        if (!nxt || nxt.type === "hal-chat") break;
+        const ns = instrumentSize(nxt);
+        if (ns === "strip" || ns === "xs" || ns === "s") break;
+        group.push(nxt);
+        j += 1;
+      }
+      if (alonePrimary && j < list.length) {
+        const nxt = list[j];
+        if (nxt && nxt.type !== "hal-chat") {
+          const ns = instrumentSize(nxt);
+          if (ns !== "strip" && ns !== "xs" && ns !== "s") {
+            group.push(nxt);
+            j += 1;
+          }
+        }
+      }
+      if (group.length === 1) {
+        const aloneSize = instrumentSize(group[0]);
+        const band = aloneSize === "l" || aloneSize === "xl" || aloneSize === "full" ? "primary" : "secondary";
+        bands.push({
+          band,
+          height: band === "primary" ? 320 : 240,
+          tiles: [{ id: String(group[0].id || ""), tileClass: "tile-100" }],
+        });
+      } else {
+        const band = group.some((g) => {
+          const gs = instrumentSize(g);
+          return gs === "l" || gs === "xl" || gs === "full";
+        })
+          ? "primary"
+          : "secondary";
+        bands.push({
+          band,
+          height: band === "primary" ? 320 : 240,
+          tiles: group.map((g) => ({ id: String(g.id || ""), tileClass: "tile-50" })),
+        });
+      }
+      i = Math.max(j, i + group.length);
+    }
+    return { mode: "fibonacci", version: 1, bands };
+  }
+
+  function mountSpecsInBands(host, specs, mosaicLayout) {
+    if (!host) return;
+    const layout =
+      mosaicLayout && Array.isArray(mosaicLayout.bands) && mosaicLayout.bands.length
+        ? mosaicLayout
+        : synthesizeMosaicLayout(specs);
+    const byId = new Map();
+    (specs || []).forEach((spec, idx) => {
+      if (!spec) return;
+      const widget = new Widget(spec);
+      widgets.set(widget.id, widget);
+      const el = widget.render(idx);
+      if (spec.layout && el && el.style) {
+        const w = Number(spec.layout.w);
+        if (w >= 12) el.classList.add("apex-inst--full");
+        else if (w >= 8) el.classList.add("apex-inst--xl");
+        else if (w >= 6) el.classList.add("apex-inst--l");
+      }
+      byId.set(String(widget.id), el);
+    });
+
+    host.classList.add("apex-mosaic--bands");
+    const placed = new Set();
+    (layout.bands || []).forEach((band) => {
+      if (!band || !Array.isArray(band.tiles) || !band.tiles.length) return;
+      const row = document.createElement("div");
+      const kind = String(band.band || "secondary");
+      row.className = `apex-band band-${kind} apex-band--${kind}`;
+      row.dataset.band = kind;
+      band.tiles.forEach((tile) => {
+        const id = String((tile && tile.id) || "");
+        const el = byId.get(id);
+        if (!el) return;
+        const tileClass = String((tile && tile.tileClass) || "tile-100");
+        el.classList.remove("tile-100", "tile-50", "tile-33");
+        el.classList.add(tileClass);
+        row.appendChild(el);
+        placed.add(id);
+      });
+      if (row.childElementCount) host.appendChild(row);
+    });
+    // Orphans (not in layout) append as full-width secondary bands
+    (specs || []).forEach((spec) => {
+      if (!spec) return;
+      const id = String(spec.id || "");
+      if (placed.has(id)) return;
+      const el = byId.get(id);
+      if (!el) return;
+      const row = document.createElement("div");
+      row.className = "apex-band band-secondary apex-band--secondary";
+      el.classList.add("tile-100");
+      row.appendChild(el);
+      host.appendChild(row);
+    });
+  }
+
+  function softRenderHalMain(list, mosaicLayout) {
     const root = stage();
     if (!root) return false;
     const main = root.querySelector(".apex-hal-main");
@@ -5869,11 +6014,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     if (window.ApexHalBrain && typeof window.ApexHalBrain.mount === "function") {
       window.ApexHalBrain.mount(main);
     }
-    mainSpecs.forEach((spec, idx) => {
-      const widget = new Widget(spec);
-      widgets.set(widget.id, widget);
-      main.appendChild(widget.render(idx));
-    });
+    mountSpecsInBands(main, mainSpecs, mosaicLayout || lastMosaicLayout);
     if (chatSpec) {
       const existing = Array.from(widgets.values()).find((w) => w && w.type === "hal-chat");
       if (existing) {
@@ -5889,7 +6030,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     return true;
   }
 
-  function renderWidgets(list) {
+  function renderWidgets(list, mosaicLayout) {
     const root = stage();
     if (!root) return;
     if (window.ApexHalBrain && typeof window.ApexHalBrain.destroy === "function") {
@@ -5897,11 +6038,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }
     root.innerHTML = "";
     widgets.clear();
+    if (mosaicLayout) lastMosaicLayout = mosaicLayout;
 
     const isHal = currentPage === "hal";
     const specs = list || [];
     const chatSpec = isHal ? specs.find((s) => s && s.type === "hal-chat") : null;
     const mainSpecs = chatSpec ? specs.filter((s) => s !== chatSpec) : specs;
+    const layout = mosaicLayout || lastMosaicLayout;
 
     if (isHal && chatSpec) {
       root.className = "apex-stage apex-stage--hal";
@@ -5916,11 +6059,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         window.ApexHalBrain.mount(main);
       }
 
-      mainSpecs.forEach((spec, idx) => {
-        const widget = new Widget(spec);
-        widgets.set(widget.id, widget);
-        main.appendChild(widget.render(idx));
-      });
+      mountSpecsInBands(main, mainSpecs, layout);
       const chatWidget = new Widget(chatSpec);
       widgets.set(chatWidget.id, chatWidget);
       rail.appendChild(chatWidget.render(mainSpecs.length));
@@ -5946,18 +6085,7 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         }
       }
     } catch (_) {}
-    orderedSpecs.forEach((spec, idx) => {
-      const widget = new Widget(spec);
-      widgets.set(widget.id, widget);
-      const el = widget.render(idx);
-      if (spec && spec.layout && el && el.style) {
-        const w = Number(spec.layout.w);
-        if (w >= 12) el.classList.add("apex-inst--full");
-        else if (w >= 8) el.classList.add("apex-inst--xl");
-        else if (w >= 6) el.classList.add("apex-inst--l");
-      }
-      root.appendChild(el);
-    });
+    mountSpecsInBands(root, orderedSpecs, layout);
     if (window.ApexMotion && typeof window.ApexMotion.enableHoloTilt === "function") {
       window.ApexMotion.enableHoloTilt(root);
     }
@@ -6145,17 +6273,18 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           return !!halChatBusy;
         }
       })();
+      if (payload && payload.mosaicLayout) lastMosaicLayout = payload.mosaicLayout;
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
       } else if (silent && currentPage === "hal" && !currentSub) {
         // Never remount HAL main while the chat composer is active — that looked like
         // a full page refresh every time staff hit the question box / sent a message.
-        if (!chatComposerActive) softRenderHalMain(list);
+        if (!chatComposerActive) softRenderHalMain(list, payload && payload.mosaicLayout);
       } else if (silent) {
         // Silent poll must never wipe the mosaic (instBoot looked like a full page refresh).
         // Keep current widgets; Sync / navigation still remount intentionally.
       } else {
-        renderWidgets(list);
+        renderWidgets(list, payload && payload.mosaicLayout);
         if (currentPage === "hal" && !currentSub) {
           restoreHalTranscript(document.querySelector("[data-hal-messages]"));
         }

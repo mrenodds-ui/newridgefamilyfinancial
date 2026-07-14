@@ -300,6 +300,27 @@ PAGE_FIRST_VIEW_ORDER: dict[str, tuple[str, ...]] = {
         "ar-collection-task-list",
         "ar-follow-up",
     ),
+    "taxes": (
+        "tax-core-strip",
+        "tax-bridge-waterfall",
+        "tax-open-planning",
+        "tax-year-status",
+        "tax-disclaimer",
+    ),
+    "quickbooks": (
+        "qb-vitals-strip",
+        "qb-net-profit-gap",
+        "qb-payroll-gap",
+        "qb-expense-hbar",
+        "qb-ap-aging",
+    ),
+    "office-manager": (
+        "om-vitals-strip",
+        "om-daily-huddle",
+        "operatory-util-trend",
+        "om-priorities",
+        "om-open-operatory",
+    ),
 }
 
 
@@ -320,9 +341,26 @@ def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -
             item["size"] = "m" if i > 0 else "l"
         elif size == "l" and i > 0:
             item["size"] = "m"
-        if wtype in {"status", "executive-strip", "claims-executive-strip", "financial-command-strip"}:
+        if wtype in {"executive-strip", "claims-executive-strip", "financial-command-strip"}:
             item["size"] = "strip" if size != "s" else size
             item.setdefault("maxHeight", MAX_MICRO_PX)
+        elif wtype == "status":
+            # Pairable secondary tiles (hal-10617) — avoid stacking every status as micro strip
+            if size in {"", "strip", "xs", "s"}:
+                item["size"] = "m"
+            item.setdefault("maxHeight", MAX_SECONDARY_PX)
+        elif wtype in {
+            "chart",
+            "dual-axis-trend",
+            "line",
+            "bar",
+            "spark",
+            "horizontal-bar",
+            "radial-gauge",
+        }:
+            if size in {"", "strip", "xs", "s"}:
+                item["size"] = "m"
+            item.setdefault("maxHeight", MAX_SECONDARY_PX)
         elif str(item.get("size") or "") in {"s", "strip", "xs"}:
             item.setdefault("maxHeight", MAX_MICRO_PX)
         elif str(item.get("size") or "") == "m":
@@ -331,6 +369,213 @@ def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -
             item.setdefault("maxHeight", MAX_PRIMARY_PX)
         out.append(item)
     return out
+
+
+def _layout_size(widget: dict[str, Any]) -> str:
+    return str(widget.get("size") or "s").lower()
+
+
+def _is_hal_chat(widget: dict[str, Any]) -> bool:
+    return str(widget.get("type") or "") == "hal-chat" or str(widget.get("id") or "") == "hal-ask"
+
+
+def _is_band_hidden(widget: dict[str, Any]) -> bool:
+    """Widgets CSS will hide — keep out of band width math (empty ≠ $0)."""
+    if not isinstance(widget, dict):
+        return True
+    status = str(widget.get("status") or "").lower()
+    wtype = str(widget.get("type") or "")
+    if widget.get("keepEmpty") is True:
+        return False
+    if status in {"empty", "awaiting-migration"} and (
+        widget.get("omitWhenEmpty") is True
+        or widget.get("collapseWhenEmpty") is True
+        or wtype == "kpi"
+    ):
+        return True
+    return False
+
+
+def _annotate_tile(widget: dict[str, Any], *, band: str, tile_class: str, height: int) -> dict[str, Any]:
+    out = dict(widget)
+    out["band"] = band
+    out["tileClass"] = tile_class
+    out["mosaicBand"] = band
+    out.setdefault("maxHeight", height)
+    out["zeroScroll"] = True
+    return out
+
+
+def pack_fibonacci_bands(
+    widgets: list[Any], *, page: str = "", sub: str = ""
+) -> tuple[list[Any], dict[str, Any]]:
+    """Group widgets into Fibonacci bands (80 / 240 / 320) that tile edge-to-edge.
+
+    Returns (annotated_widgets, mosaicLayout). Strips own micro bands; medium
+    tiles pair as tile-50 in secondary; large/hal-chat own primary. Applies to
+    every page/sub including ops — fills stage without auto-fill gaps.
+    """
+    del page, sub  # layout is size-driven for all pages
+    if not isinstance(widgets, list):
+        return widgets, {"mode": "fibonacci", "version": 1, "bands": []}
+
+    annotated: list[Any] = []
+    visible: list[dict[str, Any]] = []
+    for w in widgets:
+        if not isinstance(w, dict):
+            annotated.append(w)
+            continue
+        item = dict(w)
+        if _is_band_hidden(item):
+            item.pop("band", None)
+            item.pop("tileClass", None)
+            item.pop("mosaicBand", None)
+            annotated.append(item)
+            continue
+        visible.append(item)
+    # Ops-open chips trail so money tiles pair first in the stage.
+    visible.sort(key=lambda w: 1 if str(w.get("id") or "").endswith("-ops-open") else 0)
+
+    bands: list[dict[str, Any]] = []
+    placed: dict[str, dict[str, Any]] = {}
+    i = 0
+    while i < len(visible):
+        w = visible[i]
+        size = _layout_size(w)
+        wid = str(w.get("id") or f"w{i}")
+
+        if _is_hal_chat(w):
+            tile = _annotate_tile(w, band="primary", tile_class="tile-100", height=MAX_PRIMARY_PX)
+            placed[wid] = tile
+            bands.append(
+                {
+                    "band": "primary",
+                    "height": MAX_PRIMARY_PX,
+                    "tiles": [{"id": wid, "tileClass": "tile-100"}],
+                }
+            )
+            i += 1
+            continue
+
+        if size in {"strip", "xs"}:
+            tile = _annotate_tile(w, band="micro", tile_class="tile-100", height=MAX_MICRO_PX)
+            placed[wid] = tile
+            bands.append(
+                {
+                    "band": "micro",
+                    "height": MAX_MICRO_PX,
+                    "tiles": [{"id": wid, "tileClass": "tile-100"}],
+                }
+            )
+            i += 1
+            continue
+
+        if size == "s":
+            group = [w]
+            j = i + 1
+            while j < len(visible) and len(group) < 3:
+                nxt = visible[j]
+                if _is_hal_chat(nxt) or _layout_size(nxt) != "s":
+                    break
+                group.append(nxt)
+                j += 1
+            tile_class = {1: "tile-100", 2: "tile-50", 3: "tile-33"}[len(group)]
+            tiles_meta = []
+            for g in group:
+                gid = str(g.get("id") or "")
+                placed[gid] = _annotate_tile(
+                    g, band="micro", tile_class=tile_class, height=MAX_MICRO_PX
+                )
+                tiles_meta.append({"id": gid, "tileClass": tile_class})
+            bands.append({"band": "micro", "height": MAX_MICRO_PX, "tiles": tiles_meta})
+            i = j
+            continue
+
+        # Secondary / primary body tiles — prefer pairs (tile-50), else triple / solo.
+        group = [w]
+        j = i + 1
+        alone_primary = size in {"l", "xl", "full"}
+        while j < len(visible) and len(group) < 3 and not alone_primary:
+            nxt = visible[j]
+            ns = _layout_size(nxt)
+            if _is_hal_chat(nxt) or ns in {"strip", "xs", "s"}:
+                break
+            group.append(nxt)
+            j += 1
+            if len(group) == 2:
+                break
+
+        if alone_primary and len(group) == 1:
+            # Try to pair with next secondary-eligible sibling for a filled primary row.
+            if j < len(visible):
+                nxt = visible[j]
+                ns = _layout_size(nxt)
+                if not _is_hal_chat(nxt) and ns not in {"strip", "xs", "s"}:
+                    group.append(nxt)
+                    j += 1
+
+        if len(group) == 1:
+            alone = group[0]
+            alone_size = _layout_size(alone)
+            band = "primary" if alone_size in {"l", "xl", "full"} else "secondary"
+            height = MAX_PRIMARY_PX if band == "primary" else MAX_SECONDARY_PX
+            aid = str(alone.get("id") or "")
+            placed[aid] = _annotate_tile(alone, band=band, tile_class="tile-100", height=height)
+            bands.append(
+                {
+                    "band": band,
+                    "height": height,
+                    "tiles": [{"id": aid, "tileClass": "tile-100"}],
+                }
+            )
+        elif len(group) == 2:
+            band = (
+                "primary"
+                if any(_layout_size(g) in {"l", "xl", "full"} for g in group)
+                else "secondary"
+            )
+            height = MAX_PRIMARY_PX if band == "primary" else MAX_SECONDARY_PX
+            tiles_meta = []
+            for g in group:
+                gid = str(g.get("id") or "")
+                placed[gid] = _annotate_tile(g, band=band, tile_class="tile-50", height=height)
+                tiles_meta.append({"id": gid, "tileClass": "tile-50"})
+            bands.append({"band": band, "height": height, "tiles": tiles_meta})
+        else:
+            height = MAX_SECONDARY_PX
+            tiles_meta = []
+            for g in group:
+                gid = str(g.get("id") or "")
+                placed[gid] = _annotate_tile(
+                    g, band="secondary", tile_class="tile-33", height=height
+                )
+                tiles_meta.append({"id": gid, "tileClass": "tile-33"})
+            bands.append({"band": "secondary", "height": height, "tiles": tiles_meta})
+        i = j
+
+    # Preserve original order in annotated list; overlay band fields.
+    final: list[Any] = []
+    for w in widgets:
+        if not isinstance(w, dict):
+            final.append(w)
+            continue
+        wid = str(w.get("id") or "")
+        if wid in placed:
+            final.append(placed[wid])
+        else:
+            item = dict(w)
+            item.pop("band", None)
+            item.pop("tileClass", None)
+            item.pop("mosaicBand", None)
+            final.append(item)
+
+    layout = {
+        "mode": "fibonacci",
+        "version": 1,
+        "bands": bands,
+        "totalHeight": sum(int(b.get("height") or 0) for b in bands),
+    }
+    return final, layout
 
 
 def is_empty_kpi(widget: dict[str, Any]) -> bool:

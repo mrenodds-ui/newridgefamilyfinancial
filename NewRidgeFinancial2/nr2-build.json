@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10616",
-  "BUILD_ID": "hal-10616",
-  "assetVersion": "hal-10616",
-  "builtAt": "2026-07-14T01:40:00.000Z",
-  "notes": "hal-10616: remove optional SoftDent/HAL/claims clutter; cap overview+ops at 5 for zero-scroll.",
+  "schemaVersion": "hal-10617",
+  "BUILD_ID": "hal-10617",
+  "assetVersion": "hal-10617",
+  "builtAt": "2026-07-14T02:00:00.000Z",
+  "notes": "hal-10617: Fibonacci band mosaic — tiles pack edge-to-edge on all pages.",
   "staffRenderMode": "apex",
-  "package": "HAL-10616"
+  "package": "HAL-10617"
 }
