@@ -37,7 +37,6 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
         {
             "claims-executive-strip",
             "claims-aging-exposure",
-            "claims-pipeline-summary",
             "claims-top-critical",
         }
     ),
@@ -72,9 +71,9 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
         {
             "ar-vitals-strip",
             "ar-aging-chart",
-            "collection-bullet",
             "ar-collection-task-list",
             "ar-follow-up",
+            "ar-heatmap-grid",
         }
     ),
     "quickbooks": frozenset(
@@ -97,7 +96,7 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
     ),
 }
 
-# Ops subpages: money/detail only — no scroll fluff (hal-10616).
+# Ops subpages: money/detail only — no scroll fluff (hal-10618 debris cleanup).
 PAGE_OPS_KEEP: dict[str, frozenset[str]] = {
     "softdent": frozenset(
         {
@@ -109,6 +108,7 @@ PAGE_OPS_KEEP: dict[str, frozenset[str]] = {
     ),
     "claims": frozenset(
         {
+            "claims-pipeline-summary",
             "claims-risk-analytics",
             "claim-status-lanes",
         }
@@ -128,9 +128,46 @@ PAGE_OPS_KEEP: dict[str, frozenset[str]] = {
     ),
     "ar": frozenset(
         {
-            "ar-heatmap-grid",
+            "collection-bullet",
             "ar-waterfall",
             "collectible-remainder",
+        }
+    ),
+    "office-manager": frozenset(
+        {
+            "om-open-operatory",
+            "operatory-util-trend",
+            "patient-responsibility-calc",
+        }
+    ),
+    "content": frozenset(
+        {
+            "narr-drafts",
+            "narr-clinical-notes",
+            "narr-template-library",
+            "docs-queue",
+            "docs-previews",
+            "library-payers",
+            "library-codes",
+        }
+    ),
+    "documents": frozenset(
+        {
+            "docs-queue",
+            "docs-previews",
+        }
+    ),
+    "narratives": frozenset(
+        {
+            "narr-drafts",
+            "narr-clinical-notes",
+            "narr-template-library",
+        }
+    ),
+    "library": frozenset(
+        {
+            "library-payers",
+            "library-codes",
         }
     ),
 }
@@ -147,7 +184,6 @@ OMIT_OPTIONAL_ZERO_SCROLL_IDS = frozenset(
         "softdent-patient-dossier",
         "softdent-print-preview-audit",
         "softdent-ui-honesty",
-        "stale-import-alert",
         "v-patient-aging",
         "v-case-acceptance",
         "v-scheduling-efficiency",
@@ -282,7 +318,6 @@ PAGE_FIRST_VIEW_ORDER: dict[str, tuple[str, ...]] = {
     ),
     "claims": (
         "claims-executive-strip",
-        "claims-pipeline-summary",
         "claims-aging-exposure",
         "claims-top-critical",
     ),
@@ -296,9 +331,9 @@ PAGE_FIRST_VIEW_ORDER: dict[str, tuple[str, ...]] = {
     "ar": (
         "ar-vitals-strip",
         "ar-aging-chart",
-        "collection-bullet",
         "ar-collection-task-list",
         "ar-follow-up",
+        "ar-heatmap-grid",
     ),
     "taxes": (
         "tax-core-strip",
@@ -321,7 +356,16 @@ PAGE_FIRST_VIEW_ORDER: dict[str, tuple[str, ...]] = {
         "om-priorities",
         "om-open-operatory",
     ),
+    "content": (
+        "content-hub-strip",
+        "docs-queue",
+        "narr-drafts",
+        "narr-clinical-notes",
+        "narr-template-library",
+    ),
 }
+
+PAGE_FIRST_VIEW_KEEP["content"] = frozenset(PAGE_FIRST_VIEW_ORDER["content"])
 
 
 def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
@@ -345,10 +389,25 @@ def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -
             item["size"] = "strip" if size != "s" else size
             item.setdefault("maxHeight", MAX_MICRO_PX)
         elif wtype == "status":
-            # Pairable secondary tiles (hal-10617) — avoid stacking every status as micro strip
-            if size in {"", "strip", "xs", "s"}:
-                item["size"] = "m"
-            item.setdefault("maxHeight", MAX_SECONDARY_PX)
+            wid = str(item.get("id") or "")
+            # Keep overview/ops chrome as micro strips (hal-10618)
+            if wid.endswith(("-overview-open", "-ops-open", "-ops-empty", "-ops-pair")) and size in {
+                "strip",
+                "xs",
+                "s",
+                "",
+            }:
+                if wid.endswith("-ops-pair"):
+                    item["size"] = "m"
+                    item.setdefault("maxHeight", MAX_SECONDARY_PX)
+                else:
+                    item["size"] = "strip"
+                    item.setdefault("maxHeight", MAX_MICRO_PX)
+            else:
+                # Pairable secondary tiles (hal-10617) — avoid stacking every status as micro strip
+                if size in {"", "strip", "xs", "s"}:
+                    item["size"] = "m"
+                item.setdefault("maxHeight", MAX_SECONDARY_PX)
         elif wtype in {
             "chart",
             "dual-axis-trend",
@@ -368,6 +427,56 @@ def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -
         else:
             item.setdefault("maxHeight", MAX_PRIMARY_PX)
         out.append(item)
+    return out
+
+
+def apply_single_micro_band(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
+    """hal-10618: at most one micro (80px) band per page (HAL exempt for chat chrome)."""
+    del sub
+    if not isinstance(widgets, list):
+        return widgets
+    if str(page or "").strip().lower() == "hal":
+        return widgets
+    out: list[Any] = []
+    micro_used = False
+    for w in widgets:
+        if not isinstance(w, dict):
+            out.append(w)
+            continue
+        item = dict(w)
+        if _is_hal_chat(item):
+            out.append(item)
+            continue
+        size = _layout_size(item)
+        wtype = str(item.get("type") or "")
+        is_micro = size in {"strip", "xs", "s"} or wtype in {
+            "executive-strip",
+            "claims-executive-strip",
+            "financial-command-strip",
+        }
+        if is_micro and size in {"strip", "xs", "s"}:
+            if micro_used:
+                item["size"] = "m"
+                item["maxHeight"] = MAX_SECONDARY_PX
+                item["tileClass"] = item.get("tileClass") or "tile-50"
+            else:
+                micro_used = True
+                item["size"] = "strip" if size != "s" else size
+                item.setdefault("maxHeight", MAX_MICRO_PX)
+        out.append(item)
+    return out
+
+
+def omit_fresh_stale_alert(widgets: list[Any]) -> list[Any]:
+    """Keep stale-import-alert only when it is actually alerting (hal-10619)."""
+    if not isinstance(widgets, list):
+        return widgets
+    out: list[Any] = []
+    for w in widgets:
+        if isinstance(w, dict) and str(w.get("id") or "") == "stale-import-alert":
+            if w.get("alert") is not True:
+                continue
+        out.append(w)
     return out
 
 
@@ -740,6 +849,7 @@ def apply_collapse_empty_all(widgets: list[Any], *, page: str = "") -> list[Any]
         "analysis",
         "gap",
     }
+    page_key = str(page or "").strip().lower()
     for w in widgets:
         if isinstance(w, dict):
             wid = str(w.get("id") or "")
@@ -749,6 +859,11 @@ def apply_collapse_empty_all(widgets: list[Any], *, page: str = "") -> list[Any]
                 "warming",
                 "",
             }:
+                continue
+            # Narratives/content: drop empty workflow placeholders (hal-10618)
+            if wid in {"narr-workflow", "unknown-subpage"} and str(w.get("status") or "") == "empty":
+                continue
+            if page_key in {"narratives", "content"} and wid.startswith("narr-") and str(w.get("status") or "") == "empty":
                 continue
             # Financial + claims + all pages: omit non-strip empty widgets (hal-10615)
             wtype = str(w.get("type") or "")
@@ -1215,6 +1330,24 @@ def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
                 "emptyMessage": "Nothing to show in Ops — empty stays empty.",
                 "maxHeight": MAX_MICRO_PX,
                 "zeroScroll": True,
+            }
+        )
+    # Pair thin OPS orphans (hal-10618): odd body after overview → pad so secondary tiles pair.
+    body_n = max(0, len(out) - 1)
+    if body_n % 2 == 1 and len(out) < MAX_OPS_VIEWPORT_WIDGETS:
+        out.append(
+            {
+                "id": f"{page_key}-ops-pair",
+                "type": "status",
+                "label": "More detail",
+                "size": "m",
+                "compact": True,
+                "maxHeight": MAX_SECONDARY_PX,
+                "zeroScroll": True,
+                "status": "ok",
+                "message": f"Open #{page_key} subpages for deeper tools",
+                "hint": "Paired filler so Ops bands stay edge-to-edge (no thin single).",
+                "navHash": page_key,
             }
         )
     return out[:MAX_OPS_VIEWPORT_WIDGETS]

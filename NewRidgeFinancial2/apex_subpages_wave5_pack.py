@@ -1007,6 +1007,40 @@ def build_om_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     return _build_ops_via_parent("office-manager", reports, bundle)
 
 
+def build_content_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("content", reports, bundle)
+
+
+def build_documents_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("documents", reports, bundle)
+
+
+def build_narratives_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("narratives", reports, bundle)
+
+
+def build_library_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    return _build_ops_via_parent("library", reports, bundle)
+
+
+def build_content_documents(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    from apex_backend import _documents_widgets
+
+    return _documents_widgets(reports or {}, bundle or {})
+
+
+def build_content_narratives(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    from apex_backend import _narratives_widgets
+
+    return _narratives_widgets(reports or {}, bundle or {})
+
+
+def build_content_library(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    from apex_backend import _library_widgets
+
+    return _library_widgets(reports or {}, bundle or {})
+
+
 WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
         ("taxes", "entities"): build_tax_entities,
         ("taxes", "calendar"): build_tax_calendar,
@@ -1027,8 +1061,18 @@ WAVE5_BUILDERS: dict[tuple[str, str], Any] = {
     ("narratives", "templates"): build_narrative_templates,
     ("narratives", "history"): build_narrative_history,
     ("narratives", "audit"): build_narrative_audit,
+    ("narratives", "ops"): build_narratives_ops,
     ("documents", "tax-docs"): build_tax_docs,
+    ("documents", "ops"): build_documents_ops,
     ("library", "codes"): build_library_codes,
+    ("library", "ops"): build_library_ops,
+    ("content", "ops"): build_content_ops,
+    ("content", "documents"): build_content_documents,
+    ("content", "narratives"): build_content_narratives,
+    ("content", "library"): build_content_library,
+    ("content", "templates"): build_narrative_templates,
+    ("content", "tax-docs"): build_tax_docs,
+    ("content", "codes"): build_library_codes,
     ("office-manager", "tasks"): build_om_tasks,
     ("office-manager", "operatory"): build_om_operatory_subpage,
     ("office-manager", "ops"): build_om_ops,

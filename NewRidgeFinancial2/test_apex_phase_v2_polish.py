@@ -34,7 +34,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         invalidate_explain_cache(reason="test_teardown")
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10617")
+        self.assertEqual(BUILD_ID, "hal-10618")
 
     def test_explain_cache_default_off(self):
         os.environ.pop("NR2_EXPLAIN_CACHE", None)
@@ -130,12 +130,11 @@ class PhaseV2PolishTests(unittest.TestCase):
         self.assertFalse(b.get("cacheHit"))
         self.assertEqual(explain_cache_stats().get("size"), 0)
 
-    def test_mobile_polish_and_theme_unlinked(self):
-        """hal trim: mobile polish (#3) + theme (#5) dropped from the live stack."""
+    def test_mobile_polish_and_theme_relinked(self):
+        """hal-10620: Moonshot runner-up — theme + mobile polish back on the live stack."""
         html = (SITE / "index.html").read_text(encoding="utf-8")
-        self.assertNotIn("apex-mobile-polish.css", html)
-        self.assertNotIn("apex-theme.css", html)
-        # Files may remain on disk for reference; they must not load.
+        self.assertIn("apex-mobile-polish.css", html)
+        self.assertIn("apex-theme.css", html)
         self.assertTrue((SITE / "apex-mobile-polish.css").is_file())
         self.assertTrue((SITE / "apex-theme.css").is_file())
 

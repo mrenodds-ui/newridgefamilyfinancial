@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10617 (Fibonacci band mosaic + KPI density + zero-scroll)
+ * Build: hal-10618 (OPS debris cleanup + Content hub + freshness)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10617";
+  const ASSET_V = "hal-10618";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -24,12 +24,18 @@
     "quickbooks",
     "ar",
     "claims",
+    "content",
     "narratives",
     "documents",
     "library",
     "office-manager",
     "hal",
   ]);
+  const CONTENT_ALIASES = {
+    narratives: { parent: "content", sub: "narratives" },
+    documents: { parent: "content", sub: "documents" },
+    library: { parent: "content", sub: "library" },
+  };
   const SUBPAGE_LINKS = {
     financial: [
       { sub: null, label: "Overview" },
@@ -74,19 +80,32 @@
       { sub: "aging-detail", label: "Aging Detail" },
       { sub: "forecast", label: "Forecast" },
     ],
+    content: [
+      { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
+      { sub: "documents", label: "Documents" },
+      { sub: "narratives", label: "Narratives" },
+      { sub: "library", label: "Library" },
+      { sub: "templates", label: "Templates" },
+      { sub: "tax-docs", label: "Tax Docs" },
+      { sub: "codes", label: "Codes" },
+    ],
     narratives: [
       { sub: null, label: "Workspace" },
+      { sub: "ops", label: "Ops" },
       { sub: "templates", label: "Templates" },
       { sub: "history", label: "History" },
       { sub: "audit", label: "Audit" },
     ],
     documents: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "claim-docs", label: "Claim Docs" },
       { sub: "tax-docs", label: "Tax Docs" },
     ],
     library: [
       { sub: null, label: "Overview" },
+      { sub: "ops", label: "Ops" },
       { sub: "payers", label: "Payers" },
       { sub: "codes", label: "Codes" },
     ],
@@ -195,6 +214,7 @@
     quickbooks: "QuickBooks",
     ar: "A/R",
     claims: "Claims",
+    content: "Content",
     narratives: "Narratives",
     documents: "Documents",
     library: "Library",
@@ -6118,6 +6138,12 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           .toLowerCase()
           .replace(/[^a-z0-9\-]/g, "")
       : null;
+    // hal-10621: Narratives/Documents/Library → Content hub (keep legacy hashes)
+    if (CONTENT_ALIASES[parent] && !sub) {
+      const alias = CONTENT_ALIASES[parent];
+      parent = alias.parent;
+      sub = alias.sub;
+    }
     if (!PARENT_PAGES.has(parent)) {
       parent = "financial";
       sub = null;
@@ -6225,8 +6251,11 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       btn.classList.toggle("active", btn.dataset.page === currentPage);
     });
 
-    // Interactive narratives workspace (not KPI mosaic)
-    if (currentPage === "narratives" && !currentSub) {
+    // Interactive narratives workspace (not KPI mosaic) — also Content → Narratives
+    if (
+      (currentPage === "narratives" && !currentSub) ||
+      (currentPage === "content" && currentSub === "narratives")
+    ) {
       if (refreshTimer) clearInterval(refreshTimer);
       if (window.ApexHalBrain && typeof window.ApexHalBrain.destroy === "function") {
         window.ApexHalBrain.destroy();

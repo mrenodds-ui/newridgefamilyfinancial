@@ -84,6 +84,17 @@
       .join("");
   }
 
+  function currentPageId() {
+    try {
+      const stage = document.getElementById("apex-stage");
+      if (stage && stage.dataset && stage.dataset.page) return String(stage.dataset.page);
+      const hash = String(location.hash || "").replace(/^#/, "");
+      return String(hash.split("/")[0] || "").toLowerCase();
+    } catch (_) {
+      return "";
+    }
+  }
+
   async function refresh() {
     try {
       const res = await fetch(`${apiBase()}/hal/sync-status`, { credentials: "same-origin" });
@@ -99,6 +110,12 @@
           if (hal && hal.importDegraded) body.forceShow = true;
         }
       } catch (_) {}
+      // hal-10619: always surface freshness strip on Financial / SoftDent money pages
+      const page = currentPageId();
+      if (body && (page === "financial" || page === "softdent")) {
+        body.forceShow = true;
+        body.enabled = true;
+      }
       if (body) render(body);
     } catch (_) {}
   }

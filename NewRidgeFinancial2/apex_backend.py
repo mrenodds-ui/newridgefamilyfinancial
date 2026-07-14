@@ -24,6 +24,7 @@ APEX_PAGES = (
     "quickbooks",
     "ar",
     "claims",
+    "content",
     "narratives",
     "documents",
     "library",
@@ -31,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10617"
+BUILD_ID = "hal-10618"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4030,6 +4031,38 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     return widgets
 
 
+def _content_hub_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """hal-10618/10621 — Documents + Narratives + Library summaries on one Content page."""
+    widgets: list[dict[str, Any]] = []
+    try:
+        from apex_compact_pages_pack import build_kpi_micro_strip
+
+        widgets.append(
+            build_kpi_micro_strip(
+                "content-hub-strip",
+                "Content Hub",
+                [
+                    {"id": "hub-docs", "label": "Documents", "value": "Open", "empty": False},
+                    {"id": "hub-narr", "label": "Narratives", "value": "Open", "empty": False},
+                    {"id": "hub-lib", "label": "Library", "value": "Open", "empty": False},
+                    {"id": "hub-ops", "label": "Ops", "value": "Open", "empty": False},
+                ],
+                hint="Unified Content Hub · subpages for Documents / Narratives / Library.",
+                nav_hash="content/documents",
+            )
+        )
+    except Exception:
+        pass
+    for builder in (_documents_widgets, _narratives_widgets, _library_widgets):
+        try:
+            for w in builder(reports, bundle) or []:
+                if isinstance(w, dict):
+                    widgets.append(w)
+        except Exception:
+            pass
+    return widgets
+
+
 _PAGE_BUILDERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], list[dict[str, Any]]]] = {
     "financial": _financial_widgets_from_reports,
     "taxes": _taxes_widgets,
@@ -4037,6 +4070,7 @@ _PAGE_BUILDERS: dict[str, Callable[[dict[str, Any], dict[str, Any]], list[dict[s
     "quickbooks": _quickbooks_widgets,
     "ar": _ar_widgets,
     "claims": _claims_widgets,
+    "content": _content_hub_widgets,
     "narratives": _narratives_widgets,
     "documents": _documents_widgets,
     "library": _library_widgets,
@@ -4339,10 +4373,12 @@ def build_apex_widgets(
         from apex_compact_pages_pack import (
             apply_collapse_empty_all,
             apply_kpi_density_contract,
+            apply_single_micro_band,
             apply_zero_scroll_contract,
             compact_widget_sizes,
             normalize_first_viewport,
             omit_cross_page_duplicates,
+            omit_fresh_stale_alert,
             omit_until_source_widgets,
             pack_fibonacci_bands,
             partition_first_viewport,
@@ -4352,6 +4388,7 @@ def build_apex_widgets(
             widgets if isinstance(widgets, list) else [], page=pid, sub=sub_key or ""
         )
         widgets = omit_cross_page_duplicates(widgets, page=pid)
+        widgets = omit_fresh_stale_alert(widgets)
         widgets = apply_collapse_empty_all(widgets, page=pid)
         widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
@@ -4362,10 +4399,11 @@ def build_apex_widgets(
         widgets = omit_until_source_widgets(widgets, page=pid, sub=sub_key or "")
         widgets = omit_cross_page_duplicates(widgets, page=pid)
         widgets = compact_widget_sizes(widgets, page=pid, sub=sub_key or "")
+        widgets = apply_single_micro_band(widgets, page=pid, sub=sub_key or "")
         widgets, _mosaic_layout = pack_fibonacci_bands(
             widgets, page=pid, sub=sub_key or ""
         )
-        source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty+fib-bands"
+        source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty+fib-bands+10618"
     except Exception:
         _mosaic_layout = None
 
