@@ -191,10 +191,13 @@ html[data-apex-density="comfortable"] #apex-stage.apex-mosaic {
   max-height: none;
 }
 
-/* ——— Fibonacci band stage (hal-10617): flex rows, edge-to-edge tiles ——— */
-html[data-apex-density="compact"] #apex-stage.apex-mosaic.apex-mosaic--bands,
-html[data-apex-density="compact"] .apex-mosaic.apex-mosaic--bands,
-html[data-apex-density="compact"] .apex-hal-main.apex-mosaic--bands {
+/* ——— Fibonacci band stage (hal-10617): flex rows, edge-to-edge tiles ———
+ * Must apply whenever JS mounts .apex-mosaic--bands — NOT only in compact.
+ * Comfortable density previously left bands as 320px mosaic grid cells → crush.
+ */
+#apex-stage.apex-mosaic.apex-mosaic--bands,
+.apex-mosaic.apex-mosaic--bands,
+.apex-hal-main.apex-mosaic--bands {
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
@@ -204,13 +207,18 @@ html[data-apex-density="compact"] .apex-hal-main.apex-mosaic--bands {
   grid-auto-rows: unset;
   grid-auto-flow: row;
   gap: var(--apex-fib-gap);
-  height: 100%;
-  max-height: 100%;
-  overflow: hidden;
   padding: var(--apex-fib-stage-pad);
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band {
+html[data-apex-density="compact"] #apex-stage.apex-mosaic.apex-mosaic--bands,
+html[data-apex-density="compact"] .apex-mosaic.apex-mosaic--bands,
+html[data-apex-density="compact"] .apex-hal-main.apex-mosaic--bands {
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
+}
+
+.apex-mosaic--bands > .apex-band {
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -223,30 +231,30 @@ html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band {
   flex: 0 0 auto;
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.band-micro,
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.apex-band--micro {
+.apex-mosaic--bands > .apex-band.band-micro,
+.apex-mosaic--bands > .apex-band.apex-band--micro {
   flex: 0 0 var(--apex-band-micro);
   height: var(--apex-band-micro);
   max-height: var(--apex-band-micro);
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.band-secondary,
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.apex-band--secondary {
+.apex-mosaic--bands > .apex-band.band-secondary,
+.apex-mosaic--bands > .apex-band.apex-band--secondary {
   flex: 0 0 var(--apex-band-secondary);
   height: var(--apex-band-secondary);
   max-height: var(--apex-band-secondary);
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.band-primary,
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band.apex-band--primary {
+.apex-mosaic--bands > .apex-band.band-primary,
+.apex-mosaic--bands > .apex-band.apex-band--primary {
   flex: 1 1 var(--apex-band-primary);
   min-height: var(--apex-band-primary);
   height: auto;
   max-height: none;
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands .apex-inst,
-html[data-apex-density="compact"] .apex-mosaic--bands .apex-widget {
+.apex-mosaic--bands .apex-inst,
+.apex-mosaic--bands .apex-widget {
   grid-column: unset !important;
   grid-row: unset !important;
   min-width: 0;
@@ -256,23 +264,23 @@ html[data-apex-density="compact"] .apex-mosaic--bands .apex-widget {
   box-sizing: border-box;
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands .tile-100 {
+.apex-mosaic--bands .tile-100 {
   flex: 1 1 100%;
   width: 100%;
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands .tile-50 {
+.apex-mosaic--bands .tile-50 {
   flex: 1 1 50%;
   width: 50%;
 }
 
-html[data-apex-density="compact"] .apex-mosaic--bands .tile-33 {
+.apex-mosaic--bands .tile-33 {
   flex: 1 1 33.333%;
   width: 33.333%;
 }
 
 /* Solo survivor in a pair/triple band fills the row */
-html[data-apex-density="compact"] .apex-mosaic--bands > .apex-band > .apex-inst:only-child {
+.apex-mosaic--bands > .apex-band > .apex-inst:only-child {
   flex: 1 1 100% !important;
   width: 100% !important;
 }
