@@ -3867,8 +3867,8 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL medium spine (hal-10624): trust pair → recon → insight + chat rail."""
-    del reports  # HAL spine is import/recon oriented
+    """HAL medium spine (hal-10624): trust pair → insight + chat rail."""
+    del reports  # HAL spine is import/insight oriented
     widgets: list[dict[str, Any]] = []
 
     # A rail: Ask HAL (client mounts into sticky right rail)
@@ -3884,23 +3884,13 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
         }
     )
 
-    try:
-        from apex_32b_program_fixes_pack import reconciliation_surface_widget
-
-        recon = reconciliation_surface_widget(bundle)
-        if isinstance(recon, dict):
-            recon["chrome"] = "hal-medium"
-            recon["layoutRole"] = "recon"
-    except Exception:
-        recon = None
-
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
     connected = summary.get("connected")
     total = summary.get("total")
     missing = summary.get("missing")
 
-    # C+D: trust pair (Import Health | Program Posture)
+    # Trust pair (Import Health | Program Posture)
     if isinstance(connected, int) and isinstance(total, int) and total > 0:
         health = _count_kpi(
             "hal-import-health",
@@ -3953,11 +3943,7 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     posture["size"] = "m"
     widgets.append(posture)
 
-    # E: Reconciliation
-    if isinstance(recon, dict):
-        widgets.append(recon)
-
-    # F: AI insight
+    # AI insight
     try:
         from apex_structured_insight_pack import ai_insight_widget
 
