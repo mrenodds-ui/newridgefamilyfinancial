@@ -1,4 +1,4 @@
-"""hal-10621 — blank all Apex page widgets (empty stages)."""
+"""hal-10622 — blank all Apex page widgets (empty stages)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from apex_backend import APEX_PAGES, BUILD_ID, build_apex_widgets, _WIDGETS_CACH
 
 class Hal10619BlankWidgetsTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10621")
+        self.assertEqual(BUILD_ID, "hal-10622")
 
     def test_blank_flag_empties_every_page(self) -> None:
         prev = os.environ.get("NR2_APEX_BLANK_WIDGETS")
@@ -19,12 +19,10 @@ class Hal10619BlankWidgetsTests(unittest.TestCase):
             _WIDGETS_CACHE.clear()
             for page in APEX_PAGES:
                 out = build_apex_widgets(page, _fill=True)
-                self.assertEqual(out.get("buildId"), "hal-10621", page)
+                self.assertEqual(out.get("buildId"), "hal-10622", page)
                 self.assertTrue(out.get("blankWidgets"), page)
                 self.assertEqual(out.get("widgets"), [], page)
-                layout = out.get("mosaicLayout") or {}
-                self.assertEqual(layout.get("mode"), "empty", page)
-                self.assertEqual(layout.get("bands") or [], [], page)
+                self.assertIsNone(out.get("mosaicLayout"), page)
             ops = build_apex_widgets("softdent", sub="ops", _fill=True)
             self.assertEqual(ops.get("widgets"), [])
             self.assertTrue(ops.get("blankWidgets"))

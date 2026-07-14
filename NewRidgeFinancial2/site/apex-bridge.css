@@ -1,13 +1,10 @@
-/* NR2-Apex Bridge — Starship geometry (sidebar + ticker + fixed mosaic)
- * Build: hal-10240
+/* NR2-Apex Bridge — Starship geometry (sidebar + ticker + stacked stage)
+ * Build: hal-10622
  */
 :root {
   --sidebar-width: 240px;
   --ticker-height: 32px;
-  /* Mosaic track owned by apex-zero-scroll.css (Fibonacci 80/240/320) */
-  --mosaic-col: 320px;
-  --mosaic-row: var(--apex-band-micro, 80px);
-  --mosaic-gap: 8px;
+  --stage-gap: 12px;
   --apex-chrome: rgba(0, 240, 255, 0.08);
   --apex-scanline: repeating-linear-gradient(
     0deg,
@@ -304,9 +301,9 @@ body.apex-ticker-muted .apex-ticker__track {
   animation-play-state: paused !important;
 }
 
-/* Status messages in mosaic */
-.apex-mosaic .apex-status-msg {
-  grid-column: 1 / -1;
+/* Status messages in stage */
+.apex-stage .apex-status-msg,
+.apex-stage-stack .apex-status-msg {
   padding: 28px 16px;
   text-align: center;
   color: var(--apex-text-secondary);
@@ -315,20 +312,9 @@ body.apex-ticker-muted .apex-ticker__track {
   text-transform: uppercase;
 }
 
-.apex-mosaic .apex-status-msg.is-error {
+.apex-stage .apex-status-msg.is-error,
+.apex-stage-stack .apex-status-msg.is-error {
   color: var(--apex-magenta);
-}
-
-@media (max-width: 1400px) {
-  :root {
-    --mosaic-col: 280px;
-  }
-}
-
-@media (max-width: 1100px) {
-  :root {
-    --mosaic-col: 240px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -607,11 +593,6 @@ body.apex-ticker-muted .apex-ticker__track {
   font-variant-numeric: tabular-nums;
 }
 
-/* Mosaic column width only — row heights owned by apex-zero-scroll.css */
-body.apex-bridge {
-  --mosaic-col: 320px;
-  --mosaic-gap: 8px;
-}
 
 /* ——— MAIN ——— */
 .apex-main {
@@ -776,7 +757,7 @@ body.apex-bridge {
   align-items: flex-end;
   gap: 4px;
   min-height: 0;
-  max-height: calc(var(--apex-band-secondary, 240px) - 48px);
+  max-height: min(420px, 50vh);
   padding: 8px 0;
 }
 
@@ -853,41 +834,30 @@ body.apex-bridge {
   }
 }
 
-/* ——— MOSAIC SHELL (sizing → apex-zero-scroll.css) ——— */
-.apex-mosaic,
-#apex-stage.apex-mosaic,
-.apex-stage.apex-mosaic {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, var(--mosaic-col));
-  grid-auto-rows: var(--mosaic-row);
-  grid-auto-flow: dense;
-  gap: var(--mosaic-gap);
-  padding: 8px 12px 12px;
-  justify-content: start;
-  align-content: start;
-  max-width: none;
+/* ——— STACKED STAGE (hal-10622; mosaic retired) ——— */
+#apex-stage,
+.apex-stage,
+.apex-stage-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--stage-gap, 12px);
+  padding: 12px 16px 28px;
   margin: 0;
+  min-height: 0;
+  max-width: none;
+  align-content: stretch;
+}
+
+.apex-widget--stack,
+.apex-stage-stack > .apex-widget,
+.apex-stage-stack > .apex-inst {
+  width: 100%;
+  max-width: none;
+  height: auto;
   min-height: 0;
 }
 
-/* U3 — denser organized flow; keeps existing tokens / starship-bridge */
-.apex-mosaic--u3 {
-  grid-auto-flow: dense;
-}
-.apex-mosaic--u3[data-layout-phase="U3"] {
-  --mosaic-gap: calc(var(--mosaic-gap, 8px) * 0.92);
-}
-
-/* Financial pack cue only — Fibonacci row unit from zero-scroll sheet */
-#apex-stage.apex-mosaic[data-page="financial"] {
-  --mosaic-col: 320px;
-  --mosaic-gap: 8px;
-  padding: 8px 12px 12px;
-  align-content: start;
-  grid-auto-flow: row dense;
-}
-
-/* Instruments (chrome only — height tiers in apex-zero-scroll.css) */
+/* Instruments (chrome) */
 .apex-inst,
 .apex-widget.apex-inst {
   background: var(--apex-elevated);
@@ -947,31 +917,22 @@ body.apex-bridge {
   }
 }
 
-/* Legacy size classes: span only — heights in apex-zero-scroll.css */
-.apex-inst--s {
-  grid-column: span 1;
-  grid-row: span 1;
-}
-.apex-inst--m {
-  grid-column: span 1;
-  grid-row: span 3;
-}
-.apex-inst--l {
-  grid-column: span 2;
-  grid-row: span 3;
-}
-.apex-inst--xl {
-  grid-column: span 2;
-  grid-row: span 4;
-}
-.apex-inst--full {
-  grid-column: 1 / -1;
-  grid-row: span 4;
+/* Size classes are chrome tags only — stack layout ignores mosaic spans */
+.apex-inst--s,
+.apex-inst--m,
+.apex-inst--l,
+.apex-inst--xl,
+.apex-inst--full,
+.apex-inst--strip,
+.apex-inst--xs {
+  width: 100%;
+  grid-column: auto;
+  grid-row: auto;
 }
 
 /* Override legacy wide stretch */
-.apex-mosaic .apex-widget--wide {
-  grid-column: span 2;
+.apex-widget--wide {
+  width: 100%;
 }
 
 .apex-inst.is-updating:not(.apex-widget--skeleton) {
@@ -992,23 +953,20 @@ body.apex-bridge {
   opacity: 0.88;
 }
 
-/* HAL page: mosaic + chat rail (~2/3 of prior wide rail) */
-.apex-stage--hal.apex-mosaic,
+/* HAL page: stacked main + chat rail */
+.apex-stage--hal,
 #apex-stage.apex-stage--hal {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(347px, 28vw);
   grid-auto-rows: auto;
-  gap: var(--mosaic-gap);
+  gap: var(--stage-gap, 12px);
   padding: 16px 20px 28px;
 }
 
 .apex-stage--hal .apex-hal-main {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, var(--mosaic-col));
-  grid-auto-rows: var(--mosaic-row);
-  gap: var(--mosaic-gap);
-  justify-content: start;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--stage-gap, 12px);
   padding: 0;
   min-width: 0;
 }
@@ -1026,10 +984,11 @@ body.apex-bridge {
 .apex-stage--hal .apex-inst--hal-chat {
   min-height: 0;
   height: auto;
-  max-height: var(--apex-widget-max-primary, 320px);
+  max-height: none;
   grid-column: auto;
   grid-row: auto;
   overflow: auto;
+  height: 100%;
   /* Hover must not tilt/lift the chat — it felt like a page refresh and fought the sticky rail. */
   transform: none !important;
   transition: border-color 160ms, box-shadow 160ms;
@@ -1048,8 +1007,8 @@ body.apex-bridge {
 }
 
 @media (max-width: 1100px) {
-  .apex-stage--hal.apex-mosaic,
-  #apex-stage.apex-stage--hal {
+  #apex-stage.apex-stage--hal,
+  .apex-stage--hal {
     grid-template-columns: 1fr;
   }
   .apex-stage--hal .apex-hal-rail {
@@ -1790,10 +1749,8 @@ body.apex-bridge {
 }
 
 .apex-inst--strip {
-  grid-column: 1 / -1;
-  grid-row: span 1;
+  width: 100%;
   min-height: 0;
-  /* Height owned by apex-zero-scroll.css (80px micro band) */
   padding: 8px 12px;
 }
 .apex-inst--strip .apex-widget-header {

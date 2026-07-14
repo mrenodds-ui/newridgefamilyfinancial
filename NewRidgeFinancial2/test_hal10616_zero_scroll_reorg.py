@@ -1,4 +1,4 @@
-"""hal-10621 — remove optional widgets and cap overview/ops for zero-scroll."""
+"""hal-10622 — remove optional widgets and cap overview/ops for zero-scroll."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from apex_compact_pages_pack import (
 
 class Hal10616ZeroScrollReorgTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10621")
+        self.assertEqual(BUILD_ID, "hal-10622")
 
     def test_optional_softDent_omitted(self) -> None:
         widgets = [

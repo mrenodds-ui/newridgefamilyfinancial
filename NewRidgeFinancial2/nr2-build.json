@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10621",
-  "BUILD_ID": "hal-10621",
-  "assetVersion": "hal-10621",
-  "builtAt": "2026-07-14T11:55:00Z",
-  "notes": "hal-10621: remove Apex widget focus/enlarge mode.",
+  "schemaVersion": "hal-10622",
+  "BUILD_ID": "hal-10622",
+  "assetVersion": "hal-10622",
+  "builtAt": "2026-07-14T12:15:00.000Z",
+  "notes": "hal-10622: remove Apex mosaic/Fibonacci zero-scroll; stacked stage for redesign.",
   "staffRenderMode": "apex",
-  "package": "HAL-10621"
+  "package": "HAL-10622"
 }

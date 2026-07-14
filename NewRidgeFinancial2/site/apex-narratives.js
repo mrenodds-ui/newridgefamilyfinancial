@@ -323,7 +323,7 @@
     const stage = document.getElementById("apex-stage");
     if (!stage) return;
     snapshotFormState();
-    stage.className = "apex-stage apex-mosaic";
+    stage.className = "apex-stage apex-stage-stack";
     stage.innerHTML = shellHtml();
     wire(stage);
     activeBridge = true;
@@ -865,7 +865,7 @@
     await loadStructure();
     restoreDraft();
     applySeed();
-    stageEl.className = "apex-stage apex-mosaic";
+    stageEl.className = "apex-stage apex-stage-stack";
     stageEl.innerHTML = shellHtml();
     wire(stageEl);
     const title = document.getElementById("apex-page-title");

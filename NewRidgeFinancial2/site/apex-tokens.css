@@ -17,33 +17,35 @@
   --apex-anim-fast: 120ms;
   --apex-anim-medium: 200ms;
   --apex-widget-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  /* Fibonacci mosaic (Moonshot best-fill): 80 | 240 | 320 — no 120/140 orphans */
+  /* Legacy band tokens kept as soft hints only — mosaic packing removed (hal-10622) */
   --apex-band-micro: 80px;
   --apex-band-secondary: 240px;
   --apex-band-primary: 320px;
   --apex-widget-min: 80px;
   --apex-body-font-size: 12px;
   --apex-page-title-size: 16px;
-  --apex-widget-max-micro: var(--apex-band-micro);
-  --apex-widget-max-secondary: var(--apex-band-secondary);
-  --apex-widget-max-primary: var(--apex-band-primary);
+  --apex-widget-max-micro: none;
+  --apex-widget-max-secondary: none;
+  --apex-widget-max-primary: none;
   --apex-stage-chrome: 100px;
 }
 
-/* Phase 5 + zero-scroll density: Compact (default) vs Comfortable (may scroll) */
+/* Density: Compact (default) vs Comfortable — both may scroll (stack stage) */
 html[data-apex-density="compact"] {
   --apex-grid-gap: 4px;
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 html[data-apex-density="compact"] body {
-  height: 100%;
-  overflow: hidden;
+  min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
-html[data-apex-density="compact"] #apex-stage.apex-mosaic {
-  max-height: calc(100vh - var(--apex-stage-chrome));
-  overflow: hidden;
-  align-content: start;
+html[data-apex-density="compact"] #apex-stage,
+html[data-apex-density="compact"] #apex-stage.apex-stage-stack {
+  max-height: none;
+  overflow: visible;
 }
 
 html[data-apex-density="comfortable"] {
@@ -194,7 +196,6 @@ body {
 
 #apex-stage,
 .apex-stage {
-  /* Height owned by apex-zero-scroll.css (Fibonacci bands); do not force viewport fill */
   min-height: 0;
 }
 
@@ -671,7 +672,6 @@ body {
 
 .apex-inst--kpi-over-budget {
   opacity: 0.85;
-  max-height: var(--apex-band-micro);
 }
 
 .apex-kpi-delta {
@@ -750,8 +750,8 @@ body {
 
 .apex-chart-host {
   width: 100%;
-  height: calc(var(--apex-band-secondary) - 48px);
-  max-height: 192px;
+  height: min(280px, 40vh);
+  max-height: none;
   margin-top: 8px;
 }
 

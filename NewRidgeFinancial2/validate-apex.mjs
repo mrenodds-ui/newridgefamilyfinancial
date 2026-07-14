@@ -23,7 +23,6 @@ const requiredAssets = [
   "apex-animations.css",
   "apex-bridge.css",
   "apex-hal-brain.css",
-  "apex-zero-scroll.css",
   "apex-core.js",
   "apex-ticker.js",
   "apex-hal-bridge.js",
@@ -76,6 +75,8 @@ for (const name of bannedLegacyJs) {
 }
 assert.ok(!existsSync(join(siteDir, "deferred-live-wire")), "deferred-live-wire must be removed");
 assert.ok(!existsSync(join(siteDir, "data", "mockup-elite-pages.js")), "mockup-elite-pages.js must be removed");
+assert.ok(!existsSync(join(siteDir, "apex-zero-scroll.css")), "apex-zero-scroll.css must be removed");
+assert.ok(!indexHtml.includes("apex-zero-scroll.css"), "index must not load apex-zero-scroll.css");
 
 const pages = [
   "financial",

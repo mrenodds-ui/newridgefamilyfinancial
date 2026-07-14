@@ -34,7 +34,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         invalidate_explain_cache(reason="test_teardown")
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10621")
+        self.assertEqual(BUILD_ID, "hal-10622")
 
     def test_explain_cache_default_off(self):
         os.environ.pop("NR2_EXPLAIN_CACHE", None)
@@ -131,7 +131,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         self.assertEqual(explain_cache_stats().get("size"), 0)
 
     def test_legacy_polish_css_removed(self):
-        """hal-10621: strip theme / mobile-polish / chrome-flash and pre-Apex CSS."""
+        """hal-10622: strip theme / mobile-polish / chrome-flash and pre-Apex CSS."""
         html = (SITE / "index.html").read_text(encoding="utf-8")
         for name in (
             "apex-mobile-polish.css",

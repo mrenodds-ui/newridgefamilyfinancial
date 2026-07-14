@@ -32,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10621"
+BUILD_ID = "hal-10622"
 
 
 def _apex_blank_all_widgets() -> bool:
@@ -4111,7 +4111,7 @@ def build_apex_widgets(
     cid = str(claim_id or "").strip() or None
     pid_patient = str(patient_id or "").strip() or None
     if _apex_blank_all_widgets():
-        # Strip every page/subpage stage — no warming stubs, no mosaic tiles.
+        # Strip every page/subpage stage — no warming stubs, no widgets.
         page_label = pid if not sub_key else f"{pid}/{sub_key}"
         return {
             "page": page_label if pid in APEX_PAGES else (pid or "unknown"),
@@ -4123,7 +4123,7 @@ def build_apex_widgets(
             "buildId": BUILD_ID,
             "warming": False,
             "widgets": [],
-            "mosaicLayout": {"mode": "empty", "bands": []},
+            "mosaicLayout": None,
             "sourceNote": "blank-stage — all widgets removed",
             "blankWidgets": True,
         }
@@ -4398,20 +4398,15 @@ def build_apex_widgets(
         except Exception:
             pass
 
-    # Moonshot compact + zero-scroll (hal-10561) + KPI density (hal-10562) + fib bands (hal-10617)
-    _mosaic_layout: dict[str, Any] | None = None
+    # Content filters only — mosaic / Fibonacci / zero-scroll band packing removed (hal-10622).
     try:
         from apex_compact_pages_pack import (
             apply_collapse_empty_all,
             apply_kpi_density_contract,
-            apply_single_micro_band,
-            apply_zero_scroll_contract,
-            compact_widget_sizes,
             normalize_first_viewport,
             omit_cross_page_duplicates,
             omit_fresh_stale_alert,
             omit_until_source_widgets,
-            pack_fibonacci_bands,
             partition_first_viewport,
         )
 
@@ -4424,19 +4419,24 @@ def build_apex_widgets(
         widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
             widgets = normalize_first_viewport(widgets, page=pid)
-        widgets = apply_zero_scroll_contract(widgets, page=pid, sub=sub_key or "")
         if not sub_key:
             widgets = partition_first_viewport(widgets, page=pid, sub="")
         widgets = omit_until_source_widgets(widgets, page=pid, sub=sub_key or "")
         widgets = omit_cross_page_duplicates(widgets, page=pid)
-        widgets = compact_widget_sizes(widgets, page=pid, sub=sub_key or "")
-        widgets = apply_single_micro_band(widgets, page=pid, sub=sub_key or "")
-        widgets, _mosaic_layout = pack_fibonacci_bands(
-            widgets, page=pid, sub=sub_key or ""
-        )
-        source_note += " +compact+zero-scroll+kpi-density+demote-ops+omit-empty+fib-bands+10618"
+        # Strip leftover mosaic annotations if any builder still emits them.
+        cleaned: list[Any] = []
+        for w in widgets if isinstance(widgets, list) else []:
+            if not isinstance(w, dict):
+                cleaned.append(w)
+                continue
+            item = dict(w)
+            for key in ("band", "tileClass", "mosaicBand", "maxHeight", "zeroScroll"):
+                item.pop(key, None)
+            cleaned.append(item)
+        widgets = cleaned
+        source_note += " +omit-empty+kpi-density+demote-ops+stack-10622"
     except Exception:
-        _mosaic_layout = None
+        pass
 
     page_label = f"{pid}/{sub_key}" if sub_key else pid
     payload = {
@@ -4447,7 +4447,7 @@ def build_apex_widgets(
         "refreshedAt": reports.get("generatedAt") or bundle.get("loadedAt") or _utc_now(),
         "buildId": BUILD_ID,
         "widgets": widgets,
-        "mosaicLayout": _mosaic_layout,
+        "mosaicLayout": None,
         "sourceNote": source_note,
         "errors": errors or None,
         "widgetCensus": summarize_widget_census(widgets),
