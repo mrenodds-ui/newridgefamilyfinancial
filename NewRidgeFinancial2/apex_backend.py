@@ -3867,7 +3867,7 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL medium spine (hal-10624): cache → errors → trust pair → recon → actions → insight + chat rail."""
+    """HAL medium spine (hal-10624): cache → errors → trust pair → recon → insight + chat rail."""
     del reports  # HAL spine is import/recon/actions oriented
     widgets: list[dict[str, Any]] = []
 
@@ -3981,19 +3981,7 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
     if isinstance(recon, dict):
         widgets.append(recon)
 
-    # F: Recommended actions
-    try:
-        from apex_better_backend_widgets_pack import build_hal_action_list
-
-        actions = build_hal_action_list(bundle)
-        if isinstance(actions, dict):
-            actions["chrome"] = "hal-medium"
-            actions["layoutRole"] = "actions"
-            widgets.append(actions)
-    except Exception:
-        pass
-
-    # G: AI insight
+    # F: AI insight
     try:
         from apex_structured_insight_pack import ai_insight_widget
 
