@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10626",
-  "BUILD_ID": "hal-10626",
-  "assetVersion": "hal-10626",
-  "builtAt": "2026-07-14T13:40:00.000Z",
-  "notes": "hal-10626: stop insight SSE from remounting HAL and wiping Ask HAL chat.",
+  "schemaVersion": "hal-10627",
+  "BUILD_ID": "hal-10627",
+  "assetVersion": "hal-10627",
+  "builtAt": "2026-07-14T13:45:00.000Z",
+  "notes": "hal-10627: silent HAL Ask fallback + no flashStage on silent refresh (Moonshot).",
   "staffRenderMode": "apex",
-  "package": "HAL-10626"
+  "package": "HAL-10627"
 }

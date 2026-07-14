@@ -2,7 +2,7 @@
   "schemaEpoch": "nr2-apex",
   "staffRenderMode": "apex",
   "liveWirePages": [],
-  "description": "Apex staff shell (8765). Legacy Moonshot mockup CSS retired in hal-10626.",
+  "description": "Apex staff shell (8765). Legacy Moonshot mockup CSS retired in hal-10627.",
   "shell": [
     "index.html",
     "apex-tokens.css",

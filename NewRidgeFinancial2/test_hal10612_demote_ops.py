@@ -1,4 +1,4 @@
-"""hal-10626 — pack helpers still demote; live build no longer partitions."""
+"""hal-10627 — pack helpers still demote; live build no longer partitions."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from apex_compact_pages_pack import PAGE_FIRST_VIEW_KEEP, partition_first_viewpo
 
 class Hal10612DemoteOpsTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10626")
+        self.assertEqual(BUILD_ID, "hal-10627")
 
     def test_partition_keeps_only_allowlist(self) -> None:
         widgets = [

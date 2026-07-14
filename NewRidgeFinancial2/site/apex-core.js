@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10626 (HAL spine ↔ HAL chat wire harden)
+ * Build: hal-10627 (HAL spine ↔ HAL chat wire harden)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10626";
+  const ASSET_V = "hal-10627";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -5550,8 +5550,12 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     const q = String(query || "").trim();
     if (!q) return;
     if (!logEl) {
-      await loadPage("hal");
-      const chat = document.querySelector("[data-hal-messages]");
+      // Prefer the live composer — remounting HAL here wiped mid-ask (looked like refresh).
+      let chat = document.querySelector("[data-hal-messages]");
+      if (!chat) {
+        await loadPage("hal");
+        chat = document.querySelector("[data-hal-messages]");
+      }
       if (chat) askHal(q, chat);
       return;
     }
@@ -6171,7 +6175,8 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
         window.ApexMotion.triggerGlitch(el);
       }
     }
-    if (window.ApexMotion && typeof window.ApexMotion.flashStage === "function") {
+    // Silent polls must not flash the stage — that felt like a full page refresh on HAL chat.
+    if (!silent && window.ApexMotion && typeof window.ApexMotion.flashStage === "function") {
       window.ApexMotion.flashStage();
     }
   }
@@ -6524,15 +6529,15 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
   function askHalFromBridge(text) {
     const q = String(text || "").trim();
     if (!q) return;
-    if (currentPage !== "hal") {
-      loadPage("hal").then(() => {
-        const logEl = document.querySelector("[data-hal-messages]");
-        askHal(q, logEl);
-      });
+    const logEl = document.querySelector("[data-hal-messages]");
+    if (currentPage === "hal" && logEl) {
+      askHal(q, logEl);
       return;
     }
-    const logEl = document.querySelector("[data-hal-messages]");
-    askHal(q, logEl);
+    // Navigate once when HAL chat is not mounted; do not remount over a live composer.
+    loadPage("hal").then(() => {
+      askHal(q, document.querySelector("[data-hal-messages]"));
+    });
   }
 
   function onHalStatus(data) {

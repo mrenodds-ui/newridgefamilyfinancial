@@ -55,7 +55,9 @@
       if (window.Apex && typeof window.Apex.askHalFromBridge === "function") {
         window.Apex.askHalFromBridge(text);
       } else if (window.Apex && typeof window.Apex.loadPage === "function") {
-        window.Apex.loadPage("hal");
+        // Moonshot hal-10627: never wipe an existing HAL composer with a hard remount.
+        const onHal = String(window.location.hash || "").includes("hal");
+        window.Apex.loadPage("hal", onHal ? { silent: true } : undefined);
       }
     });
     el.querySelector("[data-suggest-sync]")?.addEventListener("click", () => {
