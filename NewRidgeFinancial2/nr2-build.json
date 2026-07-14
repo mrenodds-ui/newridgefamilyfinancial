@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10614",
-  "BUILD_ID": "hal-10614",
-  "assetVersion": "hal-10614",
-  "builtAt": "2026-07-14T00:30:00.000Z",
-  "notes": "hal-10614: SoftDent widget honesty — recon period curr fix; claims/AR bridge + collections gap + gold OPS show warn/data instead of blank empty.",
+  "schemaVersion": "hal-10615",
+  "BUILD_ID": "hal-10615",
+  "assetVersion": "hal-10615",
+  "builtAt": "2026-07-14T01:30:00.000Z",
+  "notes": "hal-10615: omit chronic empty SoftDent-source widgets; compact Ops keep sets for zero-scroll.",
   "staffRenderMode": "apex",
-  "package": "HAL-10614"
+  "package": "HAL-10615"
 }

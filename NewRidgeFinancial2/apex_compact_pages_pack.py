@@ -39,10 +39,9 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
         {
             "claims-executive-strip",
             "claims-aging-exposure",
-            "denial-pareto",
+            "claims-pipeline-summary",
+            "claims-top-critical",
             "claims-open-kanban",
-            "verification-matrix",
-            "claims-era-gauge",
         }
     ),
     "hal": frozenset(
@@ -99,7 +98,6 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
         {
             "om-vitals-strip",
             "om-daily-huddle",
-            "import-health-monitor",
             "operatory-util-trend",
             "om-priorities",
             "om-open-operatory",
@@ -107,11 +105,72 @@ PAGE_FIRST_VIEW_KEEP: dict[str, frozenset[str]] = {
     ),
 }
 
+# Ops subpages stay zero-scroll: only these demoted ids surface (hal-10615).
+PAGE_OPS_KEEP: dict[str, frozenset[str]] = {
+    "softdent": frozenset(
+        {
+            "softdent-collections-gap",
+            "softdent-outstanding-claims-bridge",
+            "softdent-aging-gap",
+            "softdent-production-gap",
+            "softdent-account-tx-coverage",
+            "softdent-transaction-ledger",
+            "stale-import-alert",
+            "v-patient-aging",
+        }
+    ),
+    "claims": frozenset(
+        {
+            "claims-risk-analytics",
+            "eob-posting-backlog",
+            "clinical-signoff-queue",
+            "claim-status-lanes",
+            "claims-open-kanban",
+        }
+    ),
+    "financial": frozenset(
+        {
+            "ebitda-station",
+            "expense-treemap",
+            "revenue-composition",
+            "deep-audit-status",
+            "reconciliation-status",
+            "bridge-errors",
+        }
+    ),
+    "hal": frozenset(
+        {
+            "hal-full-log",
+            "hal-recommended-actions",
+            "hal-ai-insight",
+            "stale-import-alert",
+            "import-health-timeline",
+        }
+    ),
+}
+
+# Chronic empty until SoftDent source lands — omit (do not scroll empty tiles).
+# warming-bridge stays for cold stub only; final payloads omit it via omit_until_source.
+OMIT_UNTIL_SOURCE_IDS = frozenset(
+    {
+        "claims-era-gauge",
+        "denial-pareto",
+        "verification-matrix",
+        "gold-csv-ticket-ops",
+        "import-cache-kpi",
+        "import-health-monitor",
+        "ins-patient-split",
+        "preauth-aging-lanes",
+        "payer-change-alerts",
+        "warming-bridge",
+        "kpi-data-pending",
+    }
+)
+
 # Always keep on parent even if not in page keep set
 _ALWAYS_KEEP_IDS = frozenset(
     {
-        "warming-bridge",
-        "kpi-data-pending",
+        # warming-bridge removed (hal-10615) — omit until fill done
     }
 )
 
@@ -136,6 +195,64 @@ def collapse_empty_large(widget: dict[str, Any]) -> dict[str, Any]:
     out["collapseWhenEmpty"] = True
     out["size"] = "strip"
     out["compact"] = True
+    return out
+
+
+def omit_until_source_widgets(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
+    """Drop chronic empty SoftDent-source widgets so pages do not scroll blanks (hal-10615)."""
+    del page, sub  # reserved for future page-scoped exceptions
+    if not isinstance(widgets, list):
+        return widgets
+    out: list[Any] = []
+    for w in widgets:
+        if not isinstance(w, dict):
+            out.append(w)
+            continue
+        wid = str(w.get("id") or "")
+        status = str(w.get("status") or "").lower()
+        if wid in OMIT_UNTIL_SOURCE_IDS:
+            # Omit while empty / warming. Show only when real status arrives (ok/warn with data).
+            if status in {"empty", "awaiting-migration", "warming", ""}:
+                continue
+            if status == "warn" and wid in {
+                "import-cache-kpi",
+                "import-health-monitor",
+                "gold-csv-ticket-ops",
+            }:
+                # Still no source file — keep ops quiet until CSV/ERA exists
+                if not w.get("paymentLines") and not w.get("value") and not w.get("rows"):
+                    continue
+        out.append(w)
+    return out
+
+
+def compact_widget_sizes(widgets: list[Any], *, page: str = "", sub: str = "") -> list[Any]:
+    """Force denser sizes on remaining tiles (zero-scroll stage)."""
+    if not isinstance(widgets, list):
+        return widgets
+    out: list[Any] = []
+    for i, w in enumerate(widgets):
+        if not isinstance(w, dict):
+            out.append(w)
+            continue
+        item = dict(w)
+        size = str(item.get("size") or "").lower()
+        wtype = str(item.get("type") or "")
+        item["compact"] = True
+        if size in {"xl", "full", "large"}:
+            item["size"] = "m" if i > 0 else "l"
+        elif size == "l" and i > 0:
+            item["size"] = "m"
+        if wtype in {"status", "executive-strip", "claims-executive-strip", "financial-command-strip"}:
+            item["size"] = "strip" if size != "s" else size
+            item.setdefault("maxHeight", MAX_MICRO_PX)
+        elif str(item.get("size") or "") in {"s", "strip", "xs"}:
+            item.setdefault("maxHeight", MAX_MICRO_PX)
+        elif str(item.get("size") or "") == "m":
+            item.setdefault("maxHeight", MAX_SECONDARY_PX)
+        else:
+            item.setdefault("maxHeight", MAX_PRIMARY_PX)
+        out.append(item)
     return out
 
 
@@ -303,9 +420,19 @@ def apply_collapse_empty_all(widgets: list[Any], *, page: str = "") -> list[Any]
     }
     for w in widgets:
         if isinstance(w, dict):
-            # Financial page: omit non-strip/analysis/gap widgets with status==empty
+            wid = str(w.get("id") or "")
+            if wid in OMIT_UNTIL_SOURCE_IDS and str(w.get("status") or "").lower() in {
+                "empty",
+                "awaiting-migration",
+                "warming",
+                "",
+            }:
+                continue
+            # Financial + claims + all pages: omit non-strip empty widgets (hal-10615)
+            wtype = str(w.get("type") or "")
+            if w.get("status") == "empty" and wtype not in exempt_if_empty:
+                continue
             if page == "financial":
-                wtype = str(w.get("type") or "")
                 if w.get("status") == "empty" and wtype not in exempt_if_empty:
                     continue
             out.append(collapse_empty_large(w))
@@ -670,11 +797,12 @@ def partition_first_viewport(
 
 
 def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
-    """Build #{page}/ops payload: everything not in first-viewport keep set."""
+    """Build #{page}/ops payload: demoted keep-set for zero-scroll Ops (hal-10615)."""
     if not isinstance(widgets, list):
         return []
     page_key = str(page or "").strip().lower()
     keep_set = PAGE_FIRST_VIEW_KEEP.get(page_key, frozenset())
+    ops_keep = PAGE_OPS_KEEP.get(page_key)
     out: list[Any] = [
         {
             "id": f"{page_key}-overview-open",
@@ -691,13 +819,39 @@ def select_demoted_widgets(widgets: list[Any], *, page: str) -> list[Any]:
         }
     ]
 
+    skipped_ops = 0
     for w in widgets:
         if not isinstance(w, dict):
             continue
         wid = str(w.get("id") or "")
         if wid in keep_set or _is_always_keep(wid):
             continue
+        if wid in OMIT_UNTIL_SOURCE_IDS and str(w.get("status") or "").lower() in {
+            "empty",
+            "awaiting-migration",
+            "warming",
+            "",
+        }:
+            continue
+        if ops_keep is not None and wid not in ops_keep:
+            skipped_ops += 1
+            continue
         out.append(w)
+    if skipped_ops:
+        out.append(
+            {
+                "id": f"{page_key}-ops-more-omitted",
+                "type": "status",
+                "label": "Compact Ops",
+                "size": "strip",
+                "compact": True,
+                "maxHeight": MAX_MICRO_PX,
+                "zeroScroll": True,
+                "status": "ok",
+                "message": f"{skipped_ops} optional SoftDent/ops tile(s) hidden for zero-scroll",
+                "hint": "Ask HAL for gold/ERA/print-preview playbooks when needed.",
+            }
+        )
     if len(out) == 1:
         out.append(
             {

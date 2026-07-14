@@ -10,7 +10,7 @@ from apex_compact_pages_pack import PAGE_FIRST_VIEW_KEEP, partition_first_viewpo
 
 class Hal10612DemoteOpsTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10613")
+        self.assertEqual(BUILD_ID, "hal-10615")
 
     def test_partition_keeps_only_allowlist(self) -> None:
         widgets = [
@@ -80,10 +80,10 @@ class Hal10612DemoteOpsTests(unittest.TestCase):
 
     def test_empty_not_padded_to_zero(self) -> None:
         widgets = [
-            {"id": "gap-demo", "type": "gap", "status": "empty", "value": None, "label": "Gap"},
+            {"id": "ebitda-station", "type": "ebitda-station", "status": "empty", "value": None, "label": "EBITDA"},
         ]
         ops = select_demoted_widgets(widgets, page="financial")
-        gap = next((w for w in ops if isinstance(w, dict) and w.get("id") == "gap-demo"), None)
+        gap = next((w for w in ops if isinstance(w, dict) and w.get("id") == "ebitda-station"), None)
         self.assertIsNotNone(gap)
         self.assertNotEqual(gap.get("value"), 0)
         self.assertNotEqual(gap.get("value"), "$0")
