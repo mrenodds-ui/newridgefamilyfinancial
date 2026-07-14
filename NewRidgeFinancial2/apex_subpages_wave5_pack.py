@@ -795,98 +795,303 @@ def build_om_tasks(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
     return widgets
 
 
-def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    del reports, bundle
-    widgets = [
-        _nav(
-            "HAL · History",
-            "Operator / HAL interaction log",
-            "Hash #hal/history · local audit when present.",
-        )
-    ]
+STORE_KEY_HAL_HISTORY = "nr2:v2:hal:history"
+
+
+def _hal_history_entries(limit: int = 80) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     try:
         from apex_program_improve_pack import _load_json
 
-        data = _load_json("nr2:v2:hal:history")
+        data = _load_json(STORE_KEY_HAL_HISTORY)
         raw = data.get("entries") if isinstance(data.get("entries"), list) else []
-        for e in raw[-40:]:
-            if isinstance(e, dict):
-                entries.append(
-                    {
-                        "at": str(e.get("at") or "")[:19],
-                        "role": str(e.get("role") or "")[:12],
-                        "preview": str(e.get("text") or e.get("query") or "")[:100],
-                    }
-                )
+        for e in raw[-limit:]:
+            if not isinstance(e, dict):
+                continue
+            role = str(e.get("role") or "hal").strip().lower()[:16] or "hal"
+            if role not in {"user", "operator", "hal", "system"}:
+                role = "hal"
+            if role == "user":
+                role = "operator"
+            text = str(e.get("text") or e.get("query") or e.get("preview") or "").strip()
+            if not text:
+                continue
+            entries.append(
+                {
+                    "id": str(e.get("id") or "")[:40],
+                    "at": str(e.get("at") or "")[:19],
+                    "role": role,
+                    "text": text[:2000],
+                    "preview": text[:140],
+                }
+            )
     except Exception:
+        return []
+    return entries
+
+
+def append_hal_history_entry(
+    role: str,
+    text: str,
+    *,
+    entry_id: str | None = None,
+) -> dict[str, Any]:
+    """Persist one HAL chat turn to local store (loopback audit — never invents content)."""
+    from apex_program_improve_pack import _load_json, _save_json, _utc_now
+
+    cleaned_role = str(role or "hal").strip().lower()[:16] or "hal"
+    if cleaned_role == "user":
+        cleaned_role = "operator"
+    if cleaned_role not in {"operator", "hal", "system"}:
+        cleaned_role = "hal"
+    body = str(text or "").strip()
+    if not body or body == "Thinking…":
+        return {"ok": False, "error": "empty"}
+    data = _load_json(STORE_KEY_HAL_HISTORY)
+    entries = data.get("entries") if isinstance(data.get("entries"), list) else []
+    if not isinstance(entries, list):
         entries = []
-    widgets.append(
+    entry = {
+        "id": str(entry_id or f"h-{_utc_now()}")[:48],
+        "at": _utc_now()[:19],
+        "role": cleaned_role,
+        "text": body[:2000],
+    }
+    entries.append(entry)
+    payload = {"entries": entries[-200:], "updatedAt": _utc_now()}
+    _save_json(STORE_KEY_HAL_HISTORY, payload)
+    return {"ok": True, "entry": entry, "count": len(payload["entries"])}
+
+
+def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """HAL History — searchable operator/HAL interaction log (#hal/history)."""
+    del reports, bundle
+    entries = _hal_history_entries(80)
+    op_n = sum(1 for e in entries if e.get("role") == "operator")
+    hal_n = sum(1 for e in entries if e.get("role") == "hal")
+    sys_n = sum(1 for e in entries if e.get("role") == "system")
+    last_at = entries[-1]["at"] if entries else "—"
+    widgets: list[dict[str, Any]] = [
+        _nav(
+            "HAL · History",
+            "Past asks, replies, and board actions",
+            "Hash #hal/history · local audit only · never invents turns.",
+        ),
         {
-            "id": "hal-history-table",
-            "type": "data-table",
-            "label": "HAL history",
+            "id": "hal-history-kpi-ops",
+            "type": "kpi",
+            "label": "Operator asks",
+            "size": "s",
+            "value": op_n,
+            "unit": "count",
+            "status": "ok" if op_n else "empty",
+            "emptyMessage": "0",
+            "hint": "Persisted operator prompts this workstation.",
+        },
+        {
+            "id": "hal-history-kpi-hal",
+            "type": "kpi",
+            "label": "HAL replies",
+            "size": "s",
+            "value": hal_n,
+            "unit": "count",
+            "status": "ok" if hal_n else "empty",
+            "emptyMessage": "0",
+            "hint": "Persisted HAL answers (Thinking… omitted).",
+        },
+        {
+            "id": "hal-history-kpi-sys",
+            "type": "kpi",
+            "label": "System events",
+            "size": "s",
+            "value": sys_n,
+            "unit": "count",
+            "status": "ok" if sys_n else "empty",
+            "emptyMessage": "0",
+            "hint": "Board actions and receipts.",
+        },
+        {
+            "id": "hal-history-last",
+            "type": "status",
+            "label": "Last interaction",
+            "size": "m",
+            "status": "ok" if entries else "empty",
+            "message": last_at if entries else "No history yet",
+            "hint": "Open Chat to start a session — turns save locally.",
+        },
+        {
+            "id": "hal-history-feed",
+            "type": "hal-history-feed",
+            "label": "Conversation log",
             "size": "full",
             "status": "ok" if entries else "empty",
-            "emptyMessage": "No persisted HAL history yet — chat stays in-session until logged",
-            "columns": ["at", "role", "preview"],
-            "rows": entries,
-            "hint": "Optional local key nr2:v2:hal:history — never invents replies.",
-        }
-    )
+            "emptyMessage": "No persisted HAL history yet. Ask HAL on Chat — turns land here.",
+            "hint": "Filter by role · Replay opens Chat with the prompt seeded.",
+            "entries": list(reversed(entries)),
+            "filters": ["all", "operator", "hal", "system"],
+            "counts": {"all": len(entries), "operator": op_n, "hal": hal_n, "system": sys_n},
+        },
+    ]
     return widgets
 
 
 def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """HAL System Logs — import telemetry & freshness diagnostics (#hal/system-logs)."""
     del reports
-    widgets = [
-        _nav(
-            "HAL · System Logs",
-            "Import telemetry & freshness",
-            "Hash #hal/system-logs · diagnostics from import_loader.",
-        )
-    ]
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
-    alerts = []
+    connected = int(summary.get("connected") or 0) if summary else 0
+    partial = int(summary.get("partial") or 0) if summary else 0
+    missing = int(summary.get("missing") or 0) if summary else 0
+    stale = int(summary.get("stale") or 0) if summary else 0
+    total = int(summary.get("total") or 0) if summary else 0
+
+    if total > 0 and missing == 0 and partial == 0 and stale == 0:
+        posture, posture_status = "Operational", "ok"
+        posture_hint = "All tracked datasets connected."
+    elif total > 0:
+        posture, posture_status = "Degraded", "ok"
+        posture_hint = "Missing or partial imports — refresh Sync before posting."
+    else:
+        posture, posture_status = "Standby", "empty"
+        posture_hint = "Awaiting import diagnostics."
+
+    alerts: list[dict[str, Any]] = []
     try:
         from apex_program_improve_pack import assess_import_health
 
         health = assess_import_health(bundle)
         for a in health.get("alerts") or []:
             if isinstance(a, dict) and a.get("message"):
-                alerts.append({"level": str(a.get("level") or "info"), "message": str(a["message"])[:120]})
+                level = str(a.get("level") or "info").lower()
+                if level not in {"error", "warn", "warning", "info", "ok"}:
+                    level = "info"
+                if level == "warning":
+                    level = "warn"
+                alerts.append(
+                    {
+                        "level": level,
+                        "at": str(a.get("at") or a.get("ts") or "")[:19],
+                        "source": str(a.get("source") or a.get("datasetKey") or "import")[:40],
+                        "message": str(a["message"])[:180],
+                    }
+                )
     except Exception:
         pass
-    widgets.append(
+
+    # Surface critical dataset gaps as console lines when alert list is thin.
+    datasets = diag.get("datasets") if isinstance(diag.get("datasets"), list) else []
+    gap_rows: list[dict[str, Any]] = []
+    for row in datasets:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("severity") or "") == "optional":
+            continue
+        if row.get("automated") is False:
+            continue
+        status = str(row.get("status") or "")
+        if status in {"missing", "stale", "partial"} or int(row.get("rowCount") or 0) <= 0:
+            gap_rows.append(
+                {
+                    "dataset": str(row.get("datasetKey") or "—")[:48],
+                    "status": status or "unknown",
+                    "rows": int(row.get("rowCount") or 0),
+                    "detail": str(row.get("detail") or "")[:120],
+                }
+            )
+            if len(alerts) < 40:
+                alerts.append(
+                    {
+                        "level": "error" if status == "missing" else "warn",
+                        "at": "",
+                        "source": str(row.get("datasetKey") or "dataset")[:40],
+                        "message": str(row.get("detail") or f"{status} · rows={row.get('rowCount') or 0}")[:180],
+                    }
+                )
+
+    log_lines = alerts[:60]
+    widgets: list[dict[str, Any]] = [
+        _nav(
+            "HAL · System Logs",
+            "Import telemetry, sync failures, freshness",
+            "Hash #hal/system-logs · diagnostics from import_loader only.",
+        ),
         {
-            "id": "hal-sys-summary",
+            "id": "hal-sys-posture",
             "type": "status",
-            "label": "Import diagnostics",
+            "label": "System posture",
             "size": "m",
-            "status": "ok" if summary else "empty",
-            "message": (
-                f"connected={summary.get('connected')} partial={summary.get('partial')} "
-                f"missing={summary.get('missing')} stale={summary.get('stale')}"
-                if summary
-                else "Diagnostics unavailable"
-            ),
-            "hint": "From bundle diagnostics — refresh Sync to update.",
-        }
-    )
-    widgets.append(
+            "status": posture_status,
+            "message": posture,
+            "hint": posture_hint,
+        },
         {
-            "id": "hal-sys-alerts",
-            "type": "data-table",
-            "label": "Freshness alerts",
+            "id": "hal-sys-kpi-connected",
+            "type": "kpi",
+            "label": "Connected",
+            "size": "s",
+            "value": connected if summary else None,
+            "unit": "count",
+            "status": "ok" if summary else "empty",
+            "emptyMessage": "—",
+            "hint": f"{connected}/{total} datasets" if total else "Bundle summary unavailable.",
+        },
+        {
+            "id": "hal-sys-kpi-partial",
+            "type": "kpi",
+            "label": "Partial",
+            "size": "s",
+            "value": partial if summary else None,
+            "unit": "count",
+            "status": "ok" if summary else "empty",
+            "emptyMessage": "—",
+            "hint": "Loaded but required fields missing.",
+        },
+        {
+            "id": "hal-sys-kpi-missing",
+            "type": "kpi",
+            "label": "Missing",
+            "size": "s",
+            "value": missing if summary else None,
+            "unit": "count",
+            "status": "ok" if summary else "empty",
+            "emptyMessage": "—",
+            "hint": "Required export files not found.",
+        },
+        {
+            "id": "hal-sys-kpi-stale",
+            "type": "kpi",
+            "label": "Stale",
+            "size": "s",
+            "value": stale if summary else None,
+            "unit": "count",
+            "status": "ok" if summary else "empty",
+            "emptyMessage": "—",
+            "hint": "Past freshness window — refresh Sync.",
+        },
+        {
+            "id": "hal-sys-console",
+            "type": "hal-sys-console",
+            "label": "Diagnostic console",
             "size": "full",
-            "status": "ok" if alerts else "empty",
-            "emptyMessage": "No import health alerts",
-            "columns": ["level", "message"],
-            "rows": alerts,
-            "hint": "Import-backed alerts only.",
-        }
-    )
+            "status": "ok" if log_lines else "empty",
+            "emptyMessage": "No import health alerts — Sync looks quiet.",
+            "hint": "Import-backed lines only · Sync to refresh.",
+            "lines": log_lines,
+            "filters": ["all", "error", "warn", "info"],
+        },
+        {
+            "id": "hal-sys-gaps",
+            "type": "data-table",
+            "label": "Critical dataset gaps",
+            "size": "full",
+            "status": "ok" if gap_rows else "empty",
+            "emptyMessage": "No critical gaps in required datasets",
+            "columns": ["dataset", "status", "rows", "detail"],
+            "rows": gap_rows[:40],
+            "hint": "Required (non-optional) automated datasets only.",
+        },
+    ]
     return widgets
 
 

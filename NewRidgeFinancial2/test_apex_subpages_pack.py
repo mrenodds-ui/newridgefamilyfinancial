@@ -204,3 +204,73 @@ def test_wave5_register_empty_honest():
     widgets = build_softdent_register({}, {})
     table = next(w for w in widgets if w.get("type") == "data-table")
     assert table.get("status") == "empty"
+
+
+def test_hal_history_feed_empty_honest():
+    from apex_program_improve_pack import _save_json
+    from apex_subpages_wave5_pack import STORE_KEY_HAL_HISTORY, build_hal_history
+
+    _save_json(STORE_KEY_HAL_HISTORY, {"entries": []})
+    widgets = build_hal_history({}, {})
+    types = [w.get("type") for w in widgets]
+    assert "hal-history-feed" in types
+    feed = next(w for w in widgets if w.get("type") == "hal-history-feed")
+    assert feed.get("status") == "empty"
+    assert feed.get("size") == "full"
+    assert "operator" in (feed.get("filters") or [])
+
+
+def test_hal_history_append_and_feed():
+    from apex_program_improve_pack import _save_json
+    from apex_subpages_wave5_pack import STORE_KEY_HAL_HISTORY, append_hal_history_entry, build_hal_history
+
+    _save_json(STORE_KEY_HAL_HISTORY, {"entries": []})
+    r1 = append_hal_history_entry("operator", "What is import health?")
+    r2 = append_hal_history_entry("hal", "Imports are degraded — refresh Sync.")
+    assert r1.get("ok") is True
+    assert r2.get("ok") is True
+    widgets = build_hal_history({}, {})
+    feed = next(w for w in widgets if w.get("type") == "hal-history-feed")
+    assert feed.get("status") == "ok"
+    entries = feed.get("entries") or []
+    assert any("import health" in str(e.get("text") or "").lower() for e in entries)
+    assert any(e.get("role") == "hal" for e in entries)
+
+
+def test_hal_system_logs_console_and_gaps():
+    from apex_subpages_wave5_pack import build_hal_system_logs
+
+    bundle = {
+        "diagnostics": {
+            "summary": {"connected": 1, "partial": 1, "missing": 2, "stale": 0, "total": 4},
+            "datasets": [
+                {
+                    "datasetKey": "softdent.ar",
+                    "status": "missing",
+                    "severity": "critical",
+                    "automated": True,
+                    "rowCount": 0,
+                    "detail": "Dataset file not found.",
+                },
+                {
+                    "datasetKey": "quickbooks.revenue",
+                    "status": "missing",
+                    "severity": "critical",
+                    "automated": True,
+                    "rowCount": 0,
+                    "detail": "Revenue export missing.",
+                },
+            ],
+        }
+    }
+    widgets = build_hal_system_logs({}, bundle)
+    types = {w.get("type") for w in widgets}
+    assert "hal-sys-console" in types
+    console = next(w for w in widgets if w.get("type") == "hal-sys-console")
+    assert console.get("status") == "ok"
+    assert console.get("lines")
+    gaps = next(w for w in widgets if w.get("id") == "hal-sys-gaps")
+    assert gaps.get("status") == "ok"
+    assert len(gaps.get("rows") or []) >= 1
+    posture = next(w for w in widgets if w.get("id") == "hal-sys-posture")
+    assert posture.get("message") == "Degraded"

@@ -2795,3 +2795,245 @@ body.apex-claim-drawer-open::after {
   display: flex;
   gap: 6px;
 }
+
+/* ——— HAL subpages: History + System Logs ——— */
+.apex-stage--hal-sub {
+  animation: apex-hal-sub-in 320ms ease-out;
+}
+
+@keyframes apex-hal-sub-in {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.apex-hal-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.apex-hal-filter {
+  appearance: none;
+  border: 1px solid rgba(0, 240, 255, 0.22);
+  background: rgba(0, 240, 255, 0.04);
+  color: var(--apex-text-secondary, #9ab);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color 140ms, color 140ms, background 140ms;
+}
+
+.apex-hal-filter:hover {
+  border-color: rgba(0, 240, 255, 0.45);
+  color: var(--apex-cyan, #00f0ff);
+}
+
+.apex-hal-filter.is-active {
+  border-color: var(--apex-cyan, #00f0ff);
+  color: var(--apex-cyan, #00f0ff);
+  background: rgba(0, 240, 255, 0.1);
+}
+
+.apex-hal-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(62vh, 720px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.apex-hal-feed--empty {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 0 4px;
+}
+
+.apex-hal-feed__row {
+  border: 1px solid rgba(0, 240, 255, 0.12);
+  border-left-width: 3px;
+  background: linear-gradient(90deg, rgba(0, 240, 255, 0.04), transparent 40%);
+  padding: 10px 12px;
+  animation: apex-hal-row-in 280ms ease-out;
+}
+
+.apex-hal-feed__row--operator {
+  border-left-color: rgba(0, 240, 255, 0.85);
+}
+
+.apex-hal-feed__row--hal {
+  border-left-color: rgba(0, 200, 170, 0.85);
+  background: linear-gradient(90deg, rgba(0, 200, 170, 0.07), transparent 45%);
+}
+
+.apex-hal-feed__row--system {
+  border-left-color: rgba(220, 180, 60, 0.8);
+  background: linear-gradient(90deg, rgba(220, 180, 60, 0.06), transparent 45%);
+}
+
+@keyframes apex-hal-row-in {
+  from {
+    transform: translateX(-4px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apex-stage--hal-sub,
+  .apex-hal-feed__row {
+    animation: none;
+  }
+}
+
+.apex-hal-feed__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--apex-text-secondary, #9ab);
+}
+
+.apex-hal-feed__role {
+  color: var(--apex-cyan, #00f0ff);
+  font-family: "Orbitron", "JetBrains Mono", monospace;
+}
+
+.apex-hal-feed__row--hal .apex-hal-feed__role {
+  color: #5ee0c8;
+}
+
+.apex-hal-feed__row--system .apex-hal-feed__role {
+  color: #e0c35a;
+}
+
+.apex-hal-feed__at {
+  opacity: 0.75;
+}
+
+.apex-hal-feed__replay {
+  margin-left: auto;
+  appearance: none;
+  border: 1px solid rgba(0, 240, 255, 0.28);
+  background: transparent;
+  color: var(--apex-cyan, #00f0ff);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+}
+
+.apex-hal-feed__replay:hover {
+  background: rgba(0, 240, 255, 0.08);
+}
+
+.apex-hal-feed__text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--apex-text-primary, #e8f0f4);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.apex-hal-console {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: min(48vh, 520px);
+  overflow: auto;
+  border: 1px solid rgba(0, 240, 255, 0.14);
+  background:
+    linear-gradient(rgba(0, 240, 255, 0.03) 1px, transparent 1px),
+    rgba(5, 8, 12, 0.72);
+  background-size: 100% 22px;
+  padding: 6px 0;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.apex-hal-console__line {
+  display: grid;
+  grid-template-columns: 56px minmax(80px, 140px) 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 12px;
+  border-left: 2px solid transparent;
+}
+
+.apex-hal-console__line--error {
+  border-left-color: rgba(255, 70, 90, 0.9);
+  background: rgba(255, 70, 90, 0.06);
+}
+
+.apex-hal-console__line--warn {
+  border-left-color: rgba(220, 180, 60, 0.9);
+  background: rgba(220, 180, 60, 0.05);
+}
+
+.apex-hal-console__line--info,
+.apex-hal-console__line--ok {
+  border-left-color: rgba(0, 240, 255, 0.45);
+}
+
+.apex-hal-console__lvl {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--apex-cyan, #00f0ff);
+}
+
+.apex-hal-console__line--error .apex-hal-console__lvl {
+  color: #ff6b7a;
+}
+
+.apex-hal-console__line--warn .apex-hal-console__lvl {
+  color: #e0c35a;
+}
+
+.apex-hal-console__src {
+  color: var(--apex-text-secondary, #9ab);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apex-hal-console__msg {
+  color: var(--apex-text-primary, #e8f0f4);
+  min-width: 0;
+}
+
+.apex-hal-console__at {
+  color: rgba(154, 170, 187, 0.7);
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .apex-hal-console__line {
+    grid-template-columns: 48px 1fr;
+    grid-template-rows: auto auto;
+  }
+  .apex-hal-console__src {
+    grid-column: 2;
+  }
+  .apex-hal-console__msg {
+    grid-column: 1 / -1;
+  }
+  .apex-hal-console__at {
+    display: none;
+  }
+}

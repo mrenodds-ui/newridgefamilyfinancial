@@ -6819,6 +6819,25 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
                 }
             )
 
+    @app.post("/api/apex/hal/history-append")
+    def apex_hal_history_append_api():
+        """Persist one HAL chat turn for #hal/history (local store only)."""
+        try:
+            import bottle
+            from apex_subpages_wave5_pack import append_hal_history_entry
+
+            raw = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(raw or "{}")
+            role = str(payload.get("role") or "").strip()
+            text = str(payload.get("text") or payload.get("query") or "").strip()
+            entry_id = str(payload.get("id") or "").strip() or None
+            result = append_hal_history_entry(role, text, entry_id=entry_id)
+            status = 200 if result.get("ok") else 400
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result, status=status)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
     @app.get("/api/apex/hal/orchestrator")
     def apex_hal_orchestrator_status():
         try:
