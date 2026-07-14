@@ -32,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10624"
+BUILD_ID = "hal-10625"
 
 
 def _apex_blank_all_widgets() -> bool:
@@ -5217,7 +5217,7 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
             r"\b("
             r"focus|highlight|point (me )?to|look at|open widget|"
             r"show me (the )?(widget|scrubber|board|kanban|table|categorize|ebitda)|"
-            r"open (the )?(categorize|ebitda|claims workbench|import health)|"
+            r"open (the )?(categorize|ebitda|claims workbench|import health|program posture|ai insight)|"
             r"go to|switch to|take me to|navigate"
             r")\b",
             q,
@@ -5366,6 +5366,9 @@ def resolve_hal_board_actions(payload: dict[str, Any] | None = None) -> dict[str
         (r"\b(executive strip|claims? (kpi|command) strip)\b", "claims-executive-strip", "claims"),
         (r"\b(aging risk|risk (bars|analytics))\b", "claims-risk-analytics", "claims"),
         (r"\b(pipeline stats|claims? (header )?stats|pending dollars)\b", "claims-header-stats", "claims"),
+        # HAL spine tiles (prefer over legacy monitors when talking on/about HAL)
+        (r"\b(hal )?import health|health (tile|card|kpi)\b", "hal-import-health", "hal"),
+        (r"\b(program posture|hal posture|operational posture)\b", "hal-program-posture", "hal"),
         (r"\b(import health|health monitor|stale imports?)\b", "import-health-monitor", None),
         (r"\b(daily huddle|morning huddle|morning briefing)\b", "om-daily-huddle", "office-manager"),
         (r"\b(ebitda trend|ebitda chart)\b", "ebitda-station", "financial"),

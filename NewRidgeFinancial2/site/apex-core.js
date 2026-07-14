@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10624 (HAL medium spine redesign)
+ * Build: hal-10625 (HAL spine ↔ HAL chat wire harden)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10624";
+  const ASSET_V = "hal-10625";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -3381,6 +3381,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       if (this.type === "ai-insight") {
         wireAiInsight(this.element);
       }
+      if (
+        this.id === "hal-import-health" ||
+        this.id === "hal-program-posture" ||
+        this.id === "hal-ai-insight"
+      ) {
+        wireHalSpineTile(this.element, this.spec);
+      }
     }
   }
 
@@ -3484,6 +3491,34 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           cols.map((c) => `${(c && c.bucket) || "?"}:${(c && c.count) || 0}`).join(",")
       );
       parts.push(`Ask: focus 30/60/90 day claims to filter the workbench.`);
+    }
+    // HAL spine tiles — deterministic context for health / posture / insight
+    if (widgetId === "hal-import-health") {
+      parts.push(`delta=${s.delta_label || s.deltaLabel || ""}`);
+      parts.push(
+        "Ask: which SoftDent/QB datasets are missing, what Sync to run next, and how Import Health becomes Operational. Never invent connection counts."
+      );
+    }
+    if (widgetId === "hal-program-posture") {
+      parts.push(`posture=${s.message || ""}`);
+      parts.push(`badge=${s.badge || ""}`);
+      parts.push(
+        "Ask: why posture is Operational/Degraded/Standby, what blocks grounded HAL answers, and the next import fix. Never invent system health."
+      );
+    }
+    if (widgetId === "hal-ai-insight" || s.type === "ai-insight") {
+      const insight = s.insight && typeof s.insight === "object" ? s.insight : null;
+      if (insight) {
+        parts.push(`insightType=${insight.widget_type || ""}`);
+        parts.push(`confidence=${insight.confidence || ""}`);
+        if (insight.explanation) parts.push(`explanation=${String(insight.explanation).slice(0, 400)}`);
+        const refs = Array.isArray(insight.source_refs) ? insight.source_refs.slice(0, 8) : [];
+        if (refs.length) parts.push(`source_refs=${refs.join(",")}`);
+      } else {
+        parts.push("insightStatus=EMPTY");
+        parts.push("Ask: generate a schema-validated structured insight with source_refs; do not invent dollars.");
+      }
+      parts.push("Ask: summarize this insight, cite sources, and name the next staff action.");
     }
     if (s.hint) parts.push(`hint=${s.hint}`);
     if (s.message) parts.push(`message=${s.message}`);
@@ -4983,6 +5018,53 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     });
   }
 
+  const HAL_SPINE_IDS = new Set(["hal-import-health", "hal-program-posture", "hal-ai-insight"]);
+
+  function wireHalSpineTile(root, spec) {
+    if (!root || root.dataset.wiredHalSpine === "1") return;
+    root.dataset.wiredHalSpine = "1";
+    root.classList.add("apex-hal-spine-tile");
+    root.setAttribute("tabindex", "0");
+    root.setAttribute("role", "button");
+    const label = String((spec && (spec.label || spec.id)) || "widget");
+    root.setAttribute("aria-label", `Ask HAL about ${label}`);
+    let foot = root.querySelector("[data-hal-spine-actions]");
+    if (!foot) {
+      foot = document.createElement("div");
+      foot.className = "apex-hal-spine-actions";
+      foot.setAttribute("data-hal-spine-actions", "1");
+      foot.innerHTML = `<button type="button" class="apex-btn apex-btn--small apex-btn--primary" data-hal-spine-ask>Ask HAL</button>
+        <button type="button" class="apex-btn apex-btn--small" data-hal-spine-focus>Highlight</button>`;
+      root.appendChild(foot);
+    }
+    const ask = () => askHalAboutWidget(spec || {});
+    const focusOnly = () =>
+      runHalBoardActions([
+        { type: "focus_widget", widgetId: String((spec && spec.id) || "") },
+        { type: "highlight_widget", widgetId: String((spec && spec.id) || ""), ms: 4000 },
+        {
+          type: "set_status_banner",
+          message: String((spec && (spec.message || spec.label)) || label),
+          hint: String((spec && spec.hint) || "HAL spine"),
+          tone: String((spec && spec.status) || "") === "empty" ? "warn" : "ok",
+        },
+      ]);
+    foot.querySelector("[data-hal-spine-ask]")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      ask();
+    });
+    foot.querySelector("[data-hal-spine-focus]")?.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      focusOnly();
+    });
+    root.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        ask();
+      }
+    });
+  }
+
   function wireHalSaidRemember(root) {
     if (!root || root.dataset.wiredRemember === "1") return;
     const form = root.querySelector("[data-hal-remember-form]");
@@ -5266,16 +5348,39 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           // Scroll+highlight only — widget focus/enlarge mode removed.
           const id = String(action.widgetId || "").trim();
           if (!id) continue;
+          // HAL spine alias: stay on HAL and use live tile ids
+          const spineAlias =
+            id === "import-health-monitor"
+              ? "hal-import-health"
+              : id === "hal-structured-remember"
+                ? "hal-program-posture"
+                : id;
+          const targetId = HAL_SPINE_IDS.has(id) || HAL_SPINE_IDS.has(spineAlias) ? spineAlias : id;
+          if (HAL_SPINE_IDS.has(targetId) && currentPage !== "hal") {
+            await loadPage("hal");
+            await new Promise((r) => setTimeout(r, 120));
+          }
           await new Promise((r) => setTimeout(r, 80));
-          const el = findWidgetEl(id);
+          const el = findWidgetEl(targetId);
           if (el) {
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-            el.classList.add("apex-hal-highlight");
+            el.classList.add("apex-hal-highlight", "apex-hal-spine-active");
+            document.querySelectorAll(".apex-hal-spine-active").forEach((node) => {
+              if (node !== el) node.classList.remove("apex-hal-spine-active");
+            });
             const ms = Number(action.ms) || 3500;
             setTimeout(() => el.classList.remove("apex-hal-highlight"), ms);
-            results.push(`${type}:${id}`);
+            results.push(`${type}:${targetId}`);
+            if (type === "focus_widget" && HAL_SPINE_IDS.has(targetId)) {
+              const meta = metaEl();
+              if (meta) {
+                const label = el.querySelector(".apex-widget-label")?.textContent || targetId;
+                meta.textContent = `HAL · focused ${label.trim()}`;
+                meta.classList.add("is-live");
+              }
+            }
           }
-          const bucketAlias = id.match(/^claims-aging-(30|60|90)$/);
+          const bucketAlias = targetId.match(/^claims-aging-(30|60|90)$/);
           if (bucketAlias && type === "focus_widget") {
             const board = findWidgetEl("claims-kanban-board");
             if (board) applyKanbanFilter(board, `bucket-${bucketAlias[1]}`);

@@ -1034,6 +1034,27 @@ body.apex-ticker-muted .apex-ticker__track {
   border-color: rgba(0, 240, 255, 0.28);
 }
 
+/* HAL spine ↔ chat hard wire */
+.apex-stage--hal .apex-hal-spine-tile {
+  cursor: pointer;
+}
+.apex-stage--hal .apex-hal-spine-tile:focus-visible {
+  outline: 1px solid var(--apex-cyan);
+  outline-offset: 2px;
+}
+.apex-stage--hal .apex-hal-spine-active {
+  border-color: var(--apex-cyan) !important;
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.35), 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+.apex-hal-spine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 240, 255, 0.12);
+}
+
 .apex-stage--hal .apex-hal-rail {
   position: sticky;
   top: calc(var(--ticker-height) + 56px);

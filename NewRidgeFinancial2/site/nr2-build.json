@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10624",
-  "BUILD_ID": "hal-10624",
-  "assetVersion": "hal-10624",
-  "builtAt": "2026-07-14T13:00:00.000Z",
-  "notes": "hal-10624: HAL medium spine redesign (cache, trust, recon, actions, insight, rail).",
+  "schemaVersion": "hal-10625",
+  "BUILD_ID": "hal-10625",
+  "assetVersion": "hal-10625",
+  "builtAt": "2026-07-14T13:30:00.000Z",
+  "notes": "hal-10625: harden HAL wire to Import Health, Program Posture, AI Insight.",
   "staffRenderMode": "apex",
-  "package": "HAL-10624"
+  "package": "HAL-10625"
 }
