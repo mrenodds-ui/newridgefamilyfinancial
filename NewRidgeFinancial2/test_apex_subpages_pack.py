@@ -192,6 +192,8 @@ def test_wave5_remaining_add_builders_resolve():
     assert ("ar", "aging-detail") in WAVE5_BUILDERS
     assert ("narratives", "audit") in WAVE5_BUILDERS
     assert ("hal", "system-logs") in WAVE5_BUILDERS
+    assert ("hal", "history") in WAVE5_BUILDERS
+    assert ("hal", "ops") in WAVE5_BUILDERS
     assert resolve_subpage_builder("taxes", "calendar") is not None
     assert resolve_subpage_builder("office-manager", "tasks") is not None
     assert resolve_subpage_builder("claims", "kanban") is not None
@@ -220,6 +222,7 @@ def test_hal_history_feed_empty_honest():
     assert feed.get("status") == "empty"
     assert feed.get("size") == "full"
     assert "operator" in (feed.get("filters") or [])
+    assert "today" in (feed.get("filters") or [])
     assert next(w for w in widgets if w.get("type") == "hal-chat").get("id") == "hal-ask"
 
 
@@ -272,7 +275,34 @@ def test_hal_system_logs_console_and_hal_rail():
     console = next(w for w in widgets if w.get("type") == "hal-sys-console")
     assert console.get("status") == "ok"
     assert console.get("lines")
+    assert "softdent" in (console.get("ownerFilters") or [])
+    assert any(ln.get("owner") == "softdent" for ln in (console.get("lines") or []))
     strip = next(w for w in widgets if w.get("type") == "hal-sub-strip")
     posture = next(m for m in strip.get("metrics") or [] if m.get("key") == "posture")
     assert posture.get("value") == "Degraded"
     assert next(w for w in widgets if w.get("type") == "hal-chat").get("id") == "hal-ask"
+
+
+def test_hal_ops_checklist_rail():
+    from apex_subpages_wave5_pack import build_hal_ops
+
+    widgets = build_hal_ops(
+        {},
+        {
+            "diagnostics": {
+                "summary": {"connected": 1, "partial": 0, "missing": 1, "stale": 0, "total": 3},
+                "datasets": [
+                    {
+                        "datasetKey": "softdent.ar",
+                        "status": "missing",
+                        "severity": "critical",
+                        "automated": True,
+                        "rowCount": 0,
+                    }
+                ],
+            }
+        },
+    )
+    assert any(w.get("id") == "hal-ops-checklist" for w in widgets)
+    assert any(w.get("type") == "hal-chat" for w in widgets)
+    assert next(w for w in widgets if w.get("id") == "hal-ops-checklist").get("syncImports") is True

@@ -1,4 +1,4 @@
-"""hal-10628 — omit helpers remain; live build no longer zero-scroll caps."""
+"""hal-10629 — omit helpers remain; live build no longer zero-scroll caps."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from apex_compact_pages_pack import (
 
 class Hal10616ZeroScrollReorgTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10628")
+        self.assertEqual(BUILD_ID, "hal-10629")
 
     def test_optional_softDent_omitted_by_helper(self) -> None:
         widgets = [

@@ -798,6 +798,31 @@ def build_om_tasks(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict
 STORE_KEY_HAL_HISTORY = "nr2:v2:hal:history"
 
 
+def _hal_history_range_bucket(at: str) -> str:
+    """Classify history timestamps into today / week / older for staff filters."""
+    try:
+        from datetime import datetime, timedelta, timezone
+
+        raw = str(at or "").strip()
+        if not raw:
+            return "older"
+        # Accept YYYY-MM-DDTHH:MM:SS (store) or date-only
+        if "T" in raw:
+            ts = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        else:
+            ts = datetime.fromisoformat(raw[:10] + "T00:00:00+00:00")
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
+        if ts.date() == now.date():
+            return "today"
+        if ts >= now - timedelta(days=7):
+            return "week"
+    except Exception:
+        pass
+    return "older"
+
+
 def _hal_history_entries(limit: int = 80) -> list[dict[str, Any]]:
     entries: list[dict[str, Any]] = []
     try:
@@ -816,11 +841,13 @@ def _hal_history_entries(limit: int = 80) -> list[dict[str, Any]]:
             text = str(e.get("text") or e.get("query") or e.get("preview") or "").strip()
             if not text:
                 continue
+            at = str(e.get("at") or "")[:19]
             entries.append(
                 {
                     "id": str(e.get("id") or "")[:40],
-                    "at": str(e.get("at") or "")[:19],
+                    "at": at,
                     "role": role,
+                    "range": _hal_history_range_bucket(at),
                     "text": text[:2000],
                     "preview": text[:140],
                 }
@@ -881,6 +908,8 @@ def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     op_n = sum(1 for e in entries if e.get("role") == "operator")
     hal_n = sum(1 for e in entries if e.get("role") == "hal")
     sys_n = sum(1 for e in entries if e.get("role") == "system")
+    today_n = sum(1 for e in entries if e.get("range") == "today")
+    week_n = sum(1 for e in entries if e.get("range") in {"today", "week"})
     last_at = entries[-1]["at"] if entries else "—"
     return [
         {
@@ -890,14 +919,15 @@ def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
             "size": "strip",
             "status": "ok" if entries else "empty",
             "title": "HAL · History",
-            "subtitle": "Local audit of asks, replies, and board actions",
+            "subtitle": "Local audit of asks, replies, Sync, and board actions",
             "metrics": [
                 {"key": "operator", "label": "Asks", "value": op_n},
                 {"key": "hal", "label": "Replies", "value": hal_n},
                 {"key": "system", "label": "System", "value": sys_n},
+                {"key": "today", "label": "Today", "value": today_n},
                 {"key": "last", "label": "Last", "value": last_at if entries else "—"},
             ],
-            "hint": "Replay sends the ask to the HAL rail on this page.",
+            "hint": "Ask again / Ask HAL stay on this page rail.",
         },
         {
             "id": "hal-history-feed",
@@ -905,18 +935,54 @@ def build_hal_history(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
             "label": "Conversation log",
             "size": "full",
             "status": "ok" if entries else "empty",
-            "emptyMessage": "No history yet — ask HAL in the rail; turns land here.",
-            "hint": "Filter by role · Replay asks HAL here · Copy for replies.",
+            "emptyMessage": "No history yet — ask HAL in the rail; Sync and turns land here.",
+            "hint": "Filter by Today / This week / role · Ask again focuses the rail.",
             "entries": list(reversed(entries)),
-            "filters": ["all", "operator", "hal", "system"],
-            "counts": {"all": len(entries), "operator": op_n, "hal": hal_n, "system": sys_n},
+            "filters": ["all", "today", "week", "operator", "hal", "system"],
+            "counts": {
+                "all": len(entries),
+                "today": today_n,
+                "week": week_n,
+                "operator": op_n,
+                "hal": hal_n,
+                "system": sys_n,
+            },
         },
         _hal_ask_widget(),
     ]
 
 
+def _hal_log_owner(source: str) -> str:
+    s = str(source or "").strip().lower()
+    if s.startswith("softdent") or "softdent" in s or s.startswith("sd.") or s.startswith("sd_"):
+        return "softdent"
+    if s.startswith("quickbooks") or "quickbooks" in s or s.startswith("qb.") or s.startswith("qb_"):
+        return "quickbooks"
+    if "era" in s or "835" in s or "remit" in s:
+        return "era"
+    if s.startswith("import") or "bridge" in s or "cache" in s or "sync" in s:
+        return "bridge"
+    return "other"
+
+
+def _hal_dedupe_log_lines(lines: list[dict[str, Any]], *, limit: int = 60) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for ln in lines:
+        if not isinstance(ln, dict):
+            continue
+        key = f"{ln.get('owner')}|{ln.get('level')}|{ln.get('source')}|{ln.get('message')}"
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(ln)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    """HAL System Logs — diagnostic console + live Ask HAL rail (#hal/system-logs)."""
+    """HAL System Logs — owner-grouped console + live Ask HAL rail (#hal/system-logs)."""
     del reports
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
@@ -948,11 +1014,15 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
                     level = "info"
                 if level == "warning":
                     level = "warn"
+                source = str(a.get("source") or a.get("datasetKey") or "import")[:40]
+                gap = str(a.get("gapCode") or a.get("code") or "")[:48]
                 alerts.append(
                     {
                         "level": level,
                         "at": str(a.get("at") or a.get("ts") or "")[:19],
-                        "source": str(a.get("source") or a.get("datasetKey") or "import")[:40],
+                        "source": source,
+                        "owner": _hal_log_owner(source),
+                        "gapCode": gap,
                         "message": str(a["message"])[:180],
                     }
                 )
@@ -971,17 +1041,28 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
         status = str(row.get("status") or "")
         if status in {"missing", "stale", "partial"} or int(row.get("rowCount") or 0) <= 0:
             gap_n += 1
-            if len(alerts) < 40:
+            if len(alerts) < 80:
+                source = str(row.get("datasetKey") or "dataset")[:40]
+                gap = str(row.get("gapCode") or status or "GAP")[:48]
                 alerts.append(
                     {
                         "level": "error" if status == "missing" else "warn",
                         "at": "",
-                        "source": str(row.get("datasetKey") or "dataset")[:40],
+                        "source": source,
+                        "owner": _hal_log_owner(source),
+                        "gapCode": gap,
                         "message": str(row.get("detail") or f"{status} · rows={row.get('rowCount') or 0}")[:180],
                     }
                 )
 
-    log_lines = alerts[:60]
+    log_lines = _hal_dedupe_log_lines(alerts, limit=60)
+    owner_counts = {
+        "softdent": sum(1 for ln in log_lines if ln.get("owner") == "softdent"),
+        "quickbooks": sum(1 for ln in log_lines if ln.get("owner") == "quickbooks"),
+        "era": sum(1 for ln in log_lines if ln.get("owner") == "era"),
+        "bridge": sum(1 for ln in log_lines if ln.get("owner") == "bridge"),
+        "other": sum(1 for ln in log_lines if ln.get("owner") == "other"),
+    }
     return [
         {
             "id": "hal-sys-strip",
@@ -999,7 +1080,7 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
                 {"key": "stale", "label": "Stale", "value": stale if summary else "—"},
                 {"key": "gaps", "label": "Gaps", "value": gap_n},
             ],
-            "hint": "Ask HAL about a console line from the Ask button on each row.",
+            "hint": "Filter by SoftDent / QuickBooks / ERA · Ask HAL includes gap codes.",
         },
         {
             "id": "hal-sys-console",
@@ -1008,8 +1089,10 @@ def build_hal_system_logs(reports: dict[str, Any], bundle: dict[str, Any]) -> li
             "size": "full",
             "status": "ok" if log_lines else "empty",
             "emptyMessage": "No import health alerts — Sync looks quiet.",
-            "hint": "Import-backed lines only · Ask HAL about a row · Sync to refresh.",
+            "hint": "Owner first · level second · Ask HAL for the safest OPS step.",
             "lines": log_lines,
+            "ownerFilters": ["all", "softdent", "quickbooks", "era", "bridge", "other"],
+            "ownerCounts": owner_counts,
             "filters": ["all", "error", "warn", "info"],
         },
         _hal_ask_widget(),
@@ -1114,7 +1197,89 @@ def build_taxes_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dic
 
 
 def build_hal_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
-    return _build_ops_via_parent("hal", reports, bundle)
+    """HAL Ops — Sync checklist + gap owners + Ask HAL rail (#hal/ops)."""
+    del reports
+    diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
+    summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
+    connected = int(summary.get("connected") or 0) if summary else 0
+    partial = int(summary.get("partial") or 0) if summary else 0
+    missing = int(summary.get("missing") or 0) if summary else 0
+    total = int(summary.get("total") or 0) if summary else 0
+
+    datasets = diag.get("datasets") if isinstance(diag.get("datasets"), list) else []
+    owner_gaps: dict[str, int] = {"softdent": 0, "quickbooks": 0, "era": 0, "bridge": 0, "other": 0}
+    for row in datasets:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("severity") or "") == "optional":
+            continue
+        if row.get("automated") is False:
+            continue
+        status = str(row.get("status") or "")
+        if status in {"missing", "stale", "partial"} or int(row.get("rowCount") or 0) <= 0:
+            owner_gaps[_hal_log_owner(str(row.get("datasetKey") or ""))] += 1
+
+    checks = [
+        {
+            "ok": missing == 0,
+            "label": "Import gaps cleared",
+            "detail": f"{connected}/{total} connected · {missing} missing · {partial} partial"
+            if total
+            else "Awaiting diagnostics",
+        },
+        {
+            "ok": owner_gaps["softdent"] == 0,
+            "label": "SoftDent datasets",
+            "detail": f"{owner_gaps['softdent']} gap(s) — pull Register/Daysheet/AR then Sync",
+        },
+        {
+            "ok": owner_gaps["quickbooks"] == 0,
+            "label": "QuickBooks datasets",
+            "detail": f"{owner_gaps['quickbooks']} gap(s) — drop P&L/Revenue exports then Sync",
+        },
+        {
+            "ok": owner_gaps["era"] == 0,
+            "label": "ERA / remittance",
+            "detail": f"{owner_gaps['era']} gap(s) — drop 835 into ERA inbox when ready",
+        },
+    ]
+
+    checklist = {
+        "id": "hal-ops-checklist",
+        "type": "status",
+        "label": "HAL · Ops checklist",
+        "size": "l",
+        "status": "ok" if summary else "empty",
+        "message": "Sync first when imports are incomplete — empty ≠ $0.",
+        "hint": "Open System Logs for gap detail · History keeps Sync/ask audit.",
+        "checks": checks,
+        "syncImports": True,
+        "syncImportsLabel": "Sync & review missing imports",
+        "actions": [
+            {"id": "logs", "label": "Then open #hal/system-logs for owner-filtered gaps"},
+            {"id": "history", "label": "Confirm Sync/ask turns on #hal/history"},
+        ],
+        "chrome": "hal-medium",
+    }
+
+    strip = {
+        "id": "hal-ops-strip",
+        "type": "hal-sub-strip",
+        "label": "Ops",
+        "size": "strip",
+        "status": "ok" if summary else "empty",
+        "title": "HAL · Ops",
+        "subtitle": "Staff Sync checklist — SoftDent / QuickBooks / ERA",
+        "metrics": [
+            {"key": "connected", "label": "Connected", "value": f"{connected}/{total}" if total else "—"},
+            {"key": "missing", "label": "Missing", "value": missing if summary else "—"},
+            {"key": "softdent", "label": "SoftDent gaps", "value": owner_gaps["softdent"]},
+            {"key": "quickbooks", "label": "QB gaps", "value": owner_gaps["quickbooks"]},
+            {"key": "era", "label": "ERA gaps", "value": owner_gaps["era"]},
+        ],
+        "hint": "Primary CTA Syncs imports; detail lives on System Logs.",
+    }
+    return [strip, checklist, _hal_ask_widget()]
 
 
 def build_softdent_ops(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
