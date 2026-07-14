@@ -5520,11 +5520,12 @@ function select(id, options) {
 function assertDesignSchemaLoaded() {
   if (NR2_WORKSTATION_ONLY) {
     if (typeof NR2Boot !== "undefined" && !NR2Boot.ready) return false;
-    if (typeof WorkstationSchema !== "undefined" && typeof MoonshotMockupChrome !== "undefined") return true;
+    // Mockup chrome retired — workstation boots on WorkstationSchema alone.
+    if (typeof WorkstationSchema !== "undefined") return true;
     const frame = document.getElementById("pageFrame");
     if (frame) {
       frame.innerHTML =
-        '<div class="ms-boot-error" role="alert"><strong class="ms-boot-error__title">Workstation failed to load</strong><p class="ms-boot-error__msg">workstation-schema.js and mockup chrome are required. Launch Start Workstation.bat and reload.</p></div>';
+        '<div class="ms-boot-error" role="alert"><strong class="ms-boot-error__title">Workstation failed to load</strong><p class="ms-boot-error__msg">workstation-schema.js is required. Launch Start Workstation.bat and reload.</p></div>';
     }
     return false;
   }
@@ -5534,7 +5535,7 @@ function assertDesignSchemaLoaded() {
   const frame = document.getElementById("pageFrame");
   if (frame) {
     frame.innerHTML =
-      '<div class="ms-boot-error" role="alert"><strong class="ms-boot-error__title">Page registry failed to load</strong><p class="ms-boot-error__msg">moonshot-page-registry.js and nr2-moonshot-mockup-chrome.js are required. Run StartProgram.bat and reload http://127.0.0.1:8765/.</p></div>';
+      '<div class="ms-boot-error" role="alert"><strong class="ms-boot-error__title">Legacy mock-embed unavailable</strong><p class="ms-boot-error__msg">Use Apex at https://127.0.0.1:8765/ (staffRenderMode=apex). Mockup registry/chrome were removed.</p></div>';
   }
   return false;
 }

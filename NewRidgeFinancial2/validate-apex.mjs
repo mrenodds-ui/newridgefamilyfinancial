@@ -47,6 +47,19 @@ const bannedLegacyCss = [
   "workstation-moonshot-bridge.css",
 ];
 
+const bannedLegacyJs = [
+  "nr2-moonshot-ui.js",
+  "nr2-moonshot-mockup-chrome.js",
+  "moonshot-page-registry.js",
+  "page-canvas.js",
+  "page-views.js",
+  "page-canvas-data.js",
+  "moonshot-kimi-wire-hal.js",
+  "nr2-page-filters.js",
+  "nr2-analytics.js",
+  "nr2-qb-reports.js",
+];
+
 for (const name of requiredAssets) {
   assert.ok(existsSync(join(siteDir, name)), `missing Apex asset: ${name}`);
   assert.ok(indexHtml.includes(`${name}?v=${expected}`), `index must load ${name}?v=${expected}`);
@@ -56,6 +69,13 @@ for (const name of bannedLegacyCss) {
   assert.ok(!indexHtml.includes(name), `index must not load legacy CSS: ${name}`);
   assert.ok(!existsSync(join(siteDir, name)), `legacy CSS must be removed from site/: ${name}`);
 }
+
+for (const name of bannedLegacyJs) {
+  assert.ok(!indexHtml.includes(name), `index must not load leftover JS: ${name}`);
+  assert.ok(!existsSync(join(siteDir, name)), `leftover JS must be removed from site/: ${name}`);
+}
+assert.ok(!existsSync(join(siteDir, "deferred-live-wire")), "deferred-live-wire must be removed");
+assert.ok(!existsSync(join(siteDir, "data", "mockup-elite-pages.js")), "mockup-elite-pages.js must be removed");
 
 const pages = [
   "financial",

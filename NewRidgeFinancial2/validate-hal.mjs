@@ -495,21 +495,24 @@ async function main() {
   execSync("node --check site/app.js", { cwd: __dirname, stdio: "pipe" });
   execSync("node --check site/hal-core.js", { cwd: __dirname, stdio: "pipe" });
   execSync("node --check site/hal-page.js", { cwd: __dirname, stdio: "pipe" });
-  execSync("node --check site/moonshot-page-registry.js", { cwd: __dirname, stdio: "pipe" });
+  if (!staffApex) {
+    execSync("node --check site/moonshot-page-registry.js", { cwd: __dirname, stdio: "pipe" });
+  }
   execSync("node --check site/hal-agent-loop.js", { cwd: __dirname, stdio: "pipe" });
   passed++;
 
   // HAL page surfaces required manager signals (no backend, local data only)
   require(join(siteDir, "icons.js"));
   globalThis.AppIcons = require(join(siteDir, "icons.js"));
-  require(join(siteDir, "moonshot-page-registry.js"));
-  require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
+  if (!staffApex) {
+    require(join(siteDir, "moonshot-page-registry.js"));
+    require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
+    require(join(siteDir, "page-views.js"));
+  }
   require(join(siteDir, "hal-page-canvas.js"));
   require(join(siteDir, "components.js"));
   require(join(siteDir, "hal-pilot-widgets.js"));
   require(join(siteDir, "hal-page-widgets.js"));
-  require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
-  require(join(siteDir, "page-views.js"));
   const HalPageMod = require(join(siteDir, "hal-page.js"));
   let halHtml = "";
   const halRoot = {
@@ -734,17 +737,19 @@ async function main() {
   });
   assert(typeof halHtml === "string" && halHtml.length > 0, "HAL page must render with empty program context");
   assert(halHtml.includes("HAL STATUS"), "HAL page empty render must still show status toolbar");
-  const MockupChrome = require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
-  const emptyShell = MockupChrome.canvasShell({ pageId: "financial", halData: {}, halWidgetFeed: null });
-  assert(
-    emptyShell.includes("ms-page-chrome") || emptyShell.includes("top-header"),
-    "page chrome must render financial mockup shell with empty feed",
-  );
-  const missingShell = MockupChrome.canvasShell({ pageId: "not-a-real-page", halData: {} });
-  assert(
-    missingShell.includes("ms-page-chrome--missing"),
-    "page chrome must degrade when schema is missing",
-  );
+  if (!staffApex) {
+    const MockupChrome = require(join(siteDir, "nr2-moonshot-mockup-chrome.js"));
+    const emptyShell = MockupChrome.canvasShell({ pageId: "financial", halData: {}, halWidgetFeed: null });
+    assert(
+      emptyShell.includes("ms-page-chrome") || emptyShell.includes("top-header"),
+      "page chrome must render financial mockup shell with empty feed",
+    );
+    const missingShell = MockupChrome.canvasShell({ pageId: "not-a-real-page", halData: {} });
+    assert(
+      missingShell.includes("ms-page-chrome--missing"),
+      "page chrome must degrade when schema is missing",
+    );
+  }
   passed++;
 
   // Full program read access
@@ -931,8 +936,6 @@ async function main() {
   assert(feed.localOnly === true && feed.runId && feed.generatedAt, "widget feed must use program-style runId/generatedAt/localOnly fields");
   assert(feed.jobs.widgetPublish && feed.jobs.widgetPublish.validation && feed.sources.quickbooks.lastStatus, "widget feed jobs/sources must use camelCase fields");
 
-  const PageCanvasData = require(join(siteDir, "page-canvas-data.js"));
-
   const crossSourceFeed = HalSkills.buildWidgetFeed({
     dashboards: {
       financial: { dataSource: "import", productionMtd: { value: 123456 } },
@@ -963,22 +966,25 @@ async function main() {
     pendingOverview.metrics.collectionsTotal === WidgetContract.MISSING || pendingOverview.metrics.collectionsTotal === null,
     "collections must stay missing when SoftDent collections export is pending",
   );
-  PageCanvasData.bind(pendingCollectionsFeed, {
-    dashboards: {
-      financial: { dataSource: "import", collectionsPending: true },
-      softdent: { dataSource: "import", collectionsPending: true },
-    },
-  });
-  const pendingFinancialKpis = PageCanvasData.financialKpis();
-  const pendingSoftdentKpis = PageCanvasData.softdentKpis();
-  assert(
-    pendingFinancialKpis.some((row) => row.label === "Collections MTD" && row.value === "Pending export"),
-    "financial page KPIs must label pending collections as Pending export",
-  );
-  assert(
-    pendingSoftdentKpis.some((row) => row.label === "Collections" && row.value === "Pending export"),
-    "SoftDent page KPIs must label pending collections as Pending export",
-  );
+  if (!staffApex) {
+    const PageCanvasData = require(join(siteDir, "page-canvas-data.js"));
+    PageCanvasData.bind(pendingCollectionsFeed, {
+      dashboards: {
+        financial: { dataSource: "import", collectionsPending: true },
+        softdent: { dataSource: "import", collectionsPending: true },
+      },
+    });
+    const pendingFinancialKpis = PageCanvasData.financialKpis();
+    const pendingSoftdentKpis = PageCanvasData.softdentKpis();
+    assert(
+      pendingFinancialKpis.some((row) => row.label === "Collections MTD" && row.value === "Pending export"),
+      "financial page KPIs must label pending collections as Pending export",
+    );
+    assert(
+      pendingSoftdentKpis.some((row) => row.label === "Collections" && row.value === "Pending export"),
+      "SoftDent page KPIs must label pending collections as Pending export",
+    );
+  }
   assert(
     WidgetContract.widgetStatusFromStates(["ok", "ok", "ok", "pending"]) === "DEGRADED",
     "pending metric state must degrade widget contract status",
@@ -1043,65 +1049,68 @@ async function main() {
       quickbooks: { syncStatus: "ok" },
     },
   };
-  PageCanvasData.bind(noArFeed, noArSnapshot);
-  const noArGlance = PageCanvasData.softdentGlanceStats();
-  const patientArGlance = noArGlance.find((row) => row.label === "Patient A/R");
-  assert(patientArGlance && patientArGlance.value === "—", "SoftDent page canvas must not show sd.hero A/R when widget feed withholds verified A/R");
+  if (!staffApex) {
+    const PageCanvasData = require(join(siteDir, "page-canvas-data.js"));
+    PageCanvasData.bind(noArFeed, noArSnapshot);
+    const noArGlance = PageCanvasData.softdentGlanceStats();
+    const patientArGlance = noArGlance.find((row) => row.label === "Patient A/R");
+    assert(patientArGlance && patientArGlance.value === "—", "SoftDent page canvas must not show sd.hero A/R when widget feed withholds verified A/R");
 
-  const staleArSnapshot = {
-    dashboards: {
-      ar: { kpis: [{ label: "Total Outstanding", value: "$5,000", tone: "gold" }] },
-      softdent: { aging: [{ bucket: "0-30", amount: "$1,000", pct: 50 }], responsibility: { insurance: { amount: "500" }, patient: { amount: "300" } } },
-    },
-  };
-  PageCanvasData.bind(noArFeed, staleArSnapshot);
-  const staleArKpis = PageCanvasData.arKpis();
-  assert(
-    staleArKpis.every((row) => row.value === "—" || row.value === "0"),
-    "A/R page canvas must not show stale dashboard KPIs when widget feed withholds verified A/R",
-  );
-  assert(PageCanvasData.softdentAgingBars() === null, "SoftDent aging chart must hide when verified A/R is unavailable");
-  assert(PageCanvasData.softdentResponsibilityDonut() === null, "SoftDent responsibility chart must hide when verified A/R is unavailable");
-
-  const claimsTableSnapshot = {
-    dashboards: {
-      ar: {
-        topClaims: [{ patient: "Jane Doe", claim: "CLM-1", outstanding: "$500.00", days: 45 }],
+    const staleArSnapshot = {
+      dashboards: {
+        ar: { kpis: [{ label: "Total Outstanding", value: "$5,000", tone: "gold" }] },
+        softdent: { aging: [{ bucket: "0-30", amount: "$1,000", pct: 50 }], responsibility: { insurance: { amount: "500" }, patient: { amount: "300" } } },
       },
-      softdent: {},
-      quickbooks: { syncStatus: "ok" },
-    },
-    claims: { total: 3 },
-  };
-  const claimsTableFeed = HalSkills.buildWidgetFeed(claimsTableSnapshot);
-  PageCanvasData.bind(claimsTableFeed, claimsTableSnapshot);
-  const claimsTableRows = PageCanvasData.arTopClaimsTable();
-  assert(
-    claimsTableRows.length === 1 && claimsTableRows[0][3] === "—",
-    "A/R claims table must withhold per-claim outstanding amounts without verified A/R export",
-  );
+    };
+    PageCanvasData.bind(noArFeed, staleArSnapshot);
+    const staleArKpis = PageCanvasData.arKpis();
+    assert(
+      staleArKpis.every((row) => row.value === "—" || row.value === "0"),
+      "A/R page canvas must not show stale dashboard KPIs when widget feed withholds verified A/R",
+    );
+    assert(PageCanvasData.softdentAgingBars() === null, "SoftDent aging chart must hide when verified A/R is unavailable");
+    assert(PageCanvasData.softdentResponsibilityDonut() === null, "SoftDent responsibility chart must hide when verified A/R is unavailable");
 
-  const followUpSnapshot = {
-    dashboards: { softdent: {}, quickbooks: { syncStatus: "ok" } },
-    claims: {
-      total: 2,
-      claims: [
-        { patient: "Jane Doe", amount: "$1,200.00", status: "Denied" },
-        { patient: "John Smith", amount: "$800.00", status: "Ready" },
-      ],
-    },
-  };
-  const followUpFeed = HalSkills.buildWidgetFeed(followUpSnapshot);
-  PageCanvasData.bind(followUpFeed, followUpSnapshot);
-  const followUpKanban = PageCanvasData.arFollowUpKanban();
-  assert(
-    followUpKanban.some((lane) => lane.items.some((item) => item.includes("$") === false)),
-    "A/R follow-up kanban must omit claim amounts without verified A/R export",
-  );
-  assert(
-    followUpKanban.flatMap((lane) => lane.items).every((item) => !/\$\d/.test(item)),
-    "A/R follow-up kanban must not display dollar amounts without verified A/R export",
-  );
+    const claimsTableSnapshot = {
+      dashboards: {
+        ar: {
+          topClaims: [{ patient: "Jane Doe", claim: "CLM-1", outstanding: "$500.00", days: 45 }],
+        },
+        softdent: {},
+        quickbooks: { syncStatus: "ok" },
+      },
+      claims: { total: 3 },
+    };
+    const claimsTableFeed = HalSkills.buildWidgetFeed(claimsTableSnapshot);
+    PageCanvasData.bind(claimsTableFeed, claimsTableSnapshot);
+    const claimsTableRows = PageCanvasData.arTopClaimsTable();
+    assert(
+      claimsTableRows.length === 1 && claimsTableRows[0][3] === "—",
+      "A/R claims table must withhold per-claim outstanding amounts without verified A/R export",
+    );
+
+    const followUpSnapshot = {
+      dashboards: { softdent: {}, quickbooks: { syncStatus: "ok" } },
+      claims: {
+        total: 2,
+        claims: [
+          { patient: "Jane Doe", amount: "$1,200.00", status: "Denied" },
+          { patient: "John Smith", amount: "$800.00", status: "Ready" },
+        ],
+      },
+    };
+    const followUpFeed = HalSkills.buildWidgetFeed(followUpSnapshot);
+    PageCanvasData.bind(followUpFeed, followUpSnapshot);
+    const followUpKanban = PageCanvasData.arFollowUpKanban();
+    assert(
+      followUpKanban.some((lane) => lane.items.some((item) => item.includes("$") === false)),
+      "A/R follow-up kanban must omit claim amounts without verified A/R export",
+    );
+    assert(
+      followUpKanban.flatMap((lane) => lane.items).every((item) => !/\$\d/.test(item)),
+      "A/R follow-up kanban must not display dollar amounts without verified A/R export",
+    );
+  }
 
   const staleDiagSnapshot = {
     dashboards: {
@@ -2526,12 +2535,14 @@ print(out["text"])`,
     assert(tools.includes(expectTool), `Phase 2A-2C tool ${expectTool} for: ${q} got ${tools.join(",")}`);
     passed++;
   }
-  const NR2MoonshotUI = require(join(siteDir, "nr2-moonshot-ui.js"));
-  assert(typeof NR2MoonshotUI.renderEraMatchCard === "function", "ERA match UI export");
-  assert(typeof NR2MoonshotUI.renderPilotPhaseBanner === "function", "pilot phase banner export");
-  assert(typeof NR2MoonshotUI.enhanceCanvasPanels === "function", "canvas panel enhancement export");
-  assert(typeof NR2MoonshotUI.enhanceCanvasCharts === "function", "canvas chart enhancement export");
-  passed += 2;
+  if (!staffApex) {
+    const NR2MoonshotUI = require(join(siteDir, "nr2-moonshot-ui.js"));
+    assert(typeof NR2MoonshotUI.renderEraMatchCard === "function", "ERA match UI export");
+    assert(typeof NR2MoonshotUI.renderPilotPhaseBanner === "function", "pilot phase banner export");
+    assert(typeof NR2MoonshotUI.enhanceCanvasPanels === "function", "canvas panel enhancement export");
+    assert(typeof NR2MoonshotUI.enhanceCanvasCharts === "function", "canvas chart enhancement export");
+    passed += 2;
+  }
   if (typeof NR2AlertsUI !== "undefined") {
     assert(typeof NR2AlertsUI.install === "function", "Alerts SSE UI export");
   }
