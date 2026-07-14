@@ -1524,27 +1524,6 @@ body.apex-bridge {
 .apex-widget-actions { display: flex; gap: 4px; align-items: center; }
 .apex-inst--full { grid-column: 1 / -1; }
 
-.apex-widget.is-focused {
-  position: fixed !important; inset: 5vh 5vw; z-index: 4000; width: auto !important; height: auto !important;
-  max-width: none; overflow: auto; box-shadow: 0 0 0 1px var(--apex-cyan), 0 24px 80px rgba(0,0,0,0.65);
-  backdrop-filter: blur(8px);
-}
-.apex-focus-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  z-index: 3990;
-  cursor: pointer;
-}
-body.apex-focus-open .apex-focus-backdrop {
-  display: block;
-}
-/* Legacy pseudo backdrop (kept inert) — real #apex-focus-backdrop handles dismiss clicks */
-body.apex-focus-open::before {
-  content: none;
-}
-
 /* Tax library + Ask HAL (hal-10300) */
 .apex-ask-hal-btn { color: var(--apex-cyan); font-size: 14px; }
 .apex-taxlib-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 220px; overflow: auto; }

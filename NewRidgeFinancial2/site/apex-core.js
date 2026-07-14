@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — Bridge mosaic, silent refresh, print, session-aware fetch
- * Build: hal-10620 (blank widgets + strip legacy CSS)
+ * Build: hal-10621 (remove widget focus mode)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10620";
+  const ASSET_V = "hal-10621";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -677,7 +677,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -825,7 +824,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -959,7 +957,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -1030,7 +1027,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -1073,7 +1069,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -1110,7 +1105,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -1952,7 +1946,6 @@
           <header class="apex-widget-header">
             <span class="apex-widget-label">${label}</span>
             <div class="apex-widget-actions">
-              <button type="button" class="apex-icon-btn" data-action="focus" title="Focus">⛶</button>
               ${printBtn}
             </div>
           </header>
@@ -3091,10 +3084,6 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       const askBtn = this.element.querySelector('[data-action="ask-hal"]');
       if (askBtn) {
         askBtn.addEventListener("click", () => askHalAboutWidget(this.spec));
-      }
-      const focusBtn = this.element.querySelector('[data-action="focus"]');
-      if (focusBtn) {
-        focusBtn.addEventListener("click", () => toggleFocus(this.element));
       }
       if (this.type === "waterfall") {
         this.element.querySelectorAll("[data-cite-key]").forEach((btn) => {
@@ -5048,24 +5037,6 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
     }
   }
 
-  function toggleFocus(el) {
-    if (!el) return;
-    const open = document.querySelector(".apex-widget.is-focused");
-    if (open && open !== el) open.classList.remove("is-focused");
-    const on = el.classList.toggle("is-focused");
-    document.body.classList.toggle("apex-focus-open", on);
-    if (on) {
-      const esc = (ev) => {
-        if (ev.key === "Escape") {
-          el.classList.remove("is-focused");
-          document.body.classList.remove("apex-focus-open");
-          document.removeEventListener("keydown", esc);
-        }
-      };
-      document.addEventListener("keydown", esc);
-    }
-  }
-
   function wireCalculator(root) {
     const box = root.querySelector("[data-calc]");
     if (!box || box.dataset.wired === "1") return;
@@ -5298,14 +5269,13 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           }
           results.push(id ? `refresh_widget:${id}` : "refresh_widget");
         } else if (type === "focus_widget" || type === "highlight_widget") {
+          // Scroll+highlight only — widget focus/enlarge mode removed.
           const id = String(action.widgetId || "").trim();
           if (!id) continue;
-          // Allow navigate to settle
           await new Promise((r) => setTimeout(r, 80));
           const el = findWidgetEl(id);
           if (el) {
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-            if (type === "focus_widget") toggleFocus(el);
             el.classList.add("apex-hal-highlight");
             const ms = Number(action.ms) || 3500;
             setTimeout(() => el.classList.remove("apex-hal-highlight"), ms);
@@ -5399,7 +5369,6 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           const el = findWidgetEl("claims-aging-exposure") || findWidgetEl(`claims-aging-${bucket}`);
           if (el) {
             el.scrollIntoView({ behavior: "smooth", block: "center" });
-            toggleFocus(el);
             el.classList.add("apex-hal-highlight");
             setTimeout(() => el.classList.remove("apex-hal-highlight"), 4000);
           }
