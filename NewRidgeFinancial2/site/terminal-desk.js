@@ -2,87 +2,327 @@ const SESSION_HEADER = "X-NR2-Session-Token";
 const API = "/api/apex";
 let sessionToken = "";
 let busy = false;
+let halQueue = Promise.resolve();
 let lastStatus = null;
 let liveBundle = {};
+let currentDesk = "practice";
+let lastHalText = "Booting multi-desk terminal…";
+let lastHalMode = "…";
 
-/** Every desk pane maps to a real Apex widget id for board-actions + live status. */
-const PANE_SPEC = {
-  prod: {
-    label: "Production vs collections",
-    widgetId: "financial-dual-trend",
-    page: "financial",
-    fallbackIds: ["revenue-composition", "financial-vital-signs"],
+const DESKS = {
+  practice: {
+    id: "practice",
+    label: "PRACTICE",
+    title: "Practice desk",
+    layout: "3x3",
+    panes: [
+      {
+        id: "prod",
+        title: "Production vs collections",
+        widgetId: "financial-dual-trend",
+        page: "financial",
+        cls: "span2",
+        kind: "dual",
+      },
+      {
+        id: "sd",
+        title: "SoftDent gaps",
+        widgetId: "softdent-collections-gap",
+        page: "softdent",
+        kind: "status-bars",
+      },
+      {
+        id: "claims",
+        title: "Claims aging",
+        widgetId: "claims-aging-exposure",
+        page: "claims",
+        kind: "claims-bars",
+      },
+      {
+        id: "ar",
+        title: "A/R aging",
+        widgetId: "ar-aging-chart",
+        page: "ar",
+        kind: "ar-donut",
+      },
+      {
+        id: "heat",
+        title: "Huddle heat",
+        widgetId: "om-daily-huddle",
+        page: "office-manager",
+        kind: "heat",
+      },
+      {
+        id: "qb",
+        title: "QB linkage",
+        widgetId: "qb-ap-aging",
+        page: "quickbooks",
+        kind: "status-bars-alt",
+      },
+      {
+        id: "movers",
+        title: "Top movers",
+        widgetId: "hal-ai-insight",
+        page: "hal",
+        kind: "movers",
+      },
+      {
+        id: "tape",
+        title: "Exception tape",
+        widgetId: "hal-sys-console",
+        page: "hal",
+        sub: "system-logs",
+        kind: "tape",
+      },
+    ],
   },
-  posture: {
-    label: "Posture",
-    widgetId: "hal-program-posture",
-    page: "hal",
-    fallbackIds: [],
-  },
-  sd: {
-    label: "SoftDent day strip",
-    widgetId: "softdent-collections-gap",
-    page: "softdent",
-    fallbackIds: ["sd-prod-trend", "import-health-timeline"],
+  close: {
+    id: "close",
+    label: "CLOSE",
+    title: "Period close",
+    layout: "3x3",
+    panes: [
+      {
+        id: "vitals",
+        title: "Financial vitals",
+        widgetId: "financial-vital-signs",
+        page: "financial",
+        cls: "span2",
+        kind: "vitals",
+      },
+      {
+        id: "cmdstrip",
+        title: "Close command strip",
+        widgetId: "financial-command-strip",
+        page: "financial",
+        kind: "note",
+      },
+      {
+        id: "ebitda",
+        title: "EBITDA station",
+        widgetId: "ebitda-station",
+        page: "financial",
+        kind: "note",
+      },
+      {
+        id: "qbpl",
+        title: "QB P&L / AP",
+        widgetId: "qb-ap-aging",
+        page: "quickbooks",
+        kind: "status-bars-alt",
+      },
+      {
+        id: "payroll",
+        title: "Payroll gap",
+        widgetId: "qb-payroll-gap",
+        page: "financial",
+        kind: "note",
+      },
+      {
+        id: "recon",
+        title: "Reconciliation",
+        widgetId: "reconciliation-status",
+        page: "financial",
+        kind: "note",
+      },
+      {
+        id: "dual",
+        title: "Dual trend",
+        widgetId: "financial-dual-trend",
+        page: "financial",
+        kind: "dual",
+      },
+      {
+        id: "ops",
+        title: "Financial ops",
+        widgetId: "financial-ops-strip",
+        page: "financial",
+        kind: "note",
+      },
+    ],
   },
   claims: {
-    label: "Claims velocity",
-    widgetId: "claims-aging-exposure",
-    page: "claims",
-    fallbackIds: ["claims-open-kanban", "claims-executive-strip"],
+    id: "claims",
+    label: "CLAIMS",
+    title: "Claims desk",
+    layout: "3x3",
+    panes: [
+      {
+        id: "aging",
+        title: "Aging exposure",
+        widgetId: "claims-aging-exposure",
+        page: "claims",
+        cls: "span2",
+        kind: "claims-bars",
+      },
+      {
+        id: "exec",
+        title: "Executive strip",
+        widgetId: "claims-executive-strip",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "kanban",
+        title: "Open kanban",
+        widgetId: "claims-open-kanban",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "critical",
+        title: "Critical actions",
+        widgetId: "claims-top-critical",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "era",
+        title: "ERA gauge",
+        widgetId: "claims-era-gauge",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "denial",
+        title: "Denial pareto",
+        widgetId: "denial-pareto",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "risk",
+        title: "Risk analytics",
+        widgetId: "claims-risk-analytics",
+        page: "claims",
+        kind: "note",
+      },
+      {
+        id: "signoff",
+        title: "Clinical sign-off",
+        widgetId: "clinical-signoff-queue",
+        page: "claims",
+        kind: "note",
+      },
+    ],
   },
   ar: {
-    label: "A/R aging",
-    widgetId: "ar-aging-chart",
-    page: "ar",
-    fallbackIds: ["ar-aging-outlook", "ar-vitals-strip"],
-  },
-  tape: {
-    label: "Exception tape",
-    widgetId: "hal-sys-console",
-    page: "hal",
-    sub: "system-logs",
-    fallbackIds: [],
-  },
-  qb: {
-    label: "QB linkage",
-    widgetId: "qb-ap-aging",
-    page: "quickbooks",
-    fallbackIds: ["qb-pl-summary", "qb-net-profit-gap"],
-  },
-  heat: {
-    label: "Operatory heat",
-    widgetId: "om-daily-huddle",
-    page: "office-manager",
-    fallbackIds: ["om-priorities", "operatory-util-board"],
-  },
-  movers: {
-    label: "Top movers",
-    widgetId: "hal-ai-insight",
-    page: "hal",
-    fallbackIds: ["hal-sync-cta", "om-daily-huddle"],
+    id: "ar",
+    label: "A/R",
+    title: "A/R book",
+    layout: "3x3",
+    panes: [
+      {
+        id: "aging",
+        title: "Aging chart",
+        widgetId: "ar-aging-chart",
+        page: "ar",
+        cls: "span2",
+        kind: "ar-donut",
+      },
+      {
+        id: "vitals",
+        title: "A/R vitals",
+        widgetId: "ar-vitals-strip",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "heat",
+        title: "Balance heatmap",
+        widgetId: "ar-heatmap-grid",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "tasks",
+        title: "Collection tasks",
+        widgetId: "ar-collection-task-list",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "outlook",
+        title: "Aging outlook",
+        widgetId: "ar-aging-outlook",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "follow",
+        title: "Follow-up",
+        widgetId: "ar-follow-up",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "waterfall",
+        title: "Waterfall",
+        widgetId: "ar-waterfall",
+        page: "ar",
+        kind: "note",
+      },
+      {
+        id: "gauge",
+        title: "Collections gauge",
+        widgetId: "collections-gauge",
+        page: "ar",
+        kind: "note",
+      },
+    ],
   },
   trust: {
-    label: "Trust ladder",
-    widgetId: "hal-import-health",
-    page: "hal",
-    fallbackIds: ["hal-sync-cta"],
+    id: "trust",
+    label: "TRUST",
+    title: "Import trust",
+    layout: "2x3",
+    panes: [
+      {
+        id: "health",
+        title: "Import health",
+        widgetId: "hal-import-health",
+        page: "hal",
+        kind: "trust-health",
+      },
+      {
+        id: "sync",
+        title: "Sync CTA",
+        widgetId: "hal-sync-cta",
+        page: "hal",
+        kind: "note",
+      },
+      {
+        id: "posture",
+        title: "Program posture",
+        widgetId: "hal-program-posture",
+        page: "hal",
+        kind: "note",
+      },
+      {
+        id: "sdgap",
+        title: "SoftDent gap",
+        widgetId: "softdent-collections-gap",
+        page: "softdent",
+        kind: "note",
+      },
+      {
+        id: "tape",
+        title: "System log tape",
+        widgetId: "hal-sys-console",
+        page: "hal",
+        sub: "system-logs",
+        cls: "span2",
+        kind: "tape",
+      },
+      {
+        id: "insight",
+        title: "AI insight",
+        widgetId: "hal-ai-insight",
+        page: "hal",
+        kind: "movers",
+      },
+    ],
   },
-  hal: {
-    label: "HAL print",
-    widgetId: "hal-ask",
-    page: "hal",
-    fallbackIds: ["hal-program-posture"],
-  },
-};
-
-const NAV_SPEC = {
-  softdent: { pane: "sd", widgetId: "softdent-collections-gap", page: "softdent" },
-  quickbooks: { pane: "qb", widgetId: "qb-ap-aging", page: "quickbooks" },
-  ar: { pane: "ar", widgetId: "ar-aging-chart", page: "ar" },
-  claims: { pane: "claims", widgetId: "claims-aging-exposure", page: "claims" },
-  hal: { pane: "trust", widgetId: "hal-import-health", page: "hal" },
-  desk: { pane: "posture", widgetId: "hal-program-posture", page: "hal" },
 };
 
 function toast(msg) {
@@ -129,9 +369,12 @@ function escapeHtml(s) {
 }
 
 function setHalPrint(text, mode) {
-  document.getElementById("halPrint").innerHTML =
-    `<div class="who">HAL // DESK</div>${escapeHtml(text)}`;
-  if (mode) document.getElementById("halMode").textContent = mode;
+  lastHalText = text;
+  if (mode) lastHalMode = mode;
+  const el = document.getElementById("halPrint");
+  const modeEl = document.getElementById("halMode");
+  if (el) el.innerHTML = `<div class="who">HAL // ${DESKS[currentDesk].label}</div>${escapeHtml(text)}`;
+  if (modeEl && mode) modeEl.textContent = mode;
 }
 
 function focusPane(paneId) {
@@ -147,12 +390,14 @@ function focusPane(paneId) {
 
 function mkBars(el, vals, alt) {
   if (!el) return;
-  el.innerHTML = (vals || []).map((v, i) => {
-    const muted = v == null;
-    const h = muted ? 8 : Math.max(8, Math.round(Number(v) * 100));
-    const cls = muted ? "mute" : alt && i % 2 ? "alt" : "";
-    return `<i class="${cls}" style="height:${h}%"></i>`;
-  }).join("");
+  el.innerHTML = (vals || [])
+    .map((v, i) => {
+      const muted = v == null;
+      const h = muted ? 8 : Math.max(8, Math.round(Number(v) * 100));
+      const cls = muted ? "mute" : alt && i % 2 ? "alt" : "";
+      return `<i class="${cls}" style="height:${h}%"></i>`;
+    })
+    .join("");
 }
 
 function pointsToPolyline(points, width, height) {
@@ -170,37 +415,146 @@ function pointsToPolyline(points, width, height) {
     .join(" ");
 }
 
+function widgetById(id) {
+  return liveBundle.byId && liveBundle.byId[id] ? liveBundle.byId[id] : null;
+}
+
+function widgetStatusLabel(w) {
+  if (!w) return "—";
+  const st = String(w.status || "").toLowerCase();
+  if (st === "empty" || w.emptyMessage) return "GATED";
+  if (st === "warn" || st === "warning") return "WARN";
+  if (st === "partial") return "PARTIAL";
+  if (st === "ok" || st === "ready") return "LIVE";
+  return (st || "LIVE").toUpperCase();
+}
+
+function paneBodyHtml(pane) {
+  switch (pane.kind) {
+    case "dual":
+      return `<div class="legend"><span style="color:var(--amber)">Production</span><span style="color:var(--blue)">Collections</span><span class="blocked" data-role="gate">…</span></div>
+        <svg class="chart" viewBox="0 0 640 160" preserveAspectRatio="none">
+          <rect width="640" height="160" fill="rgba(255,255,255,0.02)"/>
+          <polyline data-role="prod" fill="none" stroke="#f5a623" stroke-width="2" points="20,120 620,120"/>
+          <polyline data-role="coll" fill="none" stroke="#4da3ff" stroke-width="2" points="20,132 620,132"/>
+        </svg>`;
+    case "status-bars":
+    case "status-bars-alt":
+      return `<div class="bars" data-role="bars"></div><div class="legend"><span data-role="gate">…</span></div>`;
+    case "claims-bars":
+      return `<svg class="chart" data-role="claims" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>`;
+    case "ar-donut":
+      return `<svg class="chart" viewBox="0 0 220 120">
+          <circle cx="70" cy="60" r="40" fill="none" stroke="#2a3340" stroke-width="16"/>
+          <circle cx="70" cy="60" r="40" fill="none" stroke="#3dd68c" stroke-width="16" stroke-dasharray="60 251" transform="rotate(-90 70 60)" opacity=".45"/>
+          <circle cx="70" cy="60" r="40" fill="none" stroke="#f5a623" stroke-width="16" stroke-dasharray="40 251" stroke-dashoffset="-60" transform="rotate(-90 70 60)" opacity=".45"/>
+          <circle cx="70" cy="60" r="40" fill="none" stroke="#ff5c5c" stroke-width="16" stroke-dasharray="30 251" stroke-dashoffset="-100" transform="rotate(-90 70 60)" opacity=".35"/>
+          <text x="120" y="48" fill="#8b97a8" font-size="10" font-family="ui-monospace, monospace">0-30</text>
+          <text x="120" y="66" fill="#f5a623" font-size="10" font-family="ui-monospace, monospace" data-role="gate">…</text>
+          <text x="120" y="84" fill="#ff5c5c" font-size="10" font-family="ui-monospace, monospace">90+ · no invent</text>
+        </svg>`;
+    case "heat":
+      return `<div class="heat" data-role="heat"></div>`;
+    case "tape":
+      return `<table class="dense"><thead><tr><th>Src</th><th>Event</th><th>Lvl</th></tr></thead><tbody data-role="tape"></tbody></table>`;
+    case "movers":
+      return `<table class="dense"><thead><tr><th>Signal</th><th>Δ</th><th>State</th></tr></thead><tbody data-role="movers"></tbody></table>`;
+    case "vitals":
+      return `<div class="kpis" data-role="vitals" style="grid-template-columns:repeat(3,1fr)"></div>`;
+    case "trust-health":
+      return `<div class="kpis"><div class="kpi"><div class="l">Connected</div><div class="n" data-role="conn">—</div><div class="s">datasets</div></div>
+        <div class="kpi"><div class="l">Missing</div><div class="n blocked" data-role="miss">—</div><div class="s">empty ≠ $0</div></div></div>
+        <div class="note" data-role="gate">…</div>`;
+    case "note":
+    default:
+      return `<div class="note" data-role="gate">Loading widget…</div><div class="list" data-role="list"></div>`;
+  }
+}
+
+function renderStage() {
+  const desk = DESKS[currentDesk];
+  const stage = document.getElementById("stage");
+  stage.dataset.layout = desk.layout || "3x3";
+  stage.innerHTML = desk.panes
+    .map((pane) => {
+      const cls = pane.cls ? ` ${pane.cls}` : "";
+      return `<div class="pane${cls}" data-pane="${pane.id}" data-widget="${pane.widgetId}" data-page="${pane.page}" data-kind="${pane.kind}">
+        <div class="ph"><span>${escapeHtml(pane.title)}</span><span class="val" data-role="val">…</span></div>
+        <div class="pb">${paneBodyHtml(pane)}</div>
+      </div>`;
+    })
+    .join("");
+
+  stage.querySelectorAll(".pane").forEach((el) => {
+    el.addEventListener("click", () => activatePane(el.dataset.pane));
+  });
+
+  // persistent side HAL panes
+  document.querySelectorAll(".side .pane").forEach((el) => {
+    if (el.dataset.wired === "1") return;
+    el.dataset.wired = "1";
+    el.addEventListener("click", () => {
+      const ask = "explain this widget";
+      focusPane(el.dataset.pane);
+      document.getElementById("q").value = `${ask} · ${el.dataset.widget}`;
+      runHal(ask, {
+        widgetId: el.dataset.widget,
+        page: el.dataset.page || "hal",
+        deskPane: el.dataset.pane,
+      });
+    });
+  });
+
+  document.getElementById("kpiDesk").textContent = desk.label;
+  document.getElementById("kpiDeskS").textContent = desk.title;
+  setHalPrint(lastHalText, lastHalMode);
+  applyLiveToStage();
+}
+
+function parseDeskFromLocation() {
+  const hash = String(location.hash || "").replace(/^#\/?/, "").toLowerCase();
+  if (DESKS[hash]) return hash;
+  const q = new URLSearchParams(location.search || "");
+  const desk = String(q.get("desk") || "").toLowerCase();
+  if (DESKS[desk]) return desk;
+  return "practice";
+}
+
+function setDesk(deskId, pushHash) {
+  if (!DESKS[deskId]) deskId = "practice";
+  currentDesk = deskId;
+  document.querySelectorAll("#tabs [data-desk], #nav [data-desk]").forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-desk") === deskId);
+  });
+  if (pushHash !== false) {
+    const next = `#/${deskId}`;
+    if (location.hash !== next) history.pushState({ desk: deskId }, "", next);
+  }
+  renderStage();
+  document.getElementById("cmdStatus").textContent = `TERMINAL · ${DESKS[deskId].label} · HAL wired`;
+}
+
+function activatePane(paneId) {
+  const desk = DESKS[currentDesk];
+  const pane = (desk.panes || []).find((p) => p.id === paneId);
+  if (!pane) return;
+  focusPane(paneId);
+  const ask = "explain this widget";
+  document.getElementById("q").value = `${ask} · ${pane.title} · ${pane.widgetId}`;
+  runHal(ask, {
+    widgetId: pane.widgetId,
+    page: pane.page,
+    deskPane: paneId,
+    label: pane.title,
+  });
+}
+
 function mapActionToPane(action) {
   if (!action) return null;
   const wid = String(action.widgetId || "");
-  const page = String(action.page || "");
-  // Prefer exact primary widgetId matches before fallbacks.
-  for (const [pane, spec] of Object.entries(PANE_SPEC)) {
-    if (wid && wid === spec.widgetId) return pane;
-  }
-  for (const [pane, spec] of Object.entries(PANE_SPEC)) {
-    if (wid && (spec.fallbackIds || []).includes(wid)) return pane;
-  }
-  if (wid.includes("revenue") || wid.includes("financial-dual") || wid.includes("vital")) return "prod";
-  if (wid.includes("import-health")) return "trust";
-  if (wid.includes("posture")) return "posture";
-  if (wid.includes("softdent") || wid.includes("collections-gap")) return "sd";
-  if (wid.includes("claim")) return "claims";
-  if (wid.includes("ar-")) return "ar";
-  if (wid.includes("qb")) return "qb";
-  if (wid.includes("huddle") || wid.includes("operatory")) return "heat";
-  if (wid.includes("sys") || wid.includes("hal-sys")) return "tape";
-  if (wid.includes("insight") || wid.includes("sync-cta")) return "movers";
-  if (wid === "hal-ask") return "hal";
-  if (action.type === "sync_imports") return "posture";
-  if (action.type === "navigate") {
-    if (page === "softdent") return "sd";
-    if (page === "claims") return "claims";
-    if (page === "ar") return "ar";
-    if (page === "quickbooks") return "qb";
-    if (page === "hal") return "trust";
-    if (page === "office-manager") return "heat";
-    if (page === "financial") return "prod";
+  const desk = DESKS[currentDesk];
+  for (const pane of desk.panes || []) {
+    if (wid && wid === pane.widgetId) return pane.id;
   }
   return null;
 }
@@ -212,7 +566,17 @@ async function applyActions(actions, preferredPane) {
   for (const action of list) {
     if (!action || !action.type) continue;
     const type = String(action.type);
-    const pane = mapActionToPane(action) || preferredPane;
+    if (type === "navigate") {
+      const page = String(action.page || "");
+      if (page === "claims") setDesk("claims");
+      else if (page === "ar") setDesk("ar");
+      else if (page === "financial" || page === "taxes") setDesk("close");
+      else if (page === "hal") setDesk("trust");
+      else if (page === "softdent" || page === "office-manager") setDesk("practice");
+      results.push(`navigate:${page}`);
+      continue;
+    }
+    const pane = mapActionToPane(action);
     if (pane) focusPane(pane);
     if (type === "sync_imports") {
       try {
@@ -238,38 +602,49 @@ async function applyActions(actions, preferredPane) {
       results.push(
         `${type}${action.widgetId ? ":" + action.widgetId : ""}${action.page ? ":" + action.page : ""}`
       );
-    } else if (type === "focus_claim_tile") {
-      focusPane("claims");
-      results.push("focus_claim");
     } else {
       results.push(type);
     }
   }
-  // Keep the user-selected desk pane focused even if action mapping is ambiguous.
   if (preferredPane) focusPane(preferredPane);
   return results;
 }
 
-async function runHal(query, context) {
-  if (busy) return;
+function runHal(query, context) {
+  halQueue = halQueue.then(() => runHalNow(query, context)).catch(() => {});
+  return halQueue;
+}
+
+async function runHalNow(query, context) {
   busy = true;
   const btn = document.getElementById("execBtn");
   btn.disabled = true;
-  document.getElementById("cmdStatus").textContent = "DESK · board-actions…";
+  document.getElementById("cmdStatus").textContent = `TERMINAL · ${DESKS[currentDesk].label} · board-actions…`;
   setHalPrint("Running board-actions…", "BUSY");
   const preferredPane = context && context.deskPane;
+
+  // Desk navigation commands
+  const deskJump = String(query || "").toLowerCase().match(
+    /\b(?:go to|open|switch to)\s+(practice|close|claims|a\/?r|trust)\b/
+  );
+  if (deskJump) {
+    const raw = deskJump[1].replace("/", "");
+    const d = raw === "ar" ? "ar" : raw;
+    setDesk(d);
+    setHalPrint(`Switched to ${DESKS[currentDesk].title}.`, "BOARD");
+    busy = false;
+    btn.disabled = false;
+    return;
+  }
+
   try {
     const page = (context && context.page) || "hal";
-    const body = { query, page, context: context || {} };
     const res = await apexFetch(`${API}/hal/board-actions`, {
       method: "POST",
-      body: JSON.stringify(body),
+      body: JSON.stringify({ query, page, context: context || {} }),
     });
     const board = await res.json().catch(() => ({}));
-    let results = [];
     let actions = Array.isArray(board.actions) ? board.actions.slice() : [];
-
-    // Guarantee a desk focus action when a widget context was provided.
     if (context && context.widgetId) {
       const hasFocus = actions.some(
         (a) => a && (a.type === "focus_widget" || a.type === "highlight_widget")
@@ -281,13 +656,9 @@ async function runHal(query, context) {
         ].concat(actions);
       }
     }
-
-    if (actions.length) {
-      results = await applyActions(actions, preferredPane);
-    } else if (preferredPane) {
-      focusPane(preferredPane);
-    }
-
+    const results = actions.length
+      ? await applyActions(actions, preferredPane)
+      : (preferredPane && focusPane(preferredPane), []);
     let reply = "";
     let mode = "BOARD";
     if (board.handled || (context && context.widgetId && results.length)) {
@@ -295,12 +666,10 @@ async function runHal(query, context) {
         board.reply ||
           (Array.isArray(board.notes) && board.notes.join(" ")) ||
           (context && context.widgetId
-            ? `Focusing widget \`${context.widgetId}\` (import-backed display only).`
+            ? `Focusing widget \`${context.widgetId}\` on ${DESKS[currentDesk].title} (import-backed only).`
             : "Board updated.")
       );
-      mode = "BOARD";
     } else {
-      document.getElementById("cmdStatus").textContent = "DESK · evaluate-query…";
       mode = "CHAT";
       try {
         const chatRes = await apexFetch("/api/hal/evaluate-query", {
@@ -310,58 +679,38 @@ async function runHal(query, context) {
             lane: "chat8b",
             shiftContext: {
               page,
-              desk: "terminal",
+              desk: currentDesk,
               widgetId: context && context.widgetId,
               honesty: "Do not invent financial dollar amounts. Prefer import-backed facts.",
-              boardHint: board && board.reply,
             },
           }),
         });
         const chat = await chatRes.json().catch(() => ({}));
         reply = String((chat && (chat.text || chat.reply || (chat.message && chat.message.content))) || "");
         if (!reply && chat && chat.error) {
-          const err = String(chat.error);
-          if (/connection refused|ECONNREFUSED|hub|offline|fetch failed/i.test(err)) {
-            reply =
-              "Hub offline. Grounded tools still work: Sync, Trust ladder, exception tape, board focus. I will not invent SoftDent/A/R dollars.";
-          } else {
-            reply = "HAL unavailable: " + err;
-          }
+          reply = /connection refused|ECONNREFUSED|hub|offline|fetch failed/i.test(String(chat.error))
+            ? "Hub offline. Grounded tools still work across desks: Sync, Trust, board focus. Empty ≠ $0."
+            : "HAL unavailable: " + chat.error;
         }
       } catch (err) {
-        reply = "Hub unreachable. Use Sync / Trust / tape — board-actions still live. " + err.message;
+        reply = "Hub unreachable. Board-actions still live on every desk. " + err.message;
       }
       if (!reply) reply = "No conversational reply — board path only.";
     }
-
     const receipt = results.length ? `\n\n[actions: ${results.join(", ")}]` : "";
     setHalPrint(reply + receipt, mode);
     document.getElementById("cmdStatus").textContent =
-      `DESK · ${mode === "BOARD" ? "board-handled" : "chat"} · ${results.length} actions`;
+      `TERMINAL · ${DESKS[currentDesk].label} · ${mode === "BOARD" ? "board" : "chat"} · ${results.length} actions`;
     document.getElementById("liveDot").classList.remove("off");
   } catch (err) {
     setHalPrint("Board-actions failed: " + err.message, "ERR");
     document.getElementById("liveDot").classList.add("off");
-    document.getElementById("cmdStatus").textContent = "DESK · error";
+    document.getElementById("cmdStatus").textContent = "TERMINAL · error";
     toast(err.message);
   } finally {
     busy = false;
     btn.disabled = false;
   }
-}
-
-function activatePane(paneId) {
-  const spec = PANE_SPEC[paneId];
-  if (!spec) return;
-  focusPane(paneId);
-  const ask = "explain this widget";
-  document.getElementById("q").value = `${ask} · ${spec.label} · ${spec.widgetId}`;
-  runHal(ask, {
-    widgetId: spec.widgetId,
-    page: spec.page,
-    deskPane: paneId,
-    label: spec.label,
-  });
 }
 
 async function fetchWidgets(page, sub) {
@@ -376,266 +725,231 @@ async function fetchWidgets(page, sub) {
   return map;
 }
 
-function pickWidget(map, ids) {
-  for (const id of ids) {
-    if (map && map[id]) return map[id];
+function fillNote(el, w) {
+  if (!el) return;
+  const gate = el.querySelector('[data-role="gate"]');
+  const list = el.querySelector('[data-role="list"]');
+  const val = el.querySelector('[data-role="val"]');
+  if (!w) {
+    if (gate) gate.textContent = "Widget unavailable";
+    if (val) val.textContent = "—";
+    return;
   }
-  return null;
+  if (val) {
+    val.textContent = widgetStatusLabel(w);
+    val.className = "val " + (w.status === "empty" ? "blocked" : w.status === "warn" ? "blocked" : "up");
+  }
+  if (gate) {
+    gate.textContent = String(w.emptyMessage || w.message || w.hint || w.label || w.id).slice(0, 140);
+  }
+  if (list) {
+    const bits = [];
+    if (w.gapCode) bits.push(`gap ${w.gapCode}`);
+    if (Array.isArray(w.priorities)) w.priorities.slice(0, 4).forEach((p) => bits.push(String(p)));
+    if (Array.isArray(w.checks)) w.checks.slice(0, 4).forEach((c) => bits.push(String(c.label || c)));
+    if (Array.isArray(w.pills)) {
+      w.pills.slice(0, 4).forEach((p) => {
+        bits.push(`${p.label}: ${p.empty || p.value == null ? "empty" : p.value}`);
+      });
+    }
+    list.innerHTML = bits.map((b) => `<div>${escapeHtml(b)}</div>`).join("") || "<div>No detail rows</div>";
+  }
 }
 
-function widgetStatusLabel(w) {
-  if (!w) return "—";
-  const st = String(w.status || "").toLowerCase();
-  if (st === "empty" || w.emptyMessage) return "GATED";
-  if (st === "warn" || st === "warning") return "WARN";
-  if (st === "ok" || st === "ready") return "LIVE";
-  if (st === "partial") return "PARTIAL";
-  return (st || "LIVE").toUpperCase();
+function applyLiveToStage() {
+  const desk = DESKS[currentDesk];
+  (desk.panes || []).forEach((pane) => {
+    const el = document.querySelector(`#stage .pane[data-pane="${pane.id}"]`);
+    if (!el) return;
+    const w = widgetById(pane.widgetId);
+    const val = el.querySelector('[data-role="val"]');
+    const gate = el.querySelector('[data-role="gate"]');
+
+    if (pane.kind === "dual") {
+      const empty = !w || w.status === "empty";
+      if (val) {
+        val.textContent = empty ? "GATED" : "LIVE";
+        val.className = "val " + (empty ? "blocked" : "up");
+      }
+      if (gate) gate.textContent = empty ? String((w && (w.emptyMessage || w.hint)) || "Need periods").slice(0, 72) : "Import-backed";
+      if (w && !empty) {
+        const prod = Array.isArray(w.production) ? w.production.map((p) => (p && p.y != null ? p.y : p)) : [];
+        const coll = Array.isArray(w.collections) ? w.collections.map((p) => (p && p.y != null ? p.y : p)) : [];
+        const pEl = el.querySelector('[data-role="prod"]');
+        const cEl = el.querySelector('[data-role="coll"]');
+        if (pEl && prod.length) pEl.setAttribute("points", pointsToPolyline(prod, 640, 160));
+        if (cEl && coll.length) cEl.setAttribute("points", pointsToPolyline(coll, 640, 160));
+      }
+      return;
+    }
+
+    if (pane.kind === "status-bars" || pane.kind === "status-bars-alt") {
+      const empty = !w || w.status === "empty";
+      if (val) {
+        val.textContent = empty ? "GATED" : "LIVE";
+        val.className = "val " + (empty ? "blocked" : "up");
+      }
+      if (gate) gate.textContent = String((w && (w.emptyMessage || w.gapCode || w.hint)) || "…").slice(0, 64);
+      mkBars(el.querySelector('[data-role="bars"]'), empty ? [null, null, null, null, null, null, null] : [0.7, 0.8, 0.65, 0.75, 0.7, 0.85, 0.6], pane.kind === "status-bars-alt");
+      return;
+    }
+
+    if (pane.kind === "claims-bars") {
+      const svg = el.querySelector('[data-role="claims"]');
+      const cols = w && Array.isArray(w.columns) ? w.columns : [];
+      const counts = cols.map((c) => Number(c.count || 0));
+      const gated = !w || w.status === "empty" || !cols.length || counts.every((n) => n === 0);
+      if (val) {
+        val.textContent = gated ? "GATED 0" : `n=${counts.reduce((a, b) => a + b, 0)}`;
+        val.className = "val " + (gated ? "blocked" : "up");
+      }
+      if (!svg) return;
+      if (!cols.length) {
+        svg.innerHTML = `<text x="20" y="60" fill="#f5a623" font-size="11" font-family="ui-monospace, monospace">${escapeHtml(
+          String((w && w.emptyMessage) || "No claims aging")
+        ).slice(0, 48)}</text>`;
+        return;
+      }
+      const max = Math.max(1, ...counts);
+      const colors = { cyan: "#4da3ff", amber: "#f5a623", rose: "#ff5c5c" };
+      svg.innerHTML = cols
+        .map((c, i) => {
+          const h = gated ? 10 : Math.max(8, Math.round((Number(c.count || 0) / max) * 90));
+          const x = 24 + i * 50;
+          const y = 110 - h;
+          return `<rect x="${x}" y="${y}" width="36" height="${h}" fill="${colors[c.tone] || "#4da3ff"}" opacity="${gated ? 0.35 : 1}"/>
+            <text x="${x}" y="14" fill="#8b97a8" font-size="9" font-family="ui-monospace, monospace">${escapeHtml(String(c.label || c.bucket).slice(0, 6))}</text>
+            <text x="${x + 10}" y="${y - 4}" fill="#8b97a8" font-size="9" font-family="ui-monospace, monospace">${Number(c.count || 0)}</text>`;
+        })
+        .join("");
+      return;
+    }
+
+    if (pane.kind === "ar-donut") {
+      const empty = !w || w.status === "empty" || !Array.isArray(w.series) || !w.series.length;
+      if (val) {
+        val.textContent = empty ? "GATED" : "LIVE";
+        val.className = "val " + (empty ? "blocked" : "up");
+      }
+      if (gate) gate.textContent = empty ? String((w && w.emptyMessage) || "blocked").slice(0, 24) : "import-backed";
+      return;
+    }
+
+    if (pane.kind === "heat") {
+      const heat = el.querySelector('[data-role="heat"]');
+      const priorities = w && Array.isArray(w.priorities) ? w.priorities : [];
+      if (val) val.textContent = priorities.length ? `${priorities.length} pri` : widgetStatusLabel(w);
+      if (heat) {
+        heat.innerHTML = Array.from({ length: 18 }, (_, i) => {
+          const p = priorities[i];
+          const cls = p ? (/missing|gap|stale|NO_PERIOD|error/i.test(String(p)) ? "r2" : "g2") : i % 5 === 0 ? "r1" : "g1";
+          const title = p ? ` title="${escapeHtml(String(p))}"` : "";
+          return `<b class="${cls}"${title}>${i + 1}</b>`;
+        }).join("");
+      }
+      return;
+    }
+
+    if (pane.kind === "tape") {
+      const body = el.querySelector('[data-role="tape"]');
+      const lines = w && Array.isArray(w.lines) ? w.lines : liveBundle.consoleLines || [];
+      if (val) val.textContent = `${Math.min(lines.length, 8)} rows`;
+      if (body) {
+        body.innerHTML = lines
+          .slice(0, 8)
+          .map((line) => {
+            const lvl = String(line.level || "info").toLowerCase();
+            const cls = lvl === "error" ? "dn" : lvl === "warn" || lvl === "warning" ? "blocked" : "flat";
+            const lab = lvl === "error" ? "ERR" : lvl === "warn" || lvl === "warning" ? "WARN" : "INFO";
+            return `<tr><td>${escapeHtml(String(line.source || "sys").slice(0, 10))}</td><td>${escapeHtml(
+              String(line.message || "").slice(0, 48)
+            )}</td><td class="${cls}">${lab}</td></tr>`;
+          })
+          .join("") || `<tr><td>—</td><td>No lines</td><td class="flat">SYS</td></tr>`;
+      }
+      return;
+    }
+
+    if (pane.kind === "movers") {
+      const body = el.querySelector('[data-role="movers"]');
+      const huddle = widgetById("om-daily-huddle");
+      const sync = widgetById("hal-sync-cta");
+      const rows = [];
+      ((huddle && huddle.priorities) || []).slice(0, 3).forEach((p, i) => {
+        rows.push({
+          s: String(p).slice(0, 28),
+          d: `#${i + 1}`,
+          st: "Huddle",
+          cls: /missing|gap|stale|NO_PERIOD/i.test(String(p)) ? "dn" : "flat",
+        });
+      });
+      if (sync) rows.push({ s: "Sync CTA", d: sync.syncImports ? "RUN" : "—", st: widgetStatusLabel(sync), cls: "blocked" });
+      if (w) rows.push({ s: "Insight", d: w.status === "empty" ? "none" : "ready", st: widgetStatusLabel(w), cls: "flat" });
+      if (val) val.textContent = "LIVE";
+      if (body) {
+        body.innerHTML = rows
+          .slice(0, 5)
+          .map(
+            (r) =>
+              `<tr><td>${escapeHtml(r.s)}</td><td class="${r.cls}">${escapeHtml(r.d)}</td><td>${escapeHtml(r.st)}</td></tr>`
+          )
+          .join("");
+      }
+      return;
+    }
+
+    if (pane.kind === "vitals") {
+      const box = el.querySelector('[data-role="vitals"]');
+      const pills = w && Array.isArray(w.pills) ? w.pills : [];
+      if (val) val.textContent = pills.length ? `${pills.length} kpi` : widgetStatusLabel(w);
+      if (box) {
+        box.innerHTML = pills
+          .slice(0, 6)
+          .map((p) => {
+            const empty = p.empty || p.value == null;
+            return `<div class="kpi"><div class="l">${escapeHtml(p.label || p.id)}</div><div class="n ${
+              empty ? "blocked" : "up"
+            }">${empty ? "—" : escapeHtml(String(p.value))}</div><div class="s">${empty ? "empty ≠ $0" : "import"}</div></div>`;
+          })
+          .join("") || `<div class="note">${escapeHtml((w && w.emptyMessage) || "No vitals")}</div>`;
+      }
+      return;
+    }
+
+    if (pane.kind === "trust-health") {
+      const summary = liveBundle.summary || {};
+      const conn = el.querySelector('[data-role="conn"]');
+      const miss = el.querySelector('[data-role="miss"]');
+      if (conn) conn.textContent = `${summary.connected || 0}/${summary.total || 19}`;
+      if (miss) miss.textContent = String(summary.missing || 0);
+      if (val) val.textContent = w && w.value != null ? String(w.value) : `${summary.connected || 0}/${summary.total || 19}`;
+      if (gate) gate.textContent = String((w && w.hint) || "Import summary is staff-facing truth").slice(0, 120);
+      return;
+    }
+
+    fillNote(el, w);
+  });
 }
 
 function renderTicker(summary) {
   const s = summary || {};
   const connected = Number(s.connected || 0);
   const missing = Number(s.missing || 0);
-  const total = Number(s.total || connected + missing || 19);
-  const degraded = missing > 0 || connected < Math.max(1, total);
-  const sd = liveBundle.sdGap;
-  const qb = liveBundle.qbAp;
+  const total = Number(s.total || 19);
+  const degraded = missing > 0;
   const items = [
-    ["SD.CASH", sd && sd.status === "empty" ? "n/a" : degraded ? "n/a" : "live", degraded ? "flat" : "up"],
-    ["SD.GAP", sd ? widgetStatusLabel(sd) : "—", sd && sd.status === "empty" ? "dn" : "flat"],
-    ["QB.AP", qb ? widgetStatusLabel(qb) : "—", qb && qb.status === "empty" ? "dn" : "up"],
-    ["AR.90", degraded ? "GATED" : "live", degraded ? "flat" : "up"],
-    ["CLM", liveBundle.claimsAge ? widgetStatusLabel(liveBundle.claimsAge) : "—", "flat"],
+    ["DESK", DESKS[currentDesk].label, "flat"],
     ["IMP", `${connected}/${total}`, degraded ? "dn" : "up"],
-    ["HAL", "READY", "flat"],
+    ["SD", widgetStatusLabel(widgetById("softdent-collections-gap")), "blocked"],
+    ["QB", widgetStatusLabel(widgetById("qb-ap-aging")), "blocked"],
+    ["CLM", widgetStatusLabel(widgetById("claims-aging-exposure")), "flat"],
+    ["AR", widgetStatusLabel(widgetById("ar-aging-chart")), "blocked"],
     ["SYNC", "READY", "up"],
+    ["HAL", "READY", "flat"],
   ];
   document.getElementById("ticker").innerHTML = items
-    .map(([k, v, c]) => `<span><b>${k}</b><span class="${c}">${v}</span></span>`)
+    .map(([k, v, c]) => `<span><b>${k}</b><span class="${c}">${escapeHtml(String(v))}</span></span>`)
     .join("");
-}
-
-function renderTrust(summary) {
-  const missing = Number((summary && summary.missing) || 0);
-  const connected = Number((summary && summary.connected) || 0);
-  const total = Math.max(1, Number((summary && summary.total) || 19));
-  const base = Math.round((connected / total) * 100);
-  const health = liveBundle.importHealth;
-  const label = health && health.value != null ? String(health.value) : `${connected}/${total}`;
-  document.querySelector('[data-pane="trust"] .ph .val') &&
-    (document.querySelector('[data-pane="trust"] .ph .val').textContent = label);
-  const rows = [
-    ["SoftDent", Math.max(6, base - 18), missing ? "dn" : "up"],
-    ["QB", Math.max(10, base), missing ? "blocked" : "up"],
-    ["ERA", Math.max(6, base - 14), missing ? "dn" : "up"],
-    ["Bridge", Math.max(8, base - 4), missing ? "blocked" : "up"],
-  ];
-  document.getElementById("trustLadder").innerHTML = rows
-    .map(
-      ([name, pct, cls]) => `
-      <div style="display:grid;grid-template-columns:70px 1fr 28px;gap:6px;align-items:center">
-        <span class="flat">${name}</span>
-        <div style="background:#1a222d;height:10px"><div style="width:${pct}%;height:100%;background:${
-          cls === "up" ? "var(--green)" : cls === "dn" ? "var(--red)" : "var(--amber)"
-        }"></div></div>
-        <span class="${cls}">${pct}%</span>
-      </div>`
-    )
-    .join("");
-}
-
-function renderTapeFromConsole(lines) {
-  const rows = (lines || []).slice(0, 5).map((line) => {
-    const lvl = String(line.level || "info").toLowerCase();
-    const src = String(line.source || "sys");
-    const owner = src.includes("softdent")
-      ? "SD"
-      : src.includes("quickbooks") || src.includes("qb")
-        ? "QB"
-        : src.includes("era")
-          ? "ERA"
-          : src.includes("import")
-            ? "IMP"
-            : "BR";
-    const cls = lvl === "error" || lvl === "err" ? "dn" : lvl === "warn" || lvl === "warning" ? "blocked" : "flat";
-    return {
-      t: String(line.at || "—").slice(0, 5) || "—",
-      o: owner,
-      e: String(line.message || "").slice(0, 42),
-      lvl: lvl === "error" ? "ERR" : lvl === "warn" || lvl === "warning" ? "WARN" : "INFO",
-      cls,
-    };
-  });
-  if (!rows.length) {
-    rows.push({ t: "—", o: "BR", e: "No console lines", lvl: "SYS", cls: "flat" });
-  }
-  document.getElementById("tapeBody").innerHTML = rows
-    .map((r) => `<tr><td>${escapeHtml(r.t)}</td><td>${escapeHtml(r.o)}</td><td>${escapeHtml(r.e)}</td><td class="${r.cls}">${r.lvl}</td></tr>`)
-    .join("");
-}
-
-function renderMoversLive() {
-  const huddle = liveBundle.huddle;
-  const sync = liveBundle.syncCta;
-  const insight = liveBundle.insight;
-  const priorities = (huddle && Array.isArray(huddle.priorities) ? huddle.priorities : []).slice(0, 4);
-  const rows = [];
-  if (priorities.length) {
-    priorities.forEach((p, i) => {
-      rows.push({
-        s: String(p).slice(0, 28),
-        d: `#${i + 1}`,
-        st: "Huddle",
-        cls: /missing|gap|stale|NO_PERIOD/i.test(String(p)) ? "dn" : "flat",
-      });
-    });
-  }
-  if (sync) {
-    rows.push({
-      s: "Sync CTA",
-      d: sync.syncImports ? "RUN" : "—",
-      st: widgetStatusLabel(sync),
-      cls: sync.syncImports ? "blocked" : "up",
-    });
-  }
-  if (insight) {
-    rows.push({
-      s: "AI insight",
-      d: insight.status === "empty" ? "none" : "ready",
-      st: widgetStatusLabel(insight),
-      cls: insight.status === "empty" ? "flat" : "up",
-    });
-  }
-  if (!rows.length) {
-    rows.push({ s: "No movers yet", d: "—", st: "Sync", cls: "blocked" });
-  }
-  document.getElementById("moversBody").innerHTML = rows
-    .slice(0, 5)
-    .map((r) => `<tr><td>${escapeHtml(r.s)}</td><td class="${r.cls}">${escapeHtml(r.d)}</td><td>${escapeHtml(r.st)}</td></tr>`)
-    .join("");
-}
-
-function applyLiveCharts() {
-  const dual = liveBundle.dualTrend;
-  const vitals = liveBundle.vitals;
-  const prodGate = document.getElementById("prodGate");
-  const prodVal = document.getElementById("prodVal");
-  if (dual) {
-    const prod = dual.production || dual.prod || [];
-    const coll = dual.collections || dual.coll || [];
-    const prodPts = Array.isArray(prod)
-      ? prod.map((p) => (p && typeof p === "object" ? p.y ?? p.value : p))
-      : [];
-    const collPts = Array.isArray(coll)
-      ? coll.map((p) => (p && typeof p === "object" ? p.y ?? p.value : p))
-      : [];
-    const empty = dual.status === "empty" || (!prodPts.length && !collPts.length);
-    prodVal.textContent = empty ? "GATED" : "LIVE";
-    prodVal.className = "val " + (empty ? "blocked" : "up");
-    prodGate.textContent = empty
-      ? String(dual.emptyMessage || dual.hint || "Need SoftDent periods — empty ≠ $0").slice(0, 72)
-      : "Import-backed dual trend";
-    if (!empty && (prodPts.length || collPts.length)) {
-      document.getElementById("prodLine").setAttribute("points", pointsToPolyline(prodPts, 640, 160) || "20,120 620,120");
-      document.getElementById("collLine").setAttribute("points", pointsToPolyline(collPts, 640, 160) || "20,132 620,132");
-    }
-  } else if (vitals && Array.isArray(vitals.pills)) {
-    const emptyMoney = vitals.pills.filter((p) => p && (p.empty || p.value == null)).length;
-    prodVal.textContent = emptyMoney ? "GATED" : "VITALS";
-    prodGate.textContent = `${vitals.pills.length} vitals · ${emptyMoney} empty (no invent $)`;
-  }
-
-  const sd = liveBundle.sdGap;
-  const sdGate = document.getElementById("sdGate");
-  if (sd) {
-    const empty = sd.status === "empty";
-    sdGate.textContent = String(sd.emptyMessage || sd.gapCode || sd.hint || "SoftDent").slice(0, 64);
-    // Honesty: muted bars when gated — do not invent a production index.
-    mkBars(document.getElementById("sdBars"), empty ? [null, null, null, null, null, null, null] : [0.55, 0.7, 0.62, 0.8, 0.66, 0.72, 0.58]);
-    const sdVal = document.querySelector('[data-pane="sd"] .ph .val');
-    if (sdVal) {
-      sdVal.textContent = empty ? "GATED" : "LIVE";
-      sdVal.className = "val " + (empty ? "blocked" : "up");
-    }
-  }
-
-  const claims = liveBundle.claimsAge;
-  const claimsVal = document.getElementById("claimsVal");
-  const claimsSvg = document.querySelector('[data-pane="claims"] svg.chart');
-  if (claims && Array.isArray(claims.columns) && claimsSvg) {
-    const cols = claims.columns;
-    const max = Math.max(1, ...cols.map((c) => Number(c.count || 0)));
-    const colors = { cyan: "#4da3ff", amber: "#f5a623", rose: "#ff5c5c", red: "#ff5c5c" };
-    const labels = cols.map((c) => c.label || c.bucket || "");
-    const counts = cols.map((c) => Number(c.count || 0));
-    const gated = claims.status === "empty" || counts.every((n) => n === 0);
-    claimsVal.textContent = gated ? "GATED 0" : `Buckets ${counts.reduce((a, b) => a + b, 0)}`;
-    claimsVal.className = "val " + (gated ? "blocked" : "up");
-    const barW = 36;
-    const gap = 14;
-    const startX = 24;
-    let html = "";
-    cols.forEach((c, i) => {
-      const h = gated ? 10 : Math.max(8, Math.round((Number(c.count || 0) / max) * 90));
-      const x = startX + i * (barW + gap);
-      const y = 110 - h;
-      const fill = colors[c.tone] || "#4da3ff";
-      html += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="${fill}" opacity="${gated ? 0.35 : 1}"/>`;
-      html += `<text x="${x}" y="14" fill="#8b97a8" font-size="9" font-family="ui-monospace, monospace">${escapeHtml(
-        String(labels[i]).slice(0, 6)
-      )}</text>`;
-      html += `<text x="${x + 8}" y="${y - 4}" fill="#8b97a8" font-size="9" font-family="ui-monospace, monospace">${counts[i]}</text>`;
-    });
-    if (gated) {
-      html += `<text x="24" y="60" fill="#f5a623" font-size="10" font-family="ui-monospace, monospace">${escapeHtml(
-        String(claims.emptyMessage || "No aged claims — empty ≠ $0").slice(0, 48)
-      )}</text>`;
-    }
-    claimsSvg.innerHTML = html;
-  }
-
-  const ar = liveBundle.arChart;
-  const arVal = document.getElementById("arVal");
-  const arNote = document.getElementById("arNote");
-  if (ar) {
-    const empty = ar.status === "empty" || !Array.isArray(ar.series) || !ar.series.length;
-    arVal.textContent = empty ? "GATED" : "LIVE";
-    arVal.className = "val " + (empty ? "blocked" : "up");
-    arNote.textContent = empty ? String(ar.emptyMessage || "blocked").slice(0, 24) : "import-backed";
-  }
-
-  const qb = liveBundle.qbAp;
-  const qbVal = document.getElementById("qbVal");
-  const qbGate = document.getElementById("qbGate");
-  if (qb) {
-    const empty = qb.status === "empty";
-    qbVal.textContent = empty ? "GATED" : "LIVE";
-    qbVal.className = "val " + (empty ? "blocked" : "up");
-    qbGate.textContent = String(qb.emptyMessage || qb.hint || "QB").slice(0, 48);
-    mkBars(
-      document.getElementById("qbBars"),
-      empty ? [null, null, null, null, null, null, null] : [0.9, 0.85, 0.7, 0.65, 0.75, 0.8, 0.72],
-      true
-    );
-  }
-
-  const huddle = liveBundle.huddle;
-  const heat = document.getElementById("heat");
-  if (huddle && heat) {
-    const priorities = Array.isArray(huddle.priorities) ? huddle.priorities : [];
-    heat.innerHTML = Array.from({ length: 18 }, (_, i) => {
-      const p = priorities[i];
-      let cls = "g1";
-      if (p) {
-        cls = /missing|gap|NO_PERIOD|stale|error/i.test(String(p)) ? "r2" : "g2";
-      } else if ([2, 7, 16].includes(i)) cls = "r1";
-      const title = p ? ` title="${escapeHtml(String(p))}"` : "";
-      return `<b class="${cls}"${title}>${i + 1}</b>`;
-    }).join("");
-    const heatVal = document.querySelector('[data-pane="heat"] .ph .val');
-    if (heatVal) heatVal.textContent = priorities.length ? `${priorities.length} pri` : "LIVE";
-  }
 }
 
 async function loadLiveWidgets() {
@@ -649,42 +963,14 @@ async function loadLiveWidgets() {
     fetchWidgets("hal"),
     fetchWidgets("hal", "system-logs"),
   ]);
-
+  const byId = Object.assign({}, financial, softdent, claims, ar, qb, om, hal, logs);
+  const consoleW = logs["hal-sys-console"];
   liveBundle = {
-    dualTrend: pickWidget(financial, ["financial-dual-trend", "revenue-composition"]),
-    vitals: pickWidget(financial, ["financial-vital-signs"]),
-    sdGap: pickWidget(softdent, ["softdent-collections-gap", "softdent-production-gap"]),
-    claimsAge: pickWidget(claims, ["claims-aging-exposure", "claims-open-kanban"]),
-    arChart: pickWidget(ar, ["ar-aging-chart", "ar-aging-outlook"]),
-    qbAp: pickWidget(qb, ["qb-ap-aging", "qb-pl-summary", "qb-net-profit-gap"]),
-    huddle: pickWidget(om, ["om-daily-huddle", "om-priorities"]),
-    importHealth: pickWidget(hal, ["hal-import-health"]),
-    posture: pickWidget(hal, ["hal-program-posture"]),
-    insight: pickWidget(hal, ["hal-ai-insight"]),
-    syncCta: pickWidget(hal, ["hal-sync-cta"]),
-    console: pickWidget(logs, ["hal-sys-console"]),
+    byId,
+    consoleLines: consoleW && Array.isArray(consoleW.lines) ? consoleW.lines : [],
+    summary: liveBundle.summary || {},
   };
-
-  // Keep HTML data-widget attributes aligned with resolved live ids.
-  Object.entries(PANE_SPEC).forEach(([pane, spec]) => {
-    const el = document.querySelector(`[data-pane="${pane}"]`);
-    if (!el) return;
-    el.setAttribute("data-widget", spec.widgetId);
-    el.setAttribute("data-page", spec.page);
-  });
-
-  if (liveBundle.console && Array.isArray(liveBundle.console.lines)) {
-    renderTapeFromConsole(liveBundle.console.lines);
-  }
-  renderMoversLive();
-  applyLiveCharts();
-
-  if (liveBundle.posture) {
-    const msg = String(liveBundle.posture.message || liveBundle.posture.hint || "");
-    if (msg && document.getElementById("halPrint").dataset.seeded !== "1") {
-      // leave boot message; posture used in status
-    }
-  }
+  applyLiveToStage();
 }
 
 async function refreshStatus() {
@@ -695,48 +981,30 @@ async function refreshStatus() {
   const summary = (data.readiness && data.readiness.summary) || data.summary || {};
   const connected = Number(summary.connected != null ? summary.connected : metrics.importConnected || 0);
   const missing = Number(summary.missing != null ? summary.missing : metrics.importMissing || 0);
-  const partial = Number(summary.partial || 0);
-  const total = Number(
-    summary.total != null ? summary.total : metrics.importTotal || connected + missing + partial || 19
-  );
-  const degraded =
-    missing > 0 ||
-    Boolean(data.importDegraded) ||
-    /missing import/i.test(String(data.suggestion || ""));
+  const total = Number(summary.total != null ? summary.total : metrics.importTotal || 19);
+  const degraded = missing > 0 || /missing import/i.test(String(data.suggestion || ""));
+  liveBundle.summary = { connected, missing, total, degraded };
 
   document.getElementById("kpiImp").textContent = `${connected}/${total}`;
   document.getElementById("kpiImp").className = "n " + (degraded ? "blocked" : "up");
   document.getElementById("kpiImpS").textContent = degraded ? `${missing} missing` : "connected";
-  document.getElementById("kpiImpS").className = "s " + (degraded ? "dn" : "up");
-  const orchOn = !!(data.orchestrator && data.orchestrator.enabled);
-  document.getElementById("kpiHub").textContent = orchOn ? "ORCH" : "—";
-  document.getElementById("kpiHub").className = "n " + (orchOn ? "up" : "flat");
-  document.getElementById("kpiHubS").textContent = orchOn ? "orchestrator" : "status";
   document.getElementById("postureVal").textContent = degraded ? "DEGRADED" : "READY";
   document.getElementById("postureVal").className = "val " + (degraded ? "dn" : "up");
   document.getElementById("halTools").textContent = "Tools OK";
   document.getElementById("halTools").className = "up";
+  const orchOn = !!(data.orchestrator && data.orchestrator.enabled);
   document.getElementById("halHubLbl").textContent = orchOn ? "Orch ON" : "Hub —";
   document.getElementById("liveDot").classList.remove("off");
-
-  const summaryView = { connected, missing, partial, total };
-  renderTicker(summaryView);
-  renderTrust(summaryView);
-  document.getElementById("cmdStatus").textContent =
-    `DESK · ${degraded ? "import degraded" : "ready"} · HAL wired`;
+  renderTicker(liveBundle.summary);
 
   if (!document.getElementById("halPrint").dataset.seeded) {
-    const tip = String(data.suggestion || "").trim();
     setHalPrint(
-      (degraded
-        ? "Desk online. Imports degraded — click any pane (board focus) or type sync imports. Empty ≠ $0."
-        : "Desk online. Every pane uses explain-this-widget board-actions + live widget status.") +
-        (tip ? "\n\n" + tip : ""),
+      `Multi-desk terminal online · page ${DESKS[currentDesk].title}. Click panes for board focus. Type "go to claims" / "go to trust". Empty ≠ $0.` +
+        (data.suggestion ? `\n\n${data.suggestion}` : ""),
       "READY"
     );
     document.getElementById("halPrint").dataset.seeded = "1";
   }
-  return summaryView;
 }
 
 async function refreshAll() {
@@ -746,6 +1014,7 @@ async function refreshAll() {
   } catch (err) {
     toast("Widget load: " + err.message);
   }
+  renderTicker(liveBundle.summary || {});
 }
 
 function tickClock() {
@@ -757,41 +1026,19 @@ function tickClock() {
     " ET";
 }
 
-function wireUi() {
-  mkBars(document.getElementById("sdBars"), [null, null, null, null, null, null, null]);
-  mkBars(document.getElementById("qbBars"), [null, null, null, null, null, null, null], true);
-  document.getElementById("heat").innerHTML = Array.from({ length: 18 }, (_, i) => `<b>${i + 1}</b>`).join("");
-
-  tickClock();
-  setInterval(tickClock, 1000);
-
-  document.querySelectorAll(".pane[data-pane]").forEach((pane) => {
-    pane.addEventListener("click", () => activatePane(pane.dataset.pane));
+function wireChrome() {
+  document.querySelectorAll("#tabs [data-desk], #nav [data-desk]").forEach((btn) => {
+    btn.addEventListener("click", () => setDesk(btn.getAttribute("data-desk")));
   });
-
-  document.querySelectorAll(".nav [data-nav]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".nav button").forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-      const nav = btn.getAttribute("data-nav");
-      const spec = NAV_SPEC[nav];
-      if (!spec) return;
-      focusPane(spec.pane);
-      document.getElementById("q").value = `explain this widget · ${spec.widgetId}`;
-      runHal("explain this widget", {
-        widgetId: spec.widgetId,
-        page: spec.page,
-        deskPane: spec.pane,
-      });
-    });
-  });
+  window.addEventListener("popstate", () => setDesk(parseDeskFromLocation(), false));
+  window.addEventListener("hashchange", () => setDesk(parseDeskFromLocation(), false));
 
   document.getElementById("cmd").addEventListener("submit", (e) => {
     e.preventDefault();
     const input = document.getElementById("q");
     let q = input.value.trim();
     if (!q) return;
-    const focused = document.querySelector(".pane.is-focus");
+    const focused = document.querySelector("#stage .pane.is-focus, .side .pane.is-focus");
     const ctx = focused
       ? {
           widgetId: focused.getAttribute("data-widget"),
@@ -799,24 +1046,26 @@ function wireUi() {
           deskPane: focused.dataset.pane,
         }
       : { page: "hal" };
-    // If user typed a bare widget question while a pane is focused, force explain path.
     if (focused && /^(explain|what is this|help)$/i.test(q)) q = "explain this widget";
     runHal(q, ctx);
   });
+
+  tickClock();
+  setInterval(tickClock, 1000);
 }
 
 async function boot() {
   try {
-    wireUi();
+    wireChrome();
     await ensureSession();
+    setDesk(parseDeskFromLocation(), false);
+    if (!location.hash) history.replaceState({ desk: currentDesk }, "", `#/${currentDesk}`);
     await refreshAll();
-    setInterval(() => {
-      refreshAll().catch(() => {});
-    }, 60000);
+    setInterval(() => refreshAll().catch(() => {}), 60000);
   } catch (err) {
     document.getElementById("liveDot").classList.add("off");
-    setHalPrint("Desk boot failed: " + (err && err.message ? err.message : err), "ERR");
-    document.getElementById("cmdStatus").textContent = "DESK · boot failed";
+    setHalPrint("Terminal boot failed: " + (err && err.message ? err.message : err), "ERR");
+    document.getElementById("cmdStatus").textContent = "TERMINAL · boot failed";
   }
 }
 
