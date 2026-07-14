@@ -32,21 +32,18 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10622"
+BUILD_ID = "hal-10623"
 
 
 def _apex_blank_all_widgets() -> bool:
     """Operator blank-stage: every Apex page returns zero widgets.
 
-    Default ON at runtime. Force off with NR2_APEX_BLANK_WIDGETS=0.
-    Under unittest/pytest (without explicit env), builders stay active so pack tests remain valid.
+    Opt-in only via NR2_APEX_BLANK_WIDGETS=1 (default off for redesign freedom).
     """
     raw = os.getenv("NR2_APEX_BLANK_WIDGETS")
-    if raw is not None and str(raw).strip() != "":
-        return str(raw).strip().lower() not in {"0", "false", "no", "off"}
-    import sys
-
-    return "unittest" not in sys.modules and "pytest" not in sys.modules
+    if raw is None or str(raw).strip() == "":
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4398,45 +4395,19 @@ def build_apex_widgets(
         except Exception:
             pass
 
-    # Content filters only — mosaic / Fibonacci / zero-scroll band packing removed (hal-10622).
-    try:
-        from apex_compact_pages_pack import (
-            apply_collapse_empty_all,
-            apply_kpi_density_contract,
-            normalize_first_viewport,
-            omit_cross_page_duplicates,
-            omit_fresh_stale_alert,
-            omit_until_source_widgets,
-            partition_first_viewport,
-        )
-
-        widgets = omit_until_source_widgets(
-            widgets if isinstance(widgets, list) else [], page=pid, sub=sub_key or ""
-        )
-        widgets = omit_cross_page_duplicates(widgets, page=pid)
-        widgets = omit_fresh_stale_alert(widgets)
-        widgets = apply_collapse_empty_all(widgets, page=pid)
-        widgets = apply_kpi_density_contract(widgets, page=pid, sub=sub_key or "")
-        if not sub_key:
-            widgets = normalize_first_viewport(widgets, page=pid)
-        if not sub_key:
-            widgets = partition_first_viewport(widgets, page=pid, sub="")
-        widgets = omit_until_source_widgets(widgets, page=pid, sub=sub_key or "")
-        widgets = omit_cross_page_duplicates(widgets, page=pid)
-        # Strip leftover mosaic annotations if any builder still emits them.
-        cleaned: list[Any] = []
-        for w in widgets if isinstance(widgets, list) else []:
-            if not isinstance(w, dict):
-                cleaned.append(w)
-                continue
-            item = dict(w)
-            for key in ("band", "tileClass", "mosaicBand", "maxHeight", "zeroScroll"):
-                item.pop(key, None)
-            cleaned.append(item)
-        widgets = cleaned
-        source_note += " +omit-empty+kpi-density+demote-ops+stack-10622"
-    except Exception:
-        pass
+    # Free stage (hal-10623): no omit/partition/KPI-density/zero-scroll packing.
+    # Builders emit the full widget list; client stacks them with natural height.
+    cleaned: list[Any] = []
+    for w in widgets if isinstance(widgets, list) else []:
+        if not isinstance(w, dict):
+            cleaned.append(w)
+            continue
+        item = dict(w)
+        for key in ("band", "tileClass", "mosaicBand", "maxHeight", "zeroScroll"):
+            item.pop(key, None)
+        cleaned.append(item)
+    widgets = cleaned
+    source_note += " +free-stack-10623"
 
     page_label = f"{pid}/{sub_key}" if sub_key else pid
     payload = {

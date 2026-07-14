@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10622",
-  "BUILD_ID": "hal-10622",
-  "assetVersion": "hal-10622",
-  "builtAt": "2026-07-14T12:15:00.000Z",
-  "notes": "hal-10622: remove Apex mosaic/Fibonacci zero-scroll; stacked stage for redesign.",
+  "schemaVersion": "hal-10623",
+  "BUILD_ID": "hal-10623",
+  "assetVersion": "hal-10623",
+  "builtAt": "2026-07-14T12:20:00.000Z",
+  "notes": "hal-10623: free stacked stage — blank/omit/partition/KPI filters off.",
   "staffRenderMode": "apex",
-  "package": "HAL-10622"
+  "package": "HAL-10623"
 }
