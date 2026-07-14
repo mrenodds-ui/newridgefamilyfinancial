@@ -32,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10625"
+BUILD_ID = "hal-10626"
 
 
 def _apex_blank_all_widgets() -> bool:

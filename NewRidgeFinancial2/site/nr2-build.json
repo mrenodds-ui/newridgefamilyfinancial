@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10625",
-  "BUILD_ID": "hal-10625",
-  "assetVersion": "hal-10625",
-  "builtAt": "2026-07-14T13:30:00.000Z",
-  "notes": "hal-10625: harden HAL wire to Import Health, Program Posture, AI Insight.",
+  "schemaVersion": "hal-10626",
+  "BUILD_ID": "hal-10626",
+  "assetVersion": "hal-10626",
+  "builtAt": "2026-07-14T13:40:00.000Z",
+  "notes": "hal-10626: stop insight SSE from remounting HAL and wiping Ask HAL chat.",
   "staffRenderMode": "apex",
-  "package": "HAL-10625"
+  "package": "HAL-10626"
 }

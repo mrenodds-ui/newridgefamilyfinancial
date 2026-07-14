@@ -1,4 +1,4 @@
-"""hal-10625 — HAL medium spine: only full-stack instruments, ordered layout."""
+"""hal-10626 — HAL medium spine: only full-stack instruments, ordered layout."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from apex_backend import BUILD_ID, build_apex_widgets, _WIDGETS_CACHE
 
 class Hal10624MediumSpineTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10625")
+        self.assertEqual(BUILD_ID, "hal-10626")
 
     def test_hal_spine_order_and_ids(self) -> None:
         _WIDGETS_CACHE.clear()
         out = build_apex_widgets("hal", _fill=True)
-        self.assertEqual(out.get("buildId"), "hal-10625")
+        self.assertEqual(out.get("buildId"), "hal-10626")
         self.assertIsNone(out.get("mosaicLayout"))
         ids = [w.get("id") for w in (out.get("widgets") or []) if isinstance(w, dict)]
         self.assertIn("hal-ask", ids)

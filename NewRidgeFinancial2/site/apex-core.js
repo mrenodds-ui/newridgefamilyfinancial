@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10625 (HAL spine ↔ HAL chat wire harden)
+ * Build: hal-10626 (HAL spine ↔ HAL chat wire harden)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10625";
+  const ASSET_V = "hal-10626";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -5357,7 +5357,8 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
                 : id;
           const targetId = HAL_SPINE_IDS.has(id) || HAL_SPINE_IDS.has(spineAlias) ? spineAlias : id;
           if (HAL_SPINE_IDS.has(targetId) && currentPage !== "hal") {
-            await loadPage("hal");
+            // Silent: never wipe an in-flight HAL composer with a full remount.
+            await loadPage("hal", { silent: true });
             await new Promise((r) => setTimeout(r, 120));
           }
           await new Promise((r) => setTimeout(r, 80));
@@ -5591,9 +5592,15 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           q
         );
         if (!wantsNav) {
-          // Stay on HAL chat: no navigate / no mosaic remount via refresh_page.
+          // Stay on HAL chat: no navigate / remount / widget-wide refresh wiping the composer.
           actions = actions.filter(
-            (a) => !(a && (a.type === "navigate" || a.type === "refresh_page"))
+            (a) =>
+              !(
+                a &&
+                (a.type === "navigate" ||
+                  a.type === "refresh_page" ||
+                  a.type === "refresh_widget")
+              )
           );
         }
         if (actions.length) {
@@ -5735,7 +5742,15 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
           const wantsNav = /\b(open|go to|navigate|switch to|take me to)\b/i.test(q);
           const chatSafe = wantsNav
             ? safe
-            : safe.filter((a) => !(a && (a.type === "navigate" || a.type === "refresh_page")));
+            : safe.filter(
+                (a) =>
+                  !(
+                    a &&
+                    (a.type === "navigate" ||
+                      a.type === "refresh_page" ||
+                      a.type === "refresh_widget")
+                  )
+              );
           if (chatSafe.length) await runHalBoardActions(chatSafe);
         } catch (_err) {
           /* ignore bad marker */
@@ -6251,8 +6266,8 @@ if (this.type === "claims-kanban" || this.type === "claims-workbench") {
       if (silent && widgets.size && patchWidgets(list)) {
         /* in-place — no flash */
       } else if (silent && currentPage === "hal" && !currentSub) {
-        // Never remount HAL main while the chat composer is active — that looked like
-        // a full page refresh every time staff hit the question box / sent a message.
+        // Never remount HAL while Ask HAL is focused/busy — remount looked like a full
+        // page refresh and wiped the question box (insight SSE + board refresh races).
         if (!chatComposerActive) softRenderHalMain(list);
       } else if (silent) {
         // Silent poll must never wipe the stage (instBoot looked like a full page refresh).
