@@ -22,7 +22,6 @@ const requiredAssets = [
   "apex-tokens.css",
   "apex-animations.css",
   "apex-bridge.css",
-  "apex-theme.css",
   "apex-chrome-flash.css",
   "apex-hal-brain.css",
   "apex-core.js",

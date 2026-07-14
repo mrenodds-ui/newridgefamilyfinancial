@@ -34,7 +34,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         invalidate_explain_cache(reason="test_teardown")
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10576")
+        self.assertEqual(BUILD_ID, "hal-10616")
 
     def test_explain_cache_default_off(self):
         os.environ.pop("NR2_EXPLAIN_CACHE", None)
@@ -130,14 +130,14 @@ class PhaseV2PolishTests(unittest.TestCase):
         self.assertFalse(b.get("cacheHit"))
         self.assertEqual(explain_cache_stats().get("size"), 0)
 
-    def test_mobile_polish_css_present(self):
-        css = (SITE / "apex-mobile-polish.css").read_text(encoding="utf-8")
-        self.assertIn("@media (max-width: 768px)", css)
-        self.assertIn(".apex-mosaic--u3", css)
-        self.assertIn(".hal-insight-banner", css)
+    def test_mobile_polish_and_theme_unlinked(self):
+        """hal trim: mobile polish (#3) + theme (#5) dropped from the live stack."""
         html = (SITE / "index.html").read_text(encoding="utf-8")
-        self.assertIn("apex-mobile-polish.css?v=hal-10576", html)
-        self.assertIn('data-apex-version="hal-10576"', html)
+        self.assertNotIn("apex-mobile-polish.css", html)
+        self.assertNotIn("apex-theme.css", html)
+        # Files may remain on disk for reference; they must not load.
+        self.assertTrue((SITE / "apex-mobile-polish.css").is_file())
+        self.assertTrue((SITE / "apex-theme.css").is_file())
 
 
 if __name__ == "__main__":
