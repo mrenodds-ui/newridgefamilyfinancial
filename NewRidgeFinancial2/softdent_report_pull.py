@@ -28,6 +28,11 @@ def _ascii_menu(path: str) -> str:
 
 
 MONEY_PULL_CMD = (
+    r"python scripts\run_softdent_report_manager_multi_pull.py"
+)
+
+# Backward-compatible alias (same Phase-1 money pack)
+MONEY_PULL_CMD_LEGACY = (
     r"python scripts\run_softdent_money_widget_pull.py "
     r"--reports register,daysheet,aging,collections"
 )
@@ -185,8 +190,14 @@ def format_softdent_report_pull_hal_reply(query: str = "") -> str:
             "not gold InsCo×ADA CSV lines. Preview last page for totals; do not invent gold CSV."
         )
     lines.append(
+        "SoftDent Report Manager multi-report: Reports → Report Manager → Set up a Report Group "
+        f"named `NR2 Money Widgets` (Register/Collections/Trans/Daysheet/Aging) with Excel "
+        "(never Printer; SoftDent Help says Printer — override). Date macros MM/01/YY…MM/99/YY. "
+        "Run: Advanced Options → Run Now. If Report Manager is grayed out, use sequential pack."
+    )
+    lines.append(
         f"Automated bulk pull: `{MONEY_PULL_CMD}` "
-        "(Sign On + GUI). After files land: SoftDent → Sync in NR2."
+        "(Sign On + GUI; falls back to sequential Excel). After files land: SoftDent → Sync in NR2."
     )
     lines.append(
         "Any other SoftDent report (200+ in Help): same Output Options shell - "

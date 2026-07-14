@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10613",
-  "BUILD_ID": "hal-10613",
-  "assetVersion": "hal-10613",
-  "builtAt": "2026-07-14T00:00:00.000Z",
-  "notes": "hal-10613: SoftDent A/R softGap freshness follows OPS Account Aging export mtime; honest empty copy for ERA/denial/verification.",
+  "schemaVersion": "hal-10614",
+  "BUILD_ID": "hal-10614",
+  "assetVersion": "hal-10614",
+  "builtAt": "2026-07-14T00:30:00.000Z",
+  "notes": "hal-10614: SoftDent widget honesty — recon period curr fix; claims/AR bridge + collections gap + gold OPS show warn/data instead of blank empty.",
   "staffRenderMode": "apex",
-  "package": "HAL-10613"
+  "package": "HAL-10614"
 }

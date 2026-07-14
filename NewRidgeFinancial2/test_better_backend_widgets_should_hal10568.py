@@ -16,7 +16,7 @@ from apex_better_backend_widgets_pack import (
 
 class BetterBackendWidgetsShouldTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10613")
+        self.assertEqual(BUILD_ID, "hal-10614")
 
     def test_hal_action_list(self) -> None:
         with mock.patch(
@@ -62,8 +62,11 @@ class BetterBackendWidgetsShouldTests(unittest.TestCase):
         w = build_softdent_patient_dossier({})
         self.assertEqual(w["type"], "patient-dossier-card")
         self.assertEqual(w["id"], "softdent-patient-dossier")
-        self.assertEqual(w["status"], "empty")
+        # SoftDent knowledge surfaced as warn + select playbook (not blank empty).
+        self.assertEqual(w["status"], "warn")
+        self.assertEqual(w.get("gapCode"), "NO_PATIENT_CONTEXT")
         self.assertFalse(w["data"].get("patientHash"))
+        self.assertIn("patient_id", str(w.get("message") or w["data"].get("emptyMessage") or ""))
 
 
 if __name__ == "__main__":

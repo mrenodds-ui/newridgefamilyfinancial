@@ -674,8 +674,11 @@ def build_narratives_ai_insight(bundle: dict[str, Any]) -> dict[str, Any]:
 
 
 def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
-    """SoftDent page patient-dossier-card — honest empty until patient selected."""
-    empty_msg = "Select a patient from the schedule (Mon–Thu) to load dossier."
+    """SoftDent page patient-dossier-card — warn with select guidance until patient chosen."""
+    select_msg = (
+        "Select a patient from the SoftDent schedule (Mon–Thu) or open "
+        "?patient_id= to load PHI-safe dossier. No patient invented."
+    )
     selected = (
         bundle.get("selectedPatient") if isinstance(bundle.get("selectedPatient"), dict) else None
     )
@@ -693,8 +696,10 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
         }
         st = "ok"
         gap = None
+        message = None
     else:
-        # Live FE: empty message shows when status=empty and patientHash falsy
+        # SoftDent OPS knowledge: dossier needs a patient context — surface as warn
+        # with playbook (not blank empty). Do not invent a patient or balances.
         payload = {
             "patientHash": None,
             "initials": None,
@@ -703,10 +708,11 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
             "lastVisit": None,
             "accountBalance": None,
             "hasClinicalNotes": None,
-            "emptyMessage": empty_msg,
+            "emptyMessage": select_msg,
         }
-        st = "empty"
+        st = "warn"
         gap = "NO_PATIENT_CONTEXT"
+        message = select_msg
 
     out = {
         "id": "softdent-patient-dossier",
@@ -715,8 +721,16 @@ def build_softdent_patient_dossier(bundle: dict[str, Any]) -> dict[str, Any]:
         "size": "l",
         "status": st,
         "data": payload,
-        "hint": "PHI-safe hashes/initials · empty until patient selected (?patient_id=).",
+        "hint": "PHI-safe hashes/initials · select patient (?patient_id=) · empty ≠ $0.",
+        "halChips": [
+            {
+                "label": "How do I open a SoftDent patient dossier?",
+                "query": "How do I load SoftDent patient dossier with patient_id?",
+            },
+        ],
     }
+    if message:
+        out["message"] = message
     if gap:
         out["gapCode"] = gap
     return out

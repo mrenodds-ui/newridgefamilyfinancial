@@ -597,6 +597,7 @@ def outstanding_claims_bridge_widget(bridge: dict[str, Any] | None = None) -> di
     aging = b.get("aging") if isinstance(b.get("aging"), dict) else {}
     claims = b.get("claims") if isinstance(b.get("claims"), dict) else {}
     healthy = code == GAP_OK and bool(b.get("ok"))
+    has_sides = bool(aging.get("ok")) and int(claims.get("claimCount") or 0) > 0
     if healthy:
         message = (
             f"Claims/AR bridge OK · named payers={claims.get('namedPayerClaimCount') or 0} · "
@@ -604,6 +605,16 @@ def outstanding_claims_bridge_widget(bridge: dict[str, Any] | None = None) -> di
             f"{('$' + format(float(aging.get('trueReceivablesTotal')), ',.2f')) if aging.get('trueReceivablesTotal') is not None else '—'}"
         )
         status = "ok"
+    elif has_sides:
+        # SoftDent aging Excel + claims are present — show data with honest mismatch warn
+        # (do not look "empty"; dollars not invented to force GAP_OK).
+        message = (
+            f"{code} · claims={claims.get('claimCount') or 0} · "
+            f"named={claims.get('namedPayerClaimCount') or 0} · "
+            f"AR "
+            f"{('$' + format(float(aging.get('trueReceivablesTotal')), ',.2f')) if aging.get('trueReceivablesTotal') is not None else '—'}"
+        )
+        status = "warn"
     else:
         message = f"{code} · claims={claims.get('claimCount') or 0} · unnamed={claims.get('unnamedPayerClaimCount') or 0}"
         status = "empty"
@@ -617,8 +628,12 @@ def outstanding_claims_bridge_widget(bridge: dict[str, Any] | None = None) -> di
         "gapCode": code,
         "hint": (
             "Refresh SoftDent ODBC claims with named payers, or drop Account Aging Excel."
-            if not healthy
-            else "sd_claims reconciled to Account Aging insurance buckets."
+            if status == "empty"
+            else (
+                "sd_claims vs Account Aging present — review carrier reconcile mismatch (empty ≠ $0)."
+                if status == "warn"
+                else "sd_claims reconciled to Account Aging insurance buckets."
+            )
         ),
         "bridge": b,
         "halChips": [

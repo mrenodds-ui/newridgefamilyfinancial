@@ -120,11 +120,19 @@ def main() -> int:
         payload["refresh"] = {"skipped": True, "ok": True}
 
     payload["drift"] = compare_register_to_daysheet_totals(start=start, end=end)
-    exports_ok = bool((payload.get("exports") or {}).get("ok") or (payload.get("exports") or {}).get("partialOk") or (payload.get("exports") or {}).get("skipped") or args.dry_run)
+    exports = payload.get("exports") or {}
+    required_failed = list(exports.get("requiredFailed") or [])
+    exports_ok = bool(exports.get("ok")) or bool(exports.get("skipped")) or bool(args.dry_run)
     refresh_ok = bool((payload.get("refresh") or {}).get("ok"))
-    # Drift ok means agree; if Register present but drift, still partial success
-    payload["ok"] = bool(exports_ok and refresh_ok and (payload.get("drift") or {}).get("ok"))
-    payload["partialOk"] = bool(exports_ok and not payload["ok"])
+    # Multi-report: partial Ok only when some paths landed and required failures remain.
+    payload["ok"] = bool(exports_ok and refresh_ok and (payload.get("drift") or {}).get("ok") and not required_failed)
+    payload["partialOk"] = bool(
+        not payload["ok"]
+        and (
+            any(bool((exports.get("reports") or {}).get(r, {}).get("path")) for r in report_ids)
+            or bool(exports.get("partialOk"))
+        )
+    )
     payload["finishedAt"] = _utc()
 
     STATUS.parent.mkdir(parents=True, exist_ok=True)

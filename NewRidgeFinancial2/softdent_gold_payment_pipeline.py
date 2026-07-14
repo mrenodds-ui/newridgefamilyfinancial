@@ -424,6 +424,7 @@ def gold_payment_pipeline_widget() -> dict[str, Any]:
     audit = audit_gold_payment_pipeline()
     lines = int(audit.get("paymentLines") or 0)
     gap = str(audit.get("gapCode") or "")
+    play = audit.get("playbook") if isinstance(audit.get("playbook"), dict) else {}
     if lines > 0:
         status, tone = "ok", "ok"
         message = f"Gold payment lines={lines} · estimates={audit.get('treatmentEstimates')}"
@@ -431,10 +432,17 @@ def gold_payment_pipeline_widget() -> dict[str, Any]:
         status, tone = "warn", "warn"
         message = "Payment file on disk but not ingested — run Sync / gold pipeline repair"
     else:
-        status, tone = "empty", "warn"
+        # SoftDent pull playbook is known (v19 often Print Preview only) — surface as
+        # warn with data, not blank empty. paymentLines stay 0 until real CSV lands.
+        status, tone = "warn", "warn"
+        menu = play.get("softDentMenu") or (
+            "Reports → Practice Management → Insurance Reports → Insurance Income"
+        )
+        save_as = play.get("saveAs") or r"C:\SoftDentFinancialExports\insurance_payments_YYYYMMDD.csv"
         message = (
-            "Gold CSV missing — SoftDent Insurance Payment Analysis not dropped "
-            "(empty != $0; display=— not $0.00)"
+            f"SoftDent pull ready: {menu} → Excel if offered else Print Preview "
+            f"(never Printer). Drop CSV to {save_as}. "
+            f"gapCode={gap or 'GOLD_CSV_MISSING'} · paymentLines=0 (empty ≠ $0; display=—)"
         )
     return {
         "id": "softdent-gold-payment-pipeline",

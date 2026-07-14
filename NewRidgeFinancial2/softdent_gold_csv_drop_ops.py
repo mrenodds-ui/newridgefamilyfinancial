@@ -678,10 +678,13 @@ def gold_csv_drop_ops_widget() -> dict[str, Any]:
         status, tone = "warn", "warn"
         message = "Gold file on disk — run Sync / OPS verify ingest"
     else:
-        status, tone = "empty", "warn"
+        # SoftDent v19 Insurance Income is Print Preview only — surface that OPS
+        # knowledge as warn (not blank empty) while keeping GOLD_CSV_MISSING honesty.
+        status, tone = "warn", "warn"
         message = (
-            "v19: Print Preview only for Insurance Income — visual audit does not create "
-            "gold lines (gapCode=GOLD_CSV_MISSING; empty != $0)"
+            "SoftDent pull ready: Reports → Practice Management → Insurance Reports → "
+            "Insurance Income → Print Preview (never Printer) → last page. "
+            f"gapCode={gap or 'GOLD_CSV_MISSING'} · paymentLines=0 (Preview ≠ gold CSV; empty ≠ $0)"
         )
     return {
         "id": "softdent-gold-csv-drop-ops",
@@ -712,6 +715,10 @@ def gold_csv_drop_ops_widget() -> dict[str, Any]:
             {
                 "label": "Print Preview visual audit",
                 "query": "SoftDent Print Preview visual audit status",
+            },
+            {
+                "label": "Pull SoftDent reports",
+                "query": "How do I pull SoftDent reports?",
             },
         ],
         "honesty": play.get("honesty") or "empty != $0",

@@ -33,7 +33,10 @@ class SoftDentReportPullTests(unittest.TestCase):
         self.assertIn("NEVER Printer", text)
         self.assertIn("Registers", text)
         self.assertIn("SoftDentReportExports", text)
-        self.assertIn("run_softdent_money_widget_pull", text)
+        self.assertTrue(
+            "run_softdent_report_manager_multi_pull" in text
+            or "run_softdent_money_widget_pull" in text
+        )
 
     def test_query_touch_and_local_policy(self):
         self.assertTrue(query_touches_softdent_report_pull("How do I pull SoftDent reports?"))

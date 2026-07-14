@@ -461,6 +461,80 @@ def dismiss_softdent_alerts(*, max_rounds: int = 6) -> int:
     return dismissed
 
 
+def cancel_stale_report_dialogs(*, max_rounds: int = 8) -> int:
+    """Close leftover SoftDent report/setup dialogs between multi-report pulls.
+
+    Multi-report automation leaves Output Options / Report Setup / named report
+    dialogs open when a pull fails mid-flow — that blocks the next menu open
+    (ElementNotEnabled / missing Output Options). Keyboard Cancel (Alt+C) only.
+    Never Escape (SoftDent quit). Never cancel SoftDent Login.
+    """
+    from pywinauto import Desktop
+
+    cancelled = 0
+    pids = _softdent_pids()
+    for _ in range(max_rounds):
+        hit = False
+        cancel_printer_dialogs(max_rounds=2)
+        for w in Desktop(backend="win32").windows():
+            try:
+                if not w.is_visible() or w.class_name() != "#32770":
+                    continue
+                title = (w.window_text() or "").strip()
+                if not title or title == "SoftDent Login":
+                    continue
+                pid = _window_pid(int(w.handle))
+                if pids and pid not in pids:
+                    continue
+                low = title.lower()
+                is_stale = (
+                    title in _EXPORT_DIALOG_TITLES
+                    or _is_export_flow_dialog(title)
+                    or low == "output options"
+                    or low.endswith(" setup")
+                    or " for a period" in low
+                    or low in {"daysheet", "account aging", "collection summary"}
+                    or ("report" in low and "softdent software" not in low)
+                )
+                if not is_stale:
+                    continue
+                if _keyboard_cancel_dialog(int(w.handle)):
+                    cancelled += 1
+                    hit = True
+                    logger.info("Cancelled stale SoftDent report dialog title=%r", title)
+                    time.sleep(0.4)
+                    break
+            except Exception:
+                continue
+        if not hit:
+            break
+    try:
+        hwnd = _main_softdent_hwnd()
+        _force_foreground(hwnd)
+        time.sleep(0.25)
+    except Exception:
+        pass
+    dismiss_softdent_alerts(max_rounds=2)
+    return cancelled
+
+
+def prepare_softdent_for_next_report() -> dict[str, Any]:
+    """Reset SoftDent UI so the next catalog report can open cleanly."""
+    out: dict[str, Any] = {"ok": False, "staleCancelled": 0, "printerCancelled": 0}
+    try:
+        out["printerCancelled"] = int(cancel_printer_dialogs(max_rounds=4) or 0)
+        out["staleCancelled"] = int(cancel_stale_report_dialogs(max_rounds=8) or 0)
+        _minimize_focus_thieves()
+        hwnd = _main_softdent_hwnd()
+        _force_foreground(hwnd)
+        time.sleep(0.35)
+        out["ok"] = True
+        out["mainHwnd"] = int(hwnd)
+    except Exception as exc:  # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}:{exc}"
+    return out
+
+
 def softdent_main_running() -> bool:
     try:
         _main_softdent_hwnd()
@@ -740,6 +814,7 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
     HARD RULE (user): never use Printer — only the Excel prompt or the Print Preview
     prompt. Printer causes offline hang ("Waiting for printer connection…").
     Same click pattern for both: click the prompt, then Enter.
+    SoftDent often defaults the Printer radio — never Enter until Excel/Preview is selected.
     """
     raw = str(kind or "excel").strip().lower()
     if raw in {"printer", "print", "lpt", "spool"}:
@@ -763,40 +838,77 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
         raise RuntimeError("Output Options dialog did not appear")
 
     _keyboard_activate_dialog(out)
-    clicked = False
-    try:
-        from pywinauto import Application
+    hwnd = int(out.handle)
 
-        app_out = Application(backend="win32").connect(handle=out.handle)
-        d_out = app_out.window(handle=out.handle)
-        for b in d_out.descendants(class_name="Button"):
-            label = (b.window_text() or "").replace("&", "").strip()
-            lab = label.lower()
-            # Never click Printer (exact label) — even if searching preview
-            if lab == "printer":
-                continue
-            if want == "excel" and lab == "excel":
-                _softdent_click(b)
-                clicked = True
-                break
-            if want == "print preview" and "preview" in lab:
-                _softdent_click(b)
-                clicked = True
-                break
-    except Exception as exc:
-        logger.warning("Output Options %s click failed: %s", want, type(exc).__name__)
+    def _pick_button() -> bool:
+        try:
+            from pywinauto import Application
+
+            app_out = Application(backend="win32").connect(handle=out.handle)
+            d_out = app_out.window(handle=out.handle)
+            excel_btn = None
+            preview_btn = None
+            for b in d_out.descendants(class_name="Button"):
+                label = (b.window_text() or "").replace("&", "").strip()
+                lab = label.lower()
+                if lab == "printer":
+                    continue
+                if lab == "excel":
+                    excel_btn = b
+                elif "preview" in lab:
+                    preview_btn = b
+            target = excel_btn if want == "excel" else preview_btn
+            if target is None:
+                return False
+            # SoftDent radios: click twice then verify checked when possible.
+            _softdent_click(target)
+            time.sleep(0.15)
+            _softdent_click(target)
+            time.sleep(0.12)
+            try:
+                if hasattr(target, "get_check_state") and int(target.get_check_state()) == 1:
+                    return True
+            except Exception:
+                pass
+            try:
+                if hasattr(target, "is_checked") and bool(target.is_checked()):
+                    return True
+            except Exception:
+                pass
+            return True  # clicked; SoftDent often lacks readable check state
+        except Exception as exc:
+            logger.warning("Output Options %s click failed: %s", want, type(exc).__name__)
+            return False
+
+    clicked = _pick_button()
     if not clicked:
         # Accelerators: E=Excel. Never send P (hits Printer). V ≈ Pre&view when available.
         if want == "excel":
-            _send_softdent_keys("e", hwnd=int(out.handle))
+            _send_softdent_keys("e", hwnd=hwnd)
         else:
-            _send_softdent_keys("v", hwnd=int(out.handle))
+            _send_softdent_keys("v", hwnd=hwnd)
+        time.sleep(0.25)
+        # Tab away from Printer if focus landed badly, then re-hit accelerator
+        if want == "excel":
+            _send_softdent_keys("e", hwnd=hwnd)
         time.sleep(0.2)
-    time.sleep(0.25)
-    _send_softdent_keys("{ENTER}", hwnd=int(out.handle))
+
+    # Sweep printer again BEFORE Enter — default Printer can still steal focus
+    cancel_printer_dialogs(max_rounds=2)
+    if not find_dialog("Output Options"):
+        # Dialog closed into printer wait already
+        cancelled_early = cancel_printer_dialogs(max_rounds=4)
+        if cancelled_early:
+            raise RuntimeError(
+                "SoftDent selected Printer before OK — cancelled wait. Retry Excel/Preview only."
+            )
+        raise RuntimeError("Output Options closed unexpectedly before OK")
+
+    time.sleep(0.2)
+    _send_softdent_keys("{ENTER}", hwnd=hwnd)
     time.sleep(1.0)
     # If SoftDent still went to printer wait, cancel and fail loudly
-    cancelled = cancel_printer_dialogs(max_rounds=4)
+    cancelled = cancel_printer_dialogs(max_rounds=6)
     if cancelled:
         raise RuntimeError(
             "SoftDent opened a printer-wait dialog after Output Options — "
@@ -1001,13 +1113,18 @@ def _complete_output_setup_and_save(
         dismiss_softdent_alerts()
 
         dest_root.mkdir(parents=True, exist_ok=True)
-        produced = dest_root / f"{short_stem}.XLS"
-        if not produced.is_file():
-            for cand in dest_root.glob(f"{short_stem}.*"):
-                produced = cand
-                break
-        if not produced.is_file():
-            raise RuntimeError(f"Expected export not found under {dest_root} ({short_stem}.*)")
+        candidates: list[Path] = []
+        for root in (dest_root, MIRROR_ROOT):
+            if not root.is_dir():
+                continue
+            for cand in root.glob(f"{short_stem}.*"):
+                if cand.is_file() and cand.suffix.lower() in {".xls", ".xlsx", ".csv"}:
+                    candidates.append(cand)
+        if not candidates:
+            raise RuntimeError(
+                f"Expected export not found under {dest_root} or {MIRROR_ROOT} ({short_stem}.*)"
+            )
+        produced = max(candidates, key=lambda p: p.stat().st_mtime)
     else:
         # Excel-on-temp path (validated on SoftDent v19.1.4 Trans/Register/Collections)
         dest_root.mkdir(parents=True, exist_ok=True)
@@ -1092,7 +1209,6 @@ def export_report_by_id(
         use_end = end
 
     keys = resolve_menu_keys(report, menu_keys)
-    _open_accounting_report(report_id, keys)
     stem = _format_stem(str(report.get("short_stem_template") or "RPT"), use_start, use_end)
     canonical = _format_canonical(
         str(report.get("canonical_template") or f"{report_id}.xls"),
@@ -1100,7 +1216,25 @@ def export_report_by_id(
         use_end,
     )
     also = [str(x) for x in (report.get("also_copy_as") or []) if str(x).strip()]
-    return _complete_output_setup_and_save(
+    # Best-effort clear prior short-stem files so SoftDent writes a fresh drop.
+    before: dict[str, tuple[float, int]] = {}
+    for root in (dest, MIRROR_ROOT):
+        if not root.is_dir():
+            continue
+        for stale in list(root.glob(f"{stem}.*")):
+            if not stale.is_file():
+                continue
+            try:
+                st = stale.stat()
+                before[str(stale.resolve())] = (float(st.st_mtime), int(st.st_size))
+            except OSError:
+                continue
+            try:
+                stale.unlink()
+            except OSError:
+                logger.warning("Could not remove stale SoftDent export %s", stale)
+    _open_accounting_report(report_id, keys)
+    out_path = _complete_output_setup_and_save(
         start=use_start,
         end=use_end,
         short_stem=stem,
@@ -1108,6 +1242,23 @@ def export_report_by_id(
         canonical_name=canonical,
         also_copy_as=also,
     )
+    produced = Path(out_path)
+    try:
+        st = produced.stat()
+        key = str(produced.resolve())
+        prev = before.get(key)
+        refreshed = prev is None or prev[0] + 0.05 < float(st.st_mtime) or prev[1] != int(st.st_size)
+    except OSError as exc:
+        raise RuntimeError(f"{report_id}: exported path unreadable: {exc}") from exc
+    if not refreshed:
+        # SoftDent sometimes rewrites an open/locked stem without bumping mtime.
+        # Accept only when the Select File Name / Excel path completed (we have a path).
+        logger.warning(
+            "SoftDent export %s path=%s may be locked/stale mtime — keeping dialog result",
+            report_id,
+            produced,
+        )
+    return out_path
 
 
 def navigate_softdent_print_preview_pages(
@@ -1478,6 +1629,16 @@ def run_catalog_exports(
             )
             result["reports"][rid] = entry
             continue
+        # Multi-report: clear leftover setup dialogs before each pull.
+        try:
+            prep = prepare_softdent_for_next_report()
+            entry["preflight"] = {
+                "ok": bool(prep.get("ok")),
+                "staleCancelled": prep.get("staleCancelled"),
+                "printerCancelled": prep.get("printerCancelled"),
+            }
+        except Exception as exc:  # noqa: BLE001
+            entry["preflight"] = {"ok": False, "error": type(exc).__name__}
         try:
             if not softdent_main_running():
                 raise RuntimeError("SoftDent main window not available")
@@ -1498,6 +1659,12 @@ def run_catalog_exports(
                 dismiss_softdent_alerts()
             except Exception:
                 pass
+        finally:
+            # Always leave SoftDent ready for the next report in the pack.
+            try:
+                entry["postflight"] = prepare_softdent_for_next_report()
+            except Exception as exc:  # noqa: BLE001
+                entry["postflight"] = {"ok": False, "error": type(exc).__name__}
         result["reports"][rid] = entry
 
     required_ok = all(

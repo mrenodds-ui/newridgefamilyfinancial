@@ -31,7 +31,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10613"
+BUILD_ID = "hal-10614"
 
 HAL_STATUS_SUGGESTION = (
     "Dictate findings: … · morning financial brief · which widgets empty on all pages? · SoftDent sync"
@@ -4417,7 +4417,7 @@ def _widget_has_data(w: dict[str, Any]) -> bool:
     if wtype == "waterfall":
         return bool(w.get("steps"))
     if wtype == "status":
-        return status == "ok" or bool(w.get("message"))
+        return status in {"ok", "warn"} or bool(w.get("message"))
     # Default: non-empty status counts as showing
     return status != "empty"
 

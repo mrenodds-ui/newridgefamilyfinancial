@@ -84,6 +84,12 @@ class SoftDentGuiExportTests(unittest.TestCase):
         self.assertTrue(result["reports"]["register"].get("dryRun"))
         self.assertTrue(result["reports"]["aging"].get("dryRun"))
 
+    def test_prepare_for_next_report_exists(self):
+        from softdent_gui_export import cancel_stale_report_dialogs, prepare_softdent_for_next_report
+
+        self.assertTrue(callable(cancel_stale_report_dialogs))
+        self.assertTrue(callable(prepare_softdent_for_next_report))
+
 
 if __name__ == "__main__":
     unittest.main()

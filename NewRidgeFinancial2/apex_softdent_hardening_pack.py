@@ -576,6 +576,15 @@ def assess_collections_gap(bundle: dict[str, Any] | None = None) -> dict[str, An
         # Keep SoftDent-reported Regular Collections visible (not inventing Ins Plan).
         if collections is not None:
             result["collections"] = collections
+        # Prefer explicit Regular Collections; fall back to SoftDent collections total
+        # when Ins Plan is $0 truth (all collections are Regular).
+        try:
+            reg_amt = result.get("regularCollections")
+            if (reg_amt is None or float(reg_amt or 0) <= 0) and collections is not None and float(collections or 0) > 0:
+                result["regularCollections"] = float(collections)
+                result["regularCollectionsReported"] = True
+        except (TypeError, ValueError):
+            pass
         issues = list(result.get("issues") or [])
         reg_amt = result.get("regularCollections")
         reg_bit = (
@@ -696,12 +705,35 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
                 f"Ins Plan $0 (SoftDent truth) · Insurance Collections: ERA Required · {period}"
             )
     suggested = str(gap.get("suggestedAction") or resolve_collections_suggested_action(gap))
+    # SoftDent Register dollars present but Ins Plan $0 → warn with data (ERA still required).
+    # Do not mark empty when Regular Collections already imported — empty ≠ invent Ins Plan $.
+    status = "empty"
+    reg_check: float | None = None
+    if code == GAP_ERA_835_REQUIRED or gap.get("registerInsPlanZero"):
+        for key in ("regularCollections", "collections", "patient"):
+            raw = gap.get(key)
+            if raw is None:
+                continue
+            try:
+                val = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if val > 0:
+                reg_check = val
+                break
+        if reg_check is not None and reg_check > 0:
+            status = "warn"
+            if "Regular Collections: Complete" not in message:
+                message = (
+                    f"Regular Collections: Complete (${reg_check:,.2f}) · "
+                    f"Insurance Collections: ERA Required · {period}"
+                )
     out: dict[str, Any] = {
         "id": "softdent-collections-gap",
         "type": "status",
         "label": "Collections Gap (DEF-001)",
         "size": "full",
-        "status": "empty",
+        "status": status,
         "message": message,
         "emptyMessage": code,
         "hint": hint,
@@ -709,7 +741,11 @@ def collections_gap_widget(bundle: dict[str, Any] | None = None) -> dict[str, An
         "gap": gap,
         "eraInbox": gap.get("eraInbox"),
         "halChips": chips,
-        "regularCollections": gap.get("regularCollections"),
+        "regularCollections": (
+            gap.get("regularCollections")
+            if gap.get("regularCollections") is not None
+            else reg_check
+        ),
         "insPlanCollections": gap.get("insPlanCollections"),
         "registerInsPlanZero": bool(gap.get("registerInsPlanZero")),
         "suggestedAction": suggested,
