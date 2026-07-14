@@ -34,7 +34,7 @@ class PhaseV2PolishTests(unittest.TestCase):
         invalidate_explain_cache(reason="test_teardown")
 
     def test_build_id(self):
-        self.assertEqual(BUILD_ID, "hal-10619")
+        self.assertEqual(BUILD_ID, "hal-10620")
 
     def test_explain_cache_default_off(self):
         os.environ.pop("NR2_EXPLAIN_CACHE", None)
@@ -130,13 +130,18 @@ class PhaseV2PolishTests(unittest.TestCase):
         self.assertFalse(b.get("cacheHit"))
         self.assertEqual(explain_cache_stats().get("size"), 0)
 
-    def test_mobile_polish_and_theme_relinked(self):
-        """hal-10620: Moonshot runner-up — theme + mobile polish back on the live stack."""
+    def test_legacy_polish_css_removed(self):
+        """hal-10620: strip theme / mobile-polish / chrome-flash and pre-Apex CSS."""
         html = (SITE / "index.html").read_text(encoding="utf-8")
-        self.assertIn("apex-mobile-polish.css", html)
-        self.assertIn("apex-theme.css", html)
-        self.assertTrue((SITE / "apex-mobile-polish.css").is_file())
-        self.assertTrue((SITE / "apex-theme.css").is_file())
+        for name in (
+            "apex-mobile-polish.css",
+            "apex-theme.css",
+            "apex-chrome-flash.css",
+            "styles.css",
+            "nr2-moonshot-mockup-theme.css",
+        ):
+            self.assertNotIn(name, html)
+            self.assertFalse((SITE / name).is_file(), name)
 
 
 if __name__ == "__main__":

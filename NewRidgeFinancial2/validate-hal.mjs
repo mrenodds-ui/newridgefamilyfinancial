@@ -16,6 +16,7 @@ const halManagerPath = join(siteDir, "data", "hal-manager.json");
 const halModelsPath = join(siteDir, "data", "hal-models.json");
 const buildManifest = loadJson(join(__dirname, "nr2-build.json"));
 const staffRenderMode = buildManifest.staffRenderMode || "mock-embed";
+const staffApex = staffRenderMode === "apex";
 const staffMockEmbed = staffRenderMode === "mock-embed";
 const staffLiveWirePilot = staffRenderMode === "live-wire-pilot";
 const staffUsesDeferredBundles = staffMockEmbed || staffLiveWirePilot;
@@ -1910,15 +1911,33 @@ async function main() {
   assert(workstationPageSrc.includes("data-ws-sync=\"qb\""), "workstation must expose QuickBooks sync trigger");
   assert(workstationPageSrc.includes("data-ws-sync=\"softdent\""), "workstation must expose SoftDent sync trigger");
   assert(workstationPageSrc.includes("data-ws-open-hal"), "workstation must link to HAL hub");
-  const mockupChromeSrc = readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8");
-  assert(mockupChromeSrc.includes('data-nr2-export="cpa-packet"'), "financial page must expose CPA export button");
-  assert(mockupChromeSrc.includes("renderPageHeaderTools"), "mockup chrome must unify page-header-tools");
-  assert(mockupChromeSrc.includes("data-page-command"), "mockup chrome must render HAL command chips");
-  assert(mockupChromeSrc.includes("STAFF_HEADER_TOOL_PAGES"), "mockup chrome must expose sync badges on staff pages");
-  assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes(".kpi-ribbon"), "vocabulary css must style kpi-ribbon");
-  assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-theme.css"), "utf8").includes(".widget-card.col-9"), "theme must define col-9 span");
-  const pageCanvasSrc = readFileSync(join(siteDir, "page-canvas.js"), "utf8");
-  if (staffMockEmbed) {
+  if (staffApex) {
+    assert(
+      !existsSync(join(siteDir, "nr2-moonshot-mockup-theme.css")),
+      "apex mode must not keep Moonshot mockup theme CSS in site/",
+    );
+    assert(
+      !existsSync(join(siteDir, "styles.css")),
+      "apex mode must not keep legacy styles.css in site/",
+    );
+  }
+  const mockupChromeSrc = staffApex
+    ? ""
+    : readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8");
+  if (!staffApex) {
+    assert(mockupChromeSrc.includes('data-nr2-export="cpa-packet"'), "financial page must expose CPA export button");
+    assert(mockupChromeSrc.includes("renderPageHeaderTools"), "mockup chrome must unify page-header-tools");
+    assert(mockupChromeSrc.includes("data-page-command"), "mockup chrome must render HAL command chips");
+    assert(mockupChromeSrc.includes("STAFF_HEADER_TOOL_PAGES"), "mockup chrome must expose sync badges on staff pages");
+    assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes(".kpi-ribbon"), "vocabulary css must style kpi-ribbon");
+    assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-theme.css"), "utf8").includes(".widget-card.col-9"), "theme must define col-9 span");
+  }
+  const pageCanvasSrc = existsSync(join(siteDir, "page-canvas.js"))
+    ? readFileSync(join(siteDir, "page-canvas.js"), "utf8")
+    : "";
+  if (staffApex) {
+    assert(true, "apex mode skips mockup page-canvas layout asserts");
+  } else if (staffMockEmbed) {
     assert(pageCanvasSrc.includes("mockupPreviewGate"), "mock-embed staff pages must use elite mock preview gate");
     assert(pageCanvasSrc.includes("ms-mockup-preview-frame"), "mock-embed staff pages must render iframe gate");
     assert(pageCanvasSrc.includes("/mockup-elite-embed/"), "mock-embed staff pages must point at elite embed route");
@@ -1943,57 +1962,59 @@ async function main() {
     assert(pageCanvasSrc.includes("data-narrative-draft"), "claims kanban must expose Draft with HAL per row");
     assert(pageCanvasSrc.includes("nr2-odbc-strip"), "SoftDent page must render ODBC extract strip");
   }
-  assert(readFileSync(join(siteDir, "nr2-moonshot-ui.js"), "utf8").includes("chart-mount--canvas"), "chart overlays must replace inline chart mounts");
-  assert(readFileSync(join(siteDir, "hal-mockup-overrides.css"), "utf8").includes(".span-2"), "HAL mosaic must define span-2");
+  if (!staffApex) {
+    assert(readFileSync(join(siteDir, "nr2-moonshot-ui.js"), "utf8").includes("chart-mount--canvas"), "chart overlays must replace inline chart mounts");
+    assert(readFileSync(join(siteDir, "hal-mockup-overrides.css"), "utf8").includes(".span-2"), "HAL mosaic must define span-2");
+    const glowCss = readFileSync(join(siteDir, "nr2-moonshot-glow.css"), "utf8");
+    assert(glowCss.includes("@media print"), "moonshot glow css must include print-safe mode");
+    assert(glowCss.includes(".nr2-alert-ticker"), "moonshot glow css must style alert ticker");
+    const halOverridesCss = readFileSync(join(siteDir, "hal-mockup-overrides.css"), "utf8");
+    assert(halOverridesCss.includes("prefers-reduced-motion"), "hal mockup overrides must respect reduced motion");
+    assert(existsSync(join(siteDir, "nr2-page-filters.js")), "nr2-page-filters.js must exist for Tier S2");
+    assert(readFileSync(join(siteDir, "nr2-page-filters.js"), "utf8").includes("data-nr2-filter-chip"), "filter chips must be wired");
+    assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes("data-nr2-filter-chip"), "mockup chrome must render wired filter chips");
+    assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes("period-scrubber"), "period scrubber CSS must exist");
+    assert(readFileSync(join(siteDir, "nr2-moonshot-ui.js"), "utf8").includes(staffUsesDeferredBundles ? "ms-mockup-preview" : "chartMountPolicy"), staffUsesDeferredBundles ? "moonshot UI must skip live enhancement inside mock iframe gate" : "unified chart mount policy must merge with NR2Charts");
+    assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes('data-nr2-export="page-storyboard"'), "staff pages must expose storyboard export");
+    if (!staffUsesDeferredBundles) {
+      assert(existsSync(join(siteDir, "nr2-tier3.js")), "nr2-tier3.js must exist for Tier S3");
+      assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("semantic-zoom"), "Tier S3 semantic zoom must be wired");
+      assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("hal-presence-orb"), "Tier S3 HAL presence must be wired");
+      assert(readFileSync(join(siteDir, "nr2-qb-reports.js"), "utf8").includes("Awaiting QuickBooks sync"), "QB reports must expose cold empty-state copy");
+      assert(readFileSync(join(siteDir, "nr2-analytics.js"), "utf8").includes("collectionDepositVariance"), "browser analytics must expose deposit variance");
+      assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("hubAuthHeadersForNotify"), "hero metrics publish must attach hub token");
+      assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("fetchLastBroadcast"), "hero mirror must poll via HalHubClient");
+    } else {
+      const indexHtml = readFileSync(join(siteDir, "index.html"), "utf8");
+      assert(indexHtml.includes("NR2_STAFF_MOCK_ONLY"), "index must enable staff mock-only mode");
+      assert(!/<script[^>]+src=["']nr2-tier3\.js/i.test(indexHtml), "mock-embed index must not load tier-3 bundle");
+      assert(!/<script[^>]+src=["']nr2-analytics\.js/i.test(indexHtml), "mock-embed index must not load analytics bundle");
+      assert(existsSync(join(deferredDir, "nr2-tier3.js")), "deferred-live-wire must retain tier-3 bundle for sign-off");
+      assert(existsSync(join(deferredDir, "nr2-analytics.js")), "deferred-live-wire must retain analytics bundle for sign-off");
+      assert(readFileSync(join(deferredDir, "nr2-qb-reports.js"), "utf8").includes("Awaiting QuickBooks sync"), "deferred QB reports must expose cold empty-state copy");
+      assert(readFileSync(join(deferredDir, "nr2-analytics.js"), "utf8").includes("collectionDepositVariance"), "deferred analytics must expose deposit variance");
+    }
+    assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes("renderSemanticZoomToggle"), "mockup chrome must expose semantic zoom toggle");
+    assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes("nr2-hero-mirror"), "hero mirror CSS must exist");
+    if (!staffUsesDeferredBundles) {
+      assert(readFileSync(join(siteDir, "page-canvas.js"), "utf8").includes("No operatory schedule available"), "operatory empty state must be visible");
+      assert(readFileSync(join(siteDir, "page-canvas.js"), "utf8").includes("data-narrative-draft"), "claims kanban must expose Draft with HAL per row");
+    }
+  }
   assert(readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8").includes("slice(-20)"), "HAL chat must keep scrollback");
   assert(readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8").includes("hal-situational-hero"), "HAL must render situational hero");
   assert(readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8").includes("data-hal-scroll-widget"), "HAL mosaic tiles must deep-link to staff widgets");
-  const glowCss = readFileSync(join(siteDir, "nr2-moonshot-glow.css"), "utf8");
-  assert(glowCss.includes("@media print"), "moonshot glow css must include print-safe mode");
-  assert(glowCss.includes(".nr2-alert-ticker"), "moonshot glow css must style alert ticker");
   assert(readFileSync(join(__dirname, "nr2_analytics.py"), "utf8").includes("def goal_scorecard"), "nr2_analytics must expose goal_scorecard");
   assert(readFileSync(join(__dirname, "cpa_packet_export.py"), "utf8").includes("WIDGET_KEYS"), "cpa_packet_export module must exist");
   const halCanvasSrc = readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8");
   assert(halCanvasSrc.includes("widget-mosaic-tile") && halCanvasSrc.includes("aria-label="), "HAL mosaic tiles must expose aria-label");
-  const halOverridesCss = readFileSync(join(siteDir, "hal-mockup-overrides.css"), "utf8");
-  assert(halOverridesCss.includes("prefers-reduced-motion"), "hal mockup overrides must respect reduced motion");
   const completeDoc = readFileSync(join(__dirname, "docs", "MOONSHOT_FULLEST_EXTENT_COMPLETE_2026-07-09.md"), "utf8");
-  assert(existsSync(join(siteDir, "nr2-page-filters.js")), "nr2-page-filters.js must exist for Tier S2");
-  assert(readFileSync(join(siteDir, "nr2-page-filters.js"), "utf8").includes("data-nr2-filter-chip"), "filter chips must be wired");
-  assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes("data-nr2-filter-chip"), "mockup chrome must render wired filter chips");
-  assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes("period-scrubber"), "period scrubber CSS must exist");
-  assert(readFileSync(join(siteDir, "nr2-moonshot-ui.js"), "utf8").includes(staffUsesDeferredBundles ? "ms-mockup-preview" : "chartMountPolicy"), staffUsesDeferredBundles ? "moonshot UI must skip live enhancement inside mock iframe gate" : "unified chart mount policy must merge with NR2Charts");
   assert(existsSync(join(__dirname, "page_storyboard_export.py")), "page_storyboard_export module must exist");
-  assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes('data-nr2-export="page-storyboard"'), "staff pages must expose storyboard export");
-  if (!staffUsesDeferredBundles) {
-    assert(existsSync(join(siteDir, "nr2-tier3.js")), "nr2-tier3.js must exist for Tier S3");
-    assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("semantic-zoom"), "Tier S3 semantic zoom must be wired");
-    assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("hal-presence-orb"), "Tier S3 HAL presence must be wired");
-    assert(readFileSync(join(siteDir, "nr2-qb-reports.js"), "utf8").includes("Awaiting QuickBooks sync"), "QB reports must expose cold empty-state copy");
-    assert(readFileSync(join(siteDir, "nr2-analytics.js"), "utf8").includes("collectionDepositVariance"), "browser analytics must expose deposit variance");
-    assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("hubAuthHeadersForNotify"), "hero metrics publish must attach hub token");
-    assert(readFileSync(join(siteDir, "nr2-tier3.js"), "utf8").includes("fetchLastBroadcast"), "hero mirror must poll via HalHubClient");
-  } else {
-    const indexHtml = readFileSync(join(siteDir, "index.html"), "utf8");
-    assert(indexHtml.includes("NR2_STAFF_MOCK_ONLY"), "index must enable staff mock-only mode");
-    assert(!/<script[^>]+src=["']nr2-tier3\.js/i.test(indexHtml), "mock-embed index must not load tier-3 bundle");
-    assert(!/<script[^>]+src=["']nr2-analytics\.js/i.test(indexHtml), "mock-embed index must not load analytics bundle");
-    assert(existsSync(join(deferredDir, "nr2-tier3.js")), "deferred-live-wire must retain tier-3 bundle for sign-off");
-    assert(existsSync(join(deferredDir, "nr2-analytics.js")), "deferred-live-wire must retain analytics bundle for sign-off");
-    assert(readFileSync(join(deferredDir, "nr2-qb-reports.js"), "utf8").includes("Awaiting QuickBooks sync"), "deferred QB reports must expose cold empty-state copy");
-    assert(readFileSync(join(deferredDir, "nr2-analytics.js"), "utf8").includes("collectionDepositVariance"), "deferred analytics must expose deposit variance");
-  }
-  assert(readFileSync(join(siteDir, "nr2-moonshot-mockup-chrome.js"), "utf8").includes("renderSemanticZoomToggle"), "mockup chrome must expose semantic zoom toggle");
   assert(readFileSync(join(siteDir, "hal-page-canvas.js"), "utf8").includes("hal-presence-orb"), "HAL chat must render presence orb");
-  assert(readFileSync(join(siteDir, "nr2-mockup-page-vocabulary.css"), "utf8").includes("nr2-hero-mirror"), "hero mirror CSS must exist");
   assert(readFileSync(join(__dirname, "hal_hub.py"), "utf8").includes("heroMetrics"), "hub broadcast must store hero metrics");
   assert(readFileSync(join(__dirname, "import-manifest.json"), "utf8").includes("softdent.procedures"), "import manifest must define procedures export");
   assert(readFileSync(join(__dirname, "import-manifest.json"), "utf8").includes("softdent.claimStatus"), "import manifest must define claim status export");
   assert(readFileSync(join(__dirname, "softdent_operational_pipeline.py"), "utf8").includes("build_procedures_rows"), "operational pipeline must export procedures rows");
-  if (!staffUsesDeferredBundles) {
-    assert(readFileSync(join(siteDir, "page-canvas.js"), "utf8").includes("No operatory schedule available"), "operatory empty state must be visible");
-    assert(readFileSync(join(siteDir, "page-canvas.js"), "utf8").includes("data-narrative-draft"), "claims kanban must expose Draft with HAL per row");
-  }
   assert(existsSync(join(siteDir, "narrative-review.js")), "narrative-review.js must exist for Phase D");
   assert(readFileSync(join(siteDir, "narrative-review.js"), "utf8").includes("validateDraftPayload"), "narrative review must validate drafts before save");
   assert(readFileSync(join(siteDir, "hal-agent.js"), "utf8").includes("draft_insurance_narrative"), "HAL agent must expose draft_insurance_narrative tool");

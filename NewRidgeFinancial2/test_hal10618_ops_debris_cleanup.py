@@ -1,4 +1,4 @@
-"""hal-10619 — OPS debris cleanup + Content hub + Moonshot leftover package."""
+"""hal-10620 — OPS debris cleanup + Content hub + Moonshot leftover package."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from apex_compact_pages_pack import (
 
 class Hal10618OpsDebrisCleanupTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10619")
+        self.assertEqual(BUILD_ID, "hal-10620")
 
     def test_claims_no_double_micro_pipeline(self) -> None:
         _WIDGETS_CACHE.clear()
@@ -50,7 +50,7 @@ class Hal10618OpsDebrisCleanupTests(unittest.TestCase):
     def test_content_hub_main(self) -> None:
         _WIDGETS_CACHE.clear()
         out = build_apex_widgets("content", _fill=True)
-        self.assertEqual(out.get("buildId"), "hal-10619")
+        self.assertEqual(out.get("buildId"), "hal-10620")
         ids = [w.get("id") for w in (out.get("widgets") or []) if isinstance(w, dict)]
         self.assertIn("content-hub-strip", ids)
         self.assertNotIn("unknown-subpage", ids)

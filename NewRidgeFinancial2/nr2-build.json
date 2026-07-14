@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10619",
-  "BUILD_ID": "hal-10619",
-  "assetVersion": "hal-10619",
-  "builtAt": "2026-07-14T11:45:00.000Z",
-  "notes": "hal-10619: blank all Apex page widgets (empty stages).",
+  "schemaVersion": "hal-10620",
+  "BUILD_ID": "hal-10620",
+  "assetVersion": "hal-10620",
+  "builtAt": "2026-07-14T11:55:00.000Z",
+  "notes": "hal-10620: strip legacy Apex polish CSS and retire pre-Apex Moonshot styles.",
   "staffRenderMode": "apex",
-  "package": "HAL-10619"
+  "package": "HAL-10620"
 }

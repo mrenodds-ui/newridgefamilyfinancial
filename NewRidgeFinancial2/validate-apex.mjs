@@ -22,10 +22,8 @@ const requiredAssets = [
   "apex-tokens.css",
   "apex-animations.css",
   "apex-bridge.css",
-  "apex-theme.css",
-  "apex-chrome-flash.css",
   "apex-hal-brain.css",
-  "apex-mobile-polish.css",
+  "apex-zero-scroll.css",
   "apex-core.js",
   "apex-ticker.js",
   "apex-hal-bridge.js",
@@ -35,9 +33,28 @@ const requiredAssets = [
   "apex-motion-helper.js",
 ];
 
+const bannedLegacyCss = [
+  "apex-theme.css",
+  "apex-chrome-flash.css",
+  "apex-mobile-polish.css",
+  "styles.css",
+  "nr2-moonshot-mockup-theme.css",
+  "hal-mockup-overrides.css",
+  "nr2-mockup-page-vocabulary.css",
+  "nr2-moonshot-glow.css",
+  "nr2-mission-control-extreme.css",
+  "nr2-mission-control-glass.css",
+  "workstation-moonshot-bridge.css",
+];
+
 for (const name of requiredAssets) {
   assert.ok(existsSync(join(siteDir, name)), `missing Apex asset: ${name}`);
   assert.ok(indexHtml.includes(`${name}?v=${expected}`), `index must load ${name}?v=${expected}`);
+}
+
+for (const name of bannedLegacyCss) {
+  assert.ok(!indexHtml.includes(name), `index must not load legacy CSS: ${name}`);
+  assert.ok(!existsSync(join(siteDir, name)), `legacy CSS must be removed from site/: ${name}`);
 }
 
 const pages = [
