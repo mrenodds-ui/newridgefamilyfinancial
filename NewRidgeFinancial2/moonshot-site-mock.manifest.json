@@ -1,7 +1,7 @@
 {
   "schemaEpoch": "nr2-apex",
   "staffRenderMode": "apex",
-  "description": "Legacy mock-embed manifest retired — Apex is the staff shell (hal-10623+). Mockup leftover JS removed.",
+  "description": "Legacy mock-embed manifest retired — Apex is the staff shell (hal-10624+). Mockup leftover JS removed.",
   "shell": [
     "index.html",
     "apex-tokens.css",

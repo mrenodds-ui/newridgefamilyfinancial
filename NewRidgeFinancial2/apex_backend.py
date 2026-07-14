@@ -32,7 +32,7 @@ APEX_PAGES = (
     "hal",
 )
 
-BUILD_ID = "hal-10623"
+BUILD_ID = "hal-10624"
 
 
 def _apex_blank_all_widgets() -> bool:
@@ -3867,8 +3867,24 @@ def _office_manager_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> 
 
 
 def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[str, Any]]:
+    """HAL medium spine (hal-10624): cache → errors → trust pair → recon → actions → insight + chat rail."""
+    del reports  # HAL spine is import/recon/actions oriented
     widgets: list[dict[str, Any]] = []
 
+    # A rail: Ask HAL (client mounts into sticky right rail)
+    widgets.append(
+        {
+            "id": "hal-ask",
+            "type": "hal-chat",
+            "label": "Ask HAL",
+            "size": "l",
+            "status": "ok",
+            "hint": "Dictate findings · prioritize work · run grounded tools.",
+            "chrome": "hal-medium",
+        }
+    )
+
+    # B: Import cache + bridge errors
     try:
         from apex_32b_program_fixes_pack import (
             bridge_errors_widget,
@@ -3883,162 +3899,112 @@ def _hal_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[dict[s
             fill_failures=_WIDGETS_FILL_FAILURES,
             ttl_sec=_WIDGETS_CACHE_TTL_SEC,
         )
-        widgets.append(import_cache_kpi_widget(tele))
-        widgets.append(
-            bridge_errors_widget(
-                bundle=bundle,
-                fill_failures=_WIDGETS_FILL_FAILURES,
-                last_sync_error=_LAST_SYNC_ERROR or None,
-            )
+        cache = import_cache_kpi_widget(tele)
+        cache["chrome"] = "hal-medium"
+        cache["badge"] = "freshness"
+        widgets.append(cache)
+        errs = bridge_errors_widget(
+            bundle=bundle,
+            fill_failures=_WIDGETS_FILL_FAILURES,
+            last_sync_error=_LAST_SYNC_ERROR or None,
         )
-        widgets.append(reconciliation_surface_widget(bundle))
+        errs["chrome"] = "hal-medium"
+        widgets.append(errs)
+        recon = reconciliation_surface_widget(bundle)
+        if isinstance(recon, dict):
+            recon["chrome"] = "hal-medium"
+            recon["layoutRole"] = "recon"
     except Exception:
-        pass
+        recon = None
+        tele = {}
 
     diag = bundle.get("diagnostics") if isinstance(bundle.get("diagnostics"), dict) else {}
     summary = diag.get("summary") if isinstance(diag.get("summary"), dict) else {}
     connected = summary.get("connected")
     total = summary.get("total")
     missing = summary.get("missing")
-    if isinstance(connected, int) and isinstance(total, int) and total > 0:
-        widgets.append(
-            _count_kpi(
-                "hal-import-health",
-                "Import Health",
-                connected,
-                hint=f"{connected}/{total} datasets connected"
-                + (f"; {missing} missing" if missing else "")
-                + ".",
-                delta_label=f"{round(100.0 * connected / total, 0):.0f}%",
-            )
-        )
-    else:
-        widgets.append(
-            _empty_kpi(
-                "hal-import-health",
-                "Import Health",
-                hint="Import diagnostics not available.",
-            )
-        )
 
-    # Moonshot zero-scroll (hal-10561): HAL chat is a capped tile — no sole-l exemption
-    widgets.append(
-        {
-            "id": "hal-ask",
-            "type": "hal-chat",
-            "label": "Ask HAL",
-            "size": "m",
-            "compact": True,
-            "maxHeight": 320,
-            "status": "ok",
-            "hint": "Local HAL command tile · capped for zero-scroll (no sole-l).",
-        }
-    )
+    # C+D: trust pair (Import Health | Program Posture)
+    if isinstance(connected, int) and isinstance(total, int) and total > 0:
+        health = _count_kpi(
+            "hal-import-health",
+            "Import Health",
+            connected,
+            hint=f"{connected}/{total} datasets connected"
+            + (f"; {missing} missing" if missing else "")
+            + ".",
+            delta_label=f"{round(100.0 * connected / total, 0):.0f}%",
+        )
+        health["badge"] = "connected" if not missing else "partial"
+    else:
+        health = _empty_kpi(
+            "hal-import-health",
+            "Import Health",
+            hint="Import diagnostics not available.",
+        )
+        health["badge"] = "standby"
+    health["chrome"] = "hal-medium"
+    health["layoutRole"] = "trust"
+    health["size"] = "m"
+    widgets.append(health)
+
     if isinstance(connected, int) and isinstance(total, int) and total > 0 and missing == 0:
         posture_msg = "Operational"
-        posture_hint = "Imports connected — Apex P5 automation + live widgets."
+        posture_hint = "Imports connected — HAL answers stay grounded to live imports."
         posture_status = "ok"
+        posture_badge = "ok"
     elif isinstance(connected, int):
         posture_msg = "Degraded"
-        posture_hint = "Some imports missing/partial — HAL answers stay grounded to available data."
+        posture_hint = "Some imports missing/partial — answers stay grounded to available data."
         posture_status = "ok"
+        posture_badge = "warn"
     else:
         posture_msg = "Standby"
         posture_hint = "Awaiting import diagnostics."
         posture_status = "empty"
+        posture_badge = "standby"
 
-    widgets.append(
-        _status_widget(
-            "hal-program-posture",
-            "Program Posture",
-            message=posture_msg,
-            hint=posture_hint,
-            status=posture_status,
-        )
+    posture = _status_widget(
+        "hal-program-posture",
+        "Program Posture",
+        message=posture_msg,
+        hint=posture_hint,
+        status=posture_status,
     )
+    posture["chrome"] = "hal-medium"
+    posture["layoutRole"] = "trust"
+    posture["badge"] = posture_badge
+    posture["size"] = "m"
+    widgets.append(posture)
 
-    widgets.append(
-        _status_widget(
-            "hal-suggestion",
-            "HAL Suggestion",
-            message="Ready",
-            hint=HAL_STATUS_SUGGESTION,
-        )
-    )
+    # E: Reconciliation
+    if isinstance(recon, dict):
+        widgets.append(recon)
 
-    # Mosaic of key metrics (production, collections, AR, claims)
-    rows = _dashboard_rows(bundle)
-    latest = _latest_period_row(rows)
-    prod = _parse_money((latest or {}).get("production")) if latest else None
-    coll = None
-    if latest and not (latest.get("collectionsReported") is False or latest.get("collectionsPending") is True):
-        if "collections" in latest:
-            coll = _parse_money(latest.get("collections"))
-
-    widgets.append(
-        _money_kpi(
-            "hal-mosaic-prod",
-            "Production",
-            prod,
-            hint="SoftDent dashboard." if prod is not None else "Production not in latest SoftDent period.",
-        )
-    )
-    widgets.append(
-        _money_kpi(
-            "hal-mosaic-coll",
-            "Collections",
-            coll,
-            hint="SoftDent dashboard." if coll is not None else "Collections pending/missing.",
-        )
-    )
-
-    ar = reports.get("arAging") if isinstance(reports.get("arAging"), dict) else {}
-    ar_total = ar.get("totalOutstanding")
-    widgets.append(
-        _money_kpi(
-            "hal-mosaic-ar",
-            "A/R",
-            float(ar_total) if isinstance(ar_total, (int, float)) else None,
-            hint="SoftDent A/R." if isinstance(ar_total, (int, float)) else "A/R import missing.",
-        )
-    )
-
-    claims = _claims_summary_from_bundle(bundle)
-    widgets.append(
-        _count_kpi(
-            "hal-mosaic-claims",
-            "Claims",
-            claims.get("totalClaims") if claims.get("available") else None,
-            hint="SoftDent claims." if claims.get("available") else "Claims import missing.",
-        )
-    )
-
-    widgets.append(build_categorize_assist(bundle))
-    try:
-        from apex_hal_said_improve_pack import append_hal_page_hal_said
-
-        append_hal_page_hal_said(widgets)
-    except Exception:
-        pass
-    try:
-        from apex_structured_insight_pack import ai_insight_widget
-
-        widgets.append(ai_insight_widget())
-    except Exception:
-        pass
-    # Moonshot SHOULD: HAL recommended actions action-list
+    # F: Recommended actions
     try:
         from apex_better_backend_widgets_pack import build_hal_action_list
 
-        widgets.append(build_hal_action_list(bundle))
+        actions = build_hal_action_list(bundle)
+        if isinstance(actions, dict):
+            actions["chrome"] = "hal-medium"
+            actions["layoutRole"] = "actions"
+            widgets.append(actions)
     except Exception:
         pass
-    try:
-        from apex_unified_db_pack import unified_db_widget
 
-        widgets.append(unified_db_widget(bundle))
+    # G: AI insight
+    try:
+        from apex_structured_insight_pack import ai_insight_widget
+
+        insight = ai_insight_widget()
+        if isinstance(insight, dict):
+            insight["chrome"] = "hal-medium"
+            insight["layoutRole"] = "insight"
+            widgets.append(insight)
     except Exception:
         pass
+
     return widgets
 
 

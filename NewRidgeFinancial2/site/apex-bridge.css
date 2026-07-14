@@ -953,22 +953,85 @@ body.apex-ticker-muted .apex-ticker__track {
   opacity: 0.88;
 }
 
-/* HAL page: stacked main + chat rail */
+/* HAL page: medium spine + sticky Ask HAL rail (hal-10624) */
 .apex-stage--hal,
 #apex-stage.apex-stage--hal {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(347px, 28vw);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 30vw);
   grid-auto-rows: auto;
-  gap: var(--stage-gap, 12px);
+  gap: 14px;
   padding: 16px 20px 28px;
 }
 
 .apex-stage--hal .apex-hal-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--stage-gap, 12px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
   padding: 0;
   min-width: 0;
+  align-content: start;
+}
+
+/* Full-width spine tiles; trust pair shares one row */
+.apex-stage--hal .apex-hal-main > .apex-widget,
+.apex-stage--hal .apex-hal-main > .apex-inst {
+  grid-column: 1 / -1;
+}
+.apex-stage--hal .apex-hal-main > [data-widget-id="hal-import-health"],
+.apex-stage--hal .apex-hal-main > [data-widget-id="hal-program-posture"],
+.apex-stage--hal .apex-hal-main > .apex-layout--trust {
+  grid-column: auto;
+}
+
+.apex-stage--hal .apex-chrome--hal-medium {
+  border-color: rgba(0, 240, 255, 0.22);
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.04), transparent 28%), var(--apex-elevated);
+}
+.apex-stage--hal .apex-chrome--hal-medium::before {
+  opacity: 0.7;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--apex-cyan), transparent);
+}
+
+.apex-stage--hal .apex-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--apex-cyan);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  background: rgba(0, 240, 255, 0.08);
+  border-radius: 3px;
+  padding: 2px 6px;
+  z-index: 3;
+  pointer-events: none;
+}
+.apex-stage--hal .apex-badge--warn,
+.apex-stage--hal .apex-badge--partial {
+  color: var(--apex-amber);
+  border-color: rgba(255, 184, 0, 0.4);
+  background: rgba(255, 184, 0, 0.1);
+}
+.apex-stage--hal .apex-badge--standby {
+  color: var(--apex-text-secondary);
+  border-color: var(--apex-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.apex-stage--hal .apex-layout--recon {
+  border-left: 2px solid rgba(0, 240, 255, 0.35);
+}
+.apex-stage--hal .apex-layout--recon[data-empty="true"],
+.apex-stage--hal .apex-layout--recon.apex-widget--status[data-empty="true"] {
+  border-left-color: var(--apex-amber);
+}
+.apex-stage--hal .apex-layout--actions .apex-action-list {
+  gap: 8px;
+}
+.apex-stage--hal .apex-layout--insight {
+  border-color: rgba(0, 240, 255, 0.28);
 }
 
 .apex-stage--hal .apex-hal-rail {
@@ -978,6 +1041,9 @@ body.apex-ticker-muted .apex-ticker__track {
   max-height: calc(100vh - var(--ticker-height) - 72px);
   overflow: hidden;
   min-width: 0;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(0, 240, 255, 0.05), transparent 20%), var(--apex-elevated);
 }
 
 .apex-stage--hal .apex-widget--hal-chat,

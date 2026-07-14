@@ -1,13 +1,13 @@
 /**
  * NR2-Apex Core — stacked stage, silent refresh, print, session-aware fetch
- * Build: hal-10623 (free stacked stage — no blank/omit/partition filters)
+ * Build: hal-10624 (HAL medium spine redesign)
  */
 (function () {
   "use strict";
 
   const SESSION_HEADER = "X-NR2-Session-Token";
   const REFRESH_HEADER = "X-NR2-Refresh-Token";
-  const ASSET_V = "hal-10623";
+  const ASSET_V = "hal-10624";
   if (typeof window !== "undefined") {
     window.NR2_BUILD_ID = ASSET_V;
   }
@@ -421,6 +421,15 @@
       if (this.type === "hal-chat") {
         el.classList.add("apex-widget--hal-chat", "apex-inst--hal-chat");
       }
+      if (this.spec.chrome === "hal-medium") {
+        el.classList.add("apex-chrome--hal-medium");
+      }
+      const layoutRole = String((this.spec && this.spec.layoutRole) || "").trim();
+      if (layoutRole) {
+        el.classList.add(`apex-layout--${layoutRole}`);
+        el.dataset.layoutRole = layoutRole;
+      }
+      const badge = String((this.spec && this.spec.badge) || "").trim();
       if (this.spec.alert) {
         el.classList.add("apex-alert-pulse");
         if (this.spec.alertReason) el.title = String(this.spec.alertReason);
@@ -430,6 +439,14 @@
         el.dataset.empty = "true";
       }
       el.innerHTML = this.getTemplate();
+      if (badge) {
+        el.dataset.badge = badge;
+        el.classList.add("apex-has-badge");
+        const badgeEl = document.createElement("span");
+        badgeEl.className = `apex-badge apex-badge--${badge.replace(/[^a-z0-9_-]/gi, "")}`;
+        badgeEl.textContent = badge;
+        el.appendChild(badgeEl);
+      }
       this.element = el;
       this.attachEvents();
       this.mountChart();

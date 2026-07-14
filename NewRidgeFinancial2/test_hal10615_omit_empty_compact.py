@@ -1,4 +1,4 @@
-"""hal-10623 — omit helpers remain; live build no longer omits."""
+"""hal-10624 — omit helpers remain; live build no longer omits."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from apex_compact_pages_pack import (
 
 class Hal10615OmitEmptyCompactTests(unittest.TestCase):
     def test_build_id(self) -> None:
-        self.assertEqual(BUILD_ID, "hal-10623")
+        self.assertEqual(BUILD_ID, "hal-10624")
 
     def test_omit_chronic_empty_ids(self) -> None:
         widgets = [

@@ -1,9 +1,9 @@
 {
-  "schemaVersion": "hal-10623",
-  "BUILD_ID": "hal-10623",
-  "assetVersion": "hal-10623",
-  "builtAt": "2026-07-14T12:20:00.000Z",
-  "notes": "hal-10623: free stacked stage — blank/omit/partition/KPI filters off.",
+  "schemaVersion": "hal-10624",
+  "BUILD_ID": "hal-10624",
+  "assetVersion": "hal-10624",
+  "builtAt": "2026-07-14T13:00:00.000Z",
+  "notes": "hal-10624: HAL medium spine redesign (cache, trust, recon, actions, insight, rail).",
   "staffRenderMode": "apex",
-  "package": "HAL-10623"
+  "package": "HAL-10624"
 }
