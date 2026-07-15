@@ -2217,6 +2217,13 @@ class NR2BottleServer(BottleServer):
             payload = bottle.request.json or {}
             return _json_response(update_collections_queue_status(_local_store(), payload))
 
+        @app.get("/api/import/inbox-summary")
+        def import_inbox_summary_api():
+            """Document inbox file counts only — empty ≠ $0 · no invent catalog."""
+            from import_loader import inbox_summary
+
+            return _json_response(inbox_summary())
+
         @app.post("/api/import/heal")
         def import_heal_api():
             from import_healing import heal_import_pipeline

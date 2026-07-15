@@ -68,6 +68,55 @@ def quickbooks_import_dir() -> Path:
     return _import_dir("QUICKBOOKS_IMPORT_DIR", DEFAULT_QUICKBOOKS_IMPORT_REL)
 
 
+def inbox_summary() -> dict[str, Any]:
+    """Count import-inbox files only — no invented catalog dollars (empty ≠ $0)."""
+    sd_dir = softdent_import_dir()
+    qb_dir = quickbooks_import_dir()
+
+    def _count_files(root: Path) -> tuple[int, str | None]:
+        if not root.is_dir():
+            return 0, None
+        newest: float | None = None
+        n = 0
+        try:
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                # Skip processed/quarantine mirrors under inbox if present.
+                if any(part.lower() in {"processed", "quarantine", "_archive"} for part in path.parts):
+                    continue
+                n += 1
+                try:
+                    m = path.stat().st_mtime
+                except OSError:
+                    continue
+                if newest is None or m > newest:
+                    newest = m
+        except OSError:
+            return 0, None
+        mtime = (
+            datetime.fromtimestamp(newest, tz=timezone.utc).replace(microsecond=0).isoformat()
+            if newest is not None
+            else None
+        )
+        return n, mtime
+
+    sd_n, sd_m = _count_files(sd_dir)
+    qb_n, qb_m = _count_files(qb_dir)
+    total = sd_n + qb_n
+    return {
+        "hasData": total > 0,
+        "softdentFiles": sd_n,
+        "quickbooksFiles": qb_n,
+        "totalFiles": total,
+        "softdentDir": str(sd_dir),
+        "quickbooksDir": str(qb_dir),
+        "softdentNewestAt": sd_m,
+        "quickbooksNewestAt": qb_m,
+        "honesty": "empty != $0 · file counts only · no catalog invent",
+    }
+
+
 def _mtime_iso(path: Path) -> str:
     if not path.is_file():
         return ""
