@@ -1,0 +1,226 @@
+/* HAL Optical Command Center — Moonshot P3 (nr2-12018-hal-brains) */
+:root {
+  --hal-void: #000208;
+  --hal-panel: rgba(8, 12, 16, 0.96);
+  --hal-cyan: #00d4aa;
+  --hal-ink: #e0e6ed;
+  --hal-muted: #5a6575;
+  --hal-warn: #e6a23c;
+  --hal-danger: #ff0044;
+  --hal-live: #00d4aa;
+}
+
+.hal-cmd {
+  display: grid;
+  grid-template-columns: minmax(200px, 22%) minmax(320px, 1fr) minmax(200px, 22%);
+  gap: 14px;
+  align-items: stretch;
+  min-height: calc(100dvh - 150px);
+}
+@media (max-width: 1100px) {
+  .hal-cmd { grid-template-columns: 1fr; }
+}
+
+.hal-cmd-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+.hal-core-orb {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--hal-ink);
+  box-shadow: 0 0 14px var(--hal-ink);
+  animation: hal-breathe 2.4s ease-in-out infinite;
+  display: inline-block;
+}
+.hal-core-orb.busy {
+  animation: hali-spin 0.7s linear infinite;
+  background: var(--hal-cyan);
+  box-shadow: 0 0 18px var(--hal-cyan);
+}
+.hal-core-orb.error {
+  background: var(--hal-danger);
+  box-shadow: 0 0 16px var(--hal-danger);
+  animation: hali-strobe 0.5s steps(2) infinite;
+}
+@keyframes hali-breathe {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+@keyframes hali-spin {
+  to { transform: rotate(360deg); box-shadow: 0 0 22px var(--hal-cyan); }
+}
+@keyframes hali-strobe {
+  50% { opacity: 0.35; }
+}
+@keyframes hal-breathe {
+  0%, 100% { opacity: 0.45; transform: scale(0.92); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+.hal-panel {
+  border: 1px solid rgba(224, 230, 237, 0.28);
+  background: var(--hal-panel);
+  padding: 12px;
+  min-height: 120px;
+}
+.hal-panel h3 {
+  margin: 0 0 8px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--hal-muted);
+  text-transform: uppercase;
+}
+.hal-truth {
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px;
+  padding: 6px 8px;
+  border: 1px solid #243040;
+  margin-bottom: 10px;
+}
+.hal-truth.live { border-color: rgba(0,212,170,0.45); color: var(--hal-live); }
+.hal-truth.stale { border-color: rgba(230,162,60,0.5); color: var(--hal-warn); }
+.hal-truth.down { border-color: rgba(255,0,68,0.45); color: var(--hal-danger); }
+
+.hal-memo-list, .hal-action-list, .hal-beam-list {
+  list-style: none; margin: 0; padding: 0;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 12px;
+  line-height: 1.4;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.hal-memo-list li, .hal-action-list li, .hal-beam-list li {
+  border-bottom: 1px solid #1c2430;
+  padding: 8px 0;
+  color: #c8d0da;
+}
+.hal-beam-val {
+  font-size: 18px;
+  color: var(--hal-ink);
+  letter-spacing: 0.04em;
+}
+.hal-beam-val.empty { color: var(--hal-muted); }
+
+.chat-cmd {
+  position: relative;
+  border: 1px solid rgba(224,230,237,0.35);
+  background:
+    radial-gradient(ellipse 80% 40% at 50% 0%, rgba(224,230,237,0.08), transparent 55%),
+    rgba(8,12,16,0.96);
+  min-height: calc(100dvh - 200px);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 0 40px rgba(224,230,237,0.08), inset 0 0 40px rgba(0,0,0,0.35);
+}
+.chat-cmd .scanlines {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0.04; z-index: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 2px, rgba(255,255,255,0.4) 2px 3px);
+}
+.chat-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid #243040;
+  font-family: var(--mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.1em; z-index: 1;
+}
+.chat-stream {
+  flex: 1; overflow-y: auto; padding: 14px; z-index: 1;
+  font-family: var(--mono, ui-monospace, monospace); font-size: 13px; line-height: 1.45;
+}
+.msg {
+  margin-bottom: 12px; padding: 10px 12px; border: 1px solid #243040; max-width: 95%;
+}
+.msg.hal {
+  border-color: rgba(224,230,237,0.35);
+  background: rgba(224,230,237,0.04);
+  color: #dbe4ee;
+}
+.msg.user {
+  margin-left: auto;
+  border-color: rgba(0,212,170,0.35);
+  background: rgba(0,212,170,0.06);
+  color: #c8fff0;
+}
+.msg .who {
+  display: block; font-size: 10px; letter-spacing: 0.14em; color: var(--hal-muted);
+  margin-bottom: 4px; text-transform: uppercase;
+}
+.msg.typing .who::after { content: " · typing"; color: var(--hal-cyan); }
+
+.chat-compose {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 8px;
+  padding: 12px; border-top: 1px solid #243040; z-index: 1;
+}
+.chat-compose textarea {
+  resize: none; min-height: 52px; max-height: 120px;
+  border: 1px solid #334; background: #05080c; color: #e8e8f0;
+  font-family: var(--mono, ui-monospace, monospace); font-size: 13px; padding: 10px 12px;
+}
+.chat-compose textarea:focus {
+  outline: none; border-color: var(--hal-ink);
+  box-shadow: 0 0 0 1px rgba(224,230,237,0.25);
+}
+.chat-compose button {
+  min-width: 72px; min-height: 52px; border: 1px solid var(--hal-ink);
+  background: #0c1218; color: var(--hal-ink); font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px; letter-spacing: 0.1em; cursor: pointer;
+}
+.chat-compose button:hover {
+  background: rgba(224,230,237,0.08);
+  box-shadow: 0 0 18px rgba(224,230,237,0.2);
+}
+.chat-compose button.voice-btn { border-color: var(--hal-cyan); color: var(--hal-cyan); }
+
+.tool-palette {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px;
+}
+.tool-palette button, .tool-palette .tool-go {
+  border: 1px solid #334; background: #0a1016; color: #c8d0da;
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px;
+  letter-spacing: 0.08em; padding: 8px 6px; cursor: pointer;
+}
+.tool-palette button:hover { border-color: var(--hal-cyan); color: var(--hal-cyan); }
+.tool-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 4px; grid-column: 1 / -1;
+}
+.tool-row input {
+  border: 1px solid #334; background: #05080c; color: #e8e8f0;
+  font-family: var(--mono, ui-monospace, monospace); font-size: 11px; padding: 8px;
+}
+
+.consent-modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.72);
+  display: none; align-items: center; justify-content: center; z-index: 1000;
+}
+.consent-modal.open { display: flex; }
+.consent-card {
+  width: min(440px, 92vw); border: 1px solid var(--hal-warn);
+  background: #0a1016; padding: 18px; font-family: var(--mono, ui-monospace, monospace);
+  color: #e8e8f0;
+}
+.consent-card h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: 0.12em; color: var(--hal-warn); }
+.consent-actions { display: flex; gap: 8px; margin-top: 14px; }
+.consent-actions button {
+  flex: 1; min-height: 40px; border: 1px solid #445; background: #121820; color: #e8e8f0;
+  font-family: var(--mono, ui-monospace, monospace); cursor: pointer; letter-spacing: 0.1em;
+}
+.consent-actions button.approve { border-color: var(--hal-cyan); color: var(--hal-cyan); }
+.consent-actions button.deny { border-color: var(--hal-danger); color: var(--hal-danger); }
+
+.hal-stale-banner {
+  display: none; margin: 8px 0 12px; padding: 8px 10px;
+  border: 1px solid rgba(230,162,60,0.55); color: var(--hal-warn);
+  font-family: var(--mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em;
+}
+.hal-stale-banner.show { display: block; }
+
+.hal-canvas-slot {
+  margin-top: 10px; min-height: 48px; border: 1px dashed #243040;
+  color: var(--hal-muted); font-family: var(--mono, ui-monospace, monospace);
+  font-size: 11px; padding: 8px;
+}

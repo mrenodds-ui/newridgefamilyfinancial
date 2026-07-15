@@ -1,112 +1,510 @@
-/* HAL chat — live wire POST /api/hal/evaluate-query + money honesty (CSP script-src 'self') */
+/* HAL brains command center — Moonshot P0–P3 (CSP script-src 'self') */
 (function () {
   const stream = document.getElementById("stream");
   const form = document.getElementById("compose");
   const input = document.getElementById("input");
+  const orb = document.getElementById("halOrb");
+  const systemTruth = document.getElementById("systemTruth");
+  const sessionChip = document.getElementById("sessionChip");
+  const staleBanner = document.getElementById("staleBanner");
+  const importReady = document.getElementById("importReady");
+  const memoList = document.getElementById("memoList");
+  const actionQueue = document.getElementById("actionQueue");
+  const beamSd = document.getElementById("beamSd");
+  const beamSdHint = document.getElementById("beamSdHint");
+  const beamQb = document.getElementById("beamQb");
+  const beamQbHint = document.getElementById("beamQbHint");
+  const consentModal = document.getElementById("consentModal");
+  const consentBody = document.getElementById("consentBody");
+  const chatBind = document.getElementById("chatBind");
   if (!stream || !form || !input) return;
 
-  let sessionToken = "";
+  const SS_KEY = "nr2.hal.chatSessionId";
+  let browserToken = "";
+  let chatSessionId = sessionStorage.getItem(SS_KEY) || "";
   let busy = false;
+  let voiceOn = false;
+  let pendingConsent = null;
+  const messages = [];
 
-  function addMsg(role, text) {
+  function setOrb(state) {
+    if (!orb) return;
+    orb.classList.remove("busy", "error");
+    if (state === "busy") orb.classList.add("busy");
+    if (state === "error") orb.classList.add("error");
+  }
+
+  function setTruth(el, level, text) {
+    if (!el) return;
+    el.classList.remove("live", "stale", "down");
+    el.classList.add(level);
+    el.textContent = text;
+  }
+
+  function honestyMoney(hasData, display) {
+    if (!hasData) return { text: "NO SIGNAL", empty: true };
+    if (display == null || display === "" || display === "$0" || display === "0") {
+      return { text: "empty (not zero)", empty: true };
+    }
+    return { text: String(display), empty: false };
+  }
+
+  function rememberSession(id) {
+    if (!id) return;
+    chatSessionId = String(id);
+    sessionStorage.setItem(SS_KEY, chatSessionId);
+    if (sessionChip) sessionChip.textContent = "SESSION " + chatSessionId.slice(0, 8);
+  }
+
+  function addMsg(role, text, opts) {
     const el = document.createElement("div");
-    el.className = "msg " + role;
-    el.innerHTML =
-      '<span class="who">' +
-      (role === "hal" ? "HAL" : "OPERATOR") +
-      "</span>" +
-      String(text).replace(/</g, "&lt;");
+    el.className = "msg " + role + (opts && opts.typing ? " typing" : "");
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = role === "hal" ? "HAL" : "OPERATOR";
+    const body = document.createElement("div");
+    body.className = "body";
+    body.textContent = String(text || "");
+    el.appendChild(who);
+    el.appendChild(body);
     stream.appendChild(el);
     stream.scrollTop = stream.scrollHeight;
+    return { el: el, body: body };
   }
 
-  function looksMoney(q) {
-    return /\$|claim|claims|revenue|outstanding|aging|\bar\b|dollar|total/i.test(q || "");
+  function personaPrefix() {
+    try {
+      if (typeof HalChat9000 !== "undefined" && HalChat9000.personaLines) {
+        return HalChat9000.personaLines({
+          config: { chat9000: { enabled: true, hal9000Persona: true } },
+        });
+      }
+    } catch (_) {}
+    return "";
   }
 
-  async function ensureSession() {
+  function bootGreeting() {
+    addMsg(
+      "hal",
+      "Spectral link online. I am the brains of this program — SoftDent and QuickBooks beams, MemoAI, and web research. I will not invent dollars. Ask, or use the tool palette."
+    );
+  }
+
+  async function ensureBrowserSession() {
     try {
       const res = await fetch("/api/browser-session", { cache: "no-store" });
       const data = await res.json();
       if (data && data.sessionToken) {
-        sessionToken = String(data.sessionToken);
+        browserToken = String(data.sessionToken);
         return true;
       }
     } catch (_) {}
     return false;
   }
 
-  async function prefetchClaimsHint() {
+  async function ensureChatSession() {
+    if (chatSessionId) {
+      rememberSession(chatSessionId);
+      return chatSessionId;
+    }
+    const res = await fetch("/api/hal/session", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(browserToken ? { "X-NR2-Session-Token": browserToken } : {}),
+      },
+      body: JSON.stringify({ meta: { source: "optical-hal-brains" } }),
+    });
+    const data = await res.json();
+    if (data && data.sessionId) rememberSession(data.sessionId);
+    return chatSessionId;
+  }
+
+  async function restoreHistory() {
+    if (!chatSessionId) return;
     try {
-      const res = await fetch("/api/softdent/claims-outstanding?limit=1", { cache: "no-store" });
+      const res = await fetch(
+        "/api/hal/session/" + encodeURIComponent(chatSessionId) + "/history?limit=50",
+        { cache: "no-store" }
+      );
       const data = await res.json();
-      if (!res.ok || !data) return "";
-      if (!data.hasData) return " [beam: SoftDent claims ∅ · empty≠$0]";
-      const total = data.totalOutstanding;
-      if (total == null || !Number.isFinite(Number(total))) return " [beam: SoftDent claims LIVE]";
-      return " [beam: SoftDent claims live $" + Number(total).toLocaleString("en-US", { maximumFractionDigits: 0 }) + "]";
+      if (!data || !data.ok) return;
+      stream.innerHTML = "";
+      messages.length = 0;
+      (data.messages || []).forEach(function (m) {
+        const role = m.role === "user" ? "user" : "hal";
+        addMsg(role, m.content || "");
+        messages.push({
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.content || "",
+        });
+      });
+      if (!(data.messages || []).length) bootGreeting();
     } catch (_) {
-      return " [beam: SoftDent claims NO SIGNAL]";
+      addMsg("hal", "Spectral link online. Session history unavailable — starting fresh.");
     }
   }
 
-  ensureSession().then((ok) => {
-    const chip = document.querySelector(".hal-chip");
-    if (chip) {
-      chip.insertAdjacentHTML(
-        "beforeend",
-        ok
-          ? ' <span style="color:var(--sd);margin-left:8px">STANDBY · LIVE GATE</span>'
-          : ' <span style="color:var(--lock);margin-left:8px">SESSION WEAK</span>'
+  async function refreshImportTruth() {
+    try {
+      const res = await fetch("/api/import-readiness", { cache: "no-store" });
+      const data = await res.json();
+      const level = String((data && data.level) || "unknown");
+      const blocking = (data && data.blocking) || [];
+      if (level === "fresh") {
+        setTruth(importReady, "live", "LIVE · imports fresh");
+        setTruth(systemTruth, "live", "SYSTEM: LIVE");
+        staleBanner.classList.remove("show");
+        setOrb("idle");
+      } else if (level === "soft_stale" || level === "stale" || level === "degraded") {
+        setTruth(
+          importReady,
+          "stale",
+          "STALE · " + level + (blocking.length ? " · " + blocking.length + " gap(s)" : "")
+        );
+        setTruth(systemTruth, "stale", "SYSTEM: DEGRADED");
+        staleBanner.classList.add("show");
+      } else {
+        setTruth(importReady, "down", level.toUpperCase());
+        setTruth(systemTruth, "down", "SYSTEM: " + level.toUpperCase());
+        staleBanner.classList.add("show");
+        setOrb("error");
+      }
+    } catch (_) {
+      setTruth(importReady, "down", "NO SIGNAL");
+      setTruth(systemTruth, "down", "SYSTEM: NO SIGNAL");
+      setOrb("error");
+    }
+  }
+
+  async function refreshBeams() {
+    try {
+      const res = await fetch("/api/hal/tools/softdent-status", { cache: "no-store" });
+      const data = await res.json();
+      const h = honestyMoney(!!data.hasData, data.display);
+      beamSd.textContent = h.text;
+      beamSd.classList.toggle("empty", h.empty);
+      beamSdHint.textContent = data.hint || "";
+    } catch (_) {
+      beamSd.textContent = "NO SIGNAL";
+      beamSd.classList.add("empty");
+    }
+    try {
+      const res = await fetch("/api/hal/tools/qb-summary", { cache: "no-store" });
+      const data = await res.json();
+      const h = honestyMoney(!!data.hasData, data.display);
+      beamQb.textContent = h.text;
+      beamQb.classList.toggle("empty", h.empty);
+      beamQbHint.textContent = data.hint || "";
+    } catch (_) {
+      beamQb.textContent = "NO SIGNAL";
+      beamQb.classList.add("empty");
+    }
+  }
+
+  async function refreshActions() {
+    try {
+      const res = await fetch("/api/hal/actions/pending", { cache: "no-store" });
+      const data = await res.json();
+      const pending = (data && data.pending) || [];
+      actionQueue.innerHTML = "";
+      if (!pending.length) {
+        const li = document.createElement("li");
+        li.textContent = "No pending consents";
+        actionQueue.appendChild(li);
+        return;
+      }
+      pending.forEach(function (a) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "APPROVE · " + (a.label || a.kind);
+        btn.style.cssText =
+          "width:100%;text-align:left;border:1px solid #445;background:#0a1016;color:#e8e8f0;padding:6px;cursor:pointer;font:inherit";
+        btn.addEventListener("click", function () {
+          openConsent(a);
+        });
+        li.appendChild(btn);
+        actionQueue.appendChild(li);
+      });
+    } catch (_) {}
+  }
+
+  function openConsent(action) {
+    pendingConsent = action;
+    consentBody.textContent =
+      (action && action.label) ||
+      "HAL requests: " + ((action && action.kind) || "action") + ". Approve only if you intend this.";
+    consentModal.classList.add("open");
+  }
+
+  function closeConsent() {
+    pendingConsent = null;
+    consentModal.classList.remove("open");
+  }
+
+  async function executeConsent(approve) {
+    const action = pendingConsent;
+    closeConsent();
+    if (!approve || !action) return;
+    setOrb("busy");
+    try {
+      const res = await fetch("/api/hal/actions/execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(browserToken ? { "X-NR2-Session-Token": browserToken } : {}),
+        },
+        body: JSON.stringify({ actionId: action.actionId, consent: true }),
+      });
+      const data = await res.json();
+      const result = data.result || data;
+      if (result && result.clientMustNavigate && result.navigate) {
+        window.location.href = String(result.navigate);
+        return;
+      }
+      addMsg(
+        "hal",
+        data.ok
+          ? "Action executed · " + (action.label || action.kind) + (result.path ? " → " + result.path : "")
+          : "Action failed · " + (result.detail || result.error || data.error || res.status)
       );
+      if (typeof HalVoice !== "undefined" && voiceOn && HalVoice.speakHalReply && data.ok) {
+        HalVoice.speakHalReply("Action complete.");
+      }
+    } catch (err) {
+      addMsg("hal", "Action fault · " + String(err && err.message ? err.message : err));
+    }
+    setOrb("idle");
+    refreshActions();
+    refreshBeams();
+  }
+
+  document.getElementById("consentApprove").addEventListener("click", function () {
+    executeConsent(true);
+  });
+  document.getElementById("consentDeny").addEventListener("click", function () {
+    addMsg("hal", "Consent denied. No action taken.");
+    closeConsent();
+  });
+
+  async function proposeAndConsent(kind, label, payload) {
+    const res = await fetch("/api/hal/actions/propose", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(browserToken ? { "X-NR2-Session-Token": browserToken } : {}),
+      },
+      body: JSON.stringify({ kind: kind, label: label, payload: payload || {} }),
+    });
+    const data = await res.json();
+    if (data && data.action) {
+      await refreshActions();
+      openConsent(data.action);
+    } else {
+      addMsg("hal", "Could not propose action · " + (data.error || res.status));
+    }
+  }
+
+  async function memoSearch(q) {
+    const res = await fetch("/api/hal/tools/memo-search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q, limit: 5 }),
+    });
+    const data = await res.json();
+    memoList.innerHTML = "";
+    const mems = (data && data.memories) || [];
+    if (!mems.length) {
+      const li = document.createElement("li");
+      li.textContent = "No memories matched";
+      memoList.appendChild(li);
+      return;
+    }
+    mems.slice(0, 5).forEach(function (m) {
+      const li = document.createElement("li");
+      li.textContent = (m.title || m.id || "memory") + " — " + (m.text || "");
+      memoList.appendChild(li);
+    });
+  }
+
+  async function webResearch(q) {
+    const res = await fetch("/api/hal/tools/web-research", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query: q }),
+    });
+    const data = await res.json();
+    if (data.error === "phi_blocked") {
+      addMsg("hal", "Web research blocked — do not send PHI identifiers.");
+      return;
+    }
+    const results = data.results || data.items || [];
+    if (!results.length) {
+      addMsg("hal", "Web research returned empty for that query.");
+      return;
+    }
+    const lines = results.slice(0, 5).map(function (r, i) {
+      return i + 1 + ". " + (r.title || r.url || "result") + (r.snippet ? " — " + r.snippet : "");
+    });
+    addMsg("hal", "Web research:\n" + lines.join("\n"));
+  }
+
+  async function streamChat(query) {
+    setOrb("busy");
+    const typing = addMsg("hal", "", { typing: true });
+    let full = "";
+    const persona = personaPrefix();
+    try {
+      const res = await fetch("/api/hal/chat", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+          ...(browserToken ? { "X-NR2-Session-Token": browserToken } : {}),
+        },
+        body: JSON.stringify({
+          query: query,
+          sessionId: chatSessionId,
+          stream: true,
+          messages: messages.slice(-20),
+          systemPrompt: persona || undefined,
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const errJson = await res.json().catch(function () {
+          return {};
+        });
+        typing.el.classList.remove("typing");
+        typing.body.textContent =
+          "Transmit blocked · " +
+          (errJson.error || errJson.detail || res.status) +
+          ". Money answers gated by import-readiness; empty is not zero.";
+        setOrb("error");
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buf += decoder.decode(chunk.value, { stream: true });
+        const parts = buf.split("\n\n");
+        buf = parts.pop() || "";
+        parts.forEach(function (block) {
+          const lines = block.split("\n");
+          let dataLine = "";
+          lines.forEach(function (line) {
+            if (line.indexOf("data:") === 0) dataLine = line.slice(5).trim();
+          });
+          if (!dataLine) return;
+          try {
+            const obj = JSON.parse(dataLine);
+            if (obj.sessionId) rememberSession(obj.sessionId);
+            if (obj.token) {
+              full += String(obj.token);
+              typing.el.classList.remove("typing");
+              typing.body.textContent = full;
+              stream.scrollTop = stream.scrollHeight;
+            }
+            if (obj.error) {
+              typing.el.classList.remove("typing");
+              typing.body.textContent = "Link fault · " + String(obj.error);
+              setOrb("error");
+            }
+          } catch (_) {}
+        });
+      }
+      typing.el.classList.remove("typing");
+      if (!full) {
+        typing.body.textContent =
+          "No reply tokens · empty is not zero if this was a money ask.";
+      }
+      messages.push({ role: "user", content: query });
+      if (full) messages.push({ role: "assistant", content: full });
+      if (typeof HalVoice !== "undefined" && voiceOn && full && HalVoice.speakHalReply) {
+        HalVoice.speakHalReply(full);
+      }
+      setOrb("idle");
+    } catch (err) {
+      typing.el.classList.remove("typing");
+      typing.body.textContent = "Link fault · " + String(err && err.message ? err.message : err);
+      setOrb("error");
+    }
+  }
+
+  document.getElementById("btnSdExport").addEventListener("click", function () {
+    proposeAndConsent("softdent_export", "Export SoftDent Account Aging to Excel (GUI)", {
+      reportId: "aging",
+      days: 30,
+    });
+  });
+  document.getElementById("btnQbSync").addEventListener("click", function () {
+    proposeAndConsent("qb_sync", "Sync QuickBooks read-only", {});
+  });
+  document.getElementById("btnMemoSearch").addEventListener("click", function () {
+    const q = (document.getElementById("memoQuery").value || "").trim();
+    if (q) memoSearch(q);
+  });
+  document.getElementById("btnWebSearch").addEventListener("click", function () {
+    const q = (document.getElementById("webQuery").value || "").trim();
+    if (q) webResearch(q);
+  });
+  document.getElementById("btnSyncAll").addEventListener("click", function () {
+    proposeAndConsent("qb_sync", "SYNC ALL — QuickBooks read sync (consent)", {});
+  });
+  document.getElementById("btnRefreshBeams").addEventListener("click", function () {
+    refreshBeams();
+    refreshImportTruth();
+    refreshActions();
+  });
+  document.getElementById("btnVoice").addEventListener("click", function () {
+    voiceOn = !voiceOn;
+    document.getElementById("btnVoice").textContent = voiceOn ? "ON" : "MIC";
+    if (voiceOn && typeof HalVoice !== "undefined" && HalVoice.speak) {
+      HalVoice.speak("HAL voice online. Local only.");
     }
   });
 
-  form.addEventListener("submit", async (e) => {
+  form.addEventListener("submit", async function (e) {
     e.preventDefault();
     const q = (input.value || "").trim();
     if (!q || busy) return;
     addMsg("user", q);
     input.value = "";
     busy = true;
-    if (!sessionToken) await ensureSession();
-    let queryOut = q;
-    if (looksMoney(q)) {
-      const hint = await prefetchClaimsHint();
-      if (hint) queryOut = q + hint;
-    }
-    try {
-      const res = await fetch("/api/hal/evaluate-query", {
-        method: "POST",
-        cache: "no-store",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-          ...(sessionToken ? { "X-NR2-Session-Token": sessionToken } : {}),
-        },
-        body: JSON.stringify({ query: queryOut, stream: false }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        addMsg(
-          "hal",
-          "Transmit blocked · " +
-            (data.error || data.detail || res.status) +
-            ". Money answers gated by import-readiness; empty ≠ $0."
-        );
-      } else {
-        const reply =
-          data.reply ||
-          data.response ||
-          data.text ||
-          (data.message && (data.message.content || data.message)) ||
-          (data.result && (data.result.reply || data.result.text)) ||
-          JSON.stringify(data).slice(0, 800);
-        addMsg("hal", String(reply));
-      }
-    } catch (err) {
-      addMsg("hal", "Link fault · " + String(err && err.message ? err.message : err));
-    }
+    if (!browserToken) await ensureBrowserSession();
+    await ensureChatSession();
+    await streamChat(q);
     busy = false;
+    refreshBeams();
+    refreshActions();
   });
+
+  (async function boot() {
+    const ok = await ensureBrowserSession();
+    if (chatBind) {
+      chatBind.textContent = ok
+        ? "bind → POST /api/hal/chat · LIVE GATE · multi-turn stream · local only"
+        : "bind → POST /api/hal/chat · SESSION WEAK";
+    }
+    if (chatSessionId) {
+      rememberSession(chatSessionId);
+      await restoreHistory();
+    } else {
+      await ensureChatSession();
+      bootGreeting();
+    }
+    await refreshImportTruth();
+    await refreshBeams();
+    await refreshActions();
+    try {
+      if (typeof HalPageCanvas !== "undefined") {
+        const slot = document.getElementById("halCanvasSlot");
+        if (slot) slot.textContent = "HalPageCanvas mounted · feed widgets when Apex feed available";
+      }
+    } catch (_) {}
+  })();
 })();

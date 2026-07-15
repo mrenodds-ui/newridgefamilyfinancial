@@ -914,6 +914,285 @@ class NR2BottleServer(BottleServer):
             )
             return _json_response(result)
 
+        # --- Moonshot HAL brains (P0–P2): session + chat + tools + consent actions ---
+
+        @app.post("/api/hal/session")
+        def hal_session_create_api():
+            from hal_session_store import create_session
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+            return _json_response(create_session(meta=meta))
+
+        @app.get("/api/hal/session/<session_id>/history")
+        def hal_session_history_api(session_id: str):
+            from hal_session_store import get_history
+
+            limit = int(bottle.request.params.get("limit") or 50)
+            return _json_response(get_history(session_id, limit=limit))
+
+        @app.post("/api/hal/chat")
+        def hal_chat_api():
+            """Multi-turn HAL chat (Moonshot P0). stream:true → SSE; else JSON."""
+            from employee_actions import get_current_shift_context
+            from hal_session_store import (
+                HAL_9000_BRAIN_SYSTEM,
+                append_turn,
+                create_session,
+                messages_for_chat,
+            )
+            from nr2_hal_gateway import (
+                APPROVED_LOCAL_MODEL,
+                enforce_approved_local_model,
+                evaluate_query,
+                evaluate_query_sse_frames,
+                reject_financial_lane_downgrade,
+                resolve_lane,
+                route_by_complexity,
+            )
+
+            if bottle.request.headers.get("X-Direct-Ollama"):
+                return _json_response({"ok": False, "error": "direct_ollama_rejected"}, status=403)
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            query = str(payload.get("query") or "").strip()
+            if not query:
+                return _json_response({"ok": False, "error": "empty_query"}, status=400)
+
+            if reject_financial_lane_downgrade(query, bottle.request.headers.get("X-HAL-Model-Override")):
+                return _json_response(
+                    {"ok": False, "error": "financial_lane_downgrade_rejected", "minimumLane": "reason21b"},
+                    status=403,
+                )
+            model_gate = enforce_approved_local_model(
+                payload.get("model"),
+                override_header=bottle.request.headers.get("X-HAL-Model-Override"),
+            )
+            if not model_gate.get("ok"):
+                return _json_response(model_gate, status=403)
+            if payload.get("cloud") or str(payload.get("lane") or "").lower() == "cloud":
+                return _json_response(
+                    {
+                        "ok": False,
+                        "error": "cloud_hal_disabled",
+                        "approvedModel": APPROVED_LOCAL_MODEL,
+                        "detail": "Office HAL is local 32B only",
+                    },
+                    status=403,
+                )
+
+            session_id = str(payload.get("sessionId") or payload.get("session_id") or "").strip()
+            if not session_id:
+                created = create_session(meta={"source": "optical-hal-chat"})
+                session_id = str(created.get("sessionId") or "")
+
+            # Sliding window: last 10 turns from store (+ optional client messages)
+            prior = messages_for_chat(session_id, limit=20)
+            client_msgs = payload.get("messages") if isinstance(payload.get("messages"), list) else None
+            if client_msgs and not prior:
+                prior = []
+                for m in client_msgs[-20:]:
+                    if not isinstance(m, dict):
+                        continue
+                    role = str(m.get("role") or "")
+                    content = str(m.get("content") or m.get("text") or "")
+                    if role in ("user", "assistant") and content:
+                        prior.append({"role": role, "content": content})
+            chat_messages = list(prior) + [{"role": "user", "content": query}]
+
+            persona = str(payload.get("systemPrompt") or payload.get("system") or "").strip()
+            if not persona:
+                persona = HAL_9000_BRAIN_SYSTEM
+            elif "HAL" not in persona[:80]:
+                persona = HAL_9000_BRAIN_SYSTEM + "\n\n" + persona
+
+            append_turn(session_id, role="user", text=query)
+            store = _local_store()
+            readiness = _get_import_readiness()
+            shift_context = payload.get("shiftContext") if isinstance(payload.get("shiftContext"), dict) else None
+            if not shift_context:
+                shift_context = get_current_shift_context(store)
+            lane_key = str(
+                payload.get("lane")
+                or payload.get("requestedLane")
+                or route_by_complexity(query, shift_context=shift_context, store=store)
+            )
+            resolved = resolve_lane(lane_key)
+            use_stream = bool(payload.get("stream", True))
+
+            if use_stream:
+                bottle.response.content_type = "text/event-stream; charset=utf-8"
+                bottle.response.set_header("Cache-Control", "no-cache")
+                bottle.response.set_header("Connection", "keep-alive")
+                bottle.response.set_header("X-Accel-Buffering", "no")
+                bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
+                bottle.response.set_header("X-HAL-Lane-Used", str(resolved["lane"]))
+                bottle.response.set_header("X-HAL-Session-Id", session_id)
+
+                def _gen():
+                    buf: list[str] = []
+                    yield f"event: meta\ndata: {json.dumps({'sessionId': session_id, 'status': 'typing', 'done': False})}\n\n"
+                    for frame in evaluate_query_sse_frames(
+                        query=query,
+                        readiness=readiness,
+                        model=APPROVED_LOCAL_MODEL,
+                        system_prompt=persona,
+                        messages=chat_messages,
+                        options=payload.get("options") if isinstance(payload.get("options"), dict) else None,
+                        shift_context=shift_context,
+                        requested_lane=lane_key,
+                        store=store,
+                    ):
+                        if frame.startswith("data:"):
+                            try:
+                                data_line = frame.split("data:", 1)[1].strip()
+                                obj = json.loads(data_line)
+                                tok = obj.get("token")
+                                if tok:
+                                    buf.append(str(tok))
+                            except Exception:
+                                pass
+                        yield frame
+                    full = "".join(buf)
+                    if full:
+                        append_turn(session_id, role="assistant", text=full)
+                    yield f"event: session\ndata: {json.dumps({'sessionId': session_id, 'done': True})}\n\n"
+
+                return _gen()
+
+            result = evaluate_query(
+                query=query,
+                readiness=readiness,
+                model=APPROVED_LOCAL_MODEL,
+                system_prompt=persona,
+                messages=chat_messages,
+                options=payload.get("options") if isinstance(payload.get("options"), dict) else None,
+                shift_context=shift_context,
+                requested_lane=lane_key,
+                store=store,
+            )
+            result["resolvedLane"] = result.get("resolvedLane") or resolved["lane"]
+            result["sessionId"] = session_id
+            reply = str(result.get("text") or (result.get("message") or {}).get("content") or "")
+            if reply:
+                append_turn(session_id, role="assistant", text=reply)
+            bottle.response.set_header("X-HAL-Gateway-Enforced", "1")
+            bottle.response.set_header("X-HAL-Lane-Used", str(result.get("resolvedLane") or resolved["lane"]))
+            bottle.response.set_header("X-HAL-Session-Id", session_id)
+            if result.get("blocked") or result.get("error") == "HAL_UNAVAILABLE_STALE_DATA":
+                return _json_response(result, status=503)
+            if not result.get("ok"):
+                return _json_response(result, status=502)
+            return _json_response(result)
+
+        @app.get("/api/hal/tools/softdent-status")
+        def hal_softdent_status_api():
+            from hal_brain_tools import softdent_status
+
+            return _json_response(softdent_status())
+
+        @app.post("/api/hal/tools/softdent-export")
+        def hal_softdent_export_api():
+            from hal_brain_tools import softdent_export
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            consent = bool(payload.get("consent"))
+            result = softdent_export(
+                consent=consent,
+                report_id=str(payload.get("reportId") or payload.get("report_id") or "account_aging"),
+                days=int(payload.get("days") or 30),
+            )
+            status = 200 if result.get("ok") else (403 if result.get("error") == "consent_required" else 502)
+            return _json_response(result, status=status)
+
+        @app.get("/api/hal/tools/qb-summary")
+        def hal_qb_summary_api():
+            from hal_brain_tools import qb_summary
+
+            return _json_response(qb_summary())
+
+        @app.post("/api/hal/tools/qb-sync")
+        def hal_qb_sync_api():
+            from hal_brain_tools import qb_sync
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            result = qb_sync(consent=bool(payload.get("consent")), store=_local_store())
+            status = 200 if result.get("ok") else (403 if result.get("error") == "consent_required" else 502)
+            return _json_response(result, status=status)
+
+        @app.post("/api/hal/tools/memo-search")
+        def hal_memo_search_api():
+            from hal_brain_tools import memo_search
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            return _json_response(
+                memo_search(query=str(payload.get("query") or ""), limit=int(payload.get("limit") or 5))
+            )
+
+        @app.post("/api/hal/tools/memo-write")
+        def hal_memo_write_api():
+            from hal_brain_tools import memo_write
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            result = memo_write(
+                text=str(payload.get("text") or ""),
+                actor=str(payload.get("actor") or "Operator"),
+            )
+            status = 200 if result.get("ok") else 400
+            return _json_response(result, status=status)
+
+        @app.post("/api/hal/tools/web-research")
+        def hal_web_research_api():
+            from hal_brain_tools import web_research_tool
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            result = web_research_tool(query=str(payload.get("query") or ""))
+            status = 200 if result.get("ok") is not False and not result.get("error") else 400
+            if result.get("ok") is None and "results" in result:
+                status = 200
+            return _json_response(result, status=status)
+
+        @app.post("/api/hal/actions/propose")
+        def hal_actions_propose_api():
+            from hal_brain_tools import propose_action
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            return _json_response(
+                propose_action(
+                    kind=str(payload.get("kind") or "custom"),
+                    label=str(payload.get("label") or payload.get("kind") or "Action"),
+                    payload=payload.get("payload") if isinstance(payload.get("payload"), dict) else {},
+                )
+            )
+
+        @app.get("/api/hal/actions/pending")
+        def hal_actions_pending_api():
+            from hal_brain_tools import list_pending_actions
+
+            return _json_response(list_pending_actions())
+
+        @app.post("/api/hal/actions/execute")
+        def hal_actions_execute_api():
+            from hal_brain_tools import execute_action
+
+            body = bottle.request.body.read().decode("utf-8") if bottle.request.body else "{}"
+            payload = json.loads(body or "{}")
+            result = execute_action(
+                action_id=str(payload.get("actionId") or payload.get("action_id") or ""),
+                consent=bool(payload.get("consent")),
+                store=_local_store(),
+            )
+            status = 200 if result.get("ok") else (403 if result.get("error") == "consent_required" else 400)
+            return _json_response(result, status=status)
+
         @app.get("/api/audit/hal-session/<session_id>")
         def audit_hal_session_api(session_id: str):
             from nr2_audit_log import get_hal_session
