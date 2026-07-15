@@ -1383,7 +1383,12 @@ class NR2BottleServer(BottleServer):
             """SoftDent + QB money attestation (empty ≠ $0 · no invented currency)."""
             from hal_brain_tools import money_beam_attestation
 
-            return _json_response(money_beam_attestation())
+            readiness = _get_import_readiness()
+            return _json_response(
+                money_beam_attestation(
+                    readiness=readiness if isinstance(readiness, dict) else None
+                )
+            )
 
         @app.get("/api/hal/tools/period-close-status")
         def hal_period_close_status_api():

@@ -1,4 +1,4 @@
-/* QuickBooks optical bench — live revenue / cash / NI · empty ≠ $0 */
+/* QuickBooks optical bench — money-beams revenue headline + live cash / NI */
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
@@ -20,7 +20,7 @@
     W.setText("val-cash", null, "—");
     W.setText("val-ni", null, "—");
     W.setText("val-aging", null, "—");
-    W.setBanner("partial", "Wiring QB revenue + cash + net income · empty ≠ $0");
+    W.setBanner("partial", "Wiring QB money-beams + cash + net income · empty ≠ $0");
 
     const rev = await W.getJson("/api/qb/monthly-revenue", 12000);
     const cash = await W.getJson("/api/qb/cash-flow", 12000);
@@ -28,25 +28,41 @@
     const ar = await W.getJson("/api/qb/ar-aging", 12000);
     const ap = await W.getJson("/api/qb/ap-aging", 12000);
     const ready = await W.getJson("/api/import-readiness", 12000);
+    const beamsRes = await W.getMoneyBeams(12000);
     const readyData = ready.ok ? ready.data : null;
-    const qbStale = readyData ? W.keysHit(W.laserKeys(readyData), ["quickbooks."]) : false;
+    const beams = beamsRes.ok ? beamsRes.data : null;
+    const qbStale =
+      (readyData ? W.keysHit(W.laserKeys(readyData), ["quickbooks."]) : false) ||
+      W.lasersRed(readyData) ||
+      !!(beams && beams.importStale);
 
     let live = false;
 
-    if (rev.ok && rev.data && rev.data.hasData && Array.isArray(rev.data.values) && rev.data.values.length) {
-      const last = rev.data.values[rev.data.values.length - 1];
-      const shown = W.fmtMoney(last);
-      const lbl = Array.isArray(rev.data.labels) ? rev.data.labels[rev.data.labels.length - 1] : "";
-      if (shown) {
-        W.setText("val-pl", shown);
-        const hint = document.getElementById("hint-pl");
-        if (hint) hint.textContent = "monthly revenue" + (lbl ? " · " + lbl : "") + " · empty ≠ $0";
-        live = true;
+    const beamHit = W.applyBeamHeadline({
+      id: "val-pl",
+      hintId: "hint-pl",
+      beams: beams,
+      ready: readyData,
+      side: "quickbooks",
+    });
+    if (beamHit.applied && beamHit.live) {
+      live = true;
+    } else if (!beamHit.applied) {
+      if (rev.ok && rev.data && rev.data.hasData && Array.isArray(rev.data.values) && rev.data.values.length) {
+        const last = rev.data.values[rev.data.values.length - 1];
+        const shown = W.fmtMoney(last);
+        const lbl = Array.isArray(rev.data.labels) ? rev.data.labels[rev.data.labels.length - 1] : "";
+        if (shown) {
+          W.setText("val-pl", shown);
+          const hint = document.getElementById("hint-pl");
+          if (hint) hint.textContent = "monthly revenue" + (lbl ? " · " + lbl : "") + " · empty ≠ $0";
+          live = true;
+        } else {
+          W.setText("val-pl", null, "∅");
+        }
       } else {
-        W.setText("val-pl", null, "∅");
+        W.setText("val-pl", null, "NO SIGNAL");
       }
-    } else {
-      W.setText("val-pl", null, "NO SIGNAL");
     }
 
     if (cash.ok && cash.data && cash.data.hasData && Array.isArray(cash.data.net) && cash.data.net.length) {
@@ -57,8 +73,12 @@
         W.setText("val-cash", shown);
         const hint = document.getElementById("hint-cash");
         if (hint) {
-          const inflow = Array.isArray(cash.data.inflows) ? W.fmtMoney(cash.data.inflows[cash.data.inflows.length - 1]) : "";
-          const outflow = Array.isArray(cash.data.outflows) ? W.fmtMoney(cash.data.outflows[cash.data.outflows.length - 1]) : "";
+          const inflow = Array.isArray(cash.data.inflows)
+            ? W.fmtMoney(cash.data.inflows[cash.data.inflows.length - 1])
+            : "";
+          const outflow = Array.isArray(cash.data.outflows)
+            ? W.fmtMoney(cash.data.outflows[cash.data.outflows.length - 1])
+            : "";
           hint.textContent =
             "cash net" +
             (lbl ? " · " + lbl : "") +
@@ -113,17 +133,15 @@
       if (hint) hint.textContent = "QB AR/AP aging empty · payroll export UNAVAILABLE · empty ≠ $0";
     }
 
+    const provenance = W.beamProvenanceLine(beams, readyData);
     if (qbStale) {
       const pl = document.getElementById("val-pl");
       if (pl) pl.classList.add("stale");
-      W.setBanner(
-        "partial",
-        "QB lasers STALE · refresh QuickBooks imports · empty ≠ $0"
-      );
+      W.setBanner("partial", "QB lasers STALE · " + provenance + " · empty ≠ $0");
     } else {
       W.setBanner(
         live ? "live" : "partial",
-        "QB revenue + cash + net income · aging vacuum if empty · empty ≠ $0"
+        "QB · money-beams · " + provenance + " · empty ≠ $0"
       );
     }
   }

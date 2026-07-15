@@ -1,4 +1,4 @@
-/* SoftDent optical bench — live APIs, no mock dollars */
+/* SoftDent optical bench — live APIs + money-beams SoftDent headline */
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
@@ -16,7 +16,9 @@
     if (Array.isArray(vals) && vals.length) {
       const tip = vals[vals.length - 1];
       const amount =
-        typeof tip === "number" ? tip : tip && (tip.value != null ? tip.value : tip.amount != null ? tip.amount : tip.production);
+        typeof tip === "number"
+          ? tip
+          : tip && (tip.value != null ? tip.value : tip.amount != null ? tip.amount : tip.production);
       const labels = data.labels;
       const label =
         Array.isArray(labels) && labels.length ? String(labels[labels.length - 1]) : "";
@@ -31,40 +33,67 @@
     W.setText("val-period", "60d");
     W.setText("val-prod", null, "—");
     W.setText("val-claims", null, "—");
-    W.setBanner("partial", "Wiring SoftDent claims + production · empty ≠ $0");
+    W.setBanner("partial", "Wiring SoftDent + money-beams · empty ≠ $0");
 
     let live = false;
-    let arFromAging = false;
+    let arFromBeam = false;
 
     const arAging = await W.getJson("/api/softdent/ar-aging", 12000);
-    if (arAging.ok && arAging.data && arAging.data.hasData) {
+    const claims = await W.getJson("/api/softdent/claims-outstanding?limit=50", 12000);
+    const ready = await W.getJson("/api/import-readiness", 12000);
+    const beamsRes = await W.getMoneyBeams(12000);
+    const readyData = ready.ok ? ready.data : null;
+    const beams = beamsRes.ok ? beamsRes.data : null;
+
+    const beamHit = W.applyBeamHeadline({
+      id: "val-ar",
+      hintId: null,
+      beams: beams,
+      ready: readyData,
+      side: "softdent",
+    });
+    if (beamHit.applied && beamHit.live) {
+      arFromBeam = true;
+      live = true;
+      const arCard = document.getElementById("val-ar");
+      const arHint = arCard && arCard.parentElement && arCard.parentElement.querySelector(".hint");
+      if (arHint) {
+        arHint.textContent =
+          "money-beams SoftDent · hash " +
+          String((beams && beams.beamHash) || "n/a") +
+          " · empty ≠ $0";
+      }
+    } else if (!beamHit.applied && arAging.ok && arAging.data && arAging.data.hasData) {
       const shown = W.fmtMoney(arAging.data.total);
       if (shown) {
         W.setText("val-ar", shown);
-        arFromAging = true;
         live = true;
       } else {
         W.setText("val-ar", null, "∅");
       }
     }
 
-    const claims = await W.getJson("/api/softdent/claims-outstanding?limit=50", 12000);
     if (claims.ok && claims.data && claims.data.hasData) {
       const list = Array.isArray(claims.data.claims) ? claims.data.claims : [];
       const count = claims.data.count != null ? Number(claims.data.count) : list.length;
-      const total = W.money(claims.data.totalOutstanding);
-      const shown = W.fmtMoney(total);
+      // Prefer same SoftDent beam total for claims card when beam live
+      let shown = null;
+      if (beams && beams.softdent && beams.softdent.hasData && !W.lasersRed(readyData) && !beams.importStale) {
+        const h = W.honestyMoney(true, beams.softdent.display);
+        shown = h.empty ? null : h.text;
+      }
+      if (!shown) shown = W.fmtMoney(W.money(claims.data.totalOutstanding));
       if (shown) {
         W.setText("val-claims", shown + (count ? " · " + count : ""));
-        if (!arFromAging) W.setText("val-ar", shown);
+        if (!arFromBeam && !beamHit.blocked) W.setText("val-ar", shown);
         live = true;
       } else {
         W.setText("val-claims", null, "∅");
-        if (!arFromAging) W.setText("val-ar", null, "∅");
+        if (!arFromBeam && !beamHit.applied) W.setText("val-ar", null, "∅");
       }
     } else {
       W.setText("val-claims", null, "NO SIGNAL");
-      if (!arFromAging) W.setText("val-ar", null, "NO SIGNAL");
+      if (!arFromBeam && !beamHit.applied) W.setText("val-ar", null, "NO SIGNAL");
     }
 
     const prod = await W.getJson("/api/softdent/production-daily", 12000);
@@ -93,7 +122,6 @@
         : "";
       const periodEl = document.getElementById("val-period");
       if (periodEl && lastColl) {
-        // Keep period wheel hint in title; show latest collections under period card value.
         W.setText("val-period", lastColl);
         const periodHint = periodEl.parentElement && periodEl.parentElement.querySelector(".hint");
         if (periodHint) {
@@ -123,22 +151,21 @@
     }
 
     let stale = !!(arAging.ok && arAging.data && arAging.data.stale);
-    const ready = await W.getJson("/api/import-readiness", 12000);
-    const readyData = ready.ok ? ready.data : null;
     if (readyData) {
-      stale = stale || W.keysHit(W.laserKeys(readyData), ["softdent."]);
+      stale = stale || W.keysHit(W.laserKeys(readyData), ["softdent."]) || W.lasersRed(readyData);
     }
-    if (stale) {
+    const provenance = W.beamProvenanceLine(beams, readyData);
+    if (stale || (beams && beams.importStale)) {
       const ar = document.getElementById("val-ar");
       if (ar) ar.classList.add("stale");
       W.setBanner(
         "partial",
-        "SoftDent lasers STALE · re-export Account Aging (keep SoftDent save folder) · empty ≠ $0"
+        "SoftDent lasers STALE · " + provenance + " · empty ≠ $0 · no write-back"
       );
     } else {
       W.setBanner(
         live ? "live" : "partial",
-        "SoftDent read-only · claims + production · no write-back"
+        "SoftDent · money-beams · " + provenance + " · no write-back"
       );
     }
   }

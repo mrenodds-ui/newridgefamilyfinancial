@@ -141,6 +141,94 @@
     if (lasersRed(ready)) return "partial";
     return hasLiveSignal ? "live" : "partial";
   }
+  /** HAL-shaped SoftDent/QB money honesty — never treat $0 as live data. */
+  function honestyMoney(hasData, display) {
+    if (!hasData) return { text: "NO SIGNAL", empty: true };
+    const d = String(display || "").trim();
+    if (!d || /^[∅⊘]|no signal|unavailable/i.test(d)) {
+      return { text: "NO SIGNAL", empty: true };
+    }
+    if (/^\$?\s*0(\.0+)?$/.test(d)) {
+      return { text: "empty (not zero)", empty: true };
+    }
+    return { text: d, empty: false };
+  }
+  async function getMoneyBeams(timeoutMs) {
+    return getJson("/api/hal/tools/money-beams", timeoutMs || 12000);
+  }
+  /**
+   * Apply SoftDent or QB attested headline from money-beams.
+   * When lasers red / importStale: suppress dollars (empty ≠ $0).
+   */
+  function applyBeamHeadline(opts) {
+    const id = opts && opts.id;
+    const hintId = opts && opts.hintId;
+    const beams = opts && opts.beams;
+    const ready = opts && opts.ready;
+    const side = opts && opts.side; // "softdent" | "quickbooks"
+    const el = id ? document.getElementById(id) : null;
+    if (!el) return { applied: false, live: false };
+
+    const lasers = lasersRed(ready);
+    const staleBeam = !!(beams && beams.importStale);
+    const block = lasers || staleBeam;
+    const sideObj =
+      beams && side === "quickbooks"
+        ? beams.quickbooks
+        : beams && beams.softdent
+          ? beams.softdent
+          : null;
+
+    if (block) {
+      setText(id, null, lasers ? "STALE / ∅" : "NO SIGNAL");
+      el.classList.add("stale");
+      if (hintId) {
+        const hint = document.getElementById(hintId);
+        if (hint) {
+          hint.textContent =
+            "money-beams gated · lasers/import STALE · empty ≠ $0 · hash " +
+            String((beams && beams.beamHash) || "n/a");
+        }
+      }
+      return { applied: true, live: false, blocked: true };
+    }
+
+    if (!beams || !sideObj) {
+      return { applied: false, live: false };
+    }
+
+    const h = honestyMoney(!!sideObj.hasData, sideObj.display);
+    if (h.empty) {
+      setText(id, null, h.text);
+      return { applied: true, live: false };
+    }
+    setText(id, h.text);
+    el.classList.remove("stale");
+    if (hintId) {
+      const hint = document.getElementById(hintId);
+      if (hint) {
+        const ts = String(beams.beamTimestamp || beams.at || "").slice(0, 19);
+        hint.textContent =
+          "money-beams · " +
+          side +
+          (ts ? " · " + ts : "") +
+          " · hash " +
+          String(beams.beamHash || "n/a") +
+          " · empty ≠ $0";
+      }
+    }
+    return { applied: true, live: true, beamHash: beams.beamHash };
+  }
+  function beamProvenanceLine(beams, ready) {
+    if (!beams) return "money-beams · NO SIGNAL";
+    const close = ready && ready.periodClose;
+    const parts = [
+      "beamHash " + String(beams.beamHash || "n/a"),
+      beams.beamTimestamp ? "at " + String(beams.beamTimestamp).slice(0, 19) : "",
+      close && close.completedAt ? "close " + String(close.completedAt).slice(0, 19) : "",
+    ].filter(Boolean);
+    return parts.join(" · ");
+  }
   global.NR2OpticalWire = {
     money: money,
     fmtMoney: fmtMoney,
@@ -154,5 +242,9 @@
     laserKeys: laserKeys,
     keysHit: keysHit,
     bannerModeFromReady: bannerModeFromReady,
+    honestyMoney: honestyMoney,
+    getMoneyBeams: getMoneyBeams,
+    applyBeamHeadline: applyBeamHeadline,
+    beamProvenanceLine: beamProvenanceLine,
   };
 })(window);
