@@ -176,6 +176,16 @@ def _run_refresh(*, skip_refresh: bool, refresh_ps1: Path) -> dict[str, Any]:
     return out
 
 
+def _run_claims_txn_refresh() -> dict[str, Any]:
+    """Post-pull TXN claims rebuild + payer attribution (9 PM night-before path)."""
+    try:
+        from nr2_softdent_daily import refresh_nightly_claims_txn
+
+        return refresh_nightly_claims_txn()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}:{exc}", "emptyNotZero": True}
+
+
 def main() -> int:
     today = date.today()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -218,6 +228,7 @@ def main() -> int:
         "masterVerify": None,
         "exports": None,
         "refresh": None,
+        "claimsTxnRefresh": None,
         "menuMapVersion": None,
     }
     try:
@@ -252,6 +263,7 @@ def main() -> int:
         )
         payload["exports"] = exports
         payload["refresh"] = {"skipped": True, "ok": True, "reason": "dry-run"}
+        payload["claimsTxnRefresh"] = {"skipped": True, "ok": True, "reason": "dry-run"}
         payload["ok"] = True
         payload["finishedAt"] = _utc_now()
         _write_status(Path(args.status_path), payload)
@@ -281,6 +293,10 @@ def main() -> int:
         refresh_ps1=Path(args.refresh_ps1),
     )
     payload["refresh"] = refresh
+    if args.skip_refresh:
+        payload["claimsTxnRefresh"] = {"skipped": True, "ok": True, "reason": "skip-refresh"}
+    else:
+        payload["claimsTxnRefresh"] = _run_claims_txn_refresh()
     # Re-verify after pull so status shows which master reports are still missing
     try:
         payload["masterVerifyAfter"] = verify_master_reports(

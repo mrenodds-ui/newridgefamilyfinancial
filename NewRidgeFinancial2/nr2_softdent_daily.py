@@ -972,6 +972,84 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
     }
 
 
+def refresh_nightly_claims_txn() -> dict[str, Any]:
+    """9 PM night-before: TXN ledger → claims CSV → sd_claims → payer attribution.
+
+    Expects Trans-for-a-Period Excel on disk after the nightly SoftDent pull.
+    Does not drive SoftDent GUI. empty ≠ $0 — no invented payers or dollars.
+    """
+    from import_loader import softdent_import_dir
+    from import_sync import _sync_operational_softdent_exports
+    from softdent_odbc_extract import (
+        _populate_from_claims_csv,
+        _resolve_claims_path,
+        _utc_now as odbc_utc_now,
+        ensure_sd_schema,
+        refresh_claims_payer_attribution,
+    )
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "emptyNotZero": True,
+        "scheduleNote": "9:00 PM local night-before · SoftDent READ-ONLY",
+    }
+    dest = softdent_import_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        written = _sync_operational_softdent_exports(dest)
+        result["written"] = written
+        result["operationalSyncOk"] = True
+    except Exception as exc:  # noqa: BLE001
+        result["operationalSyncOk"] = False
+        result["operationalSyncError"] = f"{type(exc).__name__}:{exc}"
+        result["written"] = []
+
+    db_path = resolve_sd_sqlite_db()
+    result["dbPath"] = str(db_path) if db_path else None
+    claims_path = _resolve_claims_path()
+    result["claimsPath"] = str(claims_path) if claims_path else None
+    if db_path and claims_path and claims_path.is_file():
+        try:
+            conn = sqlite3.connect(str(db_path))
+            try:
+                ensure_sd_schema(conn)
+                result["claimsImported"] = _populate_from_claims_csv(
+                    conn, claims_path, extracted_at=odbc_utc_now()
+                )
+                result["claimsImportOk"] = True
+            finally:
+                conn.close()
+        except Exception as exc:  # noqa: BLE001
+            result["claimsImportOk"] = False
+            result["claimsImportError"] = f"{type(exc).__name__}:{exc}"
+    else:
+        result["claimsImportOk"] = False
+        result["claimsImportError"] = "no_claims_csv_or_db"
+
+    try:
+        payer = refresh_claims_payer_attribution(db_path=db_path)
+        result["payerBackfill"] = payer
+        result["payerBackfillOk"] = bool(payer.get("ok"))
+    except Exception as exc:  # noqa: BLE001
+        result["payerBackfillOk"] = False
+        result["payerBackfillError"] = f"{type(exc).__name__}:{exc}"
+
+    try:
+        snap = claims_outstanding(limit=1)
+        result["openClaimCount"] = snap.get("count")
+        result["payerStats"] = snap.get("payerStats")
+        result["claimsOutstandingOk"] = bool(snap.get("hasData"))
+    except Exception as exc:  # noqa: BLE001
+        result["claimsOutstandingOk"] = False
+        result["claimsOutstandingError"] = f"{type(exc).__name__}:{exc}"
+
+    result["ok"] = bool(
+        result.get("operationalSyncOk")
+        and (result.get("claimsImportOk") or result.get("payerBackfillOk"))
+    )
+    return result
+
+
 def _generic_payer_label(payer: str) -> bool:
     return str(payer or "").strip().lower() in {"", "insurance", "unknown", "n/a", "-", "—"}
 

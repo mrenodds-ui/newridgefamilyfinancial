@@ -17,6 +17,7 @@ from nr2_softdent_daily import (
     hygiene_recall_summary,
     new_patients_mtd,
     provider_production,
+    refresh_nightly_claims_txn,
 )
 
 
@@ -190,6 +191,38 @@ class Nr2SoftdentDailyTests(unittest.TestCase):
                 result = collections_daily()
             self.assertTrue(result["hasData"])
             self.assertEqual(result["source"], "daysheet_totals")
+
+    def test_refresh_nightly_claims_txn_orchestration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            dest = Path(tmp) / "inbox"
+            dest.mkdir()
+            db_path = Path(tmp) / "analytics.sqlite3"
+            claims_csv = dest / "softdent_claims_export.csv"
+            claims_csv.write_text(
+                "ClaimId,PatientName,Payer,ServiceDate,ClaimAmount,ClaimStatus\n"
+                "TXN-20260701-1001,Jane,Insurance,2026-07-01,120.0,Pending Review\n",
+                encoding="utf-8",
+            )
+            _seed_db(db_path)
+            with patch("import_loader.softdent_import_dir", return_value=dest), patch(
+                "import_sync._sync_operational_softdent_exports",
+                return_value=["softdent_claims_transactions_derived.csv"],
+            ), patch(
+                "softdent_odbc_extract._resolve_claims_path",
+                return_value=claims_csv,
+            ), patch(
+                "nr2_softdent_daily.resolve_sd_sqlite_db",
+                return_value=db_path,
+            ), patch(
+                "softdent_odbc_extract.refresh_claims_payer_attribution",
+                return_value={"ok": True, "attribution": {"updated": 1}},
+            ):
+                result = refresh_nightly_claims_txn()
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("operationalSyncOk"))
+            self.assertTrue(result.get("claimsImportOk"))
+            self.assertTrue(result.get("payerBackfillOk"))
+            self.assertIn("payerStats", result)
 
 
 if __name__ == "__main__":
