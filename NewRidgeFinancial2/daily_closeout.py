@@ -444,6 +444,18 @@ def force_period_close(
         if pull_softdent is not None
         else force_close_should_pull_softdent(ready, status=status_now)
     )
+    try:
+        from period_close_ops_notify import notify_force_close_started
+
+        start_note = notify_force_close_started(
+            actor=actor,
+            laser_override=laser_override,
+            store=store,
+            speak=True,
+        )
+    except Exception as exc:  # noqa: BLE001
+        start_note = {"ok": False, "error": str(exc)[:160]}
+
     result = run_period_close(
         store=store,
         actor=actor,
@@ -480,6 +492,7 @@ def force_period_close(
         "systemOfRecord": False,
         "emptyNotZero": True,
         "forceCloseLogPath": str(FORCE_CLOSE_LOG_PATH),
+        "opsNotifyStart": start_note,
     }
     return result
 

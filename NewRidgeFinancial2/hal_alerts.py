@@ -180,7 +180,11 @@ class AlertMonitor:
                 )
         try:
             from daily_closeout import period_close_status
-            from period_close_ops_notify import classify_period_close_trouble, period_close_trouble_line
+            from period_close_ops_notify import (
+                classify_period_close_trouble,
+                maybe_notify_laser_stall,
+                period_close_trouble_line,
+            )
 
             close = period_close_status()
             # Poll path: state stalled/blocked, or last close used attest_only.
@@ -191,6 +195,7 @@ class AlertMonitor:
                 "fallback": (close.get("lastClose") or {}).get("fallback")
                 if isinstance(close.get("lastClose"), dict)
                 else None,
+                "forceClose": bool(close.get("forceClose")),
                 "actor": "alert-monitor",
             }
             kind = classify_period_close_trouble(poll_result)
@@ -199,17 +204,40 @@ class AlertMonitor:
                     "stalled": "Period close stalled",
                     "blocked": "Period close blocked",
                     "attest_only": "Period close attest-only",
+                    "force_close": "Force Close",
+                    "force_close_start": "Force Close started",
+                    "laser_stall": "Lasers stalled red",
                 }
-                title = titles[kind]
+                title = titles.get(kind, "Period close trouble")
                 if not _has_active_alert(conn, alert_type="period_close", title=title):
                     created.append(
                         create_alert(
                             conn,
                             alert_type="period_close",
-                            severity="high" if kind in ("stalled", "blocked") else "medium",
+                            severity="high" if kind in ("stalled", "blocked", "laser_stall") else "medium",
                             title=title,
                             body=period_close_trouble_line(kind, poll_result),
                             meta={"kind": kind, "emptyNotZero": True, "beamHash": close.get("beamHash")},
+                        )
+                    )
+            try:
+                from import_diagnostics import assess_import_readiness
+
+                ready = assess_import_readiness()
+            except Exception:
+                ready = None
+            stall_note = maybe_notify_laser_stall(ready, store=self.store, speak=True)
+            if isinstance(stall_note, dict) and stall_note.get("kind") == "laser_stall" and not stall_note.get("skipped"):
+                title = "Lasers stalled red"
+                if not _has_active_alert(conn, alert_type="period_close", title=title):
+                    created.append(
+                        create_alert(
+                            conn,
+                            alert_type="period_close",
+                            severity="high",
+                            title=title,
+                            body=stall_note.get("line") or "Lasers red past stall window.",
+                            meta={"kind": "laser_stall", "emptyNotZero": True},
                         )
                     )
         except Exception:
