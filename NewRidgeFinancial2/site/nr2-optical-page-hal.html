@@ -27,6 +27,20 @@
       <p class="kicker">SoftDent export + QB sync + navigate run free · SoftDent write-back / payer / email still consent-gated</p>
       <div class="beam"></div>
       <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent dollars · money topics respect import-readiness</div>
+      <div class="ledge">
+        <section class="money-strip" aria-label="HAL core money faces">
+          <article class="metric-face sd">
+            <div class="face-lbl">SoftDent claims</div>
+            <div class="val exec-currency sd" id="hal-face-sd">—</div>
+            <p class="hint">Beam mirror · empty ≠ $0</p>
+          </article>
+          <article class="metric-face qb">
+            <div class="face-lbl">QuickBooks revenue</div>
+            <div class="val exec-currency qb" id="hal-face-qb">—</div>
+            <p class="hint">Beam mirror · empty ≠ $0</p>
+          </article>
+        </section>
+      </div>
       <div class="hal-patient-ctx" id="patientContextBanner" hidden>
         <span class="hal-patient-ctx-lbl">Patient context</span>
         <span id="patientContextText">—</span>
@@ -75,12 +89,16 @@
           <ul class="hal-beam-list">
             <li>
               SoftDent claims
-              <div class="hal-beam-val empty" id="beamSd">∅</div>
+              <div class="metric-face sd" style="min-height:auto;margin-top:6px;padding:8px">
+                <div class="hal-beam-val empty exec-currency" id="beamSd">∅</div>
+              </div>
               <div class="hint" id="beamSdHint" style="font-size:11px;color:#5a6575"></div>
             </li>
             <li>
               QuickBooks revenue
-              <div class="hal-beam-val empty" id="beamQb">∅</div>
+              <div class="metric-face qb" style="min-height:auto;margin-top:6px;padding:8px">
+                <div class="hal-beam-val empty exec-currency" id="beamQb">∅</div>
+              </div>
               <div class="hint" id="beamQbHint" style="font-size:11px;color:#5a6575"></div>
             </li>
           </ul>

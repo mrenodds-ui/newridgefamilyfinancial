@@ -1,13 +1,14 @@
-/* HAL Optical Command Center — spectral command chrome */
+/* HAL Optical Command Center — spectral command chrome
+   Moonshot E1: sync glass tokens from nr2-optical-theme.css */
 :root {
-  --hal-void: #000208;
-  --hal-panel: rgba(8, 12, 16, 0.96);
-  --hal-cyan: #00d4aa;
-  --hal-ink: #e0e6ed;
-  --hal-muted: #5a6575;
+  --hal-void: var(--vacuum, #000208);
+  --hal-panel: var(--bench, #0a0f14);
+  --hal-cyan: var(--sd, #00d4aa);
+  --hal-ink: var(--hal, #e0e6ed);
+  --hal-muted: var(--muted, #5a6575);
   --hal-warn: #e6a23c;
-  --hal-danger: #ff0044;
-  --hal-live: #00d4aa;
+  --hal-danger: var(--fringe, #ff0044);
+  --hal-live: var(--sd, #00d4aa);
 }
 
 .hal-cmd {
@@ -16,6 +17,8 @@
   gap: 14px;
   align-items: stretch;
   min-height: calc(100dvh - 150px);
+  width: 100%;
+  max-width: none;
 }
 @media (max-width: 1100px) {
   .hal-cmd { grid-template-columns: 1fr; }
@@ -64,10 +67,23 @@
 }
 
 .hal-panel {
-  border: 1px solid rgba(224, 230, 237, 0.28);
-  background: var(--hal-panel);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 20, 28, 0.85) 0%, rgba(10, 14, 20, 0.65) 100%);
+  background-color: var(--bench, var(--hal-panel));
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   padding: 12px;
   min-height: 120px;
+}
+.hal-panel:hover {
+  box-shadow:
+    var(--glow-sd, 0 0 20px rgba(0, 212, 170, 0.3)),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .hal-panel h3 {
   margin: 0 0 8px;

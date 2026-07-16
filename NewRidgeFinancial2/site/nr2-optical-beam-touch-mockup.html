@@ -16,7 +16,13 @@
       margin: 0; height: 100%; overflow: hidden;
       background: var(--vacuum); color: #e8e8f0; font-family: var(--sans);
       font-size: var(--text-base);
+      display: flex; flex-direction: column;
     }
+    .exec-landing-ledge { flex: 0 0 auto; }
+    .exec-landing-shell {
+      flex: 1 1 auto; min-height: 0; overflow: hidden; display: block;
+    }
+    .exec-landing-shell .bench { height: 100%; }
     .banner {
       min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
       flex-wrap: wrap; padding: 4px 14px;
@@ -903,7 +909,7 @@
     }
   </style>
 </head>
-<body>
+<body class="atmosphere exec-desk-surface">
   <div class="banner">
     <b>NR2</b>
     <span class="bind" id="banner-bind">Wiring money-beams + lasers…</span>
@@ -912,6 +918,22 @@
     <a href="/nr2-optical-pages-hub.html">Align</a>
   </div>
 
+  <div class="ledge exec-landing-ledge">
+    <section class="money-strip" aria-label="Landing money faces">
+      <article class="metric-face sd">
+        <div class="face-lbl">Claims outstanding</div>
+        <div class="val exec-currency sd" id="land-claims-total">—</div>
+        <p class="hint">SoftDent read-only · empty ≠ $0</p>
+      </article>
+      <article class="metric-face sd">
+        <div class="face-lbl">A/R total</div>
+        <div class="val exec-currency sd" id="land-ar-total">—</div>
+        <p class="hint">SoftDent AR · empty ≠ $0</p>
+      </article>
+    </section>
+  </div>
+
+  <main class="shell-hub-asymmetric exec-landing-shell atmosphere">
   <div class="bench" id="bench">
     <div class="align bad" id="align" title="Import readiness lasers — red = blocking critical gap"></div>
     <div class="toast" id="toast"></div>
@@ -1022,9 +1044,51 @@
       <div class="slot empty" data-film="5" role="button" tabindex="-1">∅</div>
     </div>
   </div>
+  </main>
 
   <script src="/nr2-boot.js" defer></script>
   <script src="/nr2-optical-page-wire.js"></script>
   <script src="/nr2-optical-beam-touch.js"></script>
+  <script>
+    /* Moonshot E1: glass money faces for Claims + A/R on landing */
+    (function () {
+      const W = window.NR2OpticalWire;
+      if (!W || !W.getJson) return;
+      function paintLand() {
+        Promise.all([
+          W.getJson("/api/softdent/claims-outstanding?limit=1", 12000),
+          W.getJson("/api/softdent/ar-aging", 12000),
+        ]).then(function (pair) {
+          const claims = pair[0];
+          const aging = pair[1];
+          if (claims && claims.ok && claims.data && claims.data.hasData) {
+            const total = W.money(claims.data.totalOutstanding);
+            if (total == null || total === 0) {
+              W.setText("land-claims-total", null, total === 0 ? "Empty ≠ $0" : "∅");
+            } else {
+              W.setText("land-claims-total", W.fmtMoney(total));
+            }
+          } else {
+            W.setText("land-claims-total", null, "NO SIGNAL");
+          }
+          if (aging && aging.ok && aging.data && aging.data.hasData) {
+            const t = W.money(aging.data.total);
+            if (t == null || t === 0) {
+              W.setText("land-ar-total", null, t === 0 ? "Empty ≠ $0" : "∅");
+            } else {
+              W.setText("land-ar-total", W.fmtMoney(t));
+            }
+          } else {
+            W.setText("land-ar-total", null, "NO SIGNAL");
+          }
+        });
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", paintLand);
+      } else {
+        paintLand();
+      }
+    })();
+  </script>
 </body>
 </html>

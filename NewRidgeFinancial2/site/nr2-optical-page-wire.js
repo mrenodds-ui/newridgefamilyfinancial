@@ -1437,14 +1437,45 @@
     });
     return marked;
   }
+  function ensurePrintExecutiveChrome() {
+    ensurePrintHeader();
+    if (!document.getElementById("nr2-exec-print-watermark")) {
+      const w = document.createElement("div");
+      w.id = "nr2-exec-print-watermark";
+      w.className = "exec-print-watermark";
+      w.setAttribute("aria-hidden", "true");
+      w.textContent = "CONFIDENTIAL";
+      document.body.appendChild(w);
+    }
+    if (!document.getElementById("nr2-exec-print-fold")) {
+      const f = document.createElement("div");
+      f.id = "nr2-exec-print-fold";
+      f.className = "exec-print-fold";
+      f.setAttribute("aria-hidden", "true");
+      document.body.appendChild(f);
+    }
+    if (!document.getElementById("nr2-exec-print-signline")) {
+      const s = document.createElement("div");
+      s.id = "nr2-exec-print-signline";
+      s.className = "exec-print-signline";
+      s.setAttribute("aria-hidden", "true");
+      s.textContent =
+        "Authorized signature ____________________________ · NewRidge Financial — Confidential · empty ≠ $0";
+      const main = document.querySelector(".main") || document.body;
+      main.appendChild(s);
+    }
+    return true;
+  }
   function bindPrintHygiene(opts) {
     document._nr2PrintOpts = opts || {};
     ensurePrintHeader();
+    ensurePrintExecutiveChrome();
     if (document._nr2PrintBound) return true;
     document._nr2PrintBound = true;
     window.addEventListener("beforeprint", function () {
       const cfg = document._nr2PrintOpts || {};
       redactPhiForPrint();
+      ensurePrintExecutiveChrome();
       if (cfg.breakSelector) {
         markPrintPageBreaks(cfg.breakSelector, cfg.breakEvery);
       }
@@ -1454,6 +1485,57 @@
       document.querySelectorAll(".nr2-print-break").forEach(function (el) {
         el.classList.remove("nr2-print-break");
       });
+    });
+    return true;
+  }
+  /** Moonshot E1–E4: letterhead, seals, currency emboss, desk surface on every optical page. */
+  function bootExecutiveChrome() {
+    document.body.classList.add("exec-desk-surface");
+    const banner = document.querySelector(".banner");
+    if (banner && !document.getElementById("nr2-exec-letterhead")) {
+      const lh = document.createElement("header");
+      lh.id = "nr2-exec-letterhead";
+      lh.className = "exec-letterhead exec-practice-header";
+      lh.setAttribute("aria-label", "Executive letterhead");
+      lh.innerHTML =
+        '<div><span class="exec-practice-name">NewRidge Family Financial</span>' +
+        '<div class="type-laser" style="margin-top:2px;font-size:11px;color:var(--muted)">Optical desk · SoftDent READ-ONLY</div></div>' +
+        '<div>CFO / Controller · <span class="cfo-initials" id="nr2-cfo-initials">NR</span></div>' +
+        '<div class="exec-period-seal period-seal" id="nr2-period-seal">Period close · —</div>';
+      banner.insertAdjacentElement("afterend", lh);
+    }
+    document
+      .querySelectorAll(
+        ".metric-face .val, .metric-face .face-val, .beam-face .face-val, .hal-beam-val"
+      )
+      .forEach(function (el) {
+        el.classList.add("exec-currency");
+      });
+    document.querySelectorAll(".ledge").forEach(function (ledge) {
+      if (ledge.querySelector(".exec-signature-block")) return;
+      const sig = document.createElement("div");
+      sig.className = "exec-signature-block";
+      sig.textContent = "Sign / attest · empty ≠ $0 · no SoftDent write-back";
+      ledge.appendChild(sig);
+    });
+    document.querySelectorAll(".money-strip").forEach(function (strip) {
+      if (strip.closest(".ledge")) return;
+      if (strip.parentNode && strip.parentNode.querySelector(".exec-signature-block")) return;
+      const sig = document.createElement("div");
+      sig.className = "exec-signature-block";
+      sig.textContent = "Sign / attest · empty ≠ $0 · no SoftDent write-back";
+      strip.insertAdjacentElement("afterend", sig);
+    });
+    // Refresh period seal from readiness when available (non-blocking).
+    getJson("/api/import-readiness", 6000).then(function (r) {
+      const seal = document.getElementById("nr2-period-seal");
+      if (!seal) return;
+      const pc = periodCloseStatus(r.ok ? r.data : null);
+      const bit = periodCloseBannerBit(r.ok ? r.data : null);
+      seal.textContent = bit || (pc && pc.status ? "Period close · " + String(pc.status) : "Period close · —");
+      if (periodCloseIsTrouble(r.ok ? r.data : null)) {
+        seal.classList.add("exec-brass-accent");
+      }
     });
     return true;
   }
@@ -1467,6 +1549,11 @@
       bootAtmosphere();
     } catch (_) {
       /* atmosphere optional */
+    }
+    try {
+      bootExecutiveChrome();
+    } catch (_) {
+      /* executive chrome optional */
     }
     try {
       bootMotionGrammar();
@@ -1558,5 +1645,7 @@
     restorePhiAfterPrint: restorePhiAfterPrint,
     markPrintPageBreaks: markPrintPageBreaks,
     bindPrintHygiene: bindPrintHygiene,
+    bootExecutiveChrome: bootExecutiveChrome,
+    ensurePrintExecutiveChrome: ensurePrintExecutiveChrome,
   };
 })(window);

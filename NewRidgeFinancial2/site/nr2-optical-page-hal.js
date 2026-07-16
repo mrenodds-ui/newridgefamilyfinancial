@@ -328,9 +328,21 @@
       const hQb = honestyMoney(!!qb.hasData, qb.display);
       beamSd.textContent = hSd.text;
       beamSd.classList.toggle("empty", hSd.empty);
+      const faceSd = document.getElementById("hal-face-sd");
+      const faceQb = document.getElementById("hal-face-qb");
+      if (faceSd) {
+        faceSd.textContent = hSd.text;
+        faceSd.classList.toggle("empty", hSd.empty);
+        faceSd.classList.add("exec-currency");
+      }
       beamSdHint.textContent =
         sd.hint || (sd.at ? "synced " + String(sd.at).slice(0, 19) : "");
       beamQb.textContent = hQb.text;
+      if (faceQb) {
+        faceQb.textContent = hQb.text;
+        faceQb.classList.toggle("empty", hQb.empty);
+        faceQb.classList.add("exec-currency");
+      }
       beamQb.classList.toggle("empty", hQb.empty);
       beamQbHint.textContent =
         qb.hint || (qb.at ? "synced " + String(qb.at).slice(0, 19) : "");
@@ -353,6 +365,16 @@
       beamSd.classList.add("empty");
       beamQb.textContent = "NO SIGNAL";
       beamQb.classList.add("empty");
+      const faceSd = document.getElementById("hal-face-sd");
+      const faceQb = document.getElementById("hal-face-qb");
+      if (faceSd) {
+        faceSd.textContent = "NO SIGNAL";
+        faceSd.classList.add("empty");
+      }
+      if (faceQb) {
+        faceQb.textContent = "NO SIGNAL";
+        faceQb.classList.add("empty");
+      }
       showMoneyBanner("[MONEY BEAMS NO SIGNAL] — attestation unreachable", true);
     }
   }

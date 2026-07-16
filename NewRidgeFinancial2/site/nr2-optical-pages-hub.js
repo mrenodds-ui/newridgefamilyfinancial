@@ -64,6 +64,52 @@
     });
   }
 
+  function paintAlignmentMoney(beams, readyData) {
+    const sdObj = beams && beams.softdent;
+    const qbObj = beams && beams.quickbooks;
+    const sdLive = !!(sdObj && sdObj.hasData && sdObj.display);
+    const qbLive = !!(qbObj && qbObj.hasData && qbObj.display);
+    const alignedEl = document.getElementById("hub-aligned");
+    const varianceEl = document.getElementById("hub-variance");
+    if (alignedEl) {
+      if (sdLive && qbLive) {
+        W.setText(
+          "hub-aligned",
+          String(sdObj.display) + " · " + String(qbObj.display)
+        );
+        alignedEl.classList.add("exec-currency", "sd");
+      } else if (sdLive) {
+        W.setText("hub-aligned", String(sdObj.display));
+        alignedEl.classList.add("exec-currency", "sd");
+      } else if (qbLive) {
+        W.setText("hub-aligned", String(qbObj.display));
+        alignedEl.classList.add("exec-currency", "qb");
+      } else {
+        W.setText("hub-aligned", null, "NO SIGNAL");
+      }
+    }
+    if (varianceEl) {
+      if (!(sdLive && qbLive)) {
+        W.setText("hub-variance", null, "∅");
+      } else {
+        const sdAmt = W.money(sdObj.amount != null ? sdObj.amount : sdObj.total);
+        const qbAmt = W.money(qbObj.amount != null ? qbObj.amount : qbObj.total);
+        if (sdAmt == null || qbAmt == null) {
+          W.setText("hub-variance", "SD/QB live · gap ∅");
+        } else {
+          const gap = Math.abs(sdAmt - qbAmt);
+          if (gap === 0) W.setText("hub-variance", null, "Empty ≠ $0");
+          else W.setText("hub-variance", W.fmtMoney(gap));
+        }
+        varianceEl.classList.add("exec-currency");
+      }
+    }
+    const ah = document.getElementById("hint-hub-aligned");
+    if (ah && W.beamProvenanceLine) {
+      ah.textContent = W.beamProvenanceLine(beams, readyData) + " · empty ≠ $0";
+    }
+  }
+
   function paintMoneyFaces(beams, readyData) {
     if (W.applyBeamHeadline) {
       const sd = W.applyBeamHeadline({
@@ -85,17 +131,21 @@
       if (sdEl) {
         sdEl.classList.remove("sd", "qb", "hal", "stale", "empty");
         sdEl.classList.add(sd && sd.live ? "sd" : "stale");
+        sdEl.classList.add("exec-currency");
       }
       if (qbEl) {
         qbEl.classList.remove("sd", "qb", "hal", "stale", "empty");
         qbEl.classList.add(qb && qb.live ? "qb" : "stale");
+        qbEl.classList.add("exec-currency");
       }
       setFaceTone("face-sd", !(sd && sd.live));
       setFaceTone("face-qb", !(qb && qb.live));
+      paintAlignmentMoney(beams, readyData);
       return;
     }
     setVal("hub-sd-amt", "NO SIGNAL", "stale");
     setVal("hub-qb-amt", "NO SIGNAL", "stale");
+    paintAlignmentMoney(beams, readyData);
   }
 
   async function boot() {

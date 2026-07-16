@@ -146,6 +146,180 @@ h1 {
   50% { box-shadow: 0 0 12px 1px rgba(220, 38, 38, 0.45); border-color: #f87171; }
 }
 
+/* ===== Moonshot HIGH EXECUTIVE E1–E4 ===== */
+.exec-practice-header,
+.exec-letterhead {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 10px 16px;
+  align-items: center;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+  background: linear-gradient(180deg, rgba(16, 14, 8, 0.92) 0%, rgba(8, 10, 12, 0.88) 100%);
+  font-family: var(--sans);
+  font-size: 12px;
+  color: var(--muted);
+}
+.exec-letterhead .exec-practice-name {
+  color: var(--hal);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.exec-letterhead .cfo-initials {
+  color: var(--lock);
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+.exec-period-seal,
+.period-seal {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 1px solid var(--lock);
+  color: var(--lock);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  box-shadow: inset 0 0 0 1px rgba(201, 162, 39, 0.2);
+}
+.exec-signature-block {
+  position: relative;
+  margin-top: var(--space-2);
+  padding: 10px 12px 8px;
+  border-top: 1px dashed rgba(201, 162, 39, 0.45);
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--lock);
+}
+.exec-signature-block::after {
+  content: "________________";
+  display: block;
+  margin-top: 6px;
+  color: rgba(201, 162, 39, 0.55);
+  letter-spacing: 0.12em;
+}
+.exec-currency,
+.metric-face .val.exec-currency,
+.metric-face .face-val.exec-currency,
+.beam-face .face-val.exec-currency {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" "ss01";
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+.exec-desk-surface,
+body.exec-desk-surface {
+  background-color: var(--vacuum);
+  background-image:
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse 55% 40% at 60% 40%, rgba(20, 40, 50, 0.35), transparent 70%);
+  background-size: 220px 220px, auto;
+}
+.exec-brass-accent,
+.metric-face.exec-brass-accent,
+.beam-face.exec-brass-accent {
+  border-color: rgba(201, 162, 39, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(201, 162, 39, 0.2),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.metric-face:focus-within,
+.metric-face.is-active,
+.beam-face.fresh {
+  border-color: rgba(201, 162, 39, 0.4);
+}
+.exec-landing-shell {
+  display: block;
+  min-height: 0;
+  width: 100%;
+  max-width: none;
+  position: relative;
+}
+.exec-landing-shell.shell-hub-asymmetric {
+  grid-template-columns: none;
+}
+.exec-landing-ledge {
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+}
+.exec-landing-ledge .money-strip {
+  margin-bottom: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.exec-landing-ledge .metric-face {
+  min-height: 88px;
+  padding: var(--space-3);
+}
+.exec-print-fold,
+.exec-print-watermark,
+.exec-print-signline {
+  display: none;
+}
+@media print {
+  .exec-letterhead,
+  .exec-practice-header {
+    display: grid !important;
+    color: #111 !important;
+    background: #fff !important;
+    border-bottom: 2px solid #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .exec-letterhead .cfo-initials,
+  .exec-period-seal,
+  .period-seal {
+    color: #111 !important;
+    border-color: #111 !important;
+  }
+  .exec-print-fold {
+    display: block !important;
+    position: fixed;
+    left: 0.35in;
+    top: 50%;
+    width: 10px;
+    height: 10px;
+    border: 1px solid #999;
+    transform: translateY(-50%);
+  }
+  .exec-print-watermark {
+    display: block !important;
+    position: fixed;
+    inset: 35% 10%;
+    text-align: center;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 42pt;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    color: rgba(0, 0, 0, 0.07);
+    transform: rotate(-18deg);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .exec-print-signline {
+    display: block !important;
+    margin-top: 24pt;
+    border-top: 1px solid #333;
+    padding-top: 6pt;
+    font-size: 9pt;
+    color: #333;
+  }
+  .exec-signature-block {
+    display: block !important;
+    color: #333 !important;
+    border-top-color: #333 !important;
+  }
+}
+
 .shell {
   display: grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 36px);
   position: relative;
@@ -397,8 +571,10 @@ td.phi-name .phi-label,
 
 /* Subpage money face — Moonshot P1 glass + P4 ledge + P5 motion */
 .ledge {
+  position: relative;
   margin-bottom: var(--space-5);
   padding: var(--space-3);
+  padding-bottom: calc(var(--space-3) + 28px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: linear-gradient(180deg, rgba(14, 20, 28, 0.55) 0%, rgba(8, 12, 16, 0.35) 100%);
   box-shadow:
@@ -407,6 +583,15 @@ td.phi-name .phi-label,
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 .ledge .money-strip { margin-bottom: 0; }
+.ledge > .exec-signature-block {
+  position: absolute;
+  right: var(--space-3);
+  bottom: 6px;
+  margin: 0;
+  padding: 4px 0 0;
+  border-top: none;
+  background: transparent;
+}
 .money-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
