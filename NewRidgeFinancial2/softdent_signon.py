@@ -232,9 +232,9 @@ def format_softdent_widget_path_hal_reply() -> str:
         "Period money widgets (Vital Signs, Ins/Patient split, collection efficiency, "
         "DEF-001 collections gap, production trends) read analytics dashboard / "
         "daysheet_totals rows that are filled by SoftDent desktop Excel "
-        "(Register/Daysheet → SoftDent keeps its save folder → NR2 copies into "
+        "(Register/Daysheet → SoftDent Select File Name under "
         "C:\\SoftDentReportExports → refresh_softdent_period_imports). "
-        "NEVER type SoftDentReportExports into SoftDent Select File Name. "
+        "ALL Excel reports land in C:\\SoftDentReportExports. "
         "Register Excel is the source of truth for period $ — if it drifts from "
         "daysheet_totals, re-export Register and refresh. "
         "Claims / A/R aging / provider production charts read SoftDent CSV/JSON inbox imports. "
@@ -376,8 +376,8 @@ def compile_softdent_signon_guidance(query: str, system_prompt: str = "") -> str
         except Exception:
             parts.append(
                 "SoftDent report pull: Output Options → Excel or Print Preview only "
-                "(never Printer). NEVER type SoftDentReportExports into SoftDent Select File Name — "
-                "keep SoftDent's folder; NR2 copies after save; then Sync."
+                "(never Printer). ALL Excel reports save under C:\\SoftDentReportExports "
+                "in Select File Name; then Sync."
             )
     if touches_signon or touches_account_tx:
         if "SOFTDENT_SIGNON_USER" in prompt and not touches_account_tx:

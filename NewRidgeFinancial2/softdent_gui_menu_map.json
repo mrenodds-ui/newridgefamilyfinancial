@@ -10,7 +10,7 @@
     "HARD RULE (ALL SoftDent reports): Output Options = Excel or Print Preview only — never Printer, never File. SoftDent defaults to Printer; NR2 must never OK a print job.",
     "NEVER Esc on SoftDent main (quit). Enter=OK, Tab=fields, Space=checkbox (Carestream KystrkSht).",
     "Launch only via desktop/Programs shortcut CS SoftDent Software.lnk (-sus).",
-    "Select File Name: SoftDent uses ONE path edit (SoftDent's folder\\\\stem) + static .XLS. ALL Excel reports save under SoftDent's C: folder (C:\\\\SoftDent\\\\softdentexportreports) — remap away from OneDrive or SoftDentReportExports. Never type SoftDentReportExports/C:\\\\SOFTDE~1 into SoftDent. NR2 copies the XLS into SoftDentReportExports after SoftDent saves.",
+    "Select File Name: SoftDent uses ONE path edit (folder\\\\stem) + static .XLS. ALL Excel reports save under C:\\\\SoftDentReportExports — remap away from OneDrive or SoftDent's legacy C:\\\\SoftDent\\\\softdentexportreports folder.",
     "Collections F10 path: Reports → Practice Management (p) → Collection Reports — not Accounting (a). Close Chrome Claim Management during morning Excel bundle (focus thief).",
     "Print Preview harden: Date Wizard / Report Setup must be filled (as_of for aging; range otherwise) before Preview is considered open; never File; money beams stay attest_only until SoftDent enables Excel."
   ],
@@ -19,7 +19,7 @@
   "neverUseFile": true,
   "pathPrefix": "{F10} r a",
   "pathPrefixPracticeManagement": "{F10} r p",
-  "selectFileFolder": "C:\\SoftDent\\softdentexportreports",
+  "selectFileFolder": "C:\\SoftDentReportExports",
   "selectFileFolderEnv": "SOFTDENT_SELECT_FILE_FOLDER",
   "reports": {
     "register": {

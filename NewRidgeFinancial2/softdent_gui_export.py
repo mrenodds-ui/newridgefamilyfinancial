@@ -1036,8 +1036,8 @@ def load_menu_map(path: Path | None = None) -> dict[str, Any]:
     return json.loads(map_path.read_text(encoding="utf-8-sig"))
 
 
-# SoftDent's own C: export folder for Select File Name (never SoftDentReportExports).
-DEFAULT_SELECT_FILE_FOLDER = Path(r"C:\SoftDent\softdentexportreports")
+# SoftDent Select File Name destination for every Excel report.
+DEFAULT_SELECT_FILE_FOLDER = Path(r"C:\SoftDentReportExports")
 
 # Every SoftDent GUI report: Excel or Print Preview only — never Printer, never File.
 _ALLOWED_OUTPUT_MODES = frozenset(
@@ -1083,7 +1083,7 @@ def normalize_report_output_policy(report: dict[str, Any]) -> dict[str, Any]:
 
 
 def resolve_select_file_folder(catalog: dict[str, Any] | None = None) -> Path:
-    """Office folder SoftDent accepts in Select File Name (never SoftDentReportExports)."""
+    """Office folder for SoftDent Select File Name (default C:\\SoftDentReportExports)."""
     env_name = ""
     if catalog is None:
         try:
@@ -1187,14 +1187,13 @@ def _set_edit_text_win32(edit_hwnd: int, text: str) -> None:
 
 
 def _softdent_select_file_path(stem_only: str, current: str = "") -> str:
-    """Build SoftDent Select File Name for EVERY report under SoftDent's C: folder.
+    """Build SoftDent Select File Name for EVERY report under SoftDentReportExports.
 
     SoftDent v19 shows ONE edit (folder\\\\stem) + static ``.XLS``. All GUI Excel
     reports (aging, register, collections, daysheet, transactions, …) must save
-    under ``C:\\SoftDent\\softdentexportreports`` (or ``SOFTDENT_SELECT_FILE_FOLDER`` /
-    menu-map ``selectFileFolder``). Never leave SoftDent on OneDrive, never use
-    SoftDentReportExports / ``C:\\SOFTDE~1`` in Select File Name — SoftDent rejects
-    those. NR2 copies the XLS into SoftDentReportExports after SoftDent writes.
+    under ``C:\\SoftDentReportExports`` (or ``SOFTDENT_SELECT_FILE_FOLDER`` /
+    menu-map ``selectFileFolder``). Remap away from OneDrive or SoftDent's
+    legacy ``C:\\SoftDent\\softdentexportreports`` folder.
     """
     stem = _softdent_file_stem(stem_only)
     office_folder = resolve_select_file_folder()
@@ -1762,9 +1761,8 @@ def _complete_output_setup_and_save(
             break
         time.sleep(0.25)
     if save:
-        # SoftDent Select File Name: ONE path edit (SoftDentFolder\stem) + static .XLS.
-        # Force SoftDent's C: folder (C:\SoftDent\softdentexportreports) for every report.
-        # Never SoftDentReportExports / C:\SOFTDE~1 / OneDrive in Select File Name.
+        # SoftDent Select File Name: ONE path edit (folder\stem) + static .XLS.
+        # Force C:\SoftDentReportExports for every report (never OneDrive / legacy SoftDent folder).
         stem_only = _softdent_file_stem(short_stem)
         if any(ch in stem_only for ch in (":", "\\", "/", " ")):
             raise RuntimeError(
@@ -1774,7 +1772,7 @@ def _complete_output_setup_and_save(
         file_hwnd, current_path = _focus_select_file_name_filename_edit(save)
         save_path = _softdent_select_file_path(stem_only, current_path)
         logger.info(
-            "SoftDent Select File Name: force office folder, current=%r → save=%r",
+            "SoftDent Select File Name: force SoftDentReportExports, current=%r → save=%r",
             current_path,
             save_path,
         )
@@ -1785,7 +1783,7 @@ def _complete_output_setup_and_save(
         time.sleep(0.15)
         _keyboard_press_ok(hwnd=int(save.handle))
         time.sleep(1.0)
-        # SoftDent alert: dismiss only — do not invent SoftDentReportExports as retry path
+        # SoftDent alert: dismiss only — path must stay under SoftDentReportExports
         for w in list(_desktop_dialogs()):
             try:
                 blob = _dialog_text_blob(w)
@@ -1803,7 +1801,7 @@ def _complete_output_setup_and_save(
                 raise RuntimeError(
                     f"SoftDent rejected Select File Name path {save_path!r} "
                     f"(from SoftDent field {current_path!r}). "
-                    "Keep SoftDent's own folder; do not use SoftDentReportExports here."
+                    "All Excel reports must save under C:\\SoftDentReportExports."
                 )
             except RuntimeError:
                 raise
@@ -1819,7 +1817,7 @@ def _complete_output_setup_and_save(
         time.sleep(2.0)
 
         dest_root.mkdir(parents=True, exist_ok=True)
-        # SoftDent writes into SoftDent's C: folder; NR2 then copies into dest_root.
+        # SoftDent writes into SoftDentReportExports; NR2 canonicalizes under dest_root.
         min_mtime = time.time() - 180.0
         search_roots: list[Path] = []
         office_folder = resolve_select_file_folder()
@@ -1935,8 +1933,8 @@ def export_report_by_id(
 ) -> Path:
     """Export one catalog report with SoftDent GUI Excel path retries.
 
-    SoftDent Select File Name keeps SoftDent's folder — never SoftDentReportExports.
-    NR2 copies into EXPORT_ROOT after SoftDent saves. Retries transient dialog failures.
+    SoftDent Select File Name saves under C:\\SoftDentReportExports for all Excel reports.
+    NR2 canonicalizes under EXPORT_ROOT after SoftDent saves. Retries transient dialog failures.
     """
     last_exc: BaseException | None = None
     max_attempts = 1 + len(EXPORT_RETRY_DELAYS_SEC)

@@ -728,12 +728,11 @@ def qb_sync(*, consent: bool = True, store, actor: str = "hal") -> dict[str, Any
 
 
 def softdent_export(*, consent: bool = True, report_id: str = "aging", days: int = 30) -> dict[str, Any]:
-    """SoftDent GUI Excel export → SoftDent folder, then copy to exports.
+    """SoftDent GUI Excel export → C:\\SoftDentReportExports.
 
     HAL may run this without operator consent (read-only GUI export). SoftDent
-    Select File Name uses SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for all Excel reports.
-    Never type SoftDentReportExports / C:\\SOFTDE~1 into SoftDent — invalid directory.
-    NR2 copies the XLS into C:\\SoftDentReportExports after SoftDent saves.
+    Select File Name uses C:\\SoftDentReportExports for all Excel reports.
+    Remap away from OneDrive or SoftDent's legacy softdentexportreports folder.
     Output Options: Excel or Print Preview only — never Printer, never File.
     When SoftDent greys out Excel, falls back to Print Preview (visual; no money invent).
     No SoftDent write-back.
@@ -765,7 +764,7 @@ def softdent_export(*, consent: bool = True, report_id: str = "aging", days: int
                         "Output Options Excel or Print Preview only (never File/Printer)."
                     ),
                     "exportRoot": r"C:\SoftDentReportExports",
-                    "pathHygiene": "Keep SoftDent folder; never SoftDentReportExports in Select File Name.",
+                    "pathHygiene": "All Excel reports → C:\\SoftDentReportExports in Select File Name.",
                 }
         end = date.today()
         start = end - timedelta(days=max(1, min(int(days), 366)))
@@ -856,7 +855,7 @@ def softdent_export(*, consent: bool = True, report_id: str = "aging", days: int
             "detail": str(exc)[:600],
             "fallback": "GUI unreachable or report unsupported — showing cached imports only; empty ≠ $0.",
             "exportRoot": r"C:\SoftDentReportExports",
-            "pathHygiene": "Keep SoftDent folder; never SoftDentReportExports in Select File Name.",
+            "pathHygiene": "All Excel reports → C:\\SoftDentReportExports in Select File Name.",
         }
 
 

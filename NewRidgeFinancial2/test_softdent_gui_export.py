@@ -45,19 +45,19 @@ class SoftDentGuiExportTests(unittest.TestCase):
 
     def test_select_file_path_forces_office_folder_for_all_reports(self):
         office = resolve_select_file_folder()
-        self.assertEqual(office, Path(r"C:\SoftDent\softdentexportreports"))
-        # Remap OneDrive / SoftDentReportExports / empty → SoftDent C: folder
+        self.assertEqual(office, Path(r"C:\SoftDentReportExports"))
+        # Remap OneDrive / legacy SoftDent folder / empty → SoftDentReportExports
         self.assertEqual(
             _softdent_select_file_path("AG260716", r"E:\OneDrive\Documents\AcctAge\OLD"),
             str(office / "AG260716"),
         )
         self.assertEqual(
-            _softdent_select_file_path("REG2607", r"C:\SoftDentReportExports\REG2607"),
+            _softdent_select_file_path("REG2607", r"C:\SoftDent\softdentexportreports\REG2607"),
             str(office / "REG2607"),
         )
         self.assertEqual(_softdent_select_file_path("AG260716", ""), str(office / "AG260716"))
         self.assertEqual(
-            _softdent_select_file_path("COL2607", r"C:\SoftDent\softdentexportreports\OLD"),
+            _softdent_select_file_path("COL2607", r"C:\SoftDentReportExports\OLD"),
             str(office / "COL2607"),
         )
 
@@ -79,11 +79,11 @@ class SoftDentGuiExportTests(unittest.TestCase):
             self.assertTrue(pol.get("neverUsePrinter"), rid)
             self.assertTrue(pol.get("neverUseFile"), rid)
             self.assertIn(pol.get("outputMode"), allowed, rid)
-            # Select File Name for Excel stems always remaps to SoftDent C: folder
+            # Select File Name for Excel stems always remaps to SoftDentReportExports
             stem = "X" + rid[:6].upper()
             p = _softdent_select_file_path(stem, r"E:\OneDrive\Documents\OLD")
             self.assertTrue(
-                p.startswith(r"C:\SoftDent\softdentexportreports"),
+                p.startswith(r"C:\SoftDentReportExports"),
                 f"{rid} → {p}",
             )
 

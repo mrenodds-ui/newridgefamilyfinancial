@@ -19,11 +19,10 @@ EXPORT_DIR = r"C:\SoftDentReportExports"
 
 # Permanent SoftDent Select File Name rule (never contradict this in HAL teach).
 SOFTDENT_SELECT_FILE_PATH_HYGIENE = (
-    "NEVER type SoftDentReportExports or C:\\SOFTDE~1 into SoftDent Select File Name — "
-    "keep SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for ALL Excel reports. "
+    f"ALL SoftDent Excel reports save under {EXPORT_DIR} in Select File Name — "
+    "remap away from OneDrive or SoftDent's legacy C:\\SoftDent\\softdentexportreports. "
     "Output Options for EVERY SoftDent report: Excel or Print Preview only — NEVER Printer, NEVER File. "
-    f"After SoftDent saves, NR2 lands/copies Excel under {EXPORT_DIR} "
-    "(temp %LOCALAPPDATA%\\Temp\\SDWIN*.csv → Excel SaveCopyAs is OK)."
+    f"Temp %LOCALAPPDATA%\\Temp\\SDWIN*.csv → Excel SaveCopyAs into {EXPORT_DIR} is OK."
 )
 
 

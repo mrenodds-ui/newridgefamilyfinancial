@@ -11,7 +11,7 @@ NR2 morning bundle (`aging` → `register` → `collections`) needs SoftDent **E
 **Schedule (overall):** pull those SoftDent reports (and any other SoftDent GUI exports needed for the next business day) at **9:00 PM local the night before** — not on the morning of. SoftDent first; Trellis report pull **1:00 AM** Mon–Thu.
 
 If Excel is greyed out, automation correctly uses Print Preview and keeps `morningBundle.ok=false` / `attest_only`.  
-**Select File Name** for every Excel report is forced to SoftDent’s C: folder (`C:\SoftDent\softdentexportreports`) — never OneDrive, never `C:\SoftDentReportExports` inside SoftDent.
+**Select File Name** for every Excel report is forced to `C:\SoftDentReportExports` — never OneDrive, never SoftDent’s legacy `C:\SoftDent\softdentexportreports`.
 
 ## Operator steps (attended, ~10–15 min)
 
@@ -29,13 +29,13 @@ If Excel is greyed out, automation correctly uses Print Preview and keeps `morni
    - If Excel is greyed: SoftDent install/feature — enable report Excel export in SoftDent (Carestream/office IT). **Do not** click File or Printer.
    - Print Preview is allowed for visual totals only; NR2 will **not** treat Preview as money ingest.
 
-### 3) SoftDent’s own save folder (never invent NR2 paths)
+### 3) SoftDentReportExports save folder
 
 When SoftDent shows **Select File Name** / Excel save:
 
-1. SoftDent **Select File Name** for **all** Excel reports must use SoftDent’s **C: folder** (`C:\SoftDent\softdentexportreports`). Override with `SOFTDENT_SELECT_FILE_FOLDER` only if SoftDent requires a different SoftDent-owned path.
-2. **Never** type `C:\SoftDentReportExports`, `C:\SOFTDE~1`, or OneDrive into SoftDent.
-3. After SoftDent saves, NR2 copies/lands Excel under `C:\SoftDentReportExports` (automation / Sync).
+1. SoftDent **Select File Name** for **all** Excel reports must use `C:\SoftDentReportExports`. Override with `SOFTDENT_SELECT_FILE_FOLDER` only if SoftDent requires a different path.
+2. **Never** leave SoftDent on OneDrive or SoftDent’s legacy `C:\SoftDent\softdentexportreports`.
+3. After SoftDent saves, NR2 canonicalizes / Syncs Excel under `C:\SoftDentReportExports`.
 
 ### 4) Attended morning-bundle re-run gate
 

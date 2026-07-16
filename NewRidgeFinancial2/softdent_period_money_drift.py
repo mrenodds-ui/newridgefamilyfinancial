@@ -89,8 +89,7 @@ def compare_register_to_daysheet_totals(
         result["error"] = "register_xls_missing"
         result["nextStep"] = (
             "SoftDent Sign On → Reports → Accounting → Registers → Period → "
-            "click Excel → Enter. NEVER type SoftDentReportExports into SoftDent Select File Name — "
-            "keep SoftDent's folder; NR2 copies after SoftDent saves."
+            "click Excel → Enter. Select File Name under C:\\SoftDentReportExports."
         )
         return result
     result["registerPath"] = str(path)

@@ -113,7 +113,7 @@ class SoftDentSignOnTests(unittest.TestCase):
         self.assertIn("Excel", text)
         self.assertIn("SDWIN", text)
         self.assertIn(r"C:\SoftDentReportExports", text)
-        self.assertIn("NEVER type SoftDentReportExports", text)
+        self.assertNotIn("NEVER type SoftDentReportExports", text)
         self.assertIn("Select File Name", text)
         self.assertNotIn(r"into C:\SoftDentReportExports (short path C:\SOFTDE~1)", text)
         self.assertIn("Printer", text)
@@ -142,7 +142,7 @@ class SoftDentSignOnTests(unittest.TestCase):
         self.assertIn("Trans for a Period", text)
         self.assertIn("List Each Transaction Separately", text)
         self.assertIn("SoftDentReportExports", text)
-        self.assertIn("NEVER type SoftDentReportExports", text)
+        self.assertNotIn("NEVER type SoftDentReportExports", text)
         self.assertNotIn("test-secret-not-real", text)
 
 

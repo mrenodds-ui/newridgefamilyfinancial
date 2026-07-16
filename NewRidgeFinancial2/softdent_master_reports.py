@@ -259,8 +259,7 @@ def verify_master_reports(
                 entry["nextStep"] = (
                     "SoftDent Sign On + UI Excel export required "
                     f"({meta.get('guiMenuPath') or meta.get('guiWin32Path')}). "
-                    "Click Excel then Enter; NEVER type SoftDentReportExports into SoftDent "
-                    "Select File Name — keep SoftDent's folder; NR2 copies after save."
+                    "Click Excel then Enter; Select File Name under C:\\SoftDentReportExports."
                 )
                 if require_inbox_files:
                     entry["ok"] = False

@@ -9,13 +9,13 @@ Whenever SoftDent desktop is used to pull financial or report data — **every**
 
 ## Allowed Output Options only
 
-1. **Excel** — select Excel → Enter → complete SoftDent Setup / save flow. Prefer for money beams and morning bundle. SoftDent Select File Name → SoftDent’s **C:** folder (`C:\SoftDent\softdentexportreports`) for **all** Excel reports.
+1. **Excel** — select Excel → Enter → complete SoftDent Setup / save flow. Prefer for money beams and morning bundle. SoftDent Select File Name → `C:\SoftDentReportExports` for **all** Excel reports.
 2. **Print Preview** — select Print Preview → Enter → read the **last page** for totals when Excel is unavailable.
 
 ## Forbidden (no report is exempt)
 
 - **Never Printer** — SoftDent often defaults to Printer; do not leave it selected and do not OK a print job. If SoftDent waits on a printer dialog, Cancel (`Alt+C`).
-- **Never File** — do not use SoftDent “File” / invent Select File Name paths under `C:\SoftDentReportExports` in the SoftDent UI.
+- **Never File** — do not use SoftDent “File”; Select File Name must stay under `C:\SoftDentReportExports` (never OneDrive / `C:\SoftDent\softdentexportreports`).
 - **Never invent dollars** — empty export ≠ `$0` (`emptyNotZero`).
 - **Never SoftDent write-back** — read-only pulls only.
 
@@ -30,4 +30,4 @@ Whenever SoftDent desktop is used to pull financial or report data — **every**
 
 - GUI export code and HAL playbooks must enforce Excel | Print Preview only for **every** catalog report (`neverUsePrinter` / `neverUseFile`).
 - If Excel is greyed: Print Preview only — do not fall through to Printer or File.
-- After Excel save, SoftDent may open a temp workbook — SaveCopyAs / NR2 copy into `C:\SoftDentReportExports`. Never invent SoftDent’s Select File Name directory.
+- After Excel save, SoftDent may open a temp workbook — SaveCopyAs into `C:\SoftDentReportExports`. Select File Name for every Excel report is `C:\SoftDentReportExports`.

@@ -558,8 +558,7 @@ def format_outstanding_claims_hal_reply(bridge: dict[str, Any] | None) -> str:
     else:
         lines.append(
             "Account Aging export not found — SoftDent Reports → Accounting → "
-            "Account Aging → Excel (NEVER type SoftDentReportExports into SoftDent "
-            "Select File Name — keep SoftDent's folder; NR2 copies after save)."
+            "Account Aging → Excel (Select File Name under C:\\SoftDentReportExports)."
         )
 
     if claims.get("ok"):
