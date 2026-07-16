@@ -1,23 +1,23 @@
-# HAL nightly Trellis dental insurance verification (Mon–Thu 10pm)
+# HAL Trellis dental insurance verification (Mon–Thu)
 
 ## What HAL learned
-Night-before SoftDent schedule → Vyne Trellis **Add Patient → Verify** for the next clinical day (Mon–Thu chairs).
+SoftDent schedule → Vyne Trellis **Add Patient → Verify → ClearCoverage** for Mon–Thu chairs.
 
 ## Schedule
 | Lane | When | What |
 |------|------|------|
-| APScheduler `nr2-trellis-verify` | Mon–Thu **22:00** local (while NR2 runs) | Build worklist + pending; upsert HAL work item |
-| Windows Task Scheduler | Mon–Thu **10:10 PM** interactive | Headed Playwright Verify (`--verify`) after worklist |
+| SoftDent GUI money pulls | **9:00 PM** night-before | Aging / register / collections (Excel\|Preview only) |
+| APScheduler `nr2-trellis-verify` | Mon–Thu **22:00** local (while NR2 runs) | Build **next clinical day** worklist + pending |
+| Windows Task Scheduler | Mon–Thu **1:00 AM** interactive | Headed Playwright Verify + report pull (`--force --verify --same-day`) for **today's** chairs |
 
-Thu night targets **Monday** (skips Fri–Sun). Mon–Wed nights target the next calendar day.
+Thu night worklist targets **Monday**. Mon–Wed night worklists target the next calendar day. The **1:00 AM** pull uses `--same-day` so Monday 1 AM verifies Monday chairs (using the worklist built Thu night).
 
 ## Credentials
 Gitignored `.env.vyne.local`:
 ```
-VYNE_AUTOMATION_USERNAME=mrenodds@hotmail.com
-VYNE_AUTOMATION_PASSWORD=Wichita4589$
+VYNE_AUTOMATION_USERNAME=…
+VYNE_AUTOMATION_PASSWORD=…   # Wichita only — never Emporia
 ```
-Never Emporia. Batch refuses Emporia autofill.
 
 ## Enable UI verify in APScheduler
 Set user/process env `NR2_TRELLIS_VERIFY=1` (Task Scheduler script already passes `--verify`).
@@ -25,7 +25,7 @@ Set user/process env `NR2_TRELLIS_VERIFY=1` (Task Scheduler script already passe
 ## Manual
 ```powershell
 .\.venv\Scripts\python.exe scripts\run_trellis_nightly_verify.py --force
-.\.venv\Scripts\python.exe scripts\run_trellis_nightly_verify.py --force --verify
+.\.venv\Scripts\python.exe scripts\run_trellis_nightly_verify.py --force --verify --same-day
 # or
 POST /api/scheduler/insurance-verify-run  {"force": true, "runVerify": true}
 ```
@@ -50,10 +50,10 @@ Rebuild report only:
 Status-only rows (Eligible but no `benefits.scrapeOk`) are **re-queued** on the next `--verify` so ClearCoverage can be scraped. To force a full re-scrape of everyone:
 ```powershell
 $env:NR2_TRELLIS_FORCE_BENEFITS=1
-.\.venv\Scripts\python.exe scripts\run_trellis_nightly_verify.py --force --verify
+.\.venv\Scripts\python.exe scripts\run_trellis_nightly_verify.py --force --verify --same-day
 ```
 
 Batch log (streamed): `app_data/nr2/vyne_pulls/trellis_verify_batch_YYYY-MM-DD.log`
 
 ## HAL chat
-Ask: “nightly Trellis verify” / “10pm insurance verification” → `policy:trellis-nightly-verify`.
+Ask: “nightly Trellis verify” / “1am Trellis report” / “insurance verification” → `policy:trellis-nightly-verify`.

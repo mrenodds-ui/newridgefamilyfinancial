@@ -66,6 +66,34 @@ class SoftDentGuiExportTests(unittest.TestCase):
         self.assertEqual(_softdent_select_file_path("AG260716", ""), str(office / "AG260716"))
         self.assertEqual(_softdent_select_file_path("REG2607", "REG2607"), str(office / "REG2607"))
 
+    def test_all_reports_never_printer_or_file(self):
+        from softdent_gui_export import normalize_report_output_policy
+
+        catalog = load_menu_map()
+        self.assertTrue(catalog.get("neverUsePrinter"))
+        self.assertTrue(catalog.get("neverUseFile"))
+        self.assertEqual(catalog.get("outputOptionsPolicy"), "excel_or_print_preview_only")
+        allowed = {"excel", "excel_or_preview", "print_preview", "print_preview_only"}
+        for rid, raw in (catalog.get("reports") or {}).items():
+            pol = normalize_report_output_policy(raw)
+            self.assertTrue(pol.get("neverUsePrinter"), rid)
+            self.assertTrue(pol.get("neverUseFile"), rid)
+            self.assertIn(pol.get("outputMode"), allowed, rid)
+            # Select File Name for Excel stems always remaps to SoftDent C: folder
+            stem = "X" + rid[:6].upper()
+            p = _softdent_select_file_path(stem, r"E:\OneDrive\Documents\OLD")
+            self.assertTrue(
+                p.startswith(r"C:\SoftDent\softdentexportreports"),
+                f"{rid} → {p}",
+            )
+
+    def test_normalize_rejects_printer_output_mode(self):
+        from softdent_gui_export import normalize_report_output_policy
+
+        with self.assertRaises(RuntimeError) as ctx:
+            normalize_report_output_policy({"id": "x", "outputMode": "printer"})
+        self.assertIn("Printer", str(ctx.exception))
+
     def test_menu_map_phase1_ids(self):
         catalog = load_menu_map()
         self.assertEqual(catalog.get("version"), 1)
@@ -95,7 +123,10 @@ class SoftDentGuiExportTests(unittest.TestCase):
         self.assertFalse(softdent_report_preview_visible(["Sorting Report"]))
         self.assertFalse(softdent_report_preview_visible(["Date Wizard"]))
         self.assertFalse(softdent_report_preview_visible(["CS SoftDent Software v19.1.4"]))
-        note = (load_menu_map().get("notes") or [])[4]
+        note = next(
+            (n for n in (load_menu_map().get("notes") or []) if "PageDown" in str(n)),
+            "",
+        )
         self.assertIn("PageDown", note)
         ipa = load_menu_map()["reports"]["insurance_payment_analysis"]
         self.assertEqual(ipa.get("outputMode"), "print_preview_only")

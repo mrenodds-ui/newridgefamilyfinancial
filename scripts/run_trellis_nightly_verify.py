@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""CLI: build next clinical day Trellis worklist (+ optional headed Verify).
+"""CLI: build Trellis worklist (+ optional headed Verify / ClearCoverage report).
 
 Usage:
   python scripts/run_trellis_nightly_verify.py
   python scripts/run_trellis_nightly_verify.py --force --verify
+  python scripts/run_trellis_nightly_verify.py --force --verify --same-day
   set NR2_TRELLIS_VERIFY=1 && python scripts/run_trellis_nightly_verify.py --force
+
+Task Scheduler (Mon–Thu 1:00 AM): --force --verify --same-day
+APScheduler (~10:00 PM): worklist for next clinical day (default target mode).
 """
 from __future__ import annotations
 
@@ -19,12 +23,17 @@ sys.path.insert(0, str(NR2))
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="HAL nightly Trellis insurance verify")
+    parser = argparse.ArgumentParser(description="HAL Trellis insurance verify / report pull")
     parser.add_argument("--force", action="store_true", help="Ignore Mon–Thu / already-ran gates")
     parser.add_argument(
         "--verify",
         action="store_true",
         help="Drive Trellis Playwright Verify (needs .env.vyne.local + interactive desktop)",
+    )
+    parser.add_argument(
+        "--same-day",
+        action="store_true",
+        help="Target today's Mon–Thu chairs (1:00 AM report pull). Default = next clinical day.",
     )
     parser.add_argument("--json", action="store_true", help="Print JSON only")
     args = parser.parse_args()
@@ -43,13 +52,15 @@ def main() -> int:
         store,
         force=args.force,
         run_verify=True if args.verify else None,
+        target_mode="same_day" if args.same_day else None,
     )
     if args.json:
         print(json.dumps(result, indent=2, default=str))
     else:
         print(
             f"ok={result.get('ok')} skipped={result.get('skipped')} "
-            f"target={result.get('targetDate')} ready={result.get('worklistReady')}/"
+            f"target={result.get('targetDate')} mode={result.get('targetMode')} "
+            f"ready={result.get('worklistReady')}/"
             f"{result.get('worklistTotal')} verifyRan={result.get('verifyRan')}"
         )
         if result.get("results"):

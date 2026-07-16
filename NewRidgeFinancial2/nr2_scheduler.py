@@ -705,7 +705,7 @@ def eod_handoff_tick(store, *, force: bool = False) -> dict[str, Any]:
 
         if should_run_tonight():
             target = next_clinical_day()
-            trellis_lines = ["", "## Trellis next-day eligibility (Mon–Thu 10pm)"]
+            trellis_lines = ["", "## Trellis eligibility (worklist ~10pm · report pull 1am Mon–Thu)"]
             if target:
                 trellis_lines.append(f"- Next clinical day: {target.isoformat()}")
                 results_path = (
@@ -726,7 +726,7 @@ def eod_handoff_tick(store, *, force: bool = False) -> dict[str, Any]:
                 else:
                     trellis_lines.append(
                         "- Results not yet written — nightly job builds worklist at 10pm; "
-                        "headed Verify via Task Scheduler at 10:10pm."
+                        "headed Verify via Task Scheduler at 1:00am (--same-day)."
                     )
             trellis_lines.append("- Ask HAL: nightly Trellis verify / insurance verification schedule")
             md = str(handoff.get("reportMarkdown") or "")

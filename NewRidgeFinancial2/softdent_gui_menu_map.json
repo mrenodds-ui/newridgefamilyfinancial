@@ -1,19 +1,22 @@
 {
   "version": 1,
   "softdentVersionHint": "CS SoftDent Software v19.1.4",
-    "notes": [
+  "notes": [
     "Carestream docs: Reports > Accounting > Registers > Period → Output Options → Excel → Register Setup.",
     "Interaction: keyboard OR mouse, SoftDent (SDWIN) windows only — never AMD (Alt+R = Instant Replay).",
     "Prefer SoftDent Win32 menu_select (Reports->Accounting->Registers->Period); F10+letters fallback.",
     "MUST click Excel prompt then Enter for Excel export — NEVER Printer, NEVER File.",
     "Print Preview path: click Print Preview prompt then Enter — page through with Next/PageDown when detail spans pages; go to LAST page for exact totals (visual read). Page 1 alone is often incomplete.",
-    "HARD RULE: Excel or Print Preview only — never Printer, never File (Output Options).",
+    "HARD RULE (ALL SoftDent reports): Output Options = Excel or Print Preview only — never Printer, never File. SoftDent defaults to Printer; NR2 must never OK a print job.",
     "NEVER Esc on SoftDent main (quit). Enter=OK, Tab=fields, Space=checkbox (Carestream KystrkSht).",
     "Launch only via desktop/Programs shortcut CS SoftDent Software.lnk (-sus).",
     "Select File Name: SoftDent uses ONE path edit (SoftDent's folder\\\\stem) + static .XLS. ALL Excel reports save under SoftDent's C: folder (C:\\\\SoftDent\\\\softdentexportreports) — remap away from OneDrive or SoftDentReportExports. Never type SoftDentReportExports/C:\\\\SOFTDE~1 into SoftDent. NR2 copies the XLS into SoftDentReportExports after SoftDent saves.",
     "Collections F10 path: Reports → Practice Management (p) → Collection Reports — not Accounting (a). Close Chrome Claim Management during morning Excel bundle (focus thief).",
     "Print Preview harden: Date Wizard / Report Setup must be filled (as_of for aging; range otherwise) before Preview is considered open; never File; money beams stay attest_only until SoftDent enables Excel."
   ],
+  "outputOptionsPolicy": "excel_or_print_preview_only",
+  "neverUsePrinter": true,
+  "neverUseFile": true,
   "pathPrefix": "{F10} r a",
   "pathPrefixPracticeManagement": "{F10} r p",
   "selectFileFolder": "C:\\SoftDent\\softdentexportreports",
@@ -30,7 +33,12 @@
       "canonical_template": "register_for_period_{start}_{end}.xls",
       "required": true,
       "phase": 1,
-      "proven": true
+      "proven": true,
+      "outputMode": "excel_or_preview",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true
     },
     "collections": {
       "id": "collections",
@@ -39,7 +47,9 @@
       "outputMode": "excel_or_preview",
       "excelExport": true,
       "printPreviewAvailable": true,
-      "note": "Output Options: click Excel→Enter for file, or Print Preview→Enter then last page for visual totals.",
+      "neverUsePrinter": true,
+      "neverUseFile": true,
+      "note": "Output Options: click Excel→Enter for file, or Print Preview→Enter then last page for visual totals. Never Printer.",
       "menu_keys": "c",
       "menu_keys_env": "SOFTDENT_COLLECTIONS_MENU_KEYS",
       "date_mode": "range",
@@ -60,10 +70,15 @@
       "short_stem_template": "TRN{yy}{mm}",
       "canonical_template": "transactions_for_period_{start}_{end}.xls",
       "also_copy_as": ["transactions_for_period.xls"],
-      "note": "Period automation converts Excel→CSV; do not fake .csv by copying XLS bytes.",
+      "note": "Period automation converts Excel→CSV; do not fake .csv by copying XLS bytes. Never Printer.",
       "required": true,
       "phase": 1,
-      "proven": false
+      "proven": false,
+      "outputMode": "excel_or_preview",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true
     },
     "daysheet": {
       "id": "daysheet",
@@ -77,7 +92,12 @@
       "also_copy_as": [],
       "required": true,
       "phase": 1,
-      "proven": false
+      "proven": false,
+      "outputMode": "excel_or_preview",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true
     },
     "aging": {
       "id": "aging",
@@ -92,7 +112,12 @@
       "required": true,
       "phase": 1,
       "proven": false,
-      "alt_menu_keys": ["g", "aa", "n"]
+      "alt_menu_keys": ["g", "aa", "n"],
+      "outputMode": "excel_or_preview",
+      "excelExport": true,
+      "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true
     },
     "writeoff_totals": {
       "id": "writeoff_totals",
@@ -110,7 +135,9 @@
       "outputMode": "print_preview_only",
       "excelExport": false,
       "printPreviewAvailable": true,
-      "note": "Operator: Excel not available/usable for this report — Print Preview only; read LAST page for totals."
+      "neverUsePrinter": true,
+      "neverUseFile": true,
+      "note": "Operator: Excel not available/usable for this report — Print Preview only; read LAST page for totals. Never Printer."
     },
     "insurance_payment_distribution": {
       "id": "insurance_payment_distribution",
@@ -128,7 +155,9 @@
       "outputMode": "print_preview_only",
       "excelExport": false,
       "printPreviewAvailable": true,
-      "note": "Operator: Excel not available — Print Preview only. May lack ADA line items."
+      "neverUsePrinter": true,
+      "neverUseFile": true,
+      "note": "Operator: Excel not available — Print Preview only. Never Printer. May lack ADA line items."
     },
     "insurance_payment_analysis": {
       "id": "insurance_payment_analysis",
@@ -146,6 +175,8 @@
       "outputMode": "print_preview_only",
       "excelExport": false,
       "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true,
       "note": "HAL-10589: Excel NOT available. Output Options → Print Preview → Enter → Next/PageDown through pages as needed → LAST page for totals. Never Printer. empty != $0; Print Preview does not populate sd_insurance_payment_lines."
     },
     "production_by_ada_code": {
@@ -165,7 +196,9 @@
       "outputMode": "excel_or_preview",
       "excelExport": true,
       "printPreviewAvailable": true,
-      "note": "Excel available. Saves as PRODBYADA.xls (often D:\\). SoftDent CODE rollups — NOT InsCo×ADA gold payment lines. Prefer 1-year range."
+      "neverUsePrinter": true,
+      "neverUseFile": true,
+      "note": "Excel available. Saves as PRODBYADA.xls under SoftDent C: folder. SoftDent CODE rollups — NOT InsCo×ADA gold payment lines. Prefer 1-year range. Never Printer."
     },
     "outstanding_claims_by_patient": {
       "id": "outstanding_claims_by_patient",
@@ -183,6 +216,8 @@
       "outputMode": "print_preview_only",
       "excelExport": false,
       "printPreviewAvailable": true,
+      "neverUsePrinter": true,
+      "neverUseFile": true,
       "note": "SoftDent Excel greyed on this report (v19.1.4). Print Preview only — never Printer/File. Full claim list for NR2 Claims page requires SoftDent Excel enablement or a SoftDent claims CSV drop into SoftDentReportExports / inbox."
     }
   },

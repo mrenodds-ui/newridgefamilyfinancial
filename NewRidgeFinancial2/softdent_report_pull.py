@@ -20,7 +20,8 @@ EXPORT_DIR = r"C:\SoftDentReportExports"
 # Permanent SoftDent Select File Name rule (never contradict this in HAL teach).
 SOFTDENT_SELECT_FILE_PATH_HYGIENE = (
     "NEVER type SoftDentReportExports or C:\\SOFTDE~1 into SoftDent Select File Name — "
-    "keep SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for all Excel reports. "
+    "keep SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for ALL Excel reports. "
+    "Output Options for EVERY SoftDent report: Excel or Print Preview only — NEVER Printer, NEVER File. "
     f"After SoftDent saves, NR2 lands/copies Excel under {EXPORT_DIR} "
     "(temp %LOCALAPPDATA%\\Temp\\SDWIN*.csv → Excel SaveCopyAs is OK)."
 )
@@ -83,7 +84,7 @@ def universal_report_pull_steps() -> list[str]:
         "SCHEDULE (overall): SoftDent reports for the NEXT business day must be pulled at "
         "9:00 PM local the NIGHT BEFORE (aging/register/collections money bundle and other "
         "next-day SoftDent GUI pulls) — do not wait until morning. SoftDent before Trellis "
-        "(Trellis verify typically ~10:10 PM).",
+        "(Trellis report pull Mon–Thu 1:00 AM).",
         "Morning money bundle (aging/register/collections) needs Excel enabled for money beams; Preview-only keeps attest_only.",
         "NR2: https://127.0.0.1:8765 → SoftDent page → Sync (or refresh_softdent_period_imports). "
         "Never invent SoftDent dollars; empty ≠ $0.",
@@ -167,7 +168,7 @@ def format_softdent_report_pull_hal_reply(query: str = "") -> str:
         " ".join(f"{i}) {s}" for i, s in enumerate(steps, 1)),
         "Hard rules: Excel or Print Preview only — never Printer; never File; never Esc on SoftDent main; "
         "never Alt+R for Reports (AMD Instant Replay steals it); SoftDent is 32-bit — prefer F10. "
-        "SCHEDULE: next-day SoftDent reports at 9:00 PM local the night before (SoftDent before Trellis ~10:10 PM). "
+        "SCHEDULE: next-day SoftDent reports at 9:00 PM local the night before (SoftDent before Trellis 1:00 AM pull). "
         "If Excel is greyed out on Output Options → Print Preview only (empty ≠ $0 for money until Excel enabled). "
         "Money-beam enablement runbook: NewRidgeFinancial2/docs/runbooks/softdent_excel_enablement_nr2.md "
         "(then say approve for attended morning bundle). "

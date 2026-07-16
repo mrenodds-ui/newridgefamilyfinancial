@@ -8,7 +8,7 @@
 
 NR2 morning bundle (`aging` → `register` → `collections`) needs SoftDent **Excel** output for money-beam ingest (`moneyBeamIngest`).
 
-**Schedule (overall):** pull those SoftDent reports (and any other SoftDent GUI exports needed for the next business day) at **9:00 PM local the night before** — not on the morning of. SoftDent first; Trellis verify typically later (~10:10 PM).
+**Schedule (overall):** pull those SoftDent reports (and any other SoftDent GUI exports needed for the next business day) at **9:00 PM local the night before** — not on the morning of. SoftDent first; Trellis report pull **1:00 AM** Mon–Thu.
 
 If Excel is greyed out, automation correctly uses Print Preview and keeps `morningBundle.ok=false` / `attest_only`.  
 **Select File Name** for every Excel report is forced to SoftDent’s C: folder (`C:\SoftDent\softdentexportreports`) — never OneDrive, never `C:\SoftDentReportExports` inside SoftDent.

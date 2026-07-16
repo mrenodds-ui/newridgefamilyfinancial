@@ -1,6 +1,6 @@
 # Install SoftDent daily GUI master pull — 9:00 PM interactive desktop only.
 # pywinauto cannot reliably drive SoftDent from Session 0 / S4U headless.
-# SoftDent before Trellis (~10:10 PM). Night-before for next business day money beams.
+# SoftDent before Trellis (1:00 AM report pull). Night-before for next business day money beams.
 $ErrorActionPreference = 'Stop'
 
 $ProjectRoot = if ($env:NEWRIDGE_PROJECT_ROOT) { $env:NEWRIDGE_PROJECT_ROOT } else { 'C:\New folder' }

@@ -1039,6 +1039,48 @@ def load_menu_map(path: Path | None = None) -> dict[str, Any]:
 # SoftDent's own C: export folder for Select File Name (never SoftDentReportExports).
 DEFAULT_SELECT_FILE_FOLDER = Path(r"C:\SoftDent\softdentexportreports")
 
+# Every SoftDent GUI report: Excel or Print Preview only — never Printer, never File.
+_ALLOWED_OUTPUT_MODES = frozenset(
+    {
+        "excel",
+        "excel_or_preview",
+        "print_preview",
+        "print_preview_only",
+    }
+)
+
+
+def normalize_report_output_policy(report: dict[str, Any]) -> dict[str, Any]:
+    """Return report policy with universal SoftDent Output Options rules enforced.
+
+    Applies to aging, register, collections, daysheet, transactions, claims, and
+    every other catalog report — SoftDent defaults to Printer; NR2 must never OK it.
+    """
+    if not isinstance(report, dict):
+        raise TypeError("report must be a dict")
+    out = dict(report)
+    mode = str(out.get("outputMode") or "").strip().lower()
+    if not mode:
+        # Default: prefer Excel when SoftDent offers it; Preview allowed as fallback.
+        mode = "excel_or_preview"
+    if mode not in _ALLOWED_OUTPUT_MODES:
+        raise RuntimeError(
+            f"Report {out.get('id')!r} outputMode={mode!r} is forbidden — "
+            "Excel or Print Preview only (never Printer, never File)."
+        )
+    out["outputMode"] = mode
+    out["neverUsePrinter"] = True
+    out["neverUseFile"] = True
+    if mode in {"print_preview", "print_preview_only"}:
+        out["excelExport"] = False
+        out["printPreviewAvailable"] = True
+    else:
+        if out.get("excelExport") is None:
+            out["excelExport"] = True
+        if out.get("printPreviewAvailable") is None:
+            out["printPreviewAvailable"] = True
+    return out
+
 
 def resolve_select_file_folder(catalog: dict[str, Any] | None = None) -> Path:
     """Office folder SoftDent accepts in Select File Name (never SoftDentReportExports)."""
@@ -1978,9 +2020,11 @@ def _export_report_by_id_once(
     report = reports.get(report_id)
     if not isinstance(report, dict):
         raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
+    report = normalize_report_output_policy(report)
 
     # Prefer Excel file ingest when SoftDent offers it. Print Preview path is separate
     # (click Print Preview prompt → Enter → visually read; last page for totals).
+    # Universal: never Printer / never File for this or any other SoftDent report.
     try:
         from softdent_master_reports import load_master_reports
 
@@ -1989,14 +2033,17 @@ def _export_report_by_id_once(
             raise RuntimeError(
                 f"{report_id} requires SoftDent Print Preview (click Print Preview, then Enter). "
                 "Visually read the report — go to the LAST page for exact totals. "
-                "Do not invent dollars."
+                "Do not invent dollars. Never Printer."
             )
     except ImportError:
         pass
-    if str(report.get("outputMode") or "").strip().lower() == "print_preview_only":
+    if str(report.get("outputMode") or "").strip().lower() in {
+        "print_preview_only",
+        "print_preview",
+    }:
         raise RuntimeError(
             f"{report_id} is SoftDent Print Preview only — click Print Preview then Enter; "
-            "read the last page for totals."
+            "read the last page for totals. Never Printer."
         )
 
     dest = dest_root or EXPORT_ROOT
@@ -2275,6 +2322,7 @@ def open_report_print_preview(
     report = (catalog.get("reports") or {}).get(report_id)
     if not isinstance(report, dict):
         raise KeyError(f"Unknown SoftDent GUI report id: {report_id}")
+    report = normalize_report_output_policy(report)
     keys = resolve_menu_keys(report, menu_keys)
     date_mode = str(report.get("date_mode") or "range").strip().lower()
     # Practice Management + collections: prefer win32 path (not Accounting F10 r a)

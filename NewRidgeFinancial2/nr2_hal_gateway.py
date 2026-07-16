@@ -694,7 +694,7 @@ def try_local_policy_reply(
     except Exception:
         pass
 
-    # Nightly Trellis dental eligibility (Mon–Thu 10pm next clinical day)
+    # Nightly Trellis dental eligibility (worklist ~10pm; headed report pull 1am Mon–Thu)
     try:
         from nr2_trellis_nightly import (
             format_hal_trellis_nightly_reply,

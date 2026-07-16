@@ -1,5 +1,5 @@
 # Install Trellis withBenefits AM proof - Mon-Thu 7:15 AM interactive.
-# Runs after nightly 10:10 PM verify; logs to .local_logs/moonshot_financial_eval.
+# Runs after 1:00 AM Trellis --same-day --verify; logs to .local_logs/moonshot_financial_eval.
 $ErrorActionPreference = 'Stop'
 
 $RepoRoot = if ($env:NEWRIDGE_FINANCIAL_REPO) {
@@ -38,4 +38,4 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Se
 
 Write-Host "Installed '$TaskName' (Interactive / Mon-Thu 7:15 AM) for $CurrentUser."
 Write-Host "Exit 0 when withBenefits > 0; exit 2 when still status-only (honest until scrape lands)."
-Write-Host "Pair with nightly verify: scripts/install_trellis_nightly_verify_task.ps1 (10:10 PM)."
+Write-Host "Pair with Trellis report pull: scripts/install_trellis_nightly_verify_task.ps1 (1:00 AM)."

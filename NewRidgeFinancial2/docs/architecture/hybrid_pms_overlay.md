@@ -52,7 +52,7 @@ flowchart TB
 3. **Beams:** `GET /api/hal/tools/money-beams` — SoftDent AR + QuickBooks revenue; `empty ≠ $0`.
 4. **Desk smoke:** `GET /api/health/desk-smoke` — `deskProof: MATCH` vs period-close snapshot.
 5. **Morning huddle:** `/nr2-optical-page-analytics.html` — beams, bundle gate, Trellis counts, claims aging, hygiene recall.
-6. **10:10 PM Mon–Thu:** Trellis verify → AM proof `withBenefits > 0`.
+6. **1:00 AM Mon–Thu:** Trellis headed verify / ClearCoverage report pull (`--same-day`) → AM proof `withBenefits > 0`.
 
 ---
 

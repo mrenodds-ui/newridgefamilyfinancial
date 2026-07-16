@@ -1,10 +1,11 @@
-"""Nightly next-day Vyne Trellis dental eligibility verify (Mon–Thu clinical days).
+"""Nightly / early-morning Vyne Trellis dental eligibility verify (Mon–Thu clinical days).
 
 Learned ops flow:
-  SoftDent tomorrow schedule → worklist → Trellis Add Patient → Verify → results JSON.
+  SoftDent schedule → worklist → Trellis Add Patient → Verify → results JSON.
 
-Runs at 22:00 Mon–Thu (local). Target date = next clinical day (Mon–Thu);
-Thu night jumps to Monday (skip Fri–Sun chairs).
+Schedule:
+  SoftDent money pulls 9:00 PM → APScheduler worklist ~10:00 PM (next clinical day)
+  → headed Trellis report pull **1:00 AM** Mon–Thu (same clinical day chairs open that morning).
 """
 from __future__ import annotations
 
@@ -42,8 +43,32 @@ def next_clinical_day(today: date | None = None) -> date | None:
     return None
 
 
+def same_day_clinical_target(today: date | None = None) -> date | None:
+    """Clinical day for the 1:00 AM Trellis report pull (today's chairs)."""
+    today = today or date.today()
+    if today.weekday() in CLINICAL_WEEKDAYS:
+        return today
+    return None
+
+
+def resolve_trellis_target(
+    today: date | None = None,
+    *,
+    target_mode: str = "next",
+) -> date | None:
+    """Resolve SoftDent/Trellis target date.
+
+    ``next`` — night-before worklist (APScheduler ~10 PM): next clinical day.
+    ``same_day`` — 1 AM report pull: today's Mon–Thu chairs.
+    """
+    mode = str(target_mode or "next").strip().lower().replace("-", "_")
+    if mode in {"same_day", "same", "today", "1am", "am"}:
+        return same_day_clinical_target(today)
+    return next_clinical_day(today)
+
+
 def should_run_tonight(today: date | None = None) -> bool:
-    """True on Mon–Thu local nights (10pm job nights)."""
+    """True on Mon–Thu (night worklist or 1 AM same-day pull days)."""
     today = today or date.today()
     return today.weekday() in CLINICAL_WEEKDAYS
 
@@ -197,12 +222,14 @@ def insurance_verify_tick(
     *,
     force: bool = False,
     run_verify: bool | None = None,
+    target_mode: str | None = None,
 ) -> dict[str, Any]:
-    """Build next-day Trellis worklist (+ optional Playwright verify) and upsert HAL work.
+    """Build Trellis worklist (+ optional Playwright verify) and upsert HAL work.
 
     Env:
       NR2_TRELLIS_VERIFY=1  — run headed Playwright verify after building worklist
-      (override with run_verify=)
+      NR2_TRELLIS_TARGET=same_day|next — default target mode (Task Scheduler 1 AM uses same_day)
+      (override with run_verify= / target_mode=)
     """
     today = date.today()
     if not force and not should_run_tonight(today):
@@ -213,9 +240,14 @@ def insurance_verify_tick(
             "weekday": today.strftime("%A"),
         }
 
-    target = next_clinical_day(today)
+    mode = str(
+        target_mode
+        or os.environ.get("NR2_TRELLIS_TARGET")
+        or "next"
+    ).strip().lower()
+    target = resolve_trellis_target(today, target_mode=mode)
     if target is None:
-        return {"ok": False, "error": "no_clinical_day"}
+        return {"ok": False, "error": "no_clinical_day", "targetMode": mode}
 
     # Idempotency: one nightly build per target date unless force
     state_key_day = _iso(target)
@@ -337,6 +369,7 @@ def insurance_verify_tick(
     return {
         "ok": True,
         "targetDate": _iso(target),
+        "targetMode": mode,
         "runNight": _iso(today),
         "worklistReady": ready,
         "worklistTotal": wl.get("total"),
@@ -366,10 +399,12 @@ def format_hal_trellis_nightly_reply(query: str = "") -> str:
                 f"{summary.get('count')} rows · {summary.get('byStatus')}"
             )
     return (
-        "HAL nightly dental insurance verification (Vyne Trellis)\n\n"
-        "Schedule: Mon-Thu 10:00 PM local (APScheduler job nr2-trellis-verify "
-        "+ optional Windows Task Scheduler headed Playwright).\n"
-        "Scope: SoftDent next clinical day (Mon-Thu chairs; Thu night -> Monday).\n"
+        "HAL dental insurance verification (Vyne Trellis)\n\n"
+        "Schedule: SoftDent 9:00 PM → APScheduler worklist Mon-Thu ~10:00 PM (next clinical day) "
+        "→ headed Trellis report pull Mon-Thu **1:00 AM** (same-day chairs; Task Scheduler "
+        "`--same-day --verify`).\n"
+        "Scope: Mon-Thu chairs (1 AM pull = today's date; night worklist = next clinical day; "
+        "Thu night worklist -> Monday).\n"
         "Flow: SoftDent appts -> Trellis Add Patient -> Verify -> ClearCoverage scrape "
         "(deductible/max/ADA %) -> results JSON + printable HTML report under "
         "app_data/nr2/vyne_pulls/ (trellis_eligibility_report_YYYY-MM-DD.html).\n"
@@ -378,12 +413,12 @@ def format_hal_trellis_nightly_reply(query: str = "") -> str:
         "Credentials: gitignored .env.vyne.local (Wichita password only - never Emporia).\n"
         "Gating: set NR2_TRELLIS_VERIFY=1 to drive the Trellis UI; without it HAL still "
         "builds the worklist/pending batch and opens a work item for staff.\n"
-        f"Tonight run? {'yes' if should_run_tonight(today) else 'no'} "
-        f"({today.strftime('%A')}). Next clinical day: "
+        f"Tonight/AM run day? {'yes' if should_run_tonight(today) else 'no'} "
+        f"({today.strftime('%A')}). Next clinical day (night worklist): "
         f"{_iso(target) if target else 'none'}."
         f"{results_note}\n"
         "Manual: POST /api/scheduler/insurance-verify-run or "
-        "python scripts/run_trellis_nightly_verify.py."
+        "python scripts/run_trellis_nightly_verify.py --same-day --verify."
     )
 
 
@@ -690,7 +725,7 @@ def trellis_am_benefits_proof(
         "emptyNotZero": True,
         "note": (
             "Counts only — no deductible/$ invent. Board stays initials+hash. "
-            "Tonight 10:10 PM Trellis --verify raises withBenefits when ClearCoverage scrapes land."
+            "Mon–Thu 1:00 AM Trellis --same-day --verify raises withBenefits when ClearCoverage scrapes land."
         ),
         "at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     }
