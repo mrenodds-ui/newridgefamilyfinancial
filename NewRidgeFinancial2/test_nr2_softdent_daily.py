@@ -69,6 +69,31 @@ class Nr2SoftdentDailyTests(unittest.TestCase):
                 result = claims_outstanding()
             self.assertTrue(result["hasData"])
             self.assertEqual(result["claims"][0]["claimId"], "CLM-1")
+            self.assertEqual(result["claims"][0]["patientId"], "1001")
+            self.assertEqual(result["sampleWithPatientId"], 1)
+
+    def test_claims_outstanding_name_join_last_first(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "analytics.sqlite3"
+            _seed_db(db_path)
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "INSERT OR REPLACE INTO sd_patients "
+                "(patient_id, patient_name, first_visit_date, last_visit_date, practice_id, extracted_at) "
+                "VALUES ('2002', 'Jane Doe', '2026-06-01', '2026-06-15', '', 't')"
+            )
+            conn.execute(
+                "INSERT OR REPLACE INTO sd_claims "
+                "(claim_id, patient_name, payer, service_date, claim_amount, claim_status, practice_id, extracted_at) "
+                "VALUES ('CLM-2', 'Doe, Jane', 'Delta', '2026-06-11', 310.0, 'Ready', '', 't')"
+            )
+            conn.commit()
+            conn.close()
+            with patch("nr2_softdent_daily.resolve_sd_sqlite_db", return_value=db_path):
+                result = claims_outstanding(limit=10)
+            by_id = {c["claimId"]: c for c in result["claims"]}
+            self.assertEqual(by_id["CLM-2"]["patientId"], "2002")
+            self.assertGreaterEqual(result["sampleWithPatientId"], 2)
 
     def test_claim_review_narrative_and_checklist(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -392,6 +392,43 @@ def _initials_from_name(raw_name: str) -> str:
     return f"{letters or 'P'}—"
 
 
+def _normalize_patient_name_key(name: str | None) -> str:
+    from softdent_odbc_extract import _normalize_patient_name_key as normalize_key
+
+    return normalize_key(name)
+
+
+def _patient_name_to_id_index(conn: sqlite3.Connection) -> dict[str, str]:
+    """Map normalized name keys and exact lower names → patient_id."""
+    out: dict[str, str] = {}
+    if not _table_exists(conn, "sd_patients"):
+        return out
+    cur = conn.cursor()
+    cur.execute("SELECT patient_id, patient_name FROM sd_patients")
+    for pid, pname in cur.fetchall():
+        patient_id = str(pid or "").strip()
+        raw = str(pname or "").strip()
+        if not patient_id or not raw:
+            continue
+        norm = _normalize_patient_name_key(raw)
+        if norm and norm not in out:
+            out[norm] = patient_id
+        exact = raw.lower()
+        if exact not in out:
+            out[exact] = patient_id
+    return out
+
+
+def _lookup_patient_id(name_index: dict[str, str], patient_name: str) -> str:
+    raw = str(patient_name or "").strip()
+    if not raw or not name_index:
+        return ""
+    hit = name_index.get(_normalize_patient_name_key(raw))
+    if hit:
+        return hit
+    return name_index.get(raw.lower(), "")
+
+
 def appointments_range_snapshot(
     start_iso: str,
     days: int = 4,
@@ -681,6 +718,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             "claims": [],
             "totalOutstanding": None,
             "count": 0,
+            "sampleWithPatientId": 0,
             "honesty": "empty != $0",
         }
     try:
@@ -748,32 +786,15 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             rows = cur.fetchall()
 
         # Name → patient_id (first match) for dossier click — sd_claims has no patient_id.
-        name_to_id: dict[str, str] = {}
-        if rows and _table_exists(conn, "sd_patients"):
-            names = sorted(
-                {
-                    str(r[1] or "").strip().lower()
-                    for r in rows
-                    if str(r[1] or "").strip()
-                }
-            )
-            for nm in names:
-                cur.execute(
-                    """
-                    SELECT patient_id FROM sd_patients
-                    WHERE lower(trim(COALESCE(patient_name, ''))) = ?
-                    ORDER BY patient_id LIMIT 1
-                    """,
-                    (nm,),
-                )
-                hit = cur.fetchone()
-                if hit and hit[0]:
-                    name_to_id[nm] = str(hit[0]).strip()
+        name_to_id = _patient_name_to_id_index(conn) if rows else {}
 
         claims = []
+        with_patient_id = 0
         for claim_id, patient, payer, service_date, amount, status in rows:
             patient_raw = str(patient or "").strip()
-            patient_id = name_to_id.get(patient_raw.lower(), "")
+            patient_id = _lookup_patient_id(name_to_id, patient_raw)
+            if patient_id:
+                with_patient_id += 1
             entry: dict[str, Any] = {
                 "claimId": str(claim_id or ""),
                 "patientName": patient_raw,
@@ -798,6 +819,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         "totalOutstanding": total,
         "count": count,
         "sampleLimit": max(1, int(limit)),
+        "sampleWithPatientId": with_patient_id if rows else 0,
         "source": source,
         "dbPath": str(db_path),
         "honesty": "empty != $0",
@@ -1066,22 +1088,15 @@ def claim_review(*, claim_id: str = "", claim: dict[str, Any] | None = None) -> 
                         "initials": (claim_row or {}).get("initials")
                         or _initials_from_name(str(hit[1] or "")),
                     }
-                    # Name → patient_id join when missing
+                    # Name → patient_id join when missing (Last, First ↔ First Last).
                     if not claim_row.get("patientId") and _table_exists(conn, "sd_patients"):
-                        nm = str(claim_row.get("patientName") or "").strip().lower()
-                        if nm:
-                            cur.execute(
-                                """
-                                SELECT patient_id FROM sd_patients
-                                WHERE lower(trim(COALESCE(patient_name, ''))) = ?
-                                ORDER BY patient_id LIMIT 1
-                                """,
-                                (nm,),
-                            )
-                            p = cur.fetchone()
-                            if p and p[0]:
-                                claim_row["patientId"] = str(p[0]).strip()
-                                claim_row["patientHash"] = _hash_patient_id(str(p[0]))
+                        name_index = _patient_name_to_id_index(conn)
+                        pid = _lookup_patient_id(
+                            name_index, str(claim_row.get("patientName") or "")
+                        )
+                        if pid:
+                            claim_row["patientId"] = pid
+                            claim_row["patientHash"] = _hash_patient_id(pid)
         finally:
             conn.close()
         out["dbPath"] = str(db_path)
