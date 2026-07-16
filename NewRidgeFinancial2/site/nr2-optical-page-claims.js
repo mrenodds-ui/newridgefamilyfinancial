@@ -380,6 +380,7 @@
       const age = claimAgeDays(c.serviceDate);
       const ageCls = claimAgeClass(age);
       tr.classList.add(ageCls);
+      if (cid) tr.setAttribute("data-claim-id", cid);
       if (clActiveClaimId && cid && cid === clActiveClaimId) {
         tr.classList.add("is-active");
       }
@@ -438,6 +439,29 @@
       return { ok: false, data: null };
     }
     renderClaimsOutstanding(res.data);
+    try {
+      const raw = sessionStorage.getItem("nr2.claims.focus");
+      if (raw) {
+        sessionStorage.removeItem("nr2.claims.focus");
+        const focus = JSON.parse(raw);
+        const claimId = String((focus && focus.claimId) || "").trim();
+        if (claimId && res.data && Array.isArray(res.data.claims)) {
+          const match = res.data.claims.find(function (c) {
+            return String(c.claimId || "").trim() === claimId;
+          });
+          if (match) {
+            openClaimContext(match);
+            const rows = document.querySelectorAll("#cl-tbody tr[data-claim-id]");
+            rows.forEach(function (row) {
+              if (row.getAttribute("data-claim-id") === claimId) {
+                row.classList.add("is-active");
+                row.scrollIntoView({ block: "nearest", behavior: "smooth" });
+              }
+            });
+          }
+        }
+      }
+    } catch (_) {}
     return { ok: true, data: res.data };
   }
 

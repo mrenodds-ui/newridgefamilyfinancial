@@ -588,6 +588,7 @@
       }
       applyWireHonesty(null);
       updateHalCore(null);
+      updateClosePath(null);
       return null;
     }
     const ready = r.data;
@@ -609,6 +610,7 @@
     applyWireHonesty(ready);
     applyMetricLaserHonesty(ready);
     updateHalCore(ready);
+    updateClosePath(ready);
     // Import alignment only — recon status from refreshReconHonesty (never fake COHERENT).
     return ready;
   }
@@ -797,6 +799,7 @@
       qb: qbEl ? qbEl.textContent : "—",
     });
     updateBeamHealth();
+    updateClosePath(ready);
   }
 
   async function refreshFilm(claimsData) {
@@ -812,10 +815,15 @@
         slot.classList.add("empty");
         slot.innerHTML = "∅";
         slot.title = "No claim stub · empty ≠ $0";
+        slot.removeAttribute("data-claim-id");
+        slot.removeAttribute("data-patient-id");
+        slot.tabIndex = -1;
         return;
       }
       slot.classList.remove("empty");
       const amt = money(c.amount);
+      const claimId = String(c.claimId || "").trim();
+      const patientId = String(c.patientId || "").trim();
       const label =
         String(c.claimId || c.patientName || "claim").slice(0, 14) +
         (amt != null ? " · $" + Math.round(amt) : "");
@@ -826,8 +834,103 @@
         String(c.serviceDate || "") +
         " · " +
         String(c.status || "") +
-        " · read-only";
+        " · open Claims · read-only";
+      if (claimId) slot.setAttribute("data-claim-id", claimId);
+      else slot.removeAttribute("data-claim-id");
+      if (patientId) slot.setAttribute("data-patient-id", patientId);
+      else slot.removeAttribute("data-patient-id");
+      slot.tabIndex = 0;
     });
+  }
+
+  function openClaimsFromFilm(slot) {
+    if (!slot || slot.classList.contains("empty")) {
+      window.location.href = "/nr2-optical-page-claims.html";
+      return;
+    }
+    const claimId = slot.getAttribute("data-claim-id") || "";
+    const patientId = slot.getAttribute("data-patient-id") || "";
+    try {
+      sessionStorage.setItem(
+        "nr2.claims.focus",
+        JSON.stringify({
+          claimId: claimId,
+          patientId: patientId,
+          at: Date.now(),
+          source: "landing-film",
+        })
+      );
+    } catch (_) {}
+    toast("FILM → Claims" + (claimId ? " · " + claimId.slice(0, 18) : ""));
+    window.location.href = "/nr2-optical-page-claims.html";
+  }
+
+  function updateClosePath(ready) {
+    const root = document.getElementById("close-steps");
+    const hint = document.getElementById("close-hint");
+    if (!root) return;
+    const bundle = ready && ready.periodClose && ready.periodClose.morningBundle;
+    const steps = {
+      bundle: root.querySelector('[data-step="bundle"]'),
+      lasers: root.querySelector('[data-step="lasers"]'),
+      close: root.querySelector('[data-step="close"]'),
+    };
+    Object.keys(steps).forEach(function (k) {
+      if (steps[k]) steps[k].classList.remove("on", "warn", "bad");
+    });
+
+    let bundleTone = "bad";
+    let bundleLabel = "Bundle";
+    if (bundle && typeof bundle === "object") {
+      if (bundle.ok) {
+        bundleTone = "on";
+        bundleLabel = "Bundle OK";
+      } else if (bundle.fallback) {
+        bundleTone = "warn";
+        bundleLabel = "Fallback";
+      } else {
+        bundleTone = "bad";
+        bundleLabel = "Bundle";
+      }
+    } else if (ready && ready.periodClose) {
+      bundleTone = "warn";
+      bundleLabel = "Bundle ?";
+    }
+    if (steps.bundle) {
+      steps.bundle.classList.add(bundleTone);
+      steps.bundle.textContent = bundleLabel;
+    }
+
+    const red = !ready || lasersRed(ready);
+    if (steps.lasers) {
+      steps.lasers.classList.add(red ? "bad" : "on");
+      steps.lasers.textContent = red ? "Lasers" : "Green";
+    }
+
+    const closeTrouble = periodCloseTrouble(ready);
+    const closeBit = periodCloseBit(ready);
+    if (steps.close) {
+      if (!ready || !ready.periodClose) {
+        steps.close.classList.add("bad");
+        steps.close.textContent = "Close";
+      } else if (closeTrouble) {
+        steps.close.classList.add("warn");
+        steps.close.textContent = String((ready.periodClose && ready.periodClose.status) || "stall")
+          .slice(0, 8)
+          .toUpperCase();
+      } else {
+        steps.close.classList.add("on");
+        steps.close.textContent = "Close";
+      }
+    }
+
+    if (hint) {
+      hint.textContent =
+        closeBit +
+        morningBundleBit(ready) +
+        (red ? " · lasers red" : " · lasers green-path") +
+        " · empty ≠ $0";
+    }
   }
 
   async function bootWire() {
@@ -996,6 +1099,7 @@
       metric.textContent = label;
       metric.classList.remove("empty");
     }
+    updateBeamHealth();
     toast((plan.disclaimer || "PLANNING ONLY — CPA REVIEW") + "");
   }
 
@@ -1022,10 +1126,21 @@
       }
     }
     benchEl.addEventListener("click", (e) => {
+      const filmSlot = e.target.closest("#film .slot");
+      if (filmSlot) {
+        openClaimsFromFilm(filmSlot);
+        return;
+      }
       runAct(e.target.closest("[data-act]"));
     });
     benchEl.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
+      const filmSlot = e.target.closest("#film .slot");
+      if (filmSlot) {
+        e.preventDefault();
+        openClaimsFromFilm(filmSlot);
+        return;
+      }
       const btn = e.target.closest("[data-act]");
       if (!btn || btn.tagName === "BUTTON") return;
       e.preventDefault();

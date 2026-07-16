@@ -640,15 +640,41 @@
       position: absolute; left: 14px; font-family: var(--mono); font-size: var(--text-sm); color: var(--muted);
       letter-spacing: 0.08em;
     }
+    .film .cap a {
+      color: var(--sd); text-decoration: none; margin-left: 10px; letter-spacing: 0.06em;
+    }
+    .film .cap a:hover { color: #e8eef5; }
     .slot {
       width: min(160px, 14vw); height: 40px; border: 1px solid #2a3340; background: #12161c;
       display: flex; align-items: center; gap: 8px; padding: 0 8px;
       filter: grayscale(0.8) sepia(0.2); font-family: var(--mono); font-size: 13px; color: #9aa3ad;
+      cursor: pointer;
     }
-    .slot.empty { justify-content: center; filter: none; color: var(--stale); }
+    .slot:hover:not(.empty) {
+      border-color: rgba(224,230,237,0.55); color: #e8eef5; filter: none;
+    }
+    .slot.empty { justify-content: center; filter: none; color: var(--stale); cursor: default; }
     .slot .mini {
       width: 22px; height: 22px; border-radius: 50%;
       background: repeating-conic-gradient(#555 0 10%, #222 0 20%);
+    }
+    .close-steps {
+      display: flex; gap: 4px; justify-content: center; margin: 4px 0 6px;
+    }
+    .close-steps span {
+      flex: 1; min-height: 36px; border: 1px solid #334; background: #0c1218;
+      color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+      text-transform: uppercase; display: grid; place-items: center; padding: 2px;
+    }
+    .close-steps span.on {
+      border-color: rgba(0,212,170,0.55); color: var(--sd);
+      box-shadow: 0 0 10px rgba(0,212,170,0.15);
+    }
+    .close-steps span.warn {
+      border-color: rgba(255,170,0,0.55); color: #ffaa00;
+    }
+    .close-steps span.bad {
+      border-color: rgba(255,0,68,0.55); color: var(--fringe);
     }
 
     /* RBAC shutter */
@@ -782,21 +808,25 @@
         <span class="bind-hint">SoftDent · refresh-period · fail-fast 18s UI / 22s server</span>
       </div>
       <div class="cell">
-        <h4>Phase Comp</h4>
-        <button type="button" class="plunger unavailable" data-act="recon" disabled aria-disabled="true" title="SoftDent×QB recon pack removed — never COHERENT · empty ≠ $0">RECONCILE · UNAVAILABLE</button>
-        <span class="bind-hint">SoftDent+QB+HAL · recon UNAVAILABLE (clean-slate)</span>
+        <h4>Close Path</h4>
+        <div class="close-steps" id="close-steps" aria-label="Period close path">
+          <span data-step="bundle">Bundle</span>
+          <span data-step="lasers">Lasers</span>
+          <span data-step="close">Close</span>
+        </div>
+        <span class="bind-hint" id="close-hint">Morning bundle · lasers · period-close</span>
       </div>
       <div class="shutter" style="position:absolute;inset:0">FRONT DESK — CONTROLS LOCKED</div>
     </div>
 
     <div class="film" id="film">
-      <span class="cap">FILM</span>
-      <div class="slot empty" data-film="0">∅</div>
-      <div class="slot empty" data-film="1">∅</div>
-      <div class="slot empty" data-film="2">∅</div>
-      <div class="slot empty" data-film="3">∅</div>
-      <div class="slot empty" data-film="4">∅</div>
-      <div class="slot empty" data-film="5">∅</div>
+      <span class="cap">FILM <a href="/nr2-optical-page-claims.html" id="film-claims-link">Claims →</a></span>
+      <div class="slot empty" data-film="0" role="button" tabindex="-1">∅</div>
+      <div class="slot empty" data-film="1" role="button" tabindex="-1">∅</div>
+      <div class="slot empty" data-film="2" role="button" tabindex="-1">∅</div>
+      <div class="slot empty" data-film="3" role="button" tabindex="-1">∅</div>
+      <div class="slot empty" data-film="4" role="button" tabindex="-1">∅</div>
+      <div class="slot empty" data-film="5" role="button" tabindex="-1">∅</div>
     </div>
   </div>
 
