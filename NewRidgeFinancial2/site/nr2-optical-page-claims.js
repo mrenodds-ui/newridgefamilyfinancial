@@ -502,6 +502,38 @@
     return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
 
+  function closeClaimDossier() {
+    const panel = document.getElementById("cl-dossier");
+    const wrap = document.getElementById("cl-body");
+    if (panel) panel.removeAttribute("data-nr2-focus-armed");
+    if (W.closeFocusPanel) {
+      W.closeFocusPanel(panel);
+    } else if (panel) {
+      panel.hidden = true;
+    }
+    if (wrap) wrap.classList.remove("has-dossier");
+    clActiveClaimId = "";
+    clActivePatientId = "";
+    clLastPhoneCopy = "";
+    if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
+      window.NR2OpticalNav.clearDeepTrail();
+    }
+    document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
+      el.classList.remove("is-active");
+    });
+  }
+
+  function armClaimDossierFocus(announceText) {
+    const panel = document.getElementById("cl-dossier");
+    if (!panel || !W.trapFocus) return;
+    if (panel.getAttribute("data-nr2-focus-armed") === "1") return;
+    panel.setAttribute("data-nr2-focus-armed", "1");
+    W.trapFocus(panel, {
+      announce: announceText || "Claim dossier",
+      onEscape: closeClaimDossier,
+    });
+  }
+
   function setDossierMessage(text, isFault) {
     const panel = document.getElementById("cl-dossier");
     const body = document.getElementById("cl-dossier-body");
@@ -515,6 +547,7 @@
     p.style.margin = "0";
     p.textContent = text;
     body.appendChild(p);
+    armClaimDossierFocus(isFault ? "Claim dossier fault" : "Claim dossier loading");
   }
 
   function appendRows(body, rows) {
@@ -539,6 +572,9 @@
     panel.hidden = false;
     if (wrap) wrap.classList.add("has-dossier");
     body.textContent = "";
+    armClaimDossierFocus(
+      "Claim " + (String((claim && claim.claimId) || "").trim() || "dossier")
+    );
 
     const age = claimAgeDays(claim && claim.serviceDate);
     appendRows(body, [
@@ -1174,9 +1210,27 @@
         (age == null ? "unknown" : String(age) + "d") +
         " · evidence " +
         evidence;
-      tr.addEventListener("click", function () {
+      tr.tabIndex = 0;
+      tr.setAttribute("role", "button");
+      tr.setAttribute(
+        "aria-label",
+        "Open claim " +
+          (cid || "row") +
+          " · " +
+          displayPatientName(c) +
+          " · " +
+          statusText
+      );
+      function activateClaimRow() {
         tr.classList.add("is-active");
         openClaimContext(c);
+      }
+      tr.addEventListener("click", activateClaimRow);
+      tr.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          activateClaimRow();
+        }
       });
       tbody.appendChild(tr);
     });
@@ -1234,23 +1288,60 @@
     if (tbody) tbody.textContent = "";
     const res = await W.getJson("/api/softdent/claims-outstanding?limit=200", 20000);
     if (!res.ok || !res.data) {
+      const detail = String(
+        (res.data && res.data.error) || res.status || "fetch failed"
+      );
+      const offline = W.isBrowserOffline && W.isBrowserOffline();
+      const hard = !offline && Number(res.status) >= 500;
       if (summary) {
         summary.textContent =
-          "Outstanding claims NO SIGNAL · " +
-          String((res.data && res.data.error) || res.status || "fetch failed");
+          (offline ? "Outstanding claims OFFLINE · " : "Outstanding claims NO SIGNAL · ") +
+          detail;
       }
-      if (rangeEl) rangeEl.textContent = "NO SIGNAL";
+      if (rangeEl) rangeEl.textContent = offline ? "OFFLINE" : "NO SIGNAL";
       if (tbody) {
         const tr = document.createElement("tr");
         const td = document.createElement("td");
         td.colSpan = 6;
         td.className = "cl-fault";
-        td.textContent = "Could not load SoftDent claims — empty ≠ $0";
+        td.textContent = offline
+          ? "Browser offline — SoftDent claims paused · empty ≠ $0"
+          : "Could not load SoftDent claims — empty ≠ $0";
         tr.appendChild(td);
         tbody.appendChild(tr);
       }
+      if (W.showPageError) {
+        W.showPageError({
+          hard: hard,
+          message: offline
+            ? "OFFLINE · claims beam paused · empty ≠ $0"
+            : hard
+              ? "HARD FAIL · SoftDent claims 5xx · empty ≠ $0"
+              : "SOFT FAIL · SoftDent claims NO SIGNAL · empty ≠ $0",
+          detail: detail,
+          onRetry: function () {
+            return loadClaimsOutstanding().then(function (r) {
+              if (r && r.ok && W.hideErrorRail) W.hideErrorRail();
+              return r;
+            });
+          },
+          countdownSec: offline ? 12 : 8,
+        });
+      }
+      if (W.setErrorState) {
+        W.setErrorState("val-snap", {
+          hard: hard,
+          label: offline ? "OFFLINE" : "NO SIGNAL",
+          detail: detail,
+          onRetry: function () {
+            return loadClaimsOutstanding();
+          },
+          countdownSec: offline ? 12 : 8,
+        });
+      }
       return { ok: false, data: null };
     }
+    if (W.hideErrorRail) W.hideErrorRail();
     renderClaimsOutstanding(res.data);
     applyClaimsJoinHonesty(res.data);
     try {
@@ -1323,21 +1414,7 @@
     const closeBtn = document.getElementById("btn-cl-dossier-close");
     if (closeBtn && !closeBtn._nr2ClBound) {
       closeBtn._nr2ClBound = true;
-      closeBtn.addEventListener("click", function () {
-        const panel = document.getElementById("cl-dossier");
-        const wrap = document.getElementById("cl-body");
-        if (panel) panel.hidden = true;
-        if (wrap) wrap.classList.remove("has-dossier");
-        clActiveClaimId = "";
-        clActivePatientId = "";
-        clLastPhoneCopy = "";
-        if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
-          window.NR2OpticalNav.clearDeepTrail();
-        }
-        document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
-          el.classList.remove("is-active");
-        });
-      });
+      closeBtn.addEventListener("click", closeClaimDossier);
     }
     if (!document._nr2ClKeysBound) {
       document._nr2ClKeysBound = true;
@@ -1364,6 +1441,20 @@
     W.markFacesLoading(["val-snap", "val-era", "val-denials", "val-over30"]);
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
     wireClaimsControls();
+    if (W.bindOfflineRail) {
+      W.bindOfflineRail(function () {
+        return loadClaimsOutstanding();
+      });
+    }
+    if (W.isBrowserOffline && W.isBrowserOffline() && W.showPageError) {
+      W.showPageError({
+        message: "OFFLINE · SoftDent / Trellis beams paused · empty ≠ $0",
+        onRetry: function () {
+          return loadClaimsOutstanding();
+        },
+        countdownSec: 12,
+      });
+    }
     if (W.applyExcelProbeHint) {
       W.applyExcelProbeHint("hint-snap", 8000).catch(function () {});
     }
@@ -1427,8 +1518,10 @@
       } else {
         W.setText("val-denials", null, "∅");
       }
-    } else {
+    } else if (!(claimsRes && claimsRes.ok === false && W.setErrorState)) {
       W.setText("val-snap", null, "NO SIGNAL");
+      W.setText("val-denials", null, "NO SIGNAL");
+    } else {
       W.setText("val-denials", null, "NO SIGNAL");
     }
 
@@ -1440,6 +1533,15 @@
       live = true;
     } else if (aging.ok && aging.data && aging.data.hasData === false) {
       W.setText("val-over30", null, "∅");
+    } else if (!aging.ok && W.setErrorState) {
+      W.setErrorState("val-over30", {
+        label: W.isBrowserOffline && W.isBrowserOffline() ? "OFFLINE" : "NO SIGNAL",
+        detail: String((aging.data && aging.data.error) || aging.status || "aging"),
+        onRetry: function () {
+          return boot();
+        },
+        countdownSec: 10,
+      });
     }
 
     let eraLive = false;
@@ -1507,9 +1609,14 @@
   }
 
   boot().catch(function (err) {
-    W.setBanner(
-      "partial",
-      "Claims wire fault · " + String(err && err.message ? err.message : err)
-    );
+    const detail = String(err && err.message ? err.message : err);
+    W.setBanner("unavailable", "Claims wire fault · " + detail);
+    if (W.showPageError) {
+      W.showPageError({
+        hard: true,
+        message: "HARD FAIL · Claims page wire fault · empty ≠ $0",
+        detail: detail,
+      });
+    }
   });
 })();

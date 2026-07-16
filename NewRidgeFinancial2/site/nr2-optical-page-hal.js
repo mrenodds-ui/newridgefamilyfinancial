@@ -448,11 +448,22 @@
       (action && action.label) ||
       "HAL requests: " + ((action && action.kind) || "action") + ". Approve only if you intend this.";
     consentModal.classList.add("open");
+    const W = window.NR2OpticalWire || {};
+    if (W.trapFocus && consentModal) {
+      W.trapFocus(consentModal, {
+        announce: "HAL consent required",
+        onEscape: function () {
+          executeConsent(false);
+        },
+      });
+    }
   }
 
   function closeConsent() {
     pendingConsent = null;
     consentModal.classList.remove("open");
+    const W = window.NR2OpticalWire || {};
+    if (W.releaseFocusTrap) W.releaseFocusTrap();
   }
 
   async function waitForImportSync(maxMs) {

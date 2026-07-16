@@ -149,6 +149,21 @@
     return setDeepTrail([]);
   }
 
+  function focusPageHeading() {
+    if (window.NR2OpticalWire && typeof window.NR2OpticalWire.focusMainHeading === "function") {
+      window.NR2OpticalWire.focusMainHeading({ preventScroll: false });
+      return;
+    }
+    const h1 = document.querySelector(".main h1, main h1, h1");
+    if (!h1) return;
+    if (!h1.hasAttribute("tabindex")) h1.setAttribute("tabindex", "-1");
+    try {
+      h1.focus({ preventScroll: true });
+    } catch (_) {
+      h1.focus();
+    }
+  }
+
   buildNav();
   renderCrumb();
 
@@ -178,10 +193,12 @@
     document.addEventListener("DOMContentLoaded", function () {
       bootMotionFromNav();
       setTimeout(bootMotionFromNav, 0);
+      setTimeout(focusPageHeading, 30);
     });
   } else {
     bootMotionFromNav();
     setTimeout(bootMotionFromNav, 0);
+    setTimeout(focusPageHeading, 30);
   }
 
   window.NR2OpticalNav = {
@@ -190,5 +207,6 @@
     setDeepTrail: setDeepTrail,
     clearDeepTrail: clearDeepTrail,
     renderCrumb: renderCrumb,
+    focusPageHeading: focusPageHeading,
   };
 })();

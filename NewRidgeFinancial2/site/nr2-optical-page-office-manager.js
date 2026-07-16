@@ -81,6 +81,36 @@
     if (cur && merged[cur]) sel.value = cur;
   }
 
+  function closePatientDossier() {
+    const panel = document.getElementById("wk-dossier");
+    const wrap = document.querySelector(".om-weekly-body");
+    if (panel) panel.removeAttribute("data-nr2-focus-armed");
+    if (W.closeFocusPanel) {
+      W.closeFocusPanel(panel);
+    } else if (panel) {
+      panel.hidden = true;
+    }
+    if (wrap) wrap.classList.remove("has-dossier");
+    wkActivePatientId = "";
+    if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
+      window.NR2OpticalNav.clearDeepTrail();
+    }
+    document.querySelectorAll(".wk-slot.is-active").forEach(function (el) {
+      el.classList.remove("is-active");
+    });
+  }
+
+  function armPatientDossierFocus(announceText) {
+    const panel = document.getElementById("wk-dossier");
+    if (!panel || !W.trapFocus) return;
+    if (panel.getAttribute("data-nr2-focus-armed") === "1") return;
+    panel.setAttribute("data-nr2-focus-armed", "1");
+    W.trapFocus(panel, {
+      announce: announceText || "Patient dossier",
+      onEscape: closePatientDossier,
+    });
+  }
+
   function setDossierMessage(text, isFault) {
     const panel = document.getElementById("wk-dossier");
     const body = document.getElementById("wk-dossier-body");
@@ -94,6 +124,7 @@
     p.style.margin = "0";
     p.textContent = text;
     body.appendChild(p);
+    armPatientDossierFocus(isFault ? "Patient dossier fault" : "Patient dossier loading");
   }
 
   function renderDossierMini(data, fallback) {
@@ -104,6 +135,7 @@
     panel.hidden = false;
     if (wrap) wrap.classList.add("has-dossier");
     body.textContent = "";
+    armPatientDossierFocus("Patient dossier");
     if (!data || data.ok === false) {
       const p = document.createElement("p");
       p.className = "d-fault";
@@ -897,19 +929,7 @@
     const closeBtn = document.getElementById("btn-wk-dossier-close");
     if (closeBtn && !closeBtn._nr2WkBound) {
       closeBtn._nr2WkBound = true;
-      closeBtn.addEventListener("click", function () {
-        const panel = document.getElementById("wk-dossier");
-        const wrap = document.querySelector(".om-weekly-body");
-        if (panel) panel.hidden = true;
-        if (wrap) wrap.classList.remove("has-dossier");
-        wkActivePatientId = "";
-        if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
-          window.NR2OpticalNav.clearDeepTrail();
-        }
-        document.querySelectorAll(".wk-slot.is-active").forEach(function (el) {
-          el.classList.remove("is-active");
-        });
-      });
+      closeBtn.addEventListener("click", closePatientDossier);
     }
     const trBtn = document.getElementById("btn-tr-refresh");
     if (trBtn && !trBtn._nr2TrBound) {

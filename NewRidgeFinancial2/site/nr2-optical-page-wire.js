@@ -37,11 +37,218 @@
     });
     return list.length;
   }
+  function isBrowserOffline() {
+    try {
+      return navigator.onLine === false;
+    } catch (_) {
+      return false;
+    }
+  }
+  function clearErrorFace(el) {
+    if (!el) return;
+    el.classList.remove("nr2-error-face", "nr2-soft-fail", "nr2-hard-fail", "nr2-error-beam");
+    const chip = el.querySelector(".nr2-retry-chip");
+    if (chip) chip.remove();
+  }
+  /**
+   * Package 8: soft fail (retry chip) vs hard fail (stuck NO SIGNAL).
+   * opts: { label, detail, hard, onRetry, countdownSec, announce }
+   */
+  function setErrorState(idOrEl, opts) {
+    const o = opts || {};
+    const el = typeof idOrEl === "string" ? document.getElementById(idOrEl) : idOrEl;
+    if (!el) return null;
+    clearLoadingFace(el);
+    clearErrorFace(el);
+    el.classList.remove("empty", "zero");
+    el.classList.add("nosignal", "nr2-error-face");
+    if (o.hard) el.classList.add("nr2-hard-fail");
+    else el.classList.add("nr2-soft-fail", "nr2-error-beam");
+    const offline = isBrowserOffline();
+    const label =
+      o.label ||
+      (offline ? "OFFLINE" : o.hard ? "NO SIGNAL" : "NO SIGNAL · retry");
+    el.textContent = "";
+    const text = document.createElement("span");
+    text.className = "nr2-error-label";
+    text.textContent = label;
+    el.appendChild(text);
+    if (o.detail) {
+      const d = document.createElement("span");
+      d.className = "nr2-error-detail";
+      d.textContent = " · " + String(o.detail);
+      el.appendChild(d);
+    }
+    if (!o.hard && typeof o.onRetry === "function") {
+      mountRetryChip(el, {
+        onRetry: o.onRetry,
+        countdownSec: o.countdownSec,
+        label: o.retryLabel,
+      });
+    }
+    if (o.announce !== false) {
+      announce(label + (o.detail ? " · " + o.detail : "") + " · empty ≠ $0");
+    }
+    return el;
+  }
+  const retryTimers = new WeakMap();
+  function mountRetryChip(host, opts) {
+    const o = opts || {};
+    if (!host || typeof o.onRetry !== "function") return null;
+    const prev = retryTimers.get(host);
+    if (prev) {
+      clearInterval(prev.interval);
+      clearTimeout(prev.timeout);
+      retryTimers.delete(host);
+    }
+    let chip = host.querySelector(".nr2-retry-chip");
+    if (!chip) {
+      chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "nr2-retry-chip";
+      host.appendChild(chip);
+    }
+    let left = Math.max(0, Number(o.countdownSec) || 0);
+    const base = o.label || "Retry";
+    function paint() {
+      chip.textContent = left > 0 ? base + " · " + left + "s" : base + " now";
+      chip.disabled = false;
+    }
+    function run() {
+      const st = retryTimers.get(host);
+      if (st) {
+        clearInterval(st.interval);
+        clearTimeout(st.timeout);
+        retryTimers.delete(host);
+      }
+      chip.disabled = true;
+      chip.textContent = "Retrying…";
+      Promise.resolve()
+        .then(function () {
+          return o.onRetry();
+        })
+        .catch(function () {
+          /* caller paints fault */
+        })
+        .then(function () {
+          chip.disabled = false;
+          paint();
+        });
+    }
+    paint();
+    chip.onclick = function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      run();
+    };
+    if (left > 0) {
+      const interval = setInterval(function () {
+        left -= 1;
+        if (left <= 0) {
+          clearInterval(interval);
+          run();
+          return;
+        }
+        paint();
+      }, 1000);
+      retryTimers.set(host, { interval: interval, timeout: null });
+    }
+    return chip;
+  }
+  function ensureErrorRail() {
+    let rail = document.getElementById("nr2-error-rail");
+    if (rail) return rail;
+    rail = document.createElement("div");
+    rail.id = "nr2-error-rail";
+    rail.className = "nr2-error-rail";
+    rail.hidden = true;
+    rail.setAttribute("role", "status");
+    rail.setAttribute("aria-live", "polite");
+    const banner = document.querySelector(".banner");
+    if (banner && banner.parentNode) {
+      banner.insertAdjacentElement("afterend", rail);
+    } else {
+      const main = document.querySelector(".main") || document.body;
+      main.insertBefore(rail, main.firstChild);
+    }
+    return rail;
+  }
+  function hideErrorRail() {
+    const rail = document.getElementById("nr2-error-rail");
+    if (!rail) return;
+    rail.hidden = true;
+    rail.textContent = "";
+    rail.className = "nr2-error-rail";
+  }
+  /**
+   * Soft fail rail (retry) or hard fail panel.
+   * opts: { hard, message, detail, onRetry, countdownSec }
+   */
+  function showPageError(opts) {
+    const o = opts || {};
+    const rail = ensureErrorRail();
+    const offline = isBrowserOffline();
+    rail.hidden = false;
+    rail.className =
+      "nr2-error-rail " +
+      (o.hard ? "nr2-hard-fail" : "nr2-soft-fail") +
+      (offline ? " is-offline" : "") +
+      (o.hard ? "" : " nr2-error-beam");
+    rail.textContent = "";
+    const msg = document.createElement("span");
+    msg.className = "nr2-error-rail-msg";
+    msg.textContent =
+      o.message ||
+      (offline
+        ? "OFFLINE · SoftDent beams unreachable · empty ≠ $0"
+        : o.hard
+          ? "HARD FAIL · no live signal · empty ≠ $0"
+          : "SOFT FAIL · fetch interrupted · empty ≠ $0");
+    rail.appendChild(msg);
+    if (o.detail) {
+      const d = document.createElement("span");
+      d.className = "nr2-error-rail-detail";
+      d.textContent = " · " + String(o.detail);
+      rail.appendChild(d);
+    }
+    if (!o.hard && typeof o.onRetry === "function") {
+      mountRetryChip(rail, {
+        onRetry: o.onRetry,
+        countdownSec: o.countdownSec != null ? o.countdownSec : 8,
+        label: o.retryLabel || "Retry",
+      });
+    }
+    announce(msg.textContent);
+    return rail;
+  }
+  function bindOfflineRail(onRetry) {
+    if (document._nr2OfflineBound) return;
+    document._nr2OfflineBound = true;
+    window.addEventListener("offline", function () {
+      showPageError({
+        message: "OFFLINE · SoftDent / Trellis beams paused · empty ≠ $0",
+        onRetry: onRetry,
+        countdownSec: 12,
+      });
+      setBanner("unavailable", "browser offline · empty ≠ $0");
+    });
+    window.addEventListener("online", function () {
+      hideErrorRail();
+      if (typeof onRetry === "function") {
+        showPageError({
+          message: "BACK ONLINE · refreshing beams…",
+          onRetry: onRetry,
+          countdownSec: 2,
+        });
+      }
+    });
+  }
   function setText(id, value, emptyLabel) {
     const el = document.getElementById(id);
     if (!el) return;
     const wasLoading = el.classList.contains("is-loading");
     clearLoadingFace(el);
+    clearErrorFace(el);
     el.classList.remove("empty", "zero", "nosignal");
     if (value == null || value === "") {
       const label = emptyLabel || "—";
@@ -52,6 +259,7 @@
         el.textContent = "Empty ≠ $0";
       }
       if (wasLoading) pulseFaceSettle(el);
+      maybeAnnounceEmpty(el.textContent);
       return;
     }
     const raw = String(value).trim();
@@ -60,6 +268,7 @@
       el.textContent = "Empty ≠ $0";
       el.classList.add("empty");
       if (wasLoading) pulseFaceSettle(el);
+      maybeAnnounceEmpty(el.textContent);
       return;
     }
     el.textContent = value;
@@ -115,6 +324,151 @@
       el.style.setProperty("--nr2-stagger", Math.min(i, 8) * 40 + "ms");
     });
     return true;
+  }
+  function ensureLiveRegion() {
+    let el = document.getElementById("nr2-a11y-live");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "nr2-a11y-live";
+    el.className = "nr2-sr-only";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
+    el.setAttribute("aria-atomic", "true");
+    document.body.appendChild(el);
+    return el;
+  }
+  let announceTimer = null;
+  function announce(msg, opts) {
+    const text = String(msg || "").trim();
+    if (!text) return;
+    const el = ensureLiveRegion();
+    const delay = opts && opts.immediate ? 0 : 40;
+    if (announceTimer) clearTimeout(announceTimer);
+    el.textContent = "";
+    announceTimer = setTimeout(function () {
+      el.textContent = text;
+    }, delay);
+  }
+  let lastEmptyAnnounce = "";
+  function maybeAnnounceEmpty(label) {
+    const t = String(label || "").trim();
+    if (!t) return;
+    if (!/empty|∅|no signal|Empty/i.test(t) && t !== "—") return;
+    if (t === "—" || t === "∅") return; // too noisy for every face
+    if (t === lastEmptyAnnounce) return;
+    lastEmptyAnnounce = t;
+    announce(t);
+  }
+  function focusMainHeading(opts) {
+    const o = opts || {};
+    const h1 =
+      document.querySelector(".main h1") ||
+      document.querySelector("main h1") ||
+      document.querySelector("h1");
+    if (!h1) return null;
+    if (!h1.hasAttribute("tabindex")) h1.setAttribute("tabindex", "-1");
+    try {
+      h1.focus({ preventScroll: !!o.preventScroll });
+    } catch (_) {
+      try {
+        h1.focus();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    if (o.announce !== false) {
+      const label = String(h1.textContent || "").trim() || "Page";
+      announce(label + " · empty ≠ $0");
+    }
+    return h1;
+  }
+  function getFocusable(root) {
+    if (!root) return [];
+    const sel =
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    return Array.prototype.slice.call(root.querySelectorAll(sel)).filter(function (el) {
+      if (el.hasAttribute("disabled") || el.getAttribute("aria-hidden") === "true") return false;
+      const style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+      if (style && (style.visibility === "hidden" || style.display === "none")) return false;
+      return true;
+    });
+  }
+  let focusTrapState = null;
+  function releaseFocusTrap() {
+    if (!focusTrapState) return null;
+    document.removeEventListener("keydown", focusTrapState.onKey, true);
+    const prev = focusTrapState.prev;
+    const container = focusTrapState.container;
+    if (container) {
+      container.removeAttribute("aria-modal");
+    }
+    focusTrapState = null;
+    if (prev && typeof prev.focus === "function") {
+      try {
+        prev.focus({ preventScroll: true });
+      } catch (_) {
+        try {
+          prev.focus();
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
+    return prev;
+  }
+  function trapFocus(container, opts) {
+    const o = opts || {};
+    if (!container) return null;
+    releaseFocusTrap();
+    const prev = document.activeElement;
+    const onKey = function (e) {
+      if (e.key === "Escape" && typeof o.onEscape === "function") {
+        e.preventDefault();
+        o.onEscape();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = getFocusable(container);
+      if (!list.length) {
+        e.preventDefault();
+        return;
+      }
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    container.setAttribute("aria-modal", "true");
+    focusTrapState = { container: container, onKey: onKey, prev: prev };
+    const heading = container.querySelector("h1, h2, h3, [data-nr2-focus]");
+    if (heading) {
+      if (!heading.hasAttribute("tabindex")) heading.setAttribute("tabindex", "-1");
+      try {
+        heading.focus({ preventScroll: true });
+      } catch (_) {
+        heading.focus();
+      }
+    } else {
+      const list = getFocusable(container);
+      if (list[0]) list[0].focus();
+    }
+    if (o.announce) announce(o.announce);
+    return focusTrapState;
+  }
+  function openFocusPanel(panel, opts) {
+    if (!panel) return null;
+    panel.hidden = false;
+    return trapFocus(panel, opts);
+  }
+  function closeFocusPanel(panel) {
+    if (panel) panel.hidden = true;
+    return releaseFocusTrap();
   }
   /**
    * Money face honesty: null → empty label · 0 → "Empty ≠ $0" · else fmtMoney.
@@ -1023,12 +1377,26 @@
     setLoading: setLoading,
     markFacesLoading: markFacesLoading,
     clearLoadingFace: clearLoadingFace,
+    clearErrorFace: clearErrorFace,
+    isBrowserOffline: isBrowserOffline,
+    setErrorState: setErrorState,
+    mountRetryChip: mountRetryChip,
+    showPageError: showPageError,
+    hideErrorRail: hideErrorRail,
+    bindOfflineRail: bindOfflineRail,
     setMoneyText: setMoneyText,
     applyExcelProbeHint: applyExcelProbeHint,
     prefersReducedMotion: prefersReducedMotion,
     pulseFaceSettle: pulseFaceSettle,
     markRowsEnter: markRowsEnter,
     bootMotionGrammar: bootMotionGrammar,
+    announce: announce,
+    focusMainHeading: focusMainHeading,
+    getFocusable: getFocusable,
+    trapFocus: trapFocus,
+    releaseFocusTrap: releaseFocusTrap,
+    openFocusPanel: openFocusPanel,
+    closeFocusPanel: closeFocusPanel,
     shortHash: shortHash,
     initialsFromName: initialsFromName,
     formatPhiInitials: formatPhiInitials,
