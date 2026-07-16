@@ -91,38 +91,11 @@
           </aside>
         </div>
       </section>
-      <section class="om-claims" id="om-claims-outstanding" aria-label="Outstanding SoftDent claims">
-        <div class="om-claims-head">
-          <h2>Outstanding Claims</h2>
-          <span class="om-claims-range" id="cl-range-label">—</span>
-          <button type="button" class="btn-quiet" id="btn-cl-refresh" title="Reload outstanding SoftDent claims">Refresh</button>
-        </div>
-        <p class="om-claims-note">
-          SoftDent read-only · staff OM shows full patient names · oldest first ·
-          null amounts = — (empty ≠ $0) · sample capped at 200
-        </p>
-        <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
-        <div class="om-claims-wrap">
-          <table class="om-claims-table" id="cl-table">
-            <thead>
-              <tr>
-                <th scope="col">Patient</th>
-                <th scope="col">Payer</th>
-                <th scope="col">Service</th>
-                <th scope="col">Amount</th>
-                <th scope="col">Status</th>
-                <th scope="col">Age</th>
-              </tr>
-            </thead>
-            <tbody id="cl-tbody" aria-live="polite"></tbody>
-          </table>
-        </div>
-      </section>
       <section class="om-trellis" id="om-trellis-tomorrow" aria-label="Tomorrow Trellis insurance verify">
         <div class="om-trellis-head">
           <h2>Tomorrow · Trellis insurance</h2>
           <span class="om-trellis-date" id="tr-date-label">—</span>
-          <button type="button" class="btn-quiet" id="btn-tr-refresh" title="Reload tomorrow insurance worklist">Refresh</button>
+          <button type="button" class="btn-quiet" title="Reload tomorrow insurance worklist" id="btn-tr-refresh">Refresh</button>
         </div>
         <p class="om-trellis-note">
           SoftDent → Trellis nightly (Mon–Thu 10pm) · verify status · no dollar invent · empty ≠ $0

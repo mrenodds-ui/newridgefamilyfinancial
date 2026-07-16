@@ -670,6 +670,9 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
 
     ``limit`` caps the returned claim *list* only — totalOutstanding/count
     always cover the full open set so UI dollars are not understated.
+
+    When ``sd_patients`` exists, resolve ``patientId`` / hash / initials via
+    patient_name lookup so Claims page can open mini dossier on click.
     """
     conn, db_path = _connect()
     if not conn:
@@ -738,18 +741,49 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             )
             rows = cur.fetchall()
 
-        claims = []
-        for claim_id, patient, payer, service_date, amount, status in rows:
-            claims.append(
+        # Name → patient_id (first match) for dossier click — sd_claims has no patient_id.
+        name_to_id: dict[str, str] = {}
+        if rows and _table_exists(conn, "sd_patients"):
+            names = sorted(
                 {
-                    "claimId": str(claim_id or ""),
-                    "patientName": str(patient or ""),
-                    "payer": str(payer or ""),
-                    "serviceDate": str(service_date or ""),
-                    "amount": round(float(amount or 0), 2),
-                    "status": str(status or ""),
+                    str(r[1] or "").strip().lower()
+                    for r in rows
+                    if str(r[1] or "").strip()
                 }
             )
+            for nm in names:
+                cur.execute(
+                    """
+                    SELECT patient_id FROM sd_patients
+                    WHERE lower(trim(COALESCE(patient_name, ''))) = ?
+                    ORDER BY patient_id LIMIT 1
+                    """,
+                    (nm,),
+                )
+                hit = cur.fetchone()
+                if hit and hit[0]:
+                    name_to_id[nm] = str(hit[0]).strip()
+
+        claims = []
+        for claim_id, patient, payer, service_date, amount, status in rows:
+            patient_raw = str(patient or "").strip()
+            patient_id = name_to_id.get(patient_raw.lower(), "")
+            entry: dict[str, Any] = {
+                "claimId": str(claim_id or ""),
+                "patientName": patient_raw,
+                "payer": str(payer or ""),
+                "serviceDate": str(service_date or ""),
+                "amount": round(float(amount or 0), 2),
+                "status": str(status or ""),
+                "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
+            }
+            if patient_id:
+                entry["patientId"] = patient_id
+                entry["patientHash"] = _hash_patient_id(patient_id)
+            else:
+                entry["patientId"] = None
+                entry["patientHash"] = None
+            claims.append(entry)
     finally:
         conn.close()
     return {

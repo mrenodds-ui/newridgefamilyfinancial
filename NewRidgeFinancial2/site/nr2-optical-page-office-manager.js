@@ -1,4 +1,4 @@
-/* Office Manager — readiness + SoftDent ops · Force Close · Mon–Thu list · claims · full names */
+/* Office Manager — readiness + SoftDent ops · Force Close · Mon–Thu list · full names */
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
@@ -35,32 +35,8 @@
     return "—";
   }
 
-  function claimAgeDays(serviceDate) {
-    const sd = String(serviceDate || "").slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(sd)) return null;
-    const d = new Date(sd + "T12:00:00");
-    if (Number.isNaN(d.getTime())) return null;
-    const today = new Date();
-    today.setHours(12, 0, 0, 0);
-    return Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86400000));
-  }
-
-  function fmtClaimAmount(amount) {
-    if (amount == null || amount === "") return "—";
-    const n = W.money ? W.money(amount) : Number(amount);
-    if (n == null || !Number.isFinite(n)) return "—";
-    // empty ≠ $0 — do not paint zero as live money
-    if (n === 0) return "—";
-    if (W.fmtMoney) {
-      const shown = W.fmtMoney(n);
-      return shown || "—";
-    }
-    return "$" + n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  }
-
   let wkProviderOptions = [];
   let wkActivePatientId = "";
-  let clActiveClaimId = "";
 
   function selectedProvider() {
     const sel = document.getElementById("wk-provider");
@@ -748,137 +724,6 @@
     return !!(res.data.hasData || (res.data.days && res.data.days.length));
   }
 
-  function renderClaimsOutstanding(data) {
-    const tbody = document.getElementById("cl-tbody");
-    const summary = document.getElementById("cl-summary");
-    const rangeEl = document.getElementById("cl-range-label");
-    if (!tbody) return;
-    tbody.textContent = "";
-    const claims = data && Array.isArray(data.claims) ? data.claims.slice() : [];
-    const count = data && data.count != null ? Number(data.count) : claims.length;
-    const sampleLimit = data && data.sampleLimit != null ? Number(data.sampleLimit) : claims.length;
-    const total = data && data.totalOutstanding != null ? W.money(data.totalOutstanding) : null;
-    let totalBit = "total —";
-    if (total != null && total !== 0) {
-      const shown = W.fmtMoney ? W.fmtMoney(total) : "$" + String(total);
-      if (shown) totalBit = "total " + shown;
-    } else if (data && data.hasData && (total == null || total === 0)) {
-      totalBit = "total empty (not zero)";
-    }
-    if (rangeEl) {
-      rangeEl.textContent =
-        String(Math.min(claims.length, sampleLimit || claims.length)) +
-        " of " +
-        String(count) +
-        " open";
-    }
-    if (summary) {
-      summary.textContent =
-        String(count) +
-        " open claim" +
-        (count === 1 ? "" : "s") +
-        " · " +
-        totalBit +
-        " · SoftDent READ-ONLY · empty ≠ $0";
-    }
-    if (!claims.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 6;
-      td.className = "cl-empty";
-      td.textContent =
-        (data && data.emptyMessage) ||
-        "No outstanding SoftDent claims in sample — sync SoftDent or empty queue.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
-    }
-    claims.sort(function (a, b) {
-      const aa = claimAgeDays(a && a.serviceDate);
-      const bb = claimAgeDays(b && b.serviceDate);
-      if (aa == null && bb == null) return 0;
-      if (aa == null) return 1;
-      if (bb == null) return -1;
-      return bb - aa; // oldest first
-    });
-    claims.forEach(function (c) {
-      if (!c || typeof c !== "object") return;
-      const tr = document.createElement("tr");
-      const cid = String(c.claimId || "");
-      if (clActiveClaimId && cid && cid === clActiveClaimId) {
-        tr.classList.add("is-active");
-      }
-      const age = claimAgeDays(c.serviceDate);
-      const cells = [
-        displayPatientName(c),
-        String(c.payer || "—") || "—",
-        String(c.serviceDate || "—").slice(0, 10) || "—",
-        fmtClaimAmount(c.amount),
-        String(c.status || "—") || "—",
-        age == null ? "—" : String(age) + "d",
-      ];
-      cells.forEach(function (text, idx) {
-        const td = document.createElement("td");
-        if (idx === 0) td.className = "phi-name";
-        if (idx === 3 || idx === 5) td.className = "num";
-        td.textContent = text;
-        tr.appendChild(td);
-      });
-      tr.title =
-        "Claim " +
-        (cid || "—") +
-        " · sd_claims has no patient_id — dossier via schedule click";
-      tr.addEventListener("click", function () {
-        clActiveClaimId = cid;
-        document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
-          el.classList.remove("is-active");
-        });
-        tr.classList.add("is-active");
-        if (summary) {
-          summary.textContent =
-            displayPatientName(c) +
-            " · " +
-            String(c.payer || "—") +
-            " · " +
-            fmtClaimAmount(c.amount) +
-            " · " +
-            String(c.status || "—") +
-            " · empty ≠ $0";
-        }
-      });
-      tbody.appendChild(tr);
-    });
-  }
-
-  async function loadClaimsOutstanding() {
-    const summary = document.getElementById("cl-summary");
-    const tbody = document.getElementById("cl-tbody");
-    const rangeEl = document.getElementById("cl-range-label");
-    if (summary) summary.textContent = "Loading outstanding claims…";
-    if (tbody) tbody.textContent = "";
-    const res = await W.getJson("/api/softdent/claims-outstanding?limit=200", 20000);
-    if (!res.ok || !res.data) {
-      if (summary) {
-        summary.textContent =
-          "Outstanding claims NO SIGNAL · " +
-          String((res.data && res.data.error) || res.status || "fetch failed");
-      }
-      if (rangeEl) rangeEl.textContent = "NO SIGNAL";
-      if (tbody) {
-        const tr = document.createElement("tr");
-        const td = document.createElement("td");
-        td.colSpan = 6;
-        td.className = "cl-fault";
-        td.textContent = "Could not load SoftDent claims — empty ≠ $0";
-        tr.appendChild(td);
-        tbody.appendChild(tr);
-      }
-      return false;
-    }
-    renderClaimsOutstanding(res.data);
-    return !!(res.data.hasData || (res.data.claims && res.data.claims.length));
-  }
-
   async function loadTomorrowInsurance() {
     const summary = document.getElementById("tr-summary");
     const list = document.getElementById("tr-list");
@@ -1030,19 +875,6 @@
         });
       });
     }
-    const clBtn = document.getElementById("btn-cl-refresh");
-    if (clBtn && !clBtn._nr2ClBound) {
-      clBtn._nr2ClBound = true;
-      clBtn.addEventListener("click", function () {
-        loadClaimsOutstanding().catch(function (err) {
-          const summary = document.getElementById("cl-summary");
-          if (summary) {
-            summary.textContent =
-              "Claims refresh fault · " + String(err && err.message ? err.message : err);
-          }
-        });
-      });
-    }
     const trBtn = document.getElementById("btn-tr-refresh");
     if (trBtn && !trBtn._nr2TrBound) {
       trBtn._nr2TrBound = true;
@@ -1117,7 +949,7 @@
     W.setText("val-health", null, "—");
 
     wireWeeklyControls();
-    const [ready, health, np, appt, weeklyOk, claimsOk] = await Promise.all([
+    const [ready, health, np, appt, weeklyOk] = await Promise.all([
       W.getJson("/api/import-readiness", 12000),
       W.getJson("/api/health", 12000),
       W.getJson("/api/softdent/new-patients-mtd", 12000),
@@ -1125,15 +957,12 @@
       loadWeeklySchedule().catch(function () {
         return false;
       }),
-      loadClaimsOutstanding().catch(function () {
-        return false;
-      }),
       loadTomorrowInsurance().catch(function () {
         return false;
       }),
     ]);
 
-    let live = !!(weeklyOk || claimsOk);
+    let live = !!weeklyOk;
     let blocked = false;
     let closeTrouble = false;
     let readyData = null;
@@ -1276,7 +1105,7 @@
         ? "OM · lasers STALE · FORCE CLOSE pulls SoftDent aging · empty ≠ $0"
         : closeTrouble
           ? "OM · " + closeBit + " · FORCE CLOSE available · empty ≠ $0"
-          : "OM · Mon–Thu + claims + day pulse · " +
+          : "OM · SoftDent Mon–Thu list + day pulse · " +
             (closeBit || "CLOSE · idle") +
             " · FORCE CLOSE · empty ≠ $0"
     );

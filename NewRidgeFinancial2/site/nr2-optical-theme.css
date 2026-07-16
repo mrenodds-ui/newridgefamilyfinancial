@@ -610,8 +610,17 @@ a:hover { color: var(--hal); }
 .om-claims-summary {
   font-family: var(--mono); font-size: 11px; color: #b8c2d0;
 }
+.om-claims-body {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  align-items: start;
+}
+.om-claims-body.has-dossier {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+}
 .om-claims-wrap {
-  max-height: 320px;
+  max-height: 420px;
   overflow: auto;
   border: 1px solid #243040;
 }
@@ -741,7 +750,7 @@ a:hover { color: var(--hal); }
 @media print {
   .banner, .nav, .beam, .money-strip, .foot-nav, .ops-row,
   .wk-filter, #btn-wk-refresh, #btn-wk-dossier-close, .wk-dossier,
-  #btn-tr-refresh, #btn-cl-refresh {
+  #btn-tr-refresh, #btn-cl-refresh, #btn-cl-dossier-close, #cl-dossier {
     display: none !important;
   }
   body { background: #fff; color: #111; }
@@ -754,6 +763,7 @@ a:hover { color: var(--hal); }
     color: #111;
   }
   .om-claims-wrap { max-height: none; overflow: visible; border-color: #999; }
+  .om-claims-body { grid-template-columns: 1fr; }
   .om-claims-table th, .om-claims-table td { border-color: #ccc; color: #222; }
   .om-weekly-body { grid-template-columns: 1fr; }
   .wk-days-grid { grid-template-columns: repeat(4, 1fr); }

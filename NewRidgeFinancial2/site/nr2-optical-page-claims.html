@@ -16,14 +16,14 @@
     <main class="main">
       <p class="mode-eyebrow">Claims · SoftDent read-only</p>
       <h1>Claims</h1>
-      <p class="kicker">Outstanding total · aging counts · ERA honesty — no invent dollars.</p>
+      <p class="kicker">Outstanding list · click a claim for patient context — no invent dollars.</p>
       <div class="beam" aria-hidden="true"></div>
-      <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent $</div>
+      <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent $ · staff shows full names</div>
       <section class="money-strip" aria-label="Claims money face">
         <article class="metric-face sd">
           <div class="face-lbl">Outstanding</div>
           <div class="val sd" id="val-snap">—</div>
-          <p class="hint">SoftDent claims total</p>
+          <p class="hint" id="hint-snap">SoftDent claims total</p>
         </article>
         <article class="metric-face">
           <div class="face-lbl">ERA / adjustments</div>
@@ -40,6 +40,44 @@
           <div class="val" id="val-over30">—</div>
           <p class="hint">Counts only · not dollars</p>
         </article>
+      </section>
+      <section class="om-claims" id="om-claims-outstanding" aria-label="Outstanding SoftDent claims list">
+        <div class="om-claims-head">
+          <h2>Outstanding Claims</h2>
+          <span class="om-claims-range" id="cl-range-label">—</span>
+          <button type="button" class="btn-quiet" id="btn-cl-refresh" title="Reload outstanding SoftDent claims">Refresh</button>
+        </div>
+        <p class="om-claims-note">
+          SoftDent read-only · full patient names · oldest first · click a row for claim + patient context ·
+          null amounts = — (empty ≠ $0) · sample capped at 200
+        </p>
+        <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
+        <div class="om-claims-body" id="cl-body">
+          <div class="om-claims-wrap">
+            <table class="om-claims-table" id="cl-table">
+              <thead>
+                <tr>
+                  <th scope="col">Patient</th>
+                  <th scope="col">Payer</th>
+                  <th scope="col">Service</th>
+                  <th scope="col">Amount</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Age</th>
+                </tr>
+              </thead>
+              <tbody id="cl-tbody" aria-live="polite"></tbody>
+            </table>
+          </div>
+          <aside class="wk-dossier" id="cl-dossier" hidden>
+            <div class="wk-dossier-head">
+              <h3>Claim context</h3>
+              <button type="button" class="btn-quiet" id="btn-cl-dossier-close" title="Close claim context">Close</button>
+            </div>
+            <div class="wk-dossier-body" id="cl-dossier-body">
+              <p style="margin:0">Click a claim row to load SoftDent claim + patient context.</p>
+            </div>
+          </aside>
+        </div>
       </section>
       <p class="foot-nav">
         <a href="/nr2-optical-pages-hub.html">← Alignment Bench</a>
