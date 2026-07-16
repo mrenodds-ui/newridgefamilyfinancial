@@ -171,18 +171,24 @@
       display: none; /* HAL relocated into center core circle */
     }
 
-    /* Core = HAL AI model (spectral brain + recon) — white light pulse */
+    /* Core = HAL AI model (spectral brain + recon) — white light pulse + sweep/ripple */
     .core {
       position: absolute; z-index: 7; left: 50%; top: 42%; transform: translate(-50%, -50%);
       width: 220px; height: 220px; border-radius: 50%;
       border: 3px solid rgba(224,230,237,0.55);
       background:
+        radial-gradient(circle at 32% 28%, rgba(255,255,255,0.14), transparent 42%),
         conic-gradient(from 200deg, rgba(224,230,237,0.18), rgba(0,212,170,0.1), rgba(255,170,0,0.12), rgba(224,230,237,0.18)),
         radial-gradient(circle at 50% 50%, #121820, #050607 72%);
       display: grid; place-items: center; text-align: center; cursor: pointer;
       box-shadow: 0 0 40px rgba(224,230,237,0.12), inset 0 0 28px rgba(224,230,237,0.06);
       animation: core-white-pulse 2.2s ease-in-out infinite;
+      isolation: isolate;
+      overflow: visible;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
     }
+    .core > div { position: relative; z-index: 2; }
+    /* Outer breathing halo */
     .core::before {
       content: "";
       position: absolute; inset: -18px; border-radius: 50%;
@@ -190,6 +196,177 @@
       box-shadow: 0 0 24px rgba(255,255,255,0.15);
       pointer-events: none;
       animation: core-ring-pulse 2.2s ease-in-out infinite;
+    }
+    /* Rotating spectral sweep (radar-style arc) */
+    .core::after {
+      content: "";
+      position: absolute; inset: -2px; border-radius: 50%;
+      background: conic-gradient(
+        from 0deg,
+        transparent 0deg,
+        transparent 300deg,
+        rgba(255,255,255,0.08) 320deg,
+        rgba(255,255,255,0.55) 350deg,
+        rgba(0,212,170,0.35) 358deg,
+        transparent 360deg
+      );
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px));
+      mask: radial-gradient(farthest-side, transparent calc(100% - 10px), #000 calc(100% - 9px));
+      pointer-events: none;
+      z-index: 1;
+      animation: core-sweep 6.5s linear infinite;
+      opacity: 0.85;
+    }
+    .core-ripple,
+    .core-ripple-delay {
+      position: absolute; inset: 0; border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.35);
+      box-shadow: 0 0 18px rgba(224,230,237,0.2);
+      pointer-events: none;
+      z-index: 0;
+      animation: core-ripple-out 3.6s ease-out infinite;
+    }
+    .core-ripple-delay { animation-delay: 1.8s; }
+    .core-glint {
+      position: absolute;
+      width: 42%; height: 28%;
+      top: 12%; left: 18%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, rgba(255,255,255,0.22), transparent 70%);
+      filter: blur(6px);
+      pointer-events: none;
+      z-index: 1;
+      animation: core-glint-drift 5.5s ease-in-out infinite;
+    }
+    /* Particle tick marks around the rim */
+    .core-ticks {
+      position: absolute; inset: -6px; border-radius: 50%;
+      background: repeating-conic-gradient(
+        from -2deg,
+        rgba(255,255,255,0.55) 0deg 1.1deg,
+        transparent 1.1deg 15deg
+      );
+      -webkit-mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 9px),
+        #000 calc(100% - 8px),
+        #000 calc(100% - 2px),
+        transparent 100%
+      );
+      mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 9px),
+        #000 calc(100% - 8px),
+        #000 calc(100% - 2px),
+        transparent 100%
+      );
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.4;
+      animation: core-ticks-breathe 2.2s ease-in-out infinite;
+    }
+    /* Beam arrival hotspots — positioned by snapBeams */
+    .core-hits {
+      position: absolute; inset: 0; border-radius: 50%;
+      pointer-events: none; z-index: 3;
+    }
+    .core-hit {
+      position: absolute;
+      width: 14px; height: 14px;
+      margin: -7px 0 0 -7px;
+      left: 50%; top: 50%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.95) 0%, transparent 70%);
+      box-shadow: 0 0 12px rgba(255,255,255,0.55);
+      opacity: 0;
+      transform: scale(0.4);
+      animation: core-hit-flash 2s ease-in-out infinite;
+    }
+    .core-hit[data-beam="sd"] {
+      background: radial-gradient(circle, #fff 0%, rgba(224,230,237,0.2) 55%, transparent 72%);
+      box-shadow: 0 0 16px rgba(224,230,237,0.85);
+      animation-duration: 2s;
+    }
+    .core-hit[data-beam="qb"] {
+      background: radial-gradient(circle, #ffd080 0%, rgba(255,170,0,0.25) 55%, transparent 72%);
+      box-shadow: 0 0 16px rgba(255,170,0,0.75);
+      animation-duration: 1.5s; animation-delay: 0.2s;
+    }
+    .core-hit[data-beam="tax"] {
+      background: radial-gradient(circle, #ffb0e0 0%, rgba(255,102,204,0.25) 55%, transparent 72%);
+      box-shadow: 0 0 16px rgba(255,102,204,0.7);
+      animation-duration: 1.5s; animation-delay: 0.45s;
+    }
+    .core-hit[data-beam="ctrl"] {
+      background: radial-gradient(circle, #a8fff8 0%, rgba(0,206,209,0.25) 55%, transparent 72%);
+      box-shadow: 0 0 14px rgba(0,206,209,0.7);
+      animation-duration: 1.4s; animation-delay: 0.7s;
+    }
+    /* One-shot recon fire burst */
+    .core-burst {
+      position: absolute; inset: -8px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.85);
+      box-shadow: 0 0 28px rgba(255,255,255,0.45), inset 0 0 24px rgba(0,212,170,0.2);
+      pointer-events: none; z-index: 4;
+      opacity: 0; transform: scale(0.85);
+    }
+    .core.core--fire .core-burst {
+      animation: core-fire-burst 0.75s ease-out forwards;
+    }
+    .core.core--fire-fail .core-burst {
+      border-color: rgba(255,0,68,0.9);
+      box-shadow: 0 0 28px rgba(255,0,68,0.45), inset 0 0 20px rgba(255,0,68,0.15);
+      animation: core-fire-burst 0.75s ease-out forwards;
+    }
+    .core.core--fire {
+      animation: none;
+      border-color: rgba(255,255,255,1);
+      box-shadow:
+        0 0 70px rgba(255,255,255,0.75),
+        0 0 140px rgba(0,212,170,0.35),
+        inset 0 0 56px rgba(255,255,255,0.22);
+    }
+    .core.core--fire .core-ticks {
+      opacity: 1;
+      filter: brightness(1.6);
+    }
+    .core.core--fire-fail {
+      animation: none;
+      border-color: rgba(255,0,68,0.95);
+      box-shadow:
+        0 0 60px rgba(255,0,68,0.55),
+        0 0 120px rgba(255,0,68,0.25),
+        inset 0 0 40px rgba(255,0,68,0.12);
+    }
+    .core.core--fire-fail .core-ticks {
+      opacity: 0.9;
+      filter: brightness(1.2) drop-shadow(0 0 4px rgba(255,0,68,0.6));
+    }
+    .core:hover,
+    .core:focus-visible {
+      outline: none;
+      border-color: rgba(255,255,255,0.95);
+      box-shadow:
+        0 0 56px rgba(255,255,255,0.55),
+        0 0 110px rgba(224,230,237,0.35),
+        inset 0 0 48px rgba(255,255,255,0.16);
+      transform: translate(-50%, -50%) scale(1.03);
+    }
+    .core:hover::after,
+    .core:focus-visible::after {
+      animation-duration: 2.8s;
+      opacity: 1;
+    }
+    .core:hover .core-ticks,
+    .core:focus-visible .core-ticks {
+      opacity: 0.7;
+    }
+    .core:active {
+      transform: translate(-50%, -50%) scale(0.98);
+      box-shadow:
+        0 0 70px rgba(255,255,255,0.7),
+        0 0 140px rgba(0,212,170,0.25),
+        inset 0 0 56px rgba(255,255,255,0.22);
     }
     @keyframes core-white-pulse {
       0%, 100% {
@@ -209,6 +386,55 @@
     @keyframes core-ring-pulse {
       0%, 100% { opacity: 0.25; transform: scale(0.96); }
       50% { opacity: 0.85; transform: scale(1.04); }
+    }
+    @keyframes core-sweep {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes core-ripple-out {
+      0% { opacity: 0.55; transform: scale(1); }
+      70% { opacity: 0.12; }
+      100% { opacity: 0; transform: scale(1.55); }
+    }
+    @keyframes core-glint-drift {
+      0%, 100% { transform: translate(0, 0) rotate(0deg); opacity: 0.45; }
+      40% { transform: translate(28%, 18%) rotate(12deg); opacity: 0.85; }
+      70% { transform: translate(8%, 32%) rotate(-6deg); opacity: 0.55; }
+    }
+    @keyframes core-ticks-breathe {
+      0%, 100% { opacity: 0.28; filter: brightness(0.85); }
+      50% { opacity: 0.62; filter: brightness(1.25); }
+    }
+    @keyframes core-hit-flash {
+      0%, 100% { opacity: 0.05; transform: scale(0.35); }
+      45% { opacity: 0.15; transform: scale(0.55); }
+      52% { opacity: 1; transform: scale(1.35); }
+      68% { opacity: 0.35; transform: scale(0.8); }
+    }
+    @keyframes core-fire-burst {
+      0% { opacity: 0.95; transform: scale(0.88); }
+      55% { opacity: 0.55; }
+      100% { opacity: 0; transform: scale(1.85); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .core,
+      .core::before,
+      .core::after,
+      .core-ripple,
+      .core-ripple-delay,
+      .core-glint,
+      .core-ticks,
+      .core-hit,
+      .core.core--fire .core-burst,
+      .core.core--fire-fail .core-burst {
+        animation: none !important;
+      }
+      .core-hit { opacity: 0.35; transform: scale(0.7); }
+      .core-ticks { opacity: 0.4; }
+      .core:hover,
+      .core:focus-visible,
+      .core:active {
+        transform: translate(-50%, -50%);
+      }
     }
     .core .k { font-size: var(--text-sm); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hal); font-weight: 600; }
     .core .ai { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); margin-top: 2px; }
@@ -464,7 +690,18 @@
     </article>
     <!-- HAL peripheral emitter removed — HAL lives in center core -->
 
-    <div class="core" id="core" title="HAL AI core · recon" data-act="recon">
+    <div class="core" id="core" title="HAL AI core · recon" data-act="recon" tabindex="0" role="button" aria-label="HAL AI core · recon">
+      <span class="core-ripple" aria-hidden="true"></span>
+      <span class="core-ripple-delay" aria-hidden="true"></span>
+      <span class="core-glint" aria-hidden="true"></span>
+      <span class="core-ticks" aria-hidden="true"></span>
+      <span class="core-hits" aria-hidden="true">
+        <i class="core-hit" data-beam="sd"></i>
+        <i class="core-hit" data-beam="qb"></i>
+        <i class="core-hit" data-beam="tax"></i>
+        <i class="core-hit" data-beam="ctrl"></i>
+      </span>
+      <span class="core-burst" aria-hidden="true"></span>
       <div>
         <div class="k">HAL</div>
         <div class="ai">AI MODEL CORE</div>

@@ -255,6 +255,32 @@
     el.style.top = a.y - 2 + "px";
     el.style.transform = "rotate(" + deg + "deg)";
   }
+  function placeCoreHit(beam, rim, center, radius) {
+    const el = document.querySelector('.core-hit[data-beam="' + beam + '"]');
+    if (!el || !radius) return;
+    const pctX = 50 + ((rim.x - center.x) / radius) * 50;
+    const pctY = 50 + ((rim.y - center.y) / radius) * 50;
+    el.style.left = pctX + "%";
+    el.style.top = pctY + "%";
+  }
+  function fireCoreBurst(kind) {
+    const core = document.getElementById("core");
+    if (!core) return;
+    const cls = kind === "fail" ? "core--fire-fail" : "core--fire";
+    core.classList.remove("core--fire", "core--fire-fail");
+    void core.offsetWidth;
+    core.classList.add(cls);
+    const burst = core.querySelector(".core-burst");
+    const clear = () => {
+      core.classList.remove("core--fire", "core--fire-fail");
+      if (burst) burst.removeEventListener("animationend", clear);
+    };
+    if (burst) {
+      burst.addEventListener("animationend", clear);
+    } else {
+      setTimeout(clear, 800);
+    }
+  }
   function snapBeams() {
     const bench = document.getElementById("bench");
     const core = document.getElementById("core");
@@ -275,10 +301,18 @@
     const taxStart = localPoint(bench, tr.left - 6, tr.top + tr.height * 0.5);
     const ctr = ctrl.getBoundingClientRect();
     const ctrlStart = localPoint(bench, ctr.right + 6, ctr.top + ctr.height * 0.5);
-    placeRay("ray-sd", sdStart, rimPoint(center, sdStart, radius));
-    placeRay("ray-qb", qbStart, rimPoint(center, qbStart, radius));
-    placeRay("ray-tax", taxStart, rimPoint(center, taxStart, radius));
-    placeRay("ray-ctrl", ctrlStart, rimPoint(center, ctrlStart, radius));
+    const sdRim = rimPoint(center, sdStart, radius);
+    const qbRim = rimPoint(center, qbStart, radius);
+    const taxRim = rimPoint(center, taxStart, radius);
+    const ctrlRim = rimPoint(center, ctrlStart, radius);
+    placeRay("ray-sd", sdStart, sdRim);
+    placeRay("ray-qb", qbStart, qbRim);
+    placeRay("ray-tax", taxStart, taxRim);
+    placeRay("ray-ctrl", ctrlStart, ctrlRim);
+    placeCoreHit("sd", sdRim, center, radius);
+    placeCoreHit("qb", qbRim, center, radius);
+    placeCoreHit("tax", taxRim, center, radius);
+    placeCoreHit("ctrl", ctrlRim, center, radius);
   }
   window.snapBeams = snapBeams;
   snapBeams();
@@ -654,9 +688,11 @@
   async function doRecon() {
     if (!reconAvailable) {
       setReconUi("unavailable");
+      fireCoreBurst("fail");
       toast("Reconciliation UNAVAILABLE · pack removed (clean-slate) · never COHERENT · empty ≠ $0");
       return;
     }
+    fireCoreBurst("ok");
     setReconUi("running");
     toast("HAL → POST /api/apex/hal/reconciliation …");
     const r = await api("/api/apex/hal/reconciliation", {
@@ -669,6 +705,7 @@
       (r.data && (r.data.available === false || r.data.status === "UNAVAILABLE"))
     ) {
       setReconUi("unavailable", (r.data && (r.data.detail || r.data.reason)) || "");
+      fireCoreBurst("fail");
       toast(
         "Reconciliation UNAVAILABLE · " +
           ((r.data && (r.data.detail || r.data.reason || r.data.error)) || r.status) +
@@ -678,6 +715,7 @@
     }
     const ok = !!(r.data && r.data.ok && r.data.coherent !== false);
     setReconUi(ok ? "coherent" : "incoherent");
+    fireCoreBurst(ok ? "ok" : "fail");
     toast(ok ? "Reconciliation ok" : "Reconciliation completed with gaps");
   }
 
@@ -709,8 +747,7 @@
 
   const benchEl = document.getElementById("bench");
   if (benchEl) {
-    benchEl.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-act]");
+    function runAct(btn) {
       if (!btn) return;
       if (role === "fd") {
         toast("Shutter locked — Front Desk cannot mutate");
@@ -721,6 +758,16 @@
       if (act === "refresh") return void doRefreshPeriod();
       if (act === "recon") return void doRecon();
       if (act === "tax") return void doTax();
+    }
+    benchEl.addEventListener("click", (e) => {
+      runAct(e.target.closest("[data-act]"));
+    });
+    benchEl.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const btn = e.target.closest("[data-act]");
+      if (!btn || btn.tagName === "BUTTON") return;
+      e.preventDefault();
+      runAct(btn);
     });
   }
 
