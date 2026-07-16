@@ -42,11 +42,6 @@
     }
     .mode-strip b { color: #e8eef5; font-weight: 600; font-size: var(--text-base); }
     .mode-strip .muted { color: var(--muted); }
-    .scram {
-      border: 1px solid var(--fringe); color: var(--fringe); background: transparent;
-      font-family: var(--mono); font-size: var(--text-sm); letter-spacing: 0.1em;
-      min-height: var(--hit); padding: 0 14px; cursor: pointer;
-    }
 
     /* Alignment lasers */
     .align {
@@ -433,8 +428,10 @@
     }
     .core .k { font-size: var(--text-sm); letter-spacing: 0.14em; text-transform: uppercase; color: var(--hal); font-weight: 600; }
     .core .ai { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--muted); margin-top: 2px; }
-    .core .v { font-family: var(--mono); font-size: clamp(20px, 2.4vw, 26px); font-weight: 600; margin: 8px 0 4px; color: var(--hal); }
+    .core .v { font-family: var(--mono); font-size: clamp(15px, 1.8vw, 20px); font-weight: 600; margin: 8px 0 4px; color: var(--hal); line-height: 1.25; }
     .core .state { font-family: var(--mono); font-size: 13px; color: var(--fringe); letter-spacing: 0.08em; }
+    .core.core--live .state { color: var(--sd); }
+    .core.core--warn .state { color: #ffaa00; }
     .core .bind-hint { margin-top: 6px; }
     .lbl {
       font-size: var(--text-sm); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
@@ -614,9 +611,6 @@
       background: rgba(8,16,14,0.88);
     }
     .metric.empty { color: var(--stale) !important; font-size: clamp(16px, 1.8vw, 22px); }
-    .scram[disabled] {
-      opacity: 0.55; cursor: not-allowed; border-style: dashed;
-    }
   </style>
 </head>
 <body>
@@ -635,9 +629,6 @@
         <a href="/nr2-optical-pages-hub.html" style="margin-left:12px;color:var(--sd);font-size:13px;letter-spacing:0.04em">ALIGNMENT BENCH</a>
       </div>
       <div class="muted" id="clock">--:--:-- UTC</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button type="button" class="scram" id="scram" disabled title="No emergency halt API — demo only">SCRAM (DEMO · NO HALT API)</button>
-      </div>
     </div>
 
     <div class="align bad" id="align" title="Import readiness lasers — red = blocking critical gap"></div>
@@ -683,7 +674,7 @@
     </article>
     <!-- HAL peripheral emitter removed — HAL lives in center core -->
 
-    <div class="core" id="core" title="HAL AI core · recon" data-act="recon" tabindex="0" role="button" aria-label="HAL AI core · recon">
+    <div class="core" id="core" title="HAL core · money fusion · Alignment Bench" data-act="align" tabindex="0" role="button" aria-label="HAL core · open Alignment Bench">
       <span class="core-ripple" aria-hidden="true"></span>
       <span class="core-ripple-delay" aria-hidden="true"></span>
       <span class="core-glint" aria-hidden="true"></span>
@@ -697,10 +688,10 @@
       <span class="core-burst" aria-hidden="true"></span>
       <div>
         <div class="k">HAL</div>
-        <div class="ai">AI MODEL CORE</div>
-        <div class="v">SPECTRAL</div>
-        <div class="state" id="hal-state">RECON · UNAVAILABLE</div>
-        <span class="bind-hint">HAL core · SoftDent+QB+Tax beams · recon pack clean-slate UNAVAILABLE</span>
+        <div class="ai">MONEY FUSION</div>
+        <div class="v" id="hal-fusion">SD — · QB —</div>
+        <div class="state" id="hal-state">WIRING…</div>
+        <span class="bind-hint" id="hal-hint">SoftDent+QB beams · empty ≠ $0 · click → Alignment Bench</span>
       </div>
     </div>
 

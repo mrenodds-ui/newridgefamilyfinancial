@@ -88,23 +88,7 @@
   }
 
   function setReconUi(mode, detail) {
-    const state = document.getElementById("hal-state");
     const btn = document.querySelector('.plunger[data-act="recon"]');
-    const label =
-      mode === "unavailable"
-        ? "RECON · UNAVAILABLE"
-        : mode === "running"
-          ? "RECON · RUNNING"
-          : mode === "coherent"
-            ? "RECON · COHERENT"
-            : mode === "incoherent"
-              ? "RECON · INCOHERENT"
-              : "RECON · STANDBY";
-    if (state) {
-      state.textContent = label;
-      state.style.color =
-        mode === "unavailable" || mode === "incoherent" ? "var(--fringe)" : "";
-    }
     if (btn) {
       const off = mode === "unavailable";
       btn.disabled = off;
@@ -113,8 +97,72 @@
       btn.title = off
         ? "SoftDent×QB recon pack removed (clean-slate) — never COHERENT · empty ≠ $0"
         : detail || "Run SoftDent×QB reconciliation";
+      if (off) {
+        btn.textContent = "RECONCILE · UNAVAILABLE";
+      } else if (mode === "running") {
+        btn.textContent = "RECONCILE · RUNNING";
+      } else if (mode === "coherent") {
+        btn.textContent = "RECONCILE · COHERENT";
+      } else if (mode === "incoherent") {
+        btn.textContent = "RECONCILE · INCOHERENT";
+      } else {
+        btn.textContent = "RECONCILE";
+      }
     }
     reconAvailable = mode !== "unavailable";
+  }
+
+  function updateHalCore(ready, moneyBits) {
+    const core = document.getElementById("core");
+    const state = document.getElementById("hal-state");
+    const fusion = document.getElementById("hal-fusion");
+    const hint = document.getElementById("hal-hint");
+    if (!core || !state) return;
+
+    const sdText =
+      moneyBits && moneyBits.sd
+        ? String(moneyBits.sd)
+        : (document.getElementById("metric-sd") || {}).textContent || "—";
+    const qbText =
+      moneyBits && moneyBits.qb
+        ? String(moneyBits.qb)
+        : (document.getElementById("metric-qb") || {}).textContent || "—";
+    if (fusion) fusion.textContent = "SD " + sdText + " · QB " + qbText;
+
+    let mode = "fault";
+    let label = "NO SIGNAL";
+    let hintText = "SoftDent+QB beams · empty ≠ $0 · click → Alignment Bench";
+
+    if (!ready) {
+      label = "READINESS · NO SIGNAL";
+      mode = "fault";
+    } else if (lasersRed(ready)) {
+      const keys = laserKeys(ready).slice(0, 2).join(",") || "blocking";
+      label = "LASERS · RED";
+      hintText = "Blocking · " + keys + " · empty ≠ $0 · click → Alignment Bench";
+      mode = "fault";
+    } else if (periodCloseTrouble(ready)) {
+      label = periodCloseBit(ready);
+      hintText = label + " · money gated · empty ≠ $0 · click → Alignment Bench";
+      mode = "warn";
+    } else if (!lastSessionOk) {
+      label = "READY · SESSION WEAK";
+      hintText = "Readiness ok · session may 403 mutations · click → Alignment Bench";
+      mode = "warn";
+    } else {
+      label = "LIVE · GREEN-PATH";
+      hintText =
+        periodCloseBit(ready) + " · money-beams · empty ≠ $0 · click → Alignment Bench";
+      mode = "live";
+    }
+
+    state.textContent = label;
+    state.style.color = "";
+    if (hint) hint.textContent = hintText;
+    core.classList.toggle("core--live", mode === "live");
+    core.classList.toggle("core--warn", mode === "warn");
+    core.classList.toggle("core--fault", mode === "fault");
+    core.title = "HAL core · " + label + " · open Alignment Bench";
   }
 
   async function refreshReconHonesty() {
@@ -197,7 +245,10 @@
     const locked = role === "fd";
     document.querySelectorAll(".inst, .ctrl").forEach((n) => n.classList.toggle("locked", locked));
     document.querySelectorAll("[data-act], #wheel button").forEach((n) => {
-      if (n.id === "scram") return;
+      if (n.getAttribute("data-act") === "align") {
+        n.disabled = false;
+        return;
+      }
       n.disabled = locked;
       if (!locked && n.getAttribute("data-act") === "recon" && !reconAvailable) {
         n.disabled = true;
@@ -221,15 +272,6 @@
     toast("RBAC shutters closed — Front Desk view-only");
   };
   applyRole();
-
-  const scram = document.getElementById("scram");
-  if (scram) {
-    scram.disabled = true;
-    scram.onclick = (e) => {
-      e.preventDefault();
-      toast("SCRAM demoted: no emergency halt API — ornamental only");
-    };
-  }
 
   /* —— beams —— */
   function localPoint(bench, clientX, clientY) {
@@ -346,6 +388,7 @@
         align.title = "Import readiness unavailable";
       }
       applyWireHonesty(null);
+      updateHalCore(null);
       return null;
     }
     const ready = r.data;
@@ -366,6 +409,7 @@
     }
     applyWireHonesty(ready);
     applyMetricLaserHonesty(ready);
+    updateHalCore(ready);
     // Import alignment only — recon status from refreshReconHonesty (never fake COHERENT).
     return ready;
   }
@@ -547,6 +591,12 @@
     }
 
     applyMetricLaserHonesty(ready);
+    const sdEl = document.getElementById("metric-sd");
+    const qbEl = document.getElementById("metric-qb");
+    updateHalCore(ready, {
+      sd: sdEl ? sdEl.textContent : "—",
+      qb: qbEl ? qbEl.textContent : "—",
+    });
   }
 
   async function refreshFilm(claimsData) {
@@ -758,6 +808,12 @@
       if (act === "refresh") return void doRefreshPeriod();
       if (act === "recon") return void doRecon();
       if (act === "tax") return void doTax();
+      if (act === "align") {
+        fireCoreBurst(lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "fail" : "ok");
+        toast("HAL → Alignment Bench · honesty lasers + period-close");
+        window.location.href = "/nr2-optical-pages-hub.html";
+        return;
+      }
     }
     benchEl.addEventListener("click", (e) => {
       runAct(e.target.closest("[data-act]"));
