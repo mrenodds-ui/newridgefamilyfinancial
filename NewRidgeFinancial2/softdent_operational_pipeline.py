@@ -23,7 +23,38 @@ INSURANCE_WRITEOFF_CODES = frozenset({"51", "52"})
 INSURANCE_PAYMENT_CODES = frozenset({"2"})
 PATIENT_PAYMENT_CODES = frozenset({"11", "12", "17", "48", "60", "61"})
 SKIP_CLINICAL_CODES = frozenset({"2", "11", "12", "17", "48", "60", "61"})
+# SoftDent claim statuses that are not active / outstanding (Claims page).
+INACTIVE_CLAIM_STATUSES = frozenset(
+    {
+        "paid",
+        "closed",
+        "complete",
+        "completed",
+        "denied",
+        "denied-final",
+        "done",
+        "settled",
+        "cancelled",
+        "canceled",
+        "void",
+        "voided",
+    }
+)
 ACCOUNT_NAME_MARKERS = (" account",)
+
+
+def is_active_claim_status(status: str) -> bool:
+    """True when SoftDent claim status is still open / active (not paid/completed)."""
+    normalized = str(status or "").strip().lower()
+    if not normalized:
+        return True
+    if normalized in INACTIVE_CLAIM_STATUSES:
+        return False
+    if normalized.startswith("paid") or normalized.startswith("closed"):
+        return False
+    if "complete" in normalized:
+        return False
+    return True
 
 
 def resolve_daysheet_jsonl_path() -> Path | None:
@@ -232,21 +263,47 @@ def build_clinical_notes_rows(transactions: list[dict[str, Any]]) -> list[dict[s
     return notes
 
 
+def _code_is_insurance_payment(code: str) -> bool:
+    text = str(code or "").strip()
+    if not text:
+        return False
+    base = text.split(".")[0]
+    return base in INSURANCE_PAYMENT_CODES or text.startswith("2")
+
+
+def _code_is_insurance_writeoff(code: str) -> bool:
+    text = str(code or "").strip()
+    if not text:
+        return False
+    base = text.split(".")[0]
+    return base in INSURANCE_WRITEOFF_CODES or text.startswith("51") or text.startswith("52")
+
+
 def _claim_status_for_patient_day(
     patient_id: str,
     report_date: str,
     transactions: list[dict[str, Any]],
 ) -> str:
+    """Active vs settled for SoftDent patient+DOS (Paid/Denied are not active)."""
     same_day = [
         row
         for row in transactions
         if str(row.get("patientId") or "") == patient_id and str(row.get("reportDate") or "") == report_date
     ]
     codes = {str(row.get("code") or "").strip() for row in same_day}
-    if codes & INSURANCE_PAYMENT_CODES:
+    if any(_code_is_insurance_payment(c) for c in codes):
         return "Paid"
-    if codes & INSURANCE_WRITEOFF_CODES:
+    if any(_code_is_insurance_writeoff(c) for c in codes):
         return "Denied"
+    # SoftDent insurance payment posted on/after DOS ⇒ treat as completed/paid (not active).
+    for row in transactions:
+        if str(row.get("patientId") or "") != patient_id:
+            continue
+        later = str(row.get("reportDate") or "")
+        if not later or later < report_date:
+            continue
+        if _code_is_insurance_payment(str(row.get("code") or "")):
+            return "Paid"
     return "Pending Review"
 
 
@@ -308,9 +365,15 @@ def _resolve_claim_payer(patient_name: str, report_date: str) -> str:
     return "Insurance"
 
 
-def build_claims_rows(transactions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_claims_rows(
+    transactions: list[dict[str, Any]],
+    *,
+    claim_id_prefix: str = "DS",
+    awaiting_reason: str = "Awaiting insurance response.",
+) -> list[dict[str, Any]]:
     claims: list[dict[str, Any]] = []
     seen: set[str] = set()
+    prefix = str(claim_id_prefix or "DS").strip().upper() or "DS"
     for idx, row in enumerate(transactions):
         code = str(row.get("code") or "").strip()
         if not code or code in INSURANCE_PAYMENT_CODES or code in INSURANCE_WRITEOFF_CODES:
@@ -332,7 +395,7 @@ def build_claims_rows(transactions: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
         seen.add(claim_key)
         status = _claim_status_for_patient_day(patient_id, report_date, transactions)
-        claim_id = f"DS-{report_date.replace('-', '')}-{patient_id}-{code}-{idx + 1}"
+        claim_id = f"{prefix}-{report_date.replace('-', '')}-{patient_id}-{code}-{idx + 1}"
         claims.append(
             {
                 "PatientName": patient,
@@ -342,15 +405,213 @@ def build_claims_rows(transactions: list[dict[str, Any]]) -> list[dict[str, Any]
                 "Payer": _resolve_claim_payer(patient, report_date),
                 "Procedure": str(row.get("description") or code),
                 "ServiceDate": report_date,
-                "DenialReason": "Derived from daysheet insurance activity."
+                "DenialReason": "Derived from SoftDent insurance activity."
                 if status == "Denied"
-                else ("Insurance payment posted." if status == "Paid" else "Awaiting insurance response."),
+                else ("Insurance payment posted." if status == "Paid" else awaiting_reason),
                 "ClaimAmount": f"{float(production):.2f}",
             }
         )
-        if len(claims) >= 150:
-            break
+        # SoftDent outstanding claims can exceed a single daysheet; do not cap
+        # derived rows at 150 (that falsely froze the Claims page near ~60).
     return claims
+
+
+def resolve_softdent_transactions_xls_path() -> Path | None:
+    """Newest SoftDent Trans-for-a-Period Excel under report/export roots."""
+    patterns = (
+        "transactions_for_period*.xls",
+        "transactions_for_period*.xlsx",
+        "TXN*.XLS",
+        "TXN*.xls",
+    )
+    candidates: list[Path] = []
+    roots = list(_softdent_direct_read_roots())
+    report_root = Path(r"C:\SoftDentReportExports")
+    if report_root.is_dir():
+        roots.append(report_root)
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for pattern in patterns:
+            try:
+                candidates.extend(p for p in root.glob(pattern) if p.is_file())
+            except OSError:
+                continue
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item.stat().st_mtime)
+
+
+def _code_token(raw: Any) -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    try:
+        value = float(text)
+        if abs(value - int(value)) < 1e-9:
+            return str(int(value))
+        return f"{value:.2f}".rstrip("0").rstrip(".")
+    except ValueError:
+        return text
+
+
+def load_softdent_transactions_xls(path: Path | None = None) -> list[dict[str, Any]]:
+    """Load SoftDent Trans-for-a-Period Excel into daysheet-shaped transaction rows."""
+    path = path or resolve_softdent_transactions_xls_path()
+    if not path or not path.is_file():
+        return []
+    try:
+        import xlrd
+    except ImportError:
+        return []
+    try:
+        book = xlrd.open_workbook(str(path))
+        sheet = book.sheet_by_index(0)
+    except Exception:
+        return []
+
+    header_row = None
+    for row_idx in range(min(40, sheet.nrows)):
+        labels = [str(sheet.cell_value(row_idx, col) or "").strip().lower() for col in range(min(16, sheet.ncols))]
+        if "date" in labels and "code" in labels and any(label in {"prod", "name", "id"} for label in labels):
+            header_row = row_idx
+            break
+    if header_row is None:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for row_idx in range(header_row + 1, sheet.nrows):
+        date_cell = sheet.cell_value(row_idx, 0)
+        if date_cell in ("", None):
+            continue
+        if isinstance(date_cell, (int, float)):
+            try:
+                report_date = datetime(*xlrd.xldate_as_tuple(float(date_cell), book.datemode)).date().isoformat()
+            except Exception:
+                continue
+        else:
+            report_date = _parse_report_date(str(date_cell))
+            if not report_date:
+                continue
+        try:
+            patient_id = str(int(float(sheet.cell_value(row_idx, 1))))
+        except (TypeError, ValueError):
+            patient_id = str(sheet.cell_value(row_idx, 1) or "").strip()
+        patient_name = _normalize_patient_name(str(sheet.cell_value(row_idx, 2) or ""))
+        provider = sheet.cell_value(row_idx, 4)
+        try:
+            provider_id = str(int(float(provider))) if provider not in ("", None) else ""
+        except (TypeError, ValueError):
+            provider_id = str(provider or "").strip()
+        code = _code_token(sheet.cell_value(row_idx, 5))
+        production_raw = sheet.cell_value(row_idx, 7)
+        try:
+            production = float(production_raw) if production_raw not in ("", None) else None
+        except (TypeError, ValueError):
+            production = None
+        if not patient_id or not patient_name:
+            continue
+        rows.append(
+            {
+                "reportDate": report_date,
+                "patientId": patient_id,
+                "patientName": patient_name,
+                "providerId": provider_id,
+                "code": code,
+                "description": code,
+                "production": production,
+                "detailLines": [],
+                "transactionNote": "",
+            }
+        )
+    return rows
+
+
+def build_transactions_claims_dataset(path: Path | None = None) -> dict[str, Any] | None:
+    """SoftDent Trans-for-a-Period Excel → open claims (broader than single-day daysheet).
+
+    SoftDent Outstanding Claims by Patient has Excel greyed on this office build, so NR2
+    rebuilds an open-claim working set from SoftDent desktop Trans-for-a-Period Excel:
+    one row per patient+service-date with production and no same-day insurance pay/write-off.
+    """
+    path = path or resolve_softdent_transactions_xls_path()
+    if not path or not path.is_file():
+        return None
+    transactions = load_softdent_transactions_xls(path)
+    if not transactions:
+        return None
+    line_rows = build_claims_rows(
+        transactions,
+        claim_id_prefix="TXN",
+        awaiting_reason=(
+            "SoftDent Trans-for-a-Period: production with no same-day insurance "
+            "payment/write-off (Outstanding Claims Excel greyed — SoftDent estimate)."
+        ),
+    )
+    # Roll up procedure lines → SoftDent-like claim batches (patient + DOS).
+    # Active only — drop Paid / Completed / Denied / Closed.
+    buckets: dict[str, dict[str, Any]] = {}
+    for row in line_rows:
+        status = str(row.get("ClaimStatus") or "").strip()
+        if not is_active_claim_status(status):
+            continue
+        patient_id = str(row.get("MRN") or "").strip()
+        service_date = str(row.get("ServiceDate") or "").strip()
+        if not patient_id or not service_date:
+            continue
+        key = f"{patient_id}|{service_date}"
+        amount = 0.0
+        try:
+            amount = float(str(row.get("ClaimAmount") or "0").replace(",", "").replace("$", ""))
+        except ValueError:
+            amount = 0.0
+        hit = buckets.get(key)
+        if not hit:
+            buckets[key] = {
+                "PatientName": row.get("PatientName") or "",
+                "MRN": patient_id,
+                "ClaimId": f"TXN-{service_date.replace('-', '')}-{patient_id}",
+                "ClaimStatus": "Pending Review",
+                "Payer": row.get("Payer") or "Insurance",
+                "Procedure": str(row.get("Procedure") or ""),
+                "ServiceDate": service_date,
+                "DenialReason": row.get("DenialReason") or "",
+                "ClaimAmount": amount,
+                "_codes": [str(row.get("Procedure") or "")],
+            }
+            continue
+        hit["ClaimAmount"] = float(hit.get("ClaimAmount") or 0) + amount
+        code = str(row.get("Procedure") or "").strip()
+        if code and code not in hit["_codes"]:
+            hit["_codes"].append(code)
+
+    open_rows: list[dict[str, Any]] = []
+    for hit in buckets.values():
+        if not is_active_claim_status(str(hit.get("ClaimStatus") or "")):
+            continue
+        codes = [c for c in (hit.pop("_codes", []) or []) if c]
+        if codes:
+            hit["Procedure"] = ", ".join(codes[:8]) + ("…" if len(codes) > 8 else "")
+        hit["ClaimAmount"] = f"{float(hit.get('ClaimAmount') or 0):.2f}"
+        hit["ClaimStatus"] = "Pending Review"
+        open_rows.append(hit)
+    open_rows.sort(key=lambda item: (str(item.get("ServiceDate") or ""), str(item.get("PatientName") or "")))
+    if not open_rows or _is_sample_claims(open_rows):
+        return None
+    return {
+        "sourceFile": "softdent_claims_export.csv",
+        "sourcePath": str(path),
+        "modifiedAt": datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat(),
+        "rows": open_rows,
+        "readSource": "direct",
+        "sourceKind": "pipeline-softdent-transactions",
+        "transactionCount": len(transactions),
+        "lineClaimCount": len(line_rows),
+        "honesty": (
+            "SoftDent desktop Trans-for-a-Period Excel estimate — not SoftDent "
+            "Outstanding Claims by Patient (Excel greyed on that report)."
+        ),
+    }
 
 
 def build_procedures_rows(transactions: list[dict[str, Any]]) -> list[dict[str, Any]]:

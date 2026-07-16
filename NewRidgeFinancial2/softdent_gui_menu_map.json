@@ -164,6 +164,24 @@
       "excelExport": true,
       "printPreviewAvailable": true,
       "note": "Excel available. Saves as PRODBYADA.xls (often D:\\). SoftDent CODE rollups — NOT InsCo×ADA gold payment lines. Prefer 1-year range."
+    },
+    "outstanding_claims_by_patient": {
+      "id": "outstanding_claims_by_patient",
+      "label": "Outstanding Claims by Patient",
+      "menuPath": "Reports → Practice Management → Insurance Reports → Outstanding Claims by Patient",
+      "menu_keys": "ip",
+      "menu_keys_env": "SOFTDENT_OUTSTANDING_CLAIMS_MENU_KEYS",
+      "date_mode": "setup_defaults",
+      "short_stem_template": "OCP{yy}{mm}{dd}",
+      "canonical_template": "outstanding_claims_by_patient_{end}.xls",
+      "also_copy_as": ["outstanding_claims_by_patient.xls", "softdent_claims_export.csv"],
+      "required": false,
+      "phase": 1,
+      "proven": false,
+      "outputMode": "print_preview_only",
+      "excelExport": false,
+      "printPreviewAvailable": true,
+      "note": "SoftDent Excel greyed on this report (v19.1.4). Print Preview only — never Printer/File. Full claim list for NR2 Claims page requires SoftDent Excel enablement or a SoftDent claims CSV drop into SoftDentReportExports / inbox."
     }
   },
   "phase1_order": ["register", "collections", "transactions", "daysheet", "aging"],
@@ -172,6 +190,7 @@
     "insurance_payment_distribution",
     "insurance_payment_analysis",
     "production_by_provider",
-    "collection_reconciliation"
+    "collection_reconciliation",
+    "outstanding_claims_by_patient"
   ]
 }

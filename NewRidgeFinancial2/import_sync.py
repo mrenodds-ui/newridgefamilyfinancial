@@ -245,17 +245,18 @@ def _claims_have_named_payers(rows: list[dict[str, Any]]) -> bool:
 
 
 def _claims_look_daysheet_derived(rows: list[dict[str, Any]]) -> bool:
-    """Daysheet pipeline uses DS-YYYYMMDD-… claim ids and generic Insurance payers."""
+    """Pipeline-derived claims use DS-/TXN- ids (not SoftDent Claim Management numbers)."""
     if not rows:
         return False
     sample = list(rows)[:20]
-    ds_ids = 0
+    derived_ids = 0
     for row in sample:
         cid = str(row.get("ClaimId") or row.get("claimId") or row.get("id") or "").strip()
-        if cid.upper().startswith("DS-"):
-            ds_ids += 1
+        upper = cid.upper()
+        if upper.startswith("DS-") or upper.startswith("TXN-"):
+            derived_ids += 1
     named = _claims_have_named_payers(sample)
-    return ds_ids >= max(1, len(sample) // 2) and not named
+    return derived_ids >= max(1, len(sample) // 2) and not named
 
 
 def _read_claims_csv_rows(path: Path) -> list[dict[str, Any]]:
@@ -664,10 +665,11 @@ def _recover_expense_categories_csv(destination: Path) -> list[str]:
 
 
 def _sync_operational_softdent_exports(destination: Path) -> list[str]:
-    """Refresh claims/clinical notes from the live daysheet pipeline when exports are stale.
+    """Refresh claims/clinical notes from SoftDent desktop exports when stale.
 
-    Never overwrite a SoftDent claims export that already has named Payer labels
-    with daysheet-derived rows (all Payer=Insurance / DS-* ids).
+    Prefer SoftDent Trans-for-a-Period Excel claims over a single-day daysheet stub
+    so the Claims page is not frozen near ~60. Never overwrite a SoftDent claims
+    export that already has named Payer labels with daysheet-derived rows.
     """
     written: list[str] = []
     try:
@@ -676,9 +678,21 @@ def _sync_operational_softdent_exports(destination: Path) -> list[str]:
             build_daysheet_claims_dataset,
             build_daysheet_clinical_dataset,
             build_daysheet_procedures_dataset,
+            build_transactions_claims_dataset,
         )
 
-        claims = build_daysheet_claims_dataset()
+        daysheet_claims = build_daysheet_claims_dataset()
+        txn_claims = build_transactions_claims_dataset()
+        daysheet_rows = (daysheet_claims or {}).get("rows") or []
+        txn_rows = (txn_claims or {}).get("rows") or []
+
+        # SoftDent Trans-for-a-Period wins when it has a broader open set than daysheet.
+        prefer_txn = bool(txn_rows) and (
+            not daysheet_rows
+            or _is_sample_claims(daysheet_rows)
+            or len(txn_rows) > len(daysheet_rows)
+        )
+        claims = txn_claims if prefer_txn else daysheet_claims
         claim_rows = (claims or {}).get("rows") or []
         if claim_rows and not _is_sample_claims(claim_rows):
             claims_path = destination / "softdent_claims_export.csv"
@@ -690,11 +704,17 @@ def _sync_operational_softdent_exports(destination: Path) -> list[str]:
                 and _claims_look_daysheet_derived(claim_rows)
             )
             # Always keep a daysheet sidecar for production/status when we preserve SoftDent CSV.
-            daysheet_sidecar = destination / "softdent_claims_daysheet_derived.csv"
-            fieldnames = list(claim_rows[0].keys())
-            _write_csv(daysheet_sidecar, claim_rows, fieldnames)
-            _write_csv_json_sidecar(daysheet_sidecar, force=True)
-            written.append(daysheet_sidecar.name)
+            if daysheet_rows and not _is_sample_claims(daysheet_rows):
+                daysheet_sidecar = destination / "softdent_claims_daysheet_derived.csv"
+                fieldnames = list(daysheet_rows[0].keys())
+                _write_csv(daysheet_sidecar, daysheet_rows, fieldnames)
+                _write_csv_json_sidecar(daysheet_sidecar, force=True)
+                written.append(daysheet_sidecar.name)
+            if txn_rows and prefer_txn:
+                txn_sidecar = destination / "softdent_claims_transactions_derived.csv"
+                _write_csv(txn_sidecar, txn_rows, list(txn_rows[0].keys()))
+                _write_csv_json_sidecar(txn_sidecar, force=True)
+                written.append(txn_sidecar.name)
 
             if preserve_named:
                 # SoftDent/ODBC export wins for carrier join; do not clobber dollars,
@@ -707,6 +727,7 @@ def _sync_operational_softdent_exports(destination: Path) -> list[str]:
                     now = time.time()
                     os.utime(claims_path, (now, now))
             else:
+                fieldnames = list(claim_rows[0].keys())
                 _write_csv(claims_path, claim_rows, fieldnames)
                 _write_csv_json_sidecar(claims_path, force=True)
                 written.append(claims_path.name)

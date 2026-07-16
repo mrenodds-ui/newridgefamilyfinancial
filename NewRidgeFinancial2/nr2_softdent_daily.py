@@ -688,7 +688,13 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         source = "sd_claims"
         open_where = """
             COALESCE(claim_amount, 0) > 0
-              AND UPPER(COALESCE(claim_status, '')) NOT IN ('PAID', 'CLOSED', 'DENIED')
+              AND UPPER(TRIM(COALESCE(claim_status, ''))) NOT IN (
+                'PAID', 'CLOSED', 'DENIED', 'COMPLETE', 'COMPLETED',
+                'DONE', 'SETTLED', 'CANCELLED', 'CANCELED', 'VOID', 'VOIDED',
+                'DENIED-FINAL'
+              )
+              AND UPPER(TRIM(COALESCE(claim_status, ''))) NOT LIKE 'PAID%'
+              AND UPPER(TRIM(COALESCE(claim_status, ''))) NOT LIKE '%COMPLETE%'
         """
         total = None
         count = 0
@@ -795,6 +801,10 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         "source": source,
         "dbPath": str(db_path),
         "honesty": "empty != $0",
+        "sourceNote": (
+            "sd_claims may be SoftDent Trans-for-a-Period estimates when SoftDent "
+            "Outstanding Claims by Patient Excel is greyed (empty ≠ $0)."
+        ),
     }
 
 

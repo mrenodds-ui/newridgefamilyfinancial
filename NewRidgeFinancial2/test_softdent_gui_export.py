@@ -22,6 +22,8 @@ class SoftDentGuiExportTests(unittest.TestCase):
     def test_reclaimable_focus_titles(self):
         self.assertTrue(_is_reclaimable_focus_title("Claim Management - Google Chrome"))
         self.assertTrue(_is_reclaimable_focus_title("nr2 — Cursor"))
+        self.assertTrue(_is_reclaimable_focus_title("ManagerOffice"))
+        self.assertTrue(_is_reclaimable_focus_title("NR2 Optical Bench — unify"))
         self.assertFalse(_is_reclaimable_focus_title("AMD Software: Adrenalin Edition"))
 
     def test_output_options_refuse_file_and_printer(self):
