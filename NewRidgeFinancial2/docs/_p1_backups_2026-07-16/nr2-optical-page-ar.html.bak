@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NR2 Optical · A/R Aging</title>
+  <link rel="stylesheet" href="/nr2-optical-theme.css" />
+</head>
+<body>
+  <div class="banner">
+    A/R Aging · empty ≠ $0 · no SoftDent write-back
+    <span class="bind">Wiring SoftDent AR…</span>
+  </div>
+  <div class="shell atmosphere">
+    <nav class="nav" id="nav"></nav>
+    <main class="main">
+      <div class="ledge">
+      <section class="money-strip" aria-label="A/R money face">
+        <article class="metric-face sd">
+          <div class="face-lbl">Total AR</div>
+          <div class="val" id="val-total">—</div>
+          <p class="hint" id="hint-total">Attested SoftDent AR · empty ≠ $0</p>
+        </article>
+        <article class="metric-face sd">
+          <div class="face-lbl">Buckets</div>
+          <div class="val" id="val-buckets">—</div>
+          <p class="hint" id="hint-buckets">0–30 · 31–60 · 61–90 · 90+</p>
+        </article>
+        <article class="metric-face sd">
+          <div class="face-lbl">Open claims</div>
+          <div class="val sd" id="val-collect">—</div>
+          <p class="hint">Count from claims feed</p>
+        </article>
+        <article class="metric-face">
+          <div class="face-lbl">Import status</div>
+          <div class="val" id="val-status">—</div>
+          <p class="hint">STALE stays high-contrast</p>
+        </article>
+      </section>
+      </div>
+      <div class="exec-compact-header">
+        <p class="mode-eyebrow">A/R · SoftDent buckets</p>
+        <h1 class="type-staff">A/R Aging</h1>
+        <p class="kicker">SoftDent AR buckets with STALE watermark when past TTL.</p>
+      </div>
+      <div class="beam" aria-hidden="true"></div>
+
+      <div class="om-claims-filters" id="ar-filters" aria-label="Filter SoftDent AR buckets">
+        <label class="om-claims-filter">
+          Bucket
+          <select id="ar-filter-bucket" title="Filter SoftDent AR aging bucket">
+            <option value="all">All buckets</option>
+            <option value="0-30">0–30</option>
+            <option value="31-60">31–60</option>
+            <option value="61-90">61–90</option>
+            <option value="90+">Over 90</option>
+          </select>
+        </label>
+      </div>
+      <p class="om-claims-summary" id="ar-bucket-summary">SoftDent AR buckets · empty ≠ $0</p>
+      <section class="phi-sample" id="phi-sample" aria-label="Open claims PHI sample">
+        <p class="mode-eyebrow">PHI glass · open claims sample</p>
+      </section>
+      <p class="foot-nav">
+        <a href="/nr2-optical-pages-hub.html">← Alignment Bench</a>
+        <a href="/nr2-optical-beam-touch-mockup.html">Main bench</a>
+      </p>
+    </main>
+  </div>
+
+  <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent bucket dollars</div>
+  <script src="/nr2-optical-nav.js"></script>
+  <script src="/nr2-optical-page-wire.js"></script>
+  <script src="/nr2-optical-page-ar.js"></script>
+</body>
+</html>

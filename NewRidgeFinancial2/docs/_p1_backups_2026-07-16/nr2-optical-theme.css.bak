@@ -626,7 +626,6 @@ body.has-ops-gates:has(#nr2-exec-letterhead) .main {
   background: rgba(201, 162, 39, 0.3);
   box-shadow: none;
   overflow: hidden;
-  /* sticky top set with ledge stack below */
 }
 .main > .beam::after {
   display: none;
@@ -705,34 +704,12 @@ body > .honesty {
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 /* Moonshot Package 1 — sticky money desk (first viewport) */
-/* §8: header + money-strip stay visually stable while content below scrolls */
 .main > .ledge {
   position: sticky;
   top: 0;
-  z-index: 52;
+  z-index: 50;
   background: var(--vacuum);
-  margin-bottom: 0;
-  /* Density: strip prior glass signature pad that stole fold (anti-pattern §7) */
-  padding: var(--space-2);
-  padding-bottom: var(--space-2);
-}
-.main > .exec-compact-header {
-  position: sticky;
-  top: var(--nr2-ledge-sticky-h, 0px);
-  z-index: 51;
-  background: var(--vacuum);
-}
-.main > .hal-cmd-header {
-  position: sticky;
-  top: calc(var(--nr2-ledge-sticky-h, 0px) + 48px);
-  z-index: 51;
-  background: var(--vacuum);
-}
-.main > .beam {
-  position: sticky;
-  top: calc(var(--nr2-ledge-sticky-h, 0px) + 48px + var(--nr2-hal-hdr-h, 0px));
-  z-index: 51;
-  background: var(--vacuum);
+  margin-bottom: var(--space-3);
 }
 .ledge .money-strip { margin-bottom: 0; }
 .ledge > .exec-signature-block {

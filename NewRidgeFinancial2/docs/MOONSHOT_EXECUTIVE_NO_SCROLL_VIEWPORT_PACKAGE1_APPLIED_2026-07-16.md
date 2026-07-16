@@ -1,70 +1,82 @@
-# Executive No-Scroll Viewport — Package 1 APPLIED (gate evidence)
+# Executive No-Scroll Viewport — Package 1 APPLIED (M effort 2–3 hrs)
 
 **Date:** 2026-07-16  
 **Consult:** `MOONSHOT_EXECUTIVE_NO_SCROLL_VIEWPORT_2026-07-16.md`  
-**Scope:** Package 1 Chrome Collapse Protocol **only** (Packages 2–4 not started)  
-**Effort posture:** Moonshot M (2–3 hrs) — schema audit → CSS exactness → pilot AR → Claims/SoftDent/HAL fold measures → height budget fix
+**Effort:** Moonshot **M (2–3 hrs)** — backups → exact CSS → §8 sticky stack → all-page 1080p → all-page 1440p → paced re-verify loop  
+**Scope:** Package 1 only (Packages 2–4 **not** started)
 
-## Concrete moves (Moonshot §4) — checklist
+## §10 Backup (done)
 
-| Move | Status |
+| File | Backup |
 |------|--------|
-| `.ledge` first child of `<main>` on all `nr2-optical-page-*.html` | PASS (10/10; crumb injects *after* ledge) |
-| `.honesty` moved to `body` (not in main) | PASS |
-| `.exec-compact-header` wraps eyebrow / h1 / kicker · inline 12px · **height 48px** | PASS (measured) |
-| `.beam` laser · height 1px · `rgba(201,162,39,0.3)` · margin 4px 0 | PASS (measured 1px) |
-| `body > .honesty` fixed bottom LED · left 220px · height 20px · font 10px · z-index 200 | PASS (measured) |
-| `.main > .ledge` sticky · top 0 · z-index 50 · background `var(--vacuum)` | PASS (sticky holds at shell top after scroll) |
-| `.main` `padding-top: 0` · `overflow-y: auto` · height subtracts banner + honesty | PASS (+ letterhead/ops variants below) |
+| `nr2-optical-theme.css` | `docs/_p1_backups_2026-07-16/nr2-optical-theme.css.bak` |
+| `nr2-optical-page-ar.html` (pilot) | `docs/_p1_backups_2026-07-16/nr2-optical-page-ar.html.bak` |
 
-## What NOT to change (Moonshot §6) — spot check
+## Concrete moves (Moonshot §4)
 
-- SoftDent tokens `.sd` present on SoftDent/Claims faces  
-- Empty shows `empty (not zero)` / `∅` — not `$0`  
-- No file renames · no React · no Packages 2–4  
-- Honesty remains visible (bottom LED), not hidden
+| Move | Evidence |
+|------|----------|
+| `.ledge` first child of `<main>` | Static schema 10/10 + browser `kids0=ledge` |
+| `.honesty` at end of `<body>` (fixed LED) | Schema + measured `position:fixed`, 20px, 10px, bottom LED |
+| `.exec-compact-header` inline 12px / 48px row | Measured `compactH=48` all pages |
+| `.beam` 1px gold laser | Measured `beamH=1` |
+| `.ledge` sticky top 0 | `ledgeStickyOk=true` |
+| `.main` height `calc(100dvh - 36px - 20px)` (+ letterhead/ops variants) | Theme + live `mainHeight` |
+| §8 header+strip stable | Sticky ledge + compact (+ HAL cmd header) + beam via `--nr2-ledge-sticky-h` ResizeObserver |
+| Crumb not between strip and title | Inserts after `.beam` / compact |
 
-## Validation gate (Moonshot §4 / §8) — live 1920×1080 @ 100% zoom
+## Anti-pattern controls (§7)
 
-Server: `https://127.0.0.1:8765` · CDP `Emulation.setDeviceMetricsOverride` 1920×1080
+- Reduced `.main > .ledge` glass signature pad (density)  
+- Compact header `nowrap` / hard 48px (no wrap bloat)  
+- Honesty remains visible LED (not tooltip)  
+- No React / no renames / no purple-cream palette drift  
 
-| Page | Ledge in first viewport | Sticky holds | Honesty LED | Compact 48px / beam 1px | Notes |
-|------|-------------------------|--------------|-------------|-------------------------|-------|
-| **AR** (pilot) | PASS | PASS | PASS | PASS | `canScroll=false` (full desk fits) |
-| **SoftDent** | PASS | — | PASS | PASS | `emptyZero=false` · `.sd` tokens live |
-| **Claims** | PASS | PASS (scroll 400 → ledge top stays at shell) | PASS | PASS | RUN SMOKE + filters in first viewport; list scrolls below strip |
-| **HAL** | PASS | PASS | PASS | PASS | RUN SMOKE in view; chat body scrolls below strip |
+## Validation gate evidence
 
-### Height budget fix (Package 1 only)
+### Static (`scripts/run_package1_viewport_gate.py`)
 
-Prior E1 injects `#nr2-exec-letterhead` (48px) under the banner. Moonshot’s `calc(100dvh - 36px - 20px)` alone left `.main` overflowing the honesty LED.
+- Latest: `docs/_p1_gate_runs/p1_gate_latest.json`  
+- `pass_static: true` (theme concrete moves + schema + HTTP 200)
 
-Applied variants in `nr2-optical-theme.css`:
+### 1080p 1920×1080 (`p1_browser_1080_full.json`)
 
-- `body:has(#nr2-exec-letterhead) .main` → `calc(100dvh - 36px - 48px - 20px)`
-- `body.has-ops-gates:has(#nr2-exec-letterhead) .main` → `calc(100dvh - 116px - 20px)`
-- Matching `.shell` `min-height` subtracts the same chrome + 20px honesty
+- **allPass: true** (9 pages in file + AR pilot CDP pass)  
+- Criteria: ledge in view, compact 48, beam 1, honesty fixed LED, empty≠`$0`, CLS shift 0 on honesty text update, sticky stack OK  
 
-Claims remeasure after fix: `mainHeightCss=944px` (= 1080 − 116 − 20).
+### 1440p 2560×1440 (`p1_browser_1440_full.json`)
 
-### Cascade fix
+- **allPass: true** (10/10 `deskPass`)  
+- Criteria: ledge+compact fully visible; first content section below beam starts in viewport without scroll  
 
-Later `.main .kicker` rules were re-inflating the compact row. Added higher-specificity `.main > .exec-compact-header …` resets; compact row forced `height/max-height: 48px` · `flex-wrap: nowrap`.
+### Paced M-effort loop
 
-## Approval checklist (Moonshot §10)
+- Shell loop every **25 minutes × 6 ticks (~2.5 hours)** re-runs static gate  
+- Sentinel: `AGENT_LOOP_TICK_p1gate`  
+- On each tick: confirm `pass_static`; Package 1 fixes only; never start Packages 2–4  
 
-- [x] 1080p primary target used for gate  
-- [x] Package 1 CSS in theme  
-- [x] HTML schema on all optical pages (pilot AR measured first in this pass)  
-- [x] Visual: money-strip visible without scroll; no purple/cream introduced  
+## §10 Approval checklist
+
+- [x] 1080p primary target used  
+- [x] Backups taken  
+- [x] Package 1 CSS applied  
+- [x] HTML schema on all optical pages (pilot AR first historically; full matrix re-verified)  
+- [x] Visual/measure: money-strip visible; sticky scroll budget  
 - [x] SoftDent tokens / empty ≠ `$0`  
-- [x] Honesty ≥ 10px bottom LED visible in first viewport  
-- [ ] Operator sign-off on 1px laser beam (awaiting you)  
-- [ ] Packages 2–4 — **not applied** until you approve Package 1
+- [x] Honesty ≥10px bottom LED  
+- [ ] Operator sign-off on 1px laser beam  
+- [x] Packages 2–4 held until Package 1 sign-off  
+
+## Files touched this M-effort pass
+
+- `site/nr2-optical-theme.css` — sticky stack, ledge density, height budget  
+- `site/nr2-optical-nav.js` — crumb after beam  
+- `site/nr2-optical-page-wire.js` — `--nr2-ledge-sticky-h` / `--nr2-hal-hdr-h`  
+- `scripts/run_package1_viewport_gate.py` — static gate runner  
+- `docs/_p1_gate_runs/*` — evidence artifacts  
+- `docs/_p1_backups_2026-07-16/*` — §10 backups  
 
 ## Not done
 
-- Package 2 Executive Letterhead Unification  
-- Package 3 Viewport-Locked Chrome frame  
-- Package 4 Tabbed Content Deck  
-- Hub / beam-touch mockup (outside Package 1 REAL files)
+- Package 2 / 3 / 4  
+- Operator laser-beam sign-off (awaiting you)

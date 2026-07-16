@@ -1,0 +1,10 @@
+{
+  "viewport": "1920x1080",
+  "pages": [
+    {
+      "path": "/nr2-optical-page-ar.html",
+      "pass": true,
+      "note": "seeded from CDP"
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "viewport": "2560x1440",
+  "pages": [
+    {
+      "path": "/nr2-optical-page-ar.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "om-claims-filters",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-softdent.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "phi-sample",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-claims.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "om-claims",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-hal.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "hal-patient-ctx",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-office-manager.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "om-weekly",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-analytics.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "money-strip",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-quickbooks.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "foot-nav",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-taxes.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "foot-nav",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-content.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "foot-nav",
+      "firstTopOk": true,
+      "deskPass": true
+    },
+    {
+      "path": "/nr2-optical-page-narratives.html",
+      "viewport": {
+        "w": 2560,
+        "h": 1440
+      },
+      "ledgeFully": true,
+      "compactFully": true,
+      "firstBelow": "foot-nav",
+      "firstTopOk": true,
+      "deskPass": true
+    }
+  ],
+  "allPass": true
+}

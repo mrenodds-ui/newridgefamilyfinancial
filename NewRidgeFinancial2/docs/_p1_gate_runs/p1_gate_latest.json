@@ -1,0 +1,206 @@
+{
+  "ts": "2026-07-16T22:17:15.762347+00:00",
+  "moonshot_package": 1,
+  "effort": "M (2-3 hrs)",
+  "theme_concrete_moves": {
+    "main_padding_top_0": true,
+    "main_height_banner_honesty": true,
+    "compact_inline_12": true,
+    "beam_laser_1px": true,
+    "honesty_fixed_led": true,
+    "ledge_sticky": true,
+    "compact_sticky_under_ledge": true
+  },
+  "theme_fail": [],
+  "schema": [
+    {
+      "page": "nr2-optical-page-analytics.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 6,
+      "qb_tokens": 2,
+      "hal_tokens": 3
+    },
+    {
+      "page": "nr2-optical-page-ar.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 4,
+      "qb_tokens": 0,
+      "hal_tokens": 0
+    },
+    {
+      "page": "nr2-optical-page-claims.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 2,
+      "qb_tokens": 0,
+      "hal_tokens": 0
+    },
+    {
+      "page": "nr2-optical-page-content.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 2,
+      "qb_tokens": 0,
+      "hal_tokens": 0
+    },
+    {
+      "page": "nr2-optical-page-hal.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 3,
+      "qb_tokens": 3,
+      "hal_tokens": 17
+    },
+    {
+      "page": "nr2-optical-page-narratives.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 0,
+      "qb_tokens": 0,
+      "hal_tokens": 2
+    },
+    {
+      "page": "nr2-optical-page-office-manager.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 2,
+      "qb_tokens": 0,
+      "hal_tokens": 2
+    },
+    {
+      "page": "nr2-optical-page-quickbooks.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 0,
+      "qb_tokens": 7,
+      "hal_tokens": 0
+    },
+    {
+      "page": "nr2-optical-page-softdent.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 7,
+      "qb_tokens": 0,
+      "hal_tokens": 0
+    },
+    {
+      "page": "nr2-optical-page-taxes.html",
+      "ledge_first": true,
+      "has_compact": true,
+      "honesty_not_in_main": true,
+      "honesty_after_main": true,
+      "has_beam": true,
+      "sd_tokens": 1,
+      "qb_tokens": 2,
+      "hal_tokens": 0
+    }
+  ],
+  "schema_fail": [],
+  "http": [
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-analytics.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-ar.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-claims.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-content.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-hal.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-narratives.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-office-manager.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-quickbooks.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-softdent.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    },
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-taxes.html",
+      "status": 200,
+      "ok": true,
+      "bytes": 200
+    }
+  ],
+  "http_fail": [],
+  "browser_gate_todo": {
+    "viewports": [
+      "1920x1080",
+      "2560x1440"
+    ],
+    "per_page": [
+      "ledge fully in first viewport",
+      "primary actions in first viewport",
+      "honesty LED visible fixed bottom",
+      "scroll only below money-strip; ledge+compact sticky",
+      "CLS\u22480 when honesty text updates",
+      "empty \u2260 $0; .sd/.qb/.hal retained"
+    ]
+  },
+  "pass_static": true
+}

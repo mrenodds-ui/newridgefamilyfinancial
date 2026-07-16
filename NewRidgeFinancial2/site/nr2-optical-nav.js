@@ -75,10 +75,13 @@
     crumb.id = "nr2-crumb";
     crumb.className = "nr2-crumb";
     crumb.setAttribute("aria-label", "Breadcrumb");
-    // Package 1 schema: keep `.ledge` as first child of main when present.
+    // Package 1: keep `.ledge` first child; park crumb after beam/compact (not between strip + title).
+    const beam = main.querySelector(":scope > .beam");
+    const compact = main.querySelector(":scope > .exec-compact-header");
     const ledge = main.querySelector(":scope > .ledge");
-    if (ledge && ledge.parentNode === main) {
-      main.insertBefore(crumb, ledge.nextSibling);
+    const anchor = beam || compact || ledge;
+    if (anchor && anchor.parentNode === main) {
+      main.insertBefore(crumb, anchor.nextSibling);
     } else {
       main.insertBefore(crumb, main.firstChild);
     }

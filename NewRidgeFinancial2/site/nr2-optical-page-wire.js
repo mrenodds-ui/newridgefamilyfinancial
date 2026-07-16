@@ -1580,6 +1580,30 @@
     });
     return true;
   }
+  /** Package 1 §8: sticky compact header/beam sit under sticky ledge height. */
+  function bootPackage1StickyStack() {
+    const main = document.querySelector("main.main");
+    const ledge = main && main.querySelector(":scope > .ledge");
+    if (!main || !ledge) return null;
+    const halHdr = main.querySelector(":scope > .hal-cmd-header");
+    const apply = function () {
+      const h = Math.ceil(ledge.getBoundingClientRect().height);
+      const hh = halHdr ? Math.ceil(halHdr.getBoundingClientRect().height) : 0;
+      main.style.setProperty("--nr2-ledge-sticky-h", String(h) + "px");
+      main.style.setProperty("--nr2-hal-hdr-h", String(hh) + "px");
+    };
+    apply();
+    if (typeof ResizeObserver === "function") {
+      const ro = new ResizeObserver(function () {
+        apply();
+      });
+      ro.observe(ledge);
+      if (halHdr) ro.observe(halHdr);
+    } else {
+      window.addEventListener("resize", apply);
+    }
+    return true;
+  }
   function bootOpsGates() {
     try {
       mountOpsGates({ refreshMs: 60000 });
@@ -1595,6 +1619,11 @@
       bootExecutiveChrome();
     } catch (_) {
       /* executive chrome optional */
+    }
+    try {
+      bootPackage1StickyStack();
+    } catch (_) {
+      /* Package 1 sticky stack optional until ledge present */
     }
     try {
       bootMotionGrammar();
