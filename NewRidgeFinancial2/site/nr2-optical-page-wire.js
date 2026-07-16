@@ -1014,6 +1014,60 @@
     const probe = o.probeHttp === false ? "&probeHttp=0" : "&probeHttp=1";
     return getJson("/api/health/desk-smoke" + q + probe, o.timeoutMs || 60000);
   }
+  function deskSmokeDriftBit(data) {
+    const checks = (data && Array.isArray(data.checks) ? data.checks : []) || [];
+    const proof = checks.find(function (c) {
+      return c && c.id === "beam_desk_proof";
+    });
+    const drift = proof && proof.drift && typeof proof.drift === "object" ? proof.drift : null;
+    if (!drift) return "";
+    const sd = drift.softdentDisplay || drift.softdentTotal;
+    if (!sd || typeof sd !== "object") return "";
+    const close = sd.close != null ? String(sd.close) : "";
+    const live = sd.live != null ? String(sd.live) : "";
+    if (!close && !live) return "";
+    return " · SoftDent close " + (close || "—") + " vs live " + (live || "—");
+  }
+  function formatDeskSmokeBit(data) {
+    const d = data || {};
+    const status = String(d.status || (d.ok ? "GREEN" : "RED")).toUpperCase();
+    const fails = Array.isArray(d.failures) ? d.failures.join(",") : "";
+    const thisPatient =
+      d.thisPatientShortcutCovered === true
+        ? " · this-patient OK"
+        : d.thisPatientShortcutCovered === false
+          ? " · this-patient gap"
+          : "";
+    return (
+      "DESK SMOKE · " +
+      status +
+      (d.deskProof ? " · proof " + d.deskProof : "") +
+      deskSmokeDriftBit(d) +
+      (d.dataBeamHash ? " · data " + formatBeamHash(d.dataBeamHash, 8) : "") +
+      thisPatient +
+      (fails ? " · fail " + fails : "") +
+      " · empty ≠ $0 · no SoftDent write-back"
+    );
+  }
+  function paintDeskSmokeFace(data, opts) {
+    const o = opts || {};
+    const d = data || {};
+    const status = String(d.status || (d.ok ? "GREEN" : "RED")).toUpperCase();
+    const bit = formatDeskSmokeBit(d);
+    if (o.valId) {
+      const el = document.getElementById(o.valId);
+      if (el) {
+        el.textContent = status === "NO SIGNAL" ? "NO SIGNAL" : status;
+        el.classList.remove("stale", "hal", "sd");
+        el.classList.add(status === "GREEN" ? "hal" : "stale");
+      }
+    }
+    if (o.hintId) {
+      const hint = document.getElementById(o.hintId);
+      if (hint) hint.textContent = bit;
+    }
+    return { status: status, bit: bit };
+  }
   function bindDeskSmokeButton(btnId, opts) {
     const btn = document.getElementById(btnId || "btn-desk-smoke");
     if (!btn || btn._nr2SmokeBound) return btn;
@@ -1029,30 +1083,12 @@
       runDeskSmoke({ probeHttp: o.probeHttp !== false })
         .then(function (res) {
           const data = (res && res.data) || {};
-          const status = String(data.status || (data.ok ? "GREEN" : "RED")).toUpperCase();
-          const fails = Array.isArray(data.failures) ? data.failures.join(",") : "";
-          const bit =
-            "DESK SMOKE · " +
-            status +
-            (data.deskProof ? " · proof " + data.deskProof : "") +
-            (data.dataBeamHash ? " · data " + formatBeamHash(data.dataBeamHash, 8) : "") +
-            (fails ? " · fail " + fails : "") +
-            " · empty ≠ $0";
+          // Transport may be 200 with ok:false (honest RED / MISMATCH).
+          const painted = paintDeskSmokeFace(data, { valId: o.valId, hintId: o.hintId });
           if (typeof setBanner === "function") {
-            setBanner(status === "GREEN" ? "live" : "partial", bit);
+            setBanner(painted.status === "GREEN" ? "live" : "partial", painted.bit);
           }
-          if (o.hintId) {
-            const hint = document.getElementById(o.hintId);
-            if (hint) hint.textContent = bit;
-          }
-          if (o.valId) {
-            const el = document.getElementById(o.valId);
-            if (el) {
-              el.textContent = status;
-              el.classList.remove("stale", "hal", "sd");
-              el.classList.add(status === "GREEN" ? "hal" : "stale");
-            }
-          }
+          if (typeof o.onDone === "function") o.onDone({ res: res, data: data, painted: painted });
         })
         .catch(function (err) {
           if (typeof setBanner === "function") {
@@ -1633,6 +1669,8 @@
     bindVerifyBeamButton: bindVerifyBeamButton,
     runDeskSmoke: runDeskSmoke,
     bindDeskSmokeButton: bindDeskSmokeButton,
+    paintDeskSmokeFace: paintDeskSmokeFace,
+    formatDeskSmokeBit: formatDeskSmokeBit,
     morningBundleGate: morningBundleGate,
     trellisGate: trellisGate,
     shadowGate: shadowGate,

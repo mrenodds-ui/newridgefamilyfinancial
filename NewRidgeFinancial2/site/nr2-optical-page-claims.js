@@ -1796,6 +1796,30 @@
     );
     applyClaimsJoinHonesty(claims.ok ? claims.data : null);
 
+    if (W.bindDeskSmokeButton) {
+      W.bindDeskSmokeButton("btn-desk-smoke", {
+        hintId: "hint-desk-smoke",
+        valId: "val-desk-smoke",
+        probeHttp: false,
+      });
+    }
+    if (W.runDeskSmoke && W.paintDeskSmokeFace) {
+      W.runDeskSmoke({ run: 0, probeHttp: false, timeoutMs: 8000 })
+        .then(function (res) {
+          if (res && res.data) {
+            W.paintDeskSmokeFace(res.data, {
+              valId: "val-desk-smoke",
+              hintId: "hint-desk-smoke",
+            });
+          } else {
+            W.setText("val-desk-smoke", null, "NO SIGNAL");
+          }
+        })
+        .catch(function () {
+          W.setText("val-desk-smoke", null, "NO SIGNAL");
+        });
+    }
+
     if (Nav && Nav.bindBeamBusScroll) Nav.bindBeamBusScroll(CLAIMS_NS);
     if (Nav && Nav.restoreScroll) Nav.restoreScroll(CLAIMS_NS);
   }

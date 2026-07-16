@@ -1557,7 +1557,15 @@ class NR2BottleServer(BottleServer):
                 readiness=_get_import_readiness(),
             )
             result["source"] = "live"
-            status = 200 if result.get("ok") else 503
+            # HTTP 200 when smoke completed with a payload — GREEN/RED lives in
+            # ok/status/deskProof (honest MISMATCH must not look like transport death).
+            # 503 only when the runner itself failed to produce checks.
+            checks = result.get("checks") if isinstance(result, dict) else None
+            ran = isinstance(result, dict) and isinstance(checks, list) and len(checks) > 0
+            status = 200 if ran else 503
+            if isinstance(result, dict):
+                result["emptyNotZero"] = True
+                result["httpTransportOk"] = bool(ran)
             return _json_response(result, status=status)
 
         @app.get("/api/hal/tools/period-close-status")

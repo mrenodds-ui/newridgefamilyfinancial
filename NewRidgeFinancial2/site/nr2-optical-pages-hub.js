@@ -250,7 +250,15 @@
       });
     }
     W.getJson("/api/health/desk-smoke?run=0", 8000).then(function (res) {
-      if (!res || !res.ok || !res.data) return;
+      if (!res || !res.data) return;
+      // HTTP 200 + ok:false is honest RED/MISMATCH — still paint the face.
+      if (W.paintDeskSmokeFace) {
+        W.paintDeskSmokeFace(res.data, {
+          valId: "hub-desk-smoke",
+          hintId: "hint-desk-smoke",
+        });
+        return;
+      }
       const st = String(res.data.status || "NO SIGNAL").toUpperCase();
       setVal("hub-desk-smoke", st, st === "GREEN" ? "hal" : "stale");
       const hint = document.getElementById("hint-desk-smoke");

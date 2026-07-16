@@ -1128,6 +1128,31 @@
     await refreshBeams();
     await refreshActions();
     try {
+      const Wire = window.NR2OpticalWire;
+      if (Wire && Wire.bindDeskSmokeButton) {
+        Wire.bindDeskSmokeButton("btn-desk-smoke", {
+          hintId: "hint-desk-smoke",
+          valId: "hal-face-desk-smoke",
+          probeHttp: false,
+        });
+      }
+      if (Wire && Wire.runDeskSmoke && Wire.paintDeskSmokeFace) {
+        const smoke = await Wire.runDeskSmoke({ run: 0, probeHttp: false, timeoutMs: 8000 });
+        if (smoke && smoke.data) {
+          Wire.paintDeskSmokeFace(smoke.data, {
+            valId: "hal-face-desk-smoke",
+            hintId: "hint-desk-smoke",
+          });
+        } else {
+          const el = document.getElementById("hal-face-desk-smoke");
+          if (el) el.textContent = "NO SIGNAL";
+        }
+      }
+    } catch (_) {
+      const el = document.getElementById("hal-face-desk-smoke");
+      if (el) el.textContent = "NO SIGNAL";
+    }
+    try {
       if (typeof HalAutonomousOps !== "undefined" && HalAutonomousOps.ensureStarted) {
         HalAutonomousOps.ensureStarted(function () {
           return {
