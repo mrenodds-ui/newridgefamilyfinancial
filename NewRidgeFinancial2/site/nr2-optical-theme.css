@@ -660,96 +660,52 @@ a:hover { color: var(--hal); }
 .om-claims-table tbody tr {
   cursor: pointer;
 }
-.om-claims-table tbody tr.age-ok {
-  background: rgba(0, 180, 120, 0.28);
-}
 .om-claims-table tbody tr.age-ok td {
-  color: #b8ffe8;
-  border-bottom-color: rgba(0, 212, 170, 0.35);
-}
-.om-claims-table tbody tr.age-ok td:first-child {
-  box-shadow: inset 5px 0 0 #00d4aa;
-}
-.om-claims-table tbody tr.age-ok td.phi-name {
-  color: #e6fff6;
-  font-weight: 600;
-}
-.om-claims-table tbody tr.age-warn {
-  background: rgba(232, 168, 56, 0.32);
+  color: #00d4aa;
 }
 .om-claims-table tbody tr.age-warn td {
-  color: #ffe9b0;
-  border-bottom-color: rgba(232, 168, 56, 0.4);
-}
-.om-claims-table tbody tr.age-warn td:first-child {
-  box-shadow: inset 5px 0 0 #f0c040;
-}
-.om-claims-table tbody tr.age-warn td.phi-name {
-  color: #fff3cc;
-  font-weight: 600;
-}
-.om-claims-table tbody tr.age-late {
-  background: rgba(232, 120, 40, 0.34);
+  color: #e8a838;
 }
 .om-claims-table tbody tr.age-late td {
-  color: #ffd0a0;
-  border-bottom-color: rgba(232, 120, 40, 0.45);
-}
-.om-claims-table tbody tr.age-late td:first-child {
-  box-shadow: inset 5px 0 0 #ff8c28;
-}
-.om-claims-table tbody tr.age-late td.phi-name {
-  color: #ffe0c0;
-  font-weight: 600;
-}
-.om-claims-table tbody tr.age-critical {
-  background: rgba(210, 50, 50, 0.36);
+  color: #e07a28;
 }
 .om-claims-table tbody tr.age-critical td {
-  color: #ffc0c0;
-  border-bottom-color: rgba(220, 72, 72, 0.45);
+  color: #f05050;
 }
-.om-claims-table tbody tr.age-critical td:first-child {
-  box-shadow: inset 5px 0 0 #ff4040;
+.om-claims-table tbody tr.age-unknown td {
+  color: #8a94a3;
 }
+.om-claims-table tbody tr.age-ok td.phi-name,
+.om-claims-table tbody tr.age-warn td.phi-name,
+.om-claims-table tbody tr.age-late td.phi-name,
 .om-claims-table tbody tr.age-critical td.phi-name {
-  color: #ffe0e0;
   font-weight: 600;
-}
-.om-claims-table tbody tr.age-unknown {
-  opacity: 0.85;
-  background: rgba(90, 100, 120, 0.15);
 }
 .om-claims-table tbody tr.age-ok .age-cell,
 .om-claims-table tbody tr.age-warn .age-cell,
 .om-claims-table tbody tr.age-late .age-cell,
 .om-claims-table tbody tr.age-critical .age-cell {
   font-weight: 700;
-  letter-spacing: 0.02em;
 }
-.om-claims-table tbody tr.age-ok .age-cell { color: #00f0c0; }
-.om-claims-table tbody tr.age-warn .age-cell { color: #ffd060; }
-.om-claims-table tbody tr.age-late .age-cell { color: #ff9a40; }
-.om-claims-table tbody tr.age-critical .age-cell { color: #ff7070; }
 .om-claims-table tbody tr:hover,
 .om-claims-table tbody tr.is-active {
-  filter: brightness(1.15);
+  background: rgba(255, 255, 255, 0.04);
 }
 .om-claims-table tbody tr.age-ok:hover,
 .om-claims-table tbody tr.age-ok.is-active {
-  background: rgba(0, 180, 120, 0.42);
+  background: rgba(0, 212, 170, 0.08);
 }
 .om-claims-table tbody tr.age-warn:hover,
 .om-claims-table tbody tr.age-warn.is-active {
-  background: rgba(232, 168, 56, 0.46);
+  background: rgba(232, 168, 56, 0.08);
 }
 .om-claims-table tbody tr.age-late:hover,
 .om-claims-table tbody tr.age-late.is-active {
-  background: rgba(232, 120, 40, 0.48);
+  background: rgba(232, 120, 40, 0.08);
 }
 .om-claims-table tbody tr.age-critical:hover,
 .om-claims-table tbody tr.age-critical.is-active {
-  background: rgba(210, 50, 50, 0.5);
+  background: rgba(220, 72, 72, 0.08);
 }
 .om-claims-table .cl-empty,
 .om-claims-table .cl-fault {
@@ -758,7 +714,6 @@ a:hover { color: var(--hal); }
   padding: 16px 10px;
   cursor: default;
   background: transparent;
-  box-shadow: none;
 }
 .om-claims-table .cl-fault { color: var(--fringe); }
 
@@ -854,10 +809,10 @@ a:hover { color: var(--hal); }
   .om-claims-wrap { max-height: none; overflow: visible; border-color: #999; }
   .om-claims-body { grid-template-columns: 1fr; }
   .om-claims-table th, .om-claims-table td { border-color: #ccc; color: #222; }
-  .om-claims-table tbody tr.age-ok { background: #e8fff6; box-shadow: inset 3px 0 0 #0a8; }
-  .om-claims-table tbody tr.age-warn { background: #fff6e0; box-shadow: inset 3px 0 0 #c90; }
-  .om-claims-table tbody tr.age-late { background: #ffecd8; box-shadow: inset 3px 0 0 #d60; }
-  .om-claims-table tbody tr.age-critical { background: #ffe0e0; box-shadow: inset 3px 0 0 #c33; }
+  .om-claims-table tbody tr.age-ok td { color: #0a8; }
+  .om-claims-table tbody tr.age-warn td { color: #a80; }
+  .om-claims-table tbody tr.age-late td { color: #c60; }
+  .om-claims-table tbody tr.age-critical td { color: #c33; }
   .om-weekly-body { grid-template-columns: 1fr; }
   .wk-days-grid { grid-template-columns: repeat(4, 1fr); }
   .wk-day { border-color: #999; background: #fff; break-inside: avoid; }
