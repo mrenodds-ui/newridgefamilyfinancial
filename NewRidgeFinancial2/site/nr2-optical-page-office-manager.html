@@ -74,7 +74,7 @@
           <button type="button" class="btn-quiet" id="btn-wk-refresh" title="Reload Mon–Thu SoftDent schedule">Refresh</button>
         </div>
         <p class="om-weekly-note" id="wk-phi-note">
-          SoftDent read-only · board = initials + hash · click for name + summary ·
+          SoftDent read-only · staff OM shows full patient names · click for dossier ·
           ADA from same-day procedures · time from Sensei/ODBC when present (else —) · empty ≠ $0
         </p>
         <p class="om-weekly-next" id="wk-next-hint" hidden></p>
@@ -87,8 +87,35 @@
               <h3>Patient context</h3>
               <button type="button" class="btn-quiet" id="btn-wk-dossier-close" title="Close patient context">Close</button>
             </div>
-            <p class="wk-dossier-body" id="wk-dossier-body">Click a schedule row (initials · hash) to load SoftDent mini dossier — no full name on the board.</p>
+            <p class="wk-dossier-body" id="wk-dossier-body">Click a schedule row to load SoftDent mini dossier.</p>
           </aside>
+        </div>
+      </section>
+      <section class="om-claims" id="om-claims-outstanding" aria-label="Outstanding SoftDent claims">
+        <div class="om-claims-head">
+          <h2>Outstanding Claims</h2>
+          <span class="om-claims-range" id="cl-range-label">—</span>
+          <button type="button" class="btn-quiet" id="btn-cl-refresh" title="Reload outstanding SoftDent claims">Refresh</button>
+        </div>
+        <p class="om-claims-note">
+          SoftDent read-only · staff OM shows full patient names · oldest first ·
+          null amounts = — (empty ≠ $0) · sample capped at 200
+        </p>
+        <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
+        <div class="om-claims-wrap">
+          <table class="om-claims-table" id="cl-table">
+            <thead>
+              <tr>
+                <th scope="col">Patient</th>
+                <th scope="col">Payer</th>
+                <th scope="col">Service</th>
+                <th scope="col">Amount</th>
+                <th scope="col">Status</th>
+                <th scope="col">Age</th>
+              </tr>
+            </thead>
+            <tbody id="cl-tbody" aria-live="polite"></tbody>
+          </table>
         </div>
       </section>
       <section class="om-trellis" id="om-trellis-tomorrow" aria-label="Tomorrow Trellis insurance verify">
@@ -98,8 +125,7 @@
           <button type="button" class="btn-quiet" id="btn-tr-refresh" title="Reload tomorrow insurance worklist">Refresh</button>
         </div>
         <p class="om-trellis-note">
-          SoftDent → Trellis nightly (Mon–Thu 10pm) · board = initials + hash ·
-          verify status only · no dollar invent · empty ≠ $0
+          SoftDent → Trellis nightly (Mon–Thu 10pm) · verify status · no dollar invent · empty ≠ $0
         </p>
         <p class="om-trellis-summary" id="tr-summary">Loading…</p>
         <p class="om-trellis-report" id="tr-report-line">

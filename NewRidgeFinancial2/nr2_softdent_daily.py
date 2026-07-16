@@ -400,7 +400,7 @@ def appointments_range_snapshot(
 ) -> dict[str, Any]:
     """Multi-day appointment list for OM (Mon–Thu). SoftDent read-only.
 
-    Board PHI: initials + hash. Full patientName returned for RBAC dossier panel only.
+    Staff OM may render full patientName; hash/initials remain for handoff/logs.
     Time: real appt_time when column/data exists; otherwise honest '—'.
     ADA: same-day sd_procedures join into procedureHint / adaCodes (empty → '—').
     """
@@ -494,7 +494,7 @@ def appointments_range_snapshot(
                         "patientId": pid,
                         "patientHash": _hash_patient_id(pid),
                         "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
-                        # Full name for RBAC dossier panel — OM board must not render this.
+                        # Full name for staff OM lists; hash/initials for handoff/logs.
                         "patientName": patient_raw or None,
                         "provider": str(r[2] or "") or "—",
                         "status": _normalize_appt_status(str(r[3] or "")),
@@ -574,6 +574,7 @@ def _next_patient_hint(days_out: list[dict[str, Any]]) -> dict[str, Any] | None:
             "time": pick.get("time"),
             "patientHash": pick.get("patientHash"),
             "initials": pick.get("initials"),
+            "patientName": pick.get("patientName"),
             "provider": pick.get("provider"),
             "adaCodes": pick.get("adaCodes") or [],
             "patientId": pick.get("patientId"),
@@ -586,6 +587,7 @@ def _next_patient_hint(days_out: list[dict[str, Any]]) -> dict[str, Any] | None:
         "time": pick.get("time"),
         "patientHash": pick.get("patientHash"),
         "initials": pick.get("initials"),
+        "patientName": pick.get("patientName"),
         "provider": pick.get("provider"),
         "adaCodes": pick.get("adaCodes") or [],
         "patientId": pick.get("patientId"),
