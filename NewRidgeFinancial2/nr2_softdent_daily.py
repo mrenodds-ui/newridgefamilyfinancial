@@ -681,7 +681,68 @@ def _filter_unpaid_claim_rows(
     return kept
 
 
-def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
+def _age_bucket_key(service_date: str) -> str:
+    days = _claim_age_days(service_date)
+    if days is None:
+        return "unknown"
+    if days <= 30:
+        return "0-30"
+    if days <= 60:
+        return "31-60"
+    if days <= 90:
+        return "61-90"
+    return "90+"
+
+
+def _claim_row_to_entry(
+    *,
+    claim_id: Any,
+    patient: Any,
+    payer: Any,
+    service_date: Any,
+    amount: Any,
+    status: Any,
+    evidence: str,
+    name_to_id: dict[str, str],
+    known_ids: set[str],
+    name_hash_fn: Any,
+    staff_hidden: bool = False,
+) -> dict[str, Any]:
+    patient_raw = str(patient or "").strip()
+    patient_id = _resolve_claim_patient_id(
+        str(claim_id or ""),
+        patient_raw,
+        name_to_id,
+        known_patient_ids=known_ids,
+    )
+    sensei_ok = bool(patient_id) and (not known_ids or patient_id in known_ids)
+    entry: dict[str, Any] = {
+        "claimId": str(claim_id or ""),
+        "patientName": patient_raw,
+        "payer": str(payer or ""),
+        "serviceDate": str(service_date or ""),
+        "amount": round(float(amount or 0), 2),
+        "status": str(status or ""),
+        "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
+        "evidence": evidence or "still_waiting",
+        "staffHidden": bool(staff_hidden),
+        "ageBucket": _age_bucket_key(str(service_date or "")),
+    }
+    if patient_raw and name_hash_fn:
+        entry["nameHash"] = name_hash_fn(patient_raw)
+    if sensei_ok:
+        entry["patientId"] = patient_id
+        entry["patientHash"] = _hash_patient_id(patient_id)
+    else:
+        entry["patientId"] = None
+        entry["patientHash"] = None
+        chart = _chart_mrn_from_claim_id(str(claim_id or ""))
+        if chart:
+            entry["chartMrn"] = chart
+    return entry
+
+
+def claims_outstanding(*, limit: int = 10, include_staff_hidden: bool = False) -> dict[str, Any]:
     """Open SoftDent claims sample + full outstanding total (empty ≠ $0).
 
     ``limit`` caps the returned claim *list* only — totalOutstanding/count
@@ -693,12 +754,17 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
 
     Suppresses paid via TXN → ERA → Claims Aging Excel → staff verified paid
     (NR2-12150). Missing ERA/Aging never invents paid (empty ≠ $0).
+
+    ``include_staff_hidden`` adds ``staffHiddenClaims`` for the Claims toggle;
+    totals stay unpaid-only (staff hide does not invent $0).
     """
     conn, db_path = _connect()
     if not conn:
         return {
             "hasData": False,
             "claims": [],
+            "staffHiddenClaims": [],
+            "ageBuckets": {"0-30": 0, "31-60": 0, "61-90": 0, "90+": 0, "unknown": 0},
             "totalOutstanding": None,
             "count": 0,
             "sampleWithPatientId": 0,
@@ -752,6 +818,8 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         txn_ctx: tuple[list[dict[str, Any]], dict[str, set[str]]] | None = None
         known_ids: set[str] = set()
         evidence_all: list[str] = []
+        unpaid_all: list[Any] = []
+        staff_hidden_rows: list[Any] = []
         sd_claims_queried = False
         if _table_exists(conn, "sd_claims"):
             sd_claims_queried = True
@@ -797,12 +865,56 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             generic_payer_count = sum(
                 1 for r in rows if _generic_payer_label(str(r[2] or ""))
             )
+            unpaid_all = list(rows)
             if rows:
                 rows = rows[: max(1, int(limit))]
                 evidence_all = evidence_all[: len(rows)]
+            # Staff-hidden but otherwise still outstanding (toggle; totals unchanged).
+            if include_staff_hidden and suppress_ctx and candidate_rows:
+                from nr2_claims_paid_suppress import claim_is_still_outstanding
+
+                staff_ids = (
+                    suppress_ctx.get("staffIds") if isinstance(suppress_ctx, dict) else None
+                )
+                if isinstance(staff_ids, set) and staff_ids:
+                    era_index = (
+                        suppress_ctx.get("era")
+                        if isinstance(suppress_ctx.get("era"), dict)
+                        else None
+                    )
+                    aging_index = (
+                        suppress_ctx.get("aging")
+                        if isinstance(suppress_ctx.get("aging"), dict)
+                        else None
+                    )
+                    for claim_id, patient, payer, service_date, amount, status in candidate_rows:
+                        cid = str(claim_id or "").strip()
+                        if not cid or cid not in staff_ids:
+                            continue
+                        patient_raw = str(patient or "").strip()
+                        chart_mrn = _resolve_claim_chart_mrn(cid, patient_raw, name_to_id)
+                        keep_wo_staff, _reason = claim_is_still_outstanding(
+                            claim_id=cid,
+                            patient_id=chart_mrn,
+                            patient_name=patient_raw,
+                            service_date=str(service_date or ""),
+                            amount=amount,
+                            claim_status=str(status or ""),
+                            transactions=txn_ctx[0] if txn_ctx else None,
+                            settlement_index=txn_ctx[1] if txn_ctx else None,
+                            era_index=era_index,
+                            aging_index=aging_index,
+                            staff_ids=set(),
+                        )
+                        if keep_wo_staff:
+                            staff_hidden_rows.append(
+                                (claim_id, patient, payer, service_date, amount, status)
+                            )
         else:
             rows = []
+            unpaid_all = []
             name_to_id = {}
+            known_ids = set()
             generic_payer_count = 0
 
         # Only fall back when sd_claims was never queried — never reintroduce
@@ -837,53 +949,57 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 1 for r in rows if _generic_payer_label(str(r[2] or ""))
             )
             evidence_all = ["still_waiting"] * len(rows)
+            unpaid_all = list(rows)
+
+        age_buckets = {"0-30": 0, "31-60": 0, "61-90": 0, "90+": 0, "unknown": 0}
+        for r in unpaid_all:
+            key = _age_bucket_key(str(r[3] or ""))
+            age_buckets[key] = int(age_buckets.get(key) or 0) + 1
 
         claims = []
+        staff_hidden_claims: list[dict[str, Any]] = []
         with_patient_id = 0
         try:
             from patient_dossier import name_hash as _name_hash
         except Exception:
             _name_hash = None  # type: ignore[assignment,misc]
         for i, (claim_id, patient, payer, service_date, amount, status) in enumerate(rows):
-            patient_raw = str(patient or "").strip()
-            patient_id = _resolve_claim_patient_id(
-                str(claim_id or ""),
-                patient_raw,
-                name_to_id,
-                known_patient_ids=known_ids,
-            )
-            # Count Sensei-resolvable ids only (in sd_patients), not bare TXN chart MRNs.
-            sensei_ok = bool(patient_id) and (
-                not known_ids or patient_id in known_ids
-            )
-            if sensei_ok:
-                with_patient_id += 1
-            entry: dict[str, Any] = {
-                "claimId": str(claim_id or ""),
-                "patientName": patient_raw,
-                "payer": str(payer or ""),
-                "serviceDate": str(service_date or ""),
-                "amount": round(float(amount or 0), 2),
-                "status": str(status or ""),
-                "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
-                "evidence": (
-                    evidence_all[i]
-                    if i < len(evidence_all)
-                    else "still_waiting"
+            entry = _claim_row_to_entry(
+                claim_id=claim_id,
+                patient=patient,
+                payer=payer,
+                service_date=service_date,
+                amount=amount,
+                status=status,
+                evidence=(
+                    evidence_all[i] if i < len(evidence_all) else "still_waiting"
                 ),
-            }
-            if patient_raw and _name_hash:
-                entry["nameHash"] = _name_hash(patient_raw)
-            if sensei_ok:
-                entry["patientId"] = patient_id
-                entry["patientHash"] = _hash_patient_id(patient_id)
-            else:
-                entry["patientId"] = None
-                entry["patientHash"] = None
-                chart = _chart_mrn_from_claim_id(str(claim_id or ""))
-                if chart:
-                    entry["chartMrn"] = chart
+                name_to_id=name_to_id,
+                known_ids=known_ids,
+                name_hash_fn=_name_hash,
+                staff_hidden=False,
+            )
+            if entry.get("patientId"):
+                with_patient_id += 1
             claims.append(entry)
+        for claim_id, patient, payer, service_date, amount, status in staff_hidden_rows[
+            : max(1, int(limit))
+        ]:
+            staff_hidden_claims.append(
+                _claim_row_to_entry(
+                    claim_id=claim_id,
+                    patient=patient,
+                    payer=payer,
+                    service_date=service_date,
+                    amount=amount,
+                    status=status,
+                    evidence="staff",
+                    name_to_id=name_to_id,
+                    known_ids=known_ids,
+                    name_hash_fn=_name_hash,
+                    staff_hidden=True,
+                )
+            )
     finally:
         conn.close()
     payer_stats = {
@@ -894,6 +1010,9 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
     return {
         "hasData": count > 0 or bool(claims),
         "claims": claims,
+        "staffHiddenClaims": staff_hidden_claims,
+        "includeStaffHidden": bool(include_staff_hidden),
+        "ageBuckets": age_buckets,
         "totalOutstanding": total,
         "count": count,
         "sampleLimit": max(1, int(limit)),

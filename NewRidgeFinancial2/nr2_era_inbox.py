@@ -69,6 +69,31 @@ def ensure_era_inbox_dirs() -> list[str]:
     return created
 
 
+def _is_era_placeholder(name: str) -> bool:
+    """README / keep files are staged drops, not remittance — empty ≠ $0."""
+    n = str(name or "").strip().lower()
+    if not n:
+        return True
+    if n in (".gitkeep", "placeholder.txt", "readme", "readme.txt", "readme.md"):
+        return True
+    if n.startswith("readme"):
+        return True
+    return False
+
+
+def _is_era_candidate_name(name: str) -> bool:
+    n = str(name or "").strip().lower()
+    if not n:
+        return False
+    if n.endswith(".835") or n.endswith(".edi"):
+        return True
+    if "era" in n:
+        return True
+    if n.endswith(".txt"):
+        return True
+    return False
+
+
 def _list_era_files() -> list[dict[str, Any]]:
     files: list[dict[str, Any]] = []
     for root in era_inbox_roots():
@@ -77,13 +102,13 @@ def _list_era_files() -> list[dict[str, Any]]:
         for path in sorted(root.iterdir()):
             if not path.is_file():
                 continue
-            name = path.name.lower()
-            if not (name.endswith(".835") or name.endswith(".edi") or name.endswith(".txt") or "era" in name):
+            if not _is_era_candidate_name(path.name):
                 continue
             try:
                 st = path.stat()
             except OSError:
                 continue
+            placeholder = _is_era_placeholder(path.name)
             files.append(
                 {
                     "name": path.name,
@@ -93,6 +118,13 @@ def _list_era_files() -> list[dict[str, Any]]:
                     "modifiedAt": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
                     .replace(microsecond=0)
                     .isoformat(),
+                    "placeholder": placeholder,
+                    "real835": not placeholder
+                    and (
+                        path.name.lower().endswith(".835")
+                        or path.name.lower().endswith(".edi")
+                        or ("era" in path.name.lower() and not placeholder)
+                    ),
                 }
             )
     return files
@@ -104,9 +136,21 @@ def scan_era_inbox(*, ensure_dirs: bool = False) -> dict[str, Any]:
     roots = [str(p) for p in era_inbox_roots()]
     existing = [str(p) for p in era_inbox_roots() if p.is_dir()]
     files = _list_era_files()
-    empty = len(files) == 0
-    chip_status = "awaiting" if empty else "staged"
-    chip_label = "Awaiting first 835 drop" if empty else f"{len(files)} file(s) in inbox"
+    placeholders = [f for f in files if f.get("placeholder")]
+    remits = [f for f in files if not f.get("placeholder")]
+    empty = len(remits) == 0
+    if empty and not placeholders:
+        chip_status = "awaiting"
+        chip_label = "Awaiting first 835 drop — Empty ≠ $0"
+    elif empty and placeholders:
+        chip_status = "staged"
+        chip_label = (
+            f"{len(placeholders)} file(s) in inbox — Empty ≠ $0 "
+            "(placeholder only · no 835 remittance)"
+        )
+    else:
+        chip_status = "staged"
+        chip_label = f"{len(remits)} file(s) in inbox — Empty ≠ $0"
     return {
         "ok": True,
         "empty": empty,
@@ -114,6 +158,8 @@ def scan_era_inbox(*, ensure_dirs: bool = False) -> dict[str, Any]:
         "chipStatus": chip_status,
         "chipLabel": chip_label,
         "fileCount": len(files),
+        "realFileCount": len(remits),
+        "placeholderCount": len(placeholders),
         "files": files[:50],
         "roots": roots,
         "existingRoots": existing,
@@ -133,11 +179,14 @@ def era_inbox_status(*, ensure_dirs: bool = False) -> dict[str, Any]:
         "emptyNotZero": True,
         "inbox": inbox,
         "fileCount": inbox.get("fileCount") or 0,
+        "realFileCount": inbox.get("realFileCount") or 0,
+        "placeholderCount": inbox.get("placeholderCount") or 0,
         "empty": bool(inbox.get("empty")),
         "chipStatus": inbox.get("chipStatus"),
         "chipLabel": inbox.get("chipLabel"),
         "files": inbox.get("files") or [],
         "gap": gap,
+        "honesty": "empty_not_zero",
         "readOnly": True,
         "writeBack": False,
         "softDentWriteBack": False,

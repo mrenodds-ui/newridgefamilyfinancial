@@ -11,6 +11,8 @@
   let clClaimsMeta = null;
   let clLastPhoneCopy = "";
   let clPreferredPayer = null;
+  let clStaffHiddenCache = [];
+  let clShowStaffHidden = false;
 
   const CLAIM_ACTION_LABELS = {
     called_payer: "Called payer",
@@ -160,6 +162,79 @@
     const named = Number(ps.named != null ? ps.named : Math.max(0, Number(ps.total || 0) - generic));
     if (!Number(ps.total)) return "";
     return " · payer named " + String(named) + "/" + String(ps.total) + " · generic " + String(generic);
+  }
+
+  function paintAgeBuckets(data) {
+    const el = document.getElementById("cl-age-buckets");
+    const buckets =
+      (data && data.ageBuckets) ||
+      (clClaimsMeta && clClaimsMeta.ageBuckets) ||
+      null;
+    if (!el) return;
+    if (!buckets || typeof buckets !== "object") {
+      el.textContent = "Age buckets · no signal · empty ≠ $0";
+      return;
+    }
+    const parts = ["0-30", "31-60", "61-90", "90+"].map(function (k) {
+      return k + " " + String(Number(buckets[k] || 0));
+    });
+    if (Number(buckets.unknown || 0) > 0) {
+      parts.push("unknown " + String(Number(buckets.unknown || 0)));
+    }
+    el.textContent =
+      "Age buckets (counts) · " + parts.join(" · ") + " · empty ≠ $0";
+    const over = document.getElementById("val-over30");
+    if (over && !over.classList.contains("nr2-error-face")) {
+      const o30 =
+        Number(buckets["31-60"] || 0) +
+        Number(buckets["61-90"] || 0) +
+        Number(buckets["90+"] || 0);
+      const total =
+        Number(buckets["0-30"] || 0) +
+        o30 +
+        Number(buckets.unknown || 0);
+      W.setText("val-over30", String(o30) + " / " + String(total));
+      const face = over.parentElement;
+      const hint = face ? face.querySelector(".hint") : null;
+      if (hint) {
+        hint.textContent =
+          "over 30 / all open · " + parts.join(" · ") + " · counts only · empty ≠ $0";
+      }
+    }
+  }
+
+  function paintSuppressPanel(data) {
+    const ps =
+      (data && data.paidSuppress) ||
+      (clClaimsMeta && clClaimsMeta.paidSuppress) ||
+      null;
+    const countEl = document.getElementById("cl-staff-hidden-count");
+    const detail = document.getElementById("cl-suppress-detail");
+    const staffN = ps
+      ? Number(ps.staffDropped != null ? ps.staffDropped : ps.staffHideCount || 0)
+      : 0;
+    if (countEl) countEl.textContent = "(" + String(staffN) + ")";
+    if (!detail) return;
+    if (!ps || typeof ps !== "object") {
+      detail.textContent =
+        "Paid suppress · no signal · totals unpaid-only · empty ≠ $0";
+      return;
+    }
+    const parts = [];
+    parts.push("TXN " + String(ps.txnDropped || 0));
+    parts.push("ERA " + String(ps.eraDropped || 0));
+    parts.push("Aging " + String(ps.agingDropped || 0));
+    parts.push("Staff hidden " + String(staffN));
+    if (ps.candidateOpenStatusCount != null) {
+      parts.push("candidates " + String(ps.candidateOpenStatusCount));
+    }
+    if (ps.txnDateMax) parts.push("TXN thru " + String(ps.txnDateMax));
+    if (!ps.agingActive) parts.push("Claims Aging Excel not loaded");
+    if (!ps.eraActive) parts.push("ERA suppress inactive");
+    detail.textContent =
+      "Paid suppress · " +
+      parts.join(" · ") +
+      " · outstanding totals exclude staff-hidden · empty ≠ $0 · no SoftDent write-back";
   }
 
   async function backfillClaimPayers() {
@@ -1095,10 +1170,26 @@
         emptyMessage: data.emptyMessage,
         payerStats: data.payerStats,
         paidSuppress: data.paidSuppress,
+        ageBuckets: data.ageBuckets,
       };
+      if (Array.isArray(data.staffHiddenClaims)) {
+        clStaffHiddenCache = data.staffHiddenClaims;
+      }
     }
     const source = data || clClaimsCache;
     let claims = source && Array.isArray(source.claims) ? source.claims.slice() : [];
+    if (clShowStaffHidden && clStaffHiddenCache.length) {
+      const seen = {};
+      claims.forEach(function (c) {
+        const id = String((c && c.claimId) || "");
+        if (id) seen[id] = true;
+      });
+      clStaffHiddenCache.forEach(function (c) {
+        const id = String((c && c.claimId) || "");
+        if (id && seen[id]) return;
+        claims.push(c);
+      });
+    }
     const count =
       clClaimsMeta && clClaimsMeta.count != null ? clClaimsMeta.count : claims.length;
     const sampleLimit =
@@ -1211,12 +1302,14 @@
       const age = claimAgeDays(c.serviceDate);
       const ageCls = claimAgeClass(age);
       tr.classList.add(ageCls);
+      if (c.staffHidden) tr.classList.add("cl-staff-hidden");
       if (cid) tr.setAttribute("data-claim-id", cid);
       if (clActiveClaimId && cid && cid === clActiveClaimId) {
         tr.classList.add("is-active");
       }
       const evidence = String(c.evidence || "still_waiting");
-      const statusText = String(c.status || "—") || "—";
+      let statusText = String(c.status || "—") || "—";
+      if (c.staffHidden) statusText = "Staff hidden · " + statusText;
       const cells = [
         displayPatientName(c),
         String(c.payer || "—") || "—",
@@ -1327,7 +1420,10 @@
     const rangeEl = document.getElementById("cl-range-label");
     if (summary) summary.textContent = "Loading outstanding claims…";
     if (tbody) tbody.textContent = "";
-    const res = await W.getJson("/api/softdent/claims-outstanding?limit=200", 20000);
+    const q =
+      "/api/softdent/claims-outstanding?limit=200" +
+      (clShowStaffHidden ? "&includeStaffHidden=1" : "");
+    const res = await W.getJson(q, 20000);
     if (!res.ok || !res.data) {
       const detail = String(
         (res.data && res.data.error) || res.status || "fetch failed"
@@ -1383,6 +1479,11 @@
       return { ok: false, data: null };
     }
     if (W.hideErrorRail) W.hideErrorRail();
+    clStaffHiddenCache = Array.isArray(res.data.staffHiddenClaims)
+      ? res.data.staffHiddenClaims
+      : [];
+    paintAgeBuckets(res.data);
+    paintSuppressPanel(res.data);
     renderClaimsOutstanding(res.data);
     applyClaimsJoinHonesty(res.data);
     try {
@@ -1453,6 +1554,21 @@
         });
       }
     });
+    const staffToggle = document.getElementById("cl-show-staff-hidden");
+    if (staffToggle && !staffToggle._nr2ClBound) {
+      staffToggle._nr2ClBound = true;
+      staffToggle.addEventListener("change", function () {
+        clShowStaffHidden = !!staffToggle.checked;
+        loadClaimsOutstanding().catch(function (err) {
+          const summary = document.getElementById("cl-summary");
+          if (summary) {
+            summary.textContent =
+              "Staff-hidden reload fault · " +
+              String(err && err.message ? err.message : err);
+          }
+        });
+      });
+    }
     const closeBtn = document.getElementById("btn-cl-dossier-close");
     if (closeBtn && !closeBtn._nr2ClBound) {
       closeBtn._nr2ClBound = true;
@@ -1597,10 +1713,28 @@
     let eraLive = false;
     if (eraInbox.ok && eraInbox.data && eraInbox.data.ok !== false) {
       const era = eraInbox.data;
+      const realN = Number(
+        era.realFileCount != null
+          ? era.realFileCount
+          : (era.inbox && era.inbox.realFileCount) != null
+            ? era.inbox.realFileCount
+            : -1
+      );
+      const placeN = Number(
+        era.placeholderCount != null
+          ? era.placeholderCount
+          : (era.inbox && era.inbox.placeholderCount) || 0
+      );
       const count = Number(era.fileCount != null ? era.fileCount : (era.inbox && era.inbox.fileCount) || 0);
       const chip = String(era.chipLabel || (era.inbox && era.inbox.chipLabel) || "").trim();
       const ingested = era.gap && era.gap.rowCount != null ? Number(era.gap.rowCount) : null;
-      if (count > 0) {
+      if (realN > 0) {
+        W.setText("val-era", String(realN) + " in inbox");
+        eraLive = true;
+      } else if (placeN > 0 || (count > 0 && realN === 0)) {
+        W.setText("val-era", null, "empty (not zero)");
+        eraLive = false;
+      } else if (count > 0) {
         W.setText("val-era", String(count) + " in inbox");
         eraLive = true;
       } else if (ingested != null && ingested > 0) {
@@ -1614,6 +1748,11 @@
         let hint =
           (chip || "ERA inbox") +
           " · read-only · empty ≠ $0 · no SoftDent write-back";
+        if (placeN > 0 && realN === 0) {
+          hint =
+            (chip || String(placeN) + " file(s) in inbox — Empty ≠ $0") +
+            " · placeholder only · drop real .835/.edi · no SoftDent write-back";
+        }
         if (eraSuggestions.ok && eraSuggestions.data && eraSuggestions.data.ok) {
           const sugCount = Number(eraSuggestions.data.count || 0);
           if (sugCount > 0) {

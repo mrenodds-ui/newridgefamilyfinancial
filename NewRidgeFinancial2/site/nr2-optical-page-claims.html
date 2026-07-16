@@ -85,6 +85,19 @@
             </select>
           </label>
         </div>
+        <p class="om-claims-age-buckets" id="cl-age-buckets" aria-live="polite">
+          Age buckets · counts only · empty ≠ $0
+        </p>
+        <div class="om-claims-suppress" id="cl-suppress-panel" aria-label="Paid suppress honesty">
+          <label class="om-claims-suppress-toggle">
+            <input type="checkbox" id="cl-show-staff-hidden" />
+            Show staff-hidden
+            <span id="cl-staff-hidden-count">(0)</span>
+          </label>
+          <p class="om-claims-suppress-detail" id="cl-suppress-detail">
+            Paid suppress · totals stay unpaid-only · empty ≠ $0 · no SoftDent write-back
+          </p>
+        </div>
         <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
         <div class="om-claims-body" id="cl-body">
           <div class="om-claims-wrap">

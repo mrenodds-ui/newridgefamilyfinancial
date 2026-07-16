@@ -3755,7 +3755,14 @@ class NR2BottleServer(BottleServer):
             except (TypeError, ValueError):
                 limit = 25
             limit = max(1, min(limit, 500))
-            return _json_response(claims_outstanding(limit=limit))
+            include_staff = str(
+                bottle.request.query.get("includeStaffHidden")
+                or bottle.request.query.get("include_staff_hidden")
+                or ""
+            ).strip().lower() in ("1", "true", "yes", "on")
+            return _json_response(
+                claims_outstanding(limit=limit, include_staff_hidden=include_staff)
+            )
 
         @app.get("/api/softdent/claims-review")
         def softdent_claims_review_api():
