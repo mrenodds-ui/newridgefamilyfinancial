@@ -661,47 +661,95 @@ a:hover { color: var(--hal); }
   cursor: pointer;
 }
 .om-claims-table tbody tr.age-ok {
-  background: rgba(0, 212, 170, 0.1);
-  box-shadow: inset 3px 0 0 var(--sd);
+  background: rgba(0, 180, 120, 0.28);
+}
+.om-claims-table tbody tr.age-ok td {
+  color: #b8ffe8;
+  border-bottom-color: rgba(0, 212, 170, 0.35);
+}
+.om-claims-table tbody tr.age-ok td:first-child {
+  box-shadow: inset 5px 0 0 #00d4aa;
+}
+.om-claims-table tbody tr.age-ok td.phi-name {
+  color: #e6fff6;
+  font-weight: 600;
 }
 .om-claims-table tbody tr.age-warn {
-  background: rgba(232, 168, 56, 0.12);
-  box-shadow: inset 3px 0 0 #e8a838;
+  background: rgba(232, 168, 56, 0.32);
+}
+.om-claims-table tbody tr.age-warn td {
+  color: #ffe9b0;
+  border-bottom-color: rgba(232, 168, 56, 0.4);
+}
+.om-claims-table tbody tr.age-warn td:first-child {
+  box-shadow: inset 5px 0 0 #f0c040;
+}
+.om-claims-table tbody tr.age-warn td.phi-name {
+  color: #fff3cc;
+  font-weight: 600;
 }
 .om-claims-table tbody tr.age-late {
-  background: rgba(232, 140, 40, 0.14);
-  box-shadow: inset 3px 0 0 #e07a28;
+  background: rgba(232, 120, 40, 0.34);
+}
+.om-claims-table tbody tr.age-late td {
+  color: #ffd0a0;
+  border-bottom-color: rgba(232, 120, 40, 0.45);
+}
+.om-claims-table tbody tr.age-late td:first-child {
+  box-shadow: inset 5px 0 0 #ff8c28;
+}
+.om-claims-table tbody tr.age-late td.phi-name {
+  color: #ffe0c0;
+  font-weight: 600;
 }
 .om-claims-table tbody tr.age-critical {
-  background: rgba(220, 72, 72, 0.14);
-  box-shadow: inset 3px 0 0 #dc4848;
+  background: rgba(210, 50, 50, 0.36);
+}
+.om-claims-table tbody tr.age-critical td {
+  color: #ffc0c0;
+  border-bottom-color: rgba(220, 72, 72, 0.45);
+}
+.om-claims-table tbody tr.age-critical td:first-child {
+  box-shadow: inset 5px 0 0 #ff4040;
+}
+.om-claims-table tbody tr.age-critical td.phi-name {
+  color: #ffe0e0;
+  font-weight: 600;
 }
 .om-claims-table tbody tr.age-unknown {
   opacity: 0.85;
+  background: rgba(90, 100, 120, 0.15);
 }
-.om-claims-table tbody tr.age-ok .age-cell { color: var(--sd); }
-.om-claims-table tbody tr.age-warn .age-cell { color: #e8a838; }
-.om-claims-table tbody tr.age-late .age-cell { color: #e07a28; }
-.om-claims-table tbody tr.age-critical .age-cell { color: #f07070; }
+.om-claims-table tbody tr.age-ok .age-cell,
+.om-claims-table tbody tr.age-warn .age-cell,
+.om-claims-table tbody tr.age-late .age-cell,
+.om-claims-table tbody tr.age-critical .age-cell {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.om-claims-table tbody tr.age-ok .age-cell { color: #00f0c0; }
+.om-claims-table tbody tr.age-warn .age-cell { color: #ffd060; }
+.om-claims-table tbody tr.age-late .age-cell { color: #ff9a40; }
+.om-claims-table tbody tr.age-critical .age-cell { color: #ff7070; }
 .om-claims-table tbody tr:hover,
 .om-claims-table tbody tr.is-active {
-  filter: brightness(1.12);
+  filter: brightness(1.15);
 }
 .om-claims-table tbody tr.age-ok:hover,
 .om-claims-table tbody tr.age-ok.is-active {
-  background: rgba(0, 212, 170, 0.18);
+  background: rgba(0, 180, 120, 0.42);
 }
 .om-claims-table tbody tr.age-warn:hover,
 .om-claims-table tbody tr.age-warn.is-active {
-  background: rgba(232, 168, 56, 0.2);
+  background: rgba(232, 168, 56, 0.46);
 }
 .om-claims-table tbody tr.age-late:hover,
 .om-claims-table tbody tr.age-late.is-active {
-  background: rgba(232, 140, 40, 0.22);
+  background: rgba(232, 120, 40, 0.48);
 }
 .om-claims-table tbody tr.age-critical:hover,
 .om-claims-table tbody tr.age-critical.is-active {
-  background: rgba(220, 72, 72, 0.22);
+  background: rgba(210, 50, 50, 0.5);
 }
 .om-claims-table .cl-empty,
 .om-claims-table .cl-fault {
@@ -709,6 +757,8 @@ a:hover { color: var(--hal); }
   color: #5a6575;
   padding: 16px 10px;
   cursor: default;
+  background: transparent;
+  box-shadow: none;
 }
 .om-claims-table .cl-fault { color: var(--fringe); }
 
