@@ -194,6 +194,7 @@
     const sdMetric = (document.getElementById("metric-sd") || {}).textContent || "";
     const qbMetric = (document.getElementById("metric-qb") || {}).textContent || "";
     const taxMetric = (document.getElementById("metric-tax") || {}).textContent || "";
+    const globalFault = !!(lasersRed(lastReady) || periodCloseTrouble(lastReady));
     setRayHealth("ray-sd", laneBeamTone(sdStatus, sdMetric));
     setRayHealth("ray-qb", laneBeamTone(qbStatus, qbMetric));
     setRayHealth(
@@ -202,15 +203,32 @@
     );
     setRayHealth(
       "ray-ctrl",
-      !lastSessionOk ? "dim" : lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "dim" : "live"
+      !lastSessionOk ? "dim" : globalFault ? "dim" : "live"
     );
+
+    const rays = ["ray-sd", "ray-qb", "ray-tax", "ray-ctrl"].map(function (id) {
+      return document.getElementById(id);
+    });
+    const allClear =
+      !globalFault &&
+      rays.every(function (el) {
+        return el && !el.classList.contains("is-dim") && !el.classList.contains("is-cut");
+      });
+
+    rays.forEach(function (el) {
+      if (!el) return;
+      const bad = el.classList.contains("is-dim") || el.classList.contains("is-cut");
+      el.classList.toggle("is-quiet", allClear || (!bad && !globalFault));
+      el.classList.toggle("is-loud", bad || (globalFault && el.id === "ray-ctrl"));
+    });
+
     const hits = document.querySelectorAll(".core-hit");
     hits.forEach(function (hit) {
       const beam = hit.getAttribute("data-beam");
       const ray = document.getElementById(beam === "ctrl" ? "ray-ctrl" : "ray-" + beam);
       const cut = ray && ray.classList.contains("is-cut");
       const dim = ray && ray.classList.contains("is-dim");
-      hit.style.opacity = cut ? "0.05" : dim ? "0.2" : "";
+      hit.style.opacity = cut ? "0.05" : dim ? "0.4" : allClear ? "0.22" : "";
     });
   }
 
@@ -899,16 +917,23 @@
     if (steps.bundle) {
       steps.bundle.classList.add(bundleTone);
       steps.bundle.textContent = bundleLabel;
+      steps.bundle.title =
+        bundleTone === "on"
+          ? "Morning bundle ok"
+          : "Click → SoftDent REFRESH-PERIOD (morning bundle gate)";
     }
 
     const red = !ready || lasersRed(ready);
     if (steps.lasers) {
       steps.lasers.classList.add(red ? "bad" : "on");
       steps.lasers.textContent = red ? "Lasers" : "Green";
+      steps.lasers.title = red ? "Click → Alignment Bench" : "Lasers green-path";
     }
 
     const closeTrouble = periodCloseTrouble(ready);
     const closeBit = periodCloseBit(ready);
+    const W = window.NR2OpticalWire;
+    const canForce = !!(W && typeof W.forceCloseAvailable === "function" && W.forceCloseAvailable(ready));
     if (steps.close) {
       if (!ready || !ready.periodClose) {
         steps.close.classList.add("bad");
@@ -922,6 +947,12 @@
         steps.close.classList.add("on");
         steps.close.textContent = "Close";
       }
+      steps.close.title = canForce
+        ? "Click → FORCE CLOSE (lasers red / stall)"
+        : closeTrouble
+          ? "Period-close trouble · force unavailable"
+          : "Period-close idle";
+      steps.close.setAttribute("data-can-force", canForce ? "1" : "0");
     }
 
     if (hint) {
@@ -929,7 +960,61 @@
         closeBit +
         morningBundleBit(ready) +
         (red ? " · lasers red" : " · lasers green-path") +
+        (canForce ? " · force ready" : "") +
         " · empty ≠ $0";
+    }
+  }
+
+  async function runCloseStep(stepEl) {
+    if (!stepEl || role === "fd") {
+      if (role === "fd") toast("Shutter locked — Front Desk cannot mutate");
+      return;
+    }
+    const step = stepEl.getAttribute("data-step");
+    if (step === "bundle") {
+      if (stepEl.classList.contains("on")) {
+        toast("Morning bundle already OK · empty ≠ $0");
+        return;
+      }
+      toast("Close Path · Bundle → SoftDent REFRESH-PERIOD");
+      await doRefreshPeriod();
+      return;
+    }
+    if (step === "lasers") {
+      if (stepEl.classList.contains("on")) {
+        toast("Lasers already green-path");
+        return;
+      }
+      openAlignmentBench();
+      return;
+    }
+    if (step === "close") {
+      const W = window.NR2OpticalWire;
+      if (!W || typeof W.forcePeriodClose !== "function") {
+        toast("Force close wire unavailable");
+        return;
+      }
+      if (stepEl.getAttribute("data-can-force") !== "1") {
+        toast("FORCE CLOSE gated · needs lasers red or close stall/blocked");
+        return;
+      }
+      toast("Close Path · FORCE CLOSE …");
+      fireCoreBurst("ok");
+      const r = await W.forcePeriodClose({ actor: "landing-close-path" });
+      if (!r || !r.ok) {
+        fireCoreBurst("fail");
+        toast(
+          "Force close failed · " +
+            ((r && r.data && (r.data.error || r.data.detail || r.data.reason)) ||
+              (r && r.status) ||
+              "unknown")
+        );
+        return;
+      }
+      fireCoreBurst("ok");
+      toast("Force close posted · refreshing lasers + metrics");
+      await refreshLasers();
+      await refreshMetrics();
     }
   }
 
@@ -1131,6 +1216,11 @@
         openClaimsFromFilm(filmSlot);
         return;
       }
+      const closeStep = e.target.closest("#close-steps [data-step]");
+      if (closeStep) {
+        runCloseStep(closeStep);
+        return;
+      }
       runAct(e.target.closest("[data-act]"));
     });
     benchEl.addEventListener("keydown", (e) => {
@@ -1139,6 +1229,12 @@
       if (filmSlot) {
         e.preventDefault();
         openClaimsFromFilm(filmSlot);
+        return;
+      }
+      const closeStep = e.target.closest("#close-steps [data-step]");
+      if (closeStep) {
+        e.preventDefault();
+        runCloseStep(closeStep);
         return;
       }
       const btn = e.target.closest("[data-act]");

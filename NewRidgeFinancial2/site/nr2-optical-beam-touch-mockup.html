@@ -116,6 +116,24 @@
       animation: none;
       background: repeating-linear-gradient(90deg, #ff0044 0 4px, transparent 4px 14px) !important;
     }
+    .beam-ray.is-quiet {
+      opacity: 0.45;
+      animation: laser-pulse 3.6s ease-in-out infinite;
+      box-shadow:
+        0 0 1px #fff,
+        0 0 4px rgba(255,0,68,0.55),
+        0 0 10px rgba(255,0,68,0.3);
+    }
+    .beam-ray.is-loud {
+      opacity: 1;
+      height: 3px;
+      animation: laser-fault 0.7s ease-in-out infinite;
+      box-shadow:
+        0 0 3px #fff,
+        0 0 10px #ff0044,
+        0 0 22px rgba(255,0,68,1),
+        0 0 40px rgba(255,0,68,0.75);
+    }
     @keyframes laser-pulse {
       0%, 100% {
         opacity: 0.72;
@@ -132,6 +150,16 @@
           0 0 8px #ff0044,
           0 0 18px rgba(255,0,68,1),
           0 0 36px rgba(255,0,68,0.65);
+      }
+    }
+    @keyframes laser-fault {
+      0%, 100% {
+        opacity: 0.55;
+        filter: brightness(0.85);
+      }
+      50% {
+        opacity: 1;
+        filter: brightness(1.25);
       }
     }
     @keyframes flow-x {
@@ -689,10 +717,15 @@
       flex: 1; min-height: 36px; border: 1px solid #334; background: #0c1218;
       color: var(--muted); font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
       text-transform: uppercase; display: grid; place-items: center; padding: 2px;
+      cursor: pointer;
+    }
+    .close-steps span:hover {
+      border-color: rgba(255,0,68,0.55); color: #e8eef5;
     }
     .close-steps span.on {
       border-color: rgba(0,212,170,0.55); color: var(--sd);
       box-shadow: 0 0 10px rgba(0,212,170,0.15);
+      cursor: default;
     }
     .close-steps span.warn {
       border-color: rgba(255,170,0,0.55); color: #ffaa00;
@@ -834,9 +867,9 @@
       <div class="cell">
         <h4>Close Path</h4>
         <div class="close-steps" id="close-steps" aria-label="Period close path">
-          <span data-step="bundle">Bundle</span>
-          <span data-step="lasers">Lasers</span>
-          <span data-step="close">Close</span>
+          <span data-step="bundle" role="button" tabindex="0">Bundle</span>
+          <span data-step="lasers" role="button" tabindex="0">Lasers</span>
+          <span data-step="close" role="button" tabindex="0">Close</span>
         </div>
         <span class="bind-hint" id="close-hint">Morning bundle · lasers · period-close</span>
       </div>
