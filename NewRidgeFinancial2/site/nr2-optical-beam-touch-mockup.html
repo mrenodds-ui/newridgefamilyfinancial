@@ -47,11 +47,6 @@
       font-family: var(--mono); font-size: var(--text-sm); letter-spacing: 0.1em;
       min-height: var(--hit); padding: 0 14px; cursor: pointer;
     }
-    .role {
-      border: 1px solid #334; background: #0c1218; color: var(--muted);
-      font-family: var(--mono); font-size: var(--text-sm); min-height: var(--hit); padding: 0 12px; cursor: pointer;
-    }
-    .role.on { border-color: var(--sd); color: var(--sd); }
 
     /* Alignment lasers */
     .align {
@@ -641,8 +636,6 @@
       </div>
       <div class="muted" id="clock">--:--:-- UTC</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button type="button" class="role on" id="role-om" data-role="om">ROLE: OM</button>
-        <button type="button" class="role" id="role-fd" data-role="fd">ROLE: FRONT DESK</button>
         <button type="button" class="scram" id="scram" disabled title="No emergency halt API — demo only">SCRAM (DEMO · NO HALT API)</button>
       </div>
     </div>
