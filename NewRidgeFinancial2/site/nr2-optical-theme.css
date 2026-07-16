@@ -276,11 +276,75 @@ td.phi-name .phi-label,
   font-family: var(--mono); font-size: 24px; font-weight: 600;
   font-variant-numeric: tabular-nums; line-height: 1.15; margin-bottom: var(--space-2);
   word-break: break-word;
+  min-height: 1.15em;
 }
 .metric-face .face-val.sd, .metric-face .val.sd { color: var(--sd); }
 .metric-face .face-val.qb, .metric-face .val.qb { color: var(--qb); }
 .metric-face .face-val.hal, .metric-face .val.hal { color: var(--hal); }
 .metric-face .face-val.stale, .metric-face .val.stale { color: var(--fringe); }
+.metric-face .val.empty,
+.metric-face .face-val.empty,
+.val.empty {
+  color: var(--lock);
+  font-weight: 500;
+  font-size: 18px;
+  letter-spacing: 0.02em;
+}
+.metric-face .val.zero,
+.val.zero {
+  color: var(--lock);
+  border-bottom: 1px dashed var(--lock-dim);
+}
+.metric-face .val.nosignal,
+.val.nosignal {
+  color: var(--stale);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Package 4: loading skeleton — gray bars only, no fake $ */
+.nr2-skeleton {
+  display: block;
+  width: min(72%, 9.5rem);
+  height: 1.05em;
+  margin: 0.15em 0;
+  border-radius: 0;
+  background: linear-gradient(
+    90deg,
+    #1a222c 0%,
+    #2a3340 45%,
+    #1a222c 90%
+  );
+  background-size: 200% 100%;
+  animation: nr2-skel-sweep 1.2s ease-in-out infinite;
+}
+.val.is-loading,
+.face-val.is-loading {
+  color: transparent;
+  text-shadow: none;
+}
+@keyframes nr2-skel-sweep {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+.excel-probe-chip {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+  border: 1px solid var(--border);
+  background: #0a0f14;
+  color: var(--muted);
+}
+.excel-probe-chip.ok {
+  border-color: rgba(0, 212, 170, 0.4);
+  color: var(--sd);
+}
+.excel-probe-chip.blocked {
+  border-color: rgba(220, 38, 38, 0.55);
+  color: #fecaca;
+  background: #1a0608;
+}
+.hint.excel-blocked { color: #e8c56a; }
 .metric-face .face-hint,
 .metric-face .hint {
   font-family: var(--sans); font-size: 12px; color: #5a6575; line-height: 1.35;

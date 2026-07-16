@@ -1358,12 +1358,12 @@
   }
 
   async function boot() {
-    W.setText("val-snap", null, "—");
-    W.setText("val-era", "UNAVAILABLE");
-    W.setText("val-denials", null, "—");
-    W.setText("val-over30", null, "—");
+    W.markFacesLoading(["val-snap", "val-era", "val-denials", "val-over30"]);
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
     wireClaimsControls();
+    if (W.applyExcelProbeHint) {
+      W.applyExcelProbeHint("hint-snap", 8000).catch(function () {});
+    }
 
     const [claimsRes, aging, adj, eraInbox, eraSuggestions, ready] = await Promise.all([
       loadClaimsOutstanding(),

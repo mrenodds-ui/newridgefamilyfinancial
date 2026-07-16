@@ -9,16 +9,111 @@
     if (v == null) return null;
     return "$" + v.toLocaleString("en-US", { maximumFractionDigits: 0 });
   }
+  function clearLoadingFace(el) {
+    if (!el) return;
+    el.classList.remove("is-loading");
+    el.removeAttribute("aria-busy");
+    const sk = el.querySelector(".nr2-skeleton");
+    if (sk) sk.remove();
+  }
+  /** Gray bar only — never show placeholder dollars while loading. */
+  function setLoading(idOrEl) {
+    const el = typeof idOrEl === "string" ? document.getElementById(idOrEl) : idOrEl;
+    if (!el) return null;
+    el.classList.remove("empty", "zero", "nosignal");
+    el.classList.add("is-loading");
+    el.setAttribute("aria-busy", "true");
+    el.textContent = "";
+    const sk = document.createElement("span");
+    sk.className = "nr2-skeleton";
+    sk.setAttribute("aria-hidden", "true");
+    el.appendChild(sk);
+    return el;
+  }
+  function markFacesLoading(ids) {
+    const list = Array.isArray(ids) ? ids : [];
+    list.forEach(function (id) {
+      setLoading(id);
+    });
+    return list.length;
+  }
   function setText(id, value, emptyLabel) {
     const el = document.getElementById(id);
     if (!el) return;
+    clearLoadingFace(el);
+    el.classList.remove("empty", "zero", "nosignal");
     if (value == null || value === "") {
-      el.textContent = emptyLabel || "—";
+      const label = emptyLabel || "—";
+      el.textContent = label;
+      el.classList.add("empty");
+      if (/no signal/i.test(label)) el.classList.add("nosignal");
+      if (/^\$?\s*0(\.0+)?$/i.test(String(label).trim())) {
+        el.textContent = "Empty ≠ $0";
+      }
+      return;
+    }
+    const raw = String(value).trim();
+    // Never paint attested-looking $0.00 — empty ≠ $0.
+    if (/^\$?\s*0(\.0+)?$/.test(raw)) {
+      el.textContent = "Empty ≠ $0";
       el.classList.add("empty");
       return;
     }
     el.textContent = value;
-    el.classList.remove("empty");
+  }
+  /**
+   * Money face honesty: null → empty label · 0 → "Empty ≠ $0" · else fmtMoney.
+   * Never invent $0.00 for missing data.
+   */
+  function setMoneyText(id, amount, opts) {
+    const o = opts || {};
+    const v = money(amount);
+    if (v == null) {
+      setText(id, null, o.emptyLabel || "—");
+      return { empty: true, live: false };
+    }
+    if (v === 0) {
+      setText(id, null, o.zeroLabel || "Empty ≠ $0");
+      const el = document.getElementById(id);
+      if (el) el.classList.add("zero");
+      return { empty: true, live: false, zeroish: true };
+    }
+    const shown = fmtMoney(v);
+    setText(id, shown);
+    return { empty: false, live: true, text: shown };
+  }
+  /** Surface SoftDent Excel Output Options probe (never fake Excel-ready). */
+  async function applyExcelProbeHint(hintId, timeoutMs) {
+    const el = hintId ? document.getElementById(hintId) : null;
+    const r = await getJson("/api/softdent/excel-probe", timeoutMs || 8000);
+    const data = r.ok ? r.data : null;
+    const available = !!(data && data.excelAvailable === true);
+    const bit = available
+      ? "Excel Output Options available"
+      : data && data.hasProbe
+        ? "Excel Output Options blocked · morning bundle stays attest_only"
+        : "Excel probe missing · do not invent export paths";
+    if (el) {
+      const prev = String(el.textContent || "").trim();
+      el.textContent = (prev ? prev + " · " : "") + bit;
+      el.classList.toggle("excel-blocked", !available);
+    }
+    let chip = document.getElementById("nr2-excel-probe-chip");
+    if (!chip) {
+      const strip = document.querySelector(".honesty, .honesty-strip");
+      if (strip && strip.parentNode) {
+        chip = document.createElement("p");
+        chip.id = "nr2-excel-probe-chip";
+        chip.className = "excel-probe-chip";
+        strip.insertAdjacentElement("afterend", chip);
+      }
+    }
+    if (chip) {
+      chip.className = "excel-probe-chip " + (available ? "ok" : "blocked");
+      chip.textContent =
+        (available ? "EXCEL · READY" : "EXCEL · BLOCKED") + " · empty ≠ $0 · never Printer/File";
+    }
+    return { ok: !!r.ok, excelAvailable: available, data: data };
   }
   /** Board-safe hash chip · "#a7f3" (never invent). */
   function shortHash(h, len) {
@@ -865,6 +960,11 @@
     money: money,
     fmtMoney: fmtMoney,
     setText: setText,
+    setLoading: setLoading,
+    markFacesLoading: markFacesLoading,
+    clearLoadingFace: clearLoadingFace,
+    setMoneyText: setMoneyText,
+    applyExcelProbeHint: applyExcelProbeHint,
     shortHash: shortHash,
     initialsFromName: initialsFromName,
     formatPhiInitials: formatPhiInitials,

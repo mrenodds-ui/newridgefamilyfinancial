@@ -99,6 +99,9 @@
   }
 
   async function boot() {
+    if (W.markFacesLoading) {
+      W.markFacesLoading(["hub-sd-amt", "hub-close", "hub-qb-amt"]);
+    }
     const [info, ready, beamsRes] = await Promise.all([
       W.getJson("/api/app-info", 8000),
       W.getJson("/api/import-readiness", 12000),

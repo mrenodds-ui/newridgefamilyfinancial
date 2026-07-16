@@ -7,23 +7,27 @@
     if (!Array.isArray(buckets) || !buckets.length) return null;
     return buckets
       .map(function (b) {
-        const amt = W.fmtMoney(W.money(b.amount != null ? b.amount : b.balance));
-        return String(b.bucket || "?") + " " + (amt || "∅");
+        const v = W.money(b.amount != null ? b.amount : b.balance);
+        let amt = "—";
+        if (v == null) amt = "—";
+        else if (v === 0) amt = "Empty";
+        else amt = W.fmtMoney(v) || "—";
+        return String(b.bucket || "?") + " " + amt;
       })
       .join(" · ");
   }
 
   async function boot() {
-    W.setText("val-total", null);
-    W.setText("val-buckets", null, "—");
-    W.setText("val-collect", null, "—");
-    W.setText("val-status", null, "—");
+    W.markFacesLoading(["val-total", "val-buckets", "val-collect", "val-status"]);
     W.setBanner("partial", "Wiring SoftDent AR + money-beams · empty ≠ $0 · no invent $");
 
     const aging = await W.getJson("/api/softdent/ar-aging", 12000);
     const claims = await W.getJson("/api/softdent/claims-outstanding", 12000);
     const ready = await W.getJson("/api/import-readiness", 12000);
     const beamsRes = await W.getMoneyBeams(12000);
+    if (W.applyExcelProbeHint) {
+      W.applyExcelProbeHint("hint-total", 8000).catch(function () {});
+    }
 
     let live = false;
     let stale = false;
@@ -36,7 +40,7 @@
       stale = arHit || W.lasersRed(readyData);
       W.setText("val-status", arHit || W.lasersRed(readyData) ? "STALE · lasers" : "READY");
     } else {
-      W.setText("val-status", "NO SIGNAL");
+      W.setText("val-status", null, "NO SIGNAL");
     }
 
     const beamHit = W.applyBeamHeadline({
@@ -51,12 +55,18 @@
     } else if (!beamHit.applied) {
       // Fallback to domain APIs only when money-beams unavailable
       if (aging.ok && aging.data && aging.data.hasData) {
-        const shown = W.fmtMoney(aging.data.total);
-        if (shown) {
-          W.setText("val-total", shown);
-          live = true;
-        } else {
-          W.setText("val-total", null, "∅");
+        const hit = W.setMoneyText
+          ? W.setMoneyText("val-total", aging.data.total, { emptyLabel: "∅" })
+          : null;
+        if (hit && hit.live) live = true;
+        else if (!W.setMoneyText) {
+          const shown = W.fmtMoney(aging.data.total);
+          if (shown) {
+            W.setText("val-total", shown);
+            live = true;
+          } else {
+            W.setText("val-total", null, "∅");
+          }
         }
         if (aging.data.stale) stale = true;
       } else if (claims.ok && claims.data && claims.data.hasData) {
@@ -64,10 +74,18 @@
         const total =
           W.money(claims.data.totalOutstanding) != null
             ? W.money(claims.data.totalOutstanding)
-            : list.reduce((s, c) => s + (W.money(c.amount) || 0), 0);
-        const shown = W.fmtMoney(total);
-        W.setText("val-total", shown, shown ? null : "∅");
-        if (shown) live = true;
+            : list.reduce(function (s, c) {
+                return s + (W.money(c.amount) || 0);
+              }, 0);
+        const hit = W.setMoneyText
+          ? W.setMoneyText("val-total", total, { emptyLabel: "∅" })
+          : null;
+        if (hit && hit.live) live = true;
+        else if (!W.setMoneyText) {
+          const shown = W.fmtMoney(total);
+          W.setText("val-total", shown, shown ? null : "∅");
+          if (shown) live = true;
+        }
         const totalHint = document.getElementById("hint-total");
         if (totalHint) totalHint.textContent = "claims proxy · money-beams UNAVAILABLE";
       } else {

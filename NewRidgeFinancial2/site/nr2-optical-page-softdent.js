@@ -29,10 +29,7 @@
   }
 
   async function boot() {
-    W.setText("val-ar", null);
-    W.setText("val-period", "60d");
-    W.setText("val-prod", null, "—");
-    W.setText("val-claims", null, "—");
+    W.markFacesLoading(["val-ar", "val-period", "val-prod", "val-claims"]);
     W.setBanner("partial", "Wiring SoftDent + money-beams · empty ≠ $0");
 
     let live = false;
@@ -42,6 +39,9 @@
     const claims = await W.getJson("/api/softdent/claims-outstanding?limit=50", 12000);
     const ready = await W.getJson("/api/import-readiness", 12000);
     const beamsRes = await W.getMoneyBeams(12000);
+    if (W.applyExcelProbeHint) {
+      W.applyExcelProbeHint("hint-claims", 8000).catch(function () {});
+    }
     const readyData = ready.ok ? ready.data : null;
     const beams = beamsRes.ok ? beamsRes.data : null;
 
@@ -64,12 +64,18 @@
           " · empty ≠ $0";
       }
     } else if (!beamHit.applied && arAging.ok && arAging.data && arAging.data.hasData) {
-      const shown = W.fmtMoney(arAging.data.total);
-      if (shown) {
-        W.setText("val-ar", shown);
-        live = true;
-      } else {
-        W.setText("val-ar", null, "∅");
+      const hit = W.setMoneyText
+        ? W.setMoneyText("val-ar", arAging.data.total, { emptyLabel: "∅" })
+        : null;
+      if (hit && hit.live) live = true;
+      else if (!W.setMoneyText) {
+        const shown = W.fmtMoney(arAging.data.total);
+        if (shown) {
+          W.setText("val-ar", shown);
+          live = true;
+        } else {
+          W.setText("val-ar", null, "∅");
+        }
       }
     }
 
@@ -82,13 +88,18 @@
         const h = W.honestyMoney(true, beams.softdent.display);
         shown = h.empty ? null : h.text;
       }
-      if (!shown) shown = W.fmtMoney(W.money(claims.data.totalOutstanding));
+      if (!shown) {
+        const total = W.money(claims.data.totalOutstanding);
+        if (total == null) shown = null;
+        else if (total === 0) shown = null;
+        else shown = W.fmtMoney(total);
+      }
       if (shown) {
         W.setText("val-claims", shown + (count ? " · " + count : ""));
         if (!arFromBeam && !beamHit.blocked) W.setText("val-ar", shown);
         live = true;
       } else {
-        W.setText("val-claims", null, "∅");
+        W.setText("val-claims", null, "Empty ≠ $0");
         if (!arFromBeam && !beamHit.applied) W.setText("val-ar", null, "∅");
       }
       if (W.fillPhiSampleList) {
@@ -105,37 +116,52 @@
     const prod = await W.getJson("/api/softdent/production-daily", 12000);
     if (prod.ok && prod.data) {
       const last = lastProduction(prod.data);
-      const shown = W.fmtMoney(last.amount);
       const empty = Array.isArray(prod.data.points)
         ? prod.data.points.length === 0
         : prod.data.hasData === false;
-      W.setText("val-prod", shown, empty ? "∅" : "—");
+      if (W.setMoneyText) {
+        const hit = W.setMoneyText("val-prod", empty ? null : last.amount, {
+          emptyLabel: empty ? "∅" : "—",
+        });
+        if (hit && hit.live) live = true;
+      } else {
+        const shown = W.fmtMoney(last.amount);
+        W.setText("val-prod", shown, empty ? "∅" : "—");
+        if (shown) live = true;
+      }
       const hint = document.getElementById("hint-prod");
-      if (hint && shown) {
+      if (hint && last.amount != null && last.amount !== 0) {
         hint.textContent =
           "Production" + (last.label ? " · " + last.label : "") + " · empty ≠ $0";
       }
-      if (shown) live = true;
     } else {
       W.setText("val-prod", null, "NO SIGNAL");
     }
 
     const coll = await W.getJson("/api/softdent/collections-daily", 12000);
     if (coll.ok && coll.data && coll.data.hasData && Array.isArray(coll.data.values) && coll.data.values.length) {
-      const lastColl = W.fmtMoney(coll.data.values[coll.data.values.length - 1]);
+      const lastVal = coll.data.values[coll.data.values.length - 1];
       const lbl = Array.isArray(coll.data.labels)
         ? coll.data.labels[coll.data.labels.length - 1]
         : "";
       const periodEl = document.getElementById("val-period");
-      if (periodEl && lastColl) {
-        W.setText("val-period", lastColl);
+      if (periodEl) {
+        if (W.setMoneyText) {
+          const hit = W.setMoneyText("val-period", lastVal, { emptyLabel: "∅" });
+          if (hit && hit.live) live = true;
+        } else {
+          const lastColl = W.fmtMoney(lastVal);
+          if (lastColl) {
+            W.setText("val-period", lastColl);
+            live = true;
+          }
+        }
         const periodHint = periodEl.parentElement && periodEl.parentElement.querySelector(".hint");
         if (periodHint) {
           periodHint.textContent =
             "collections latest" + (lbl ? " · " + lbl : "") + " · period refresh on main";
         }
       }
-      live = true;
     }
 
     const util = await W.getJson("/api/softdent/provider-utilization-7d", 10000);
