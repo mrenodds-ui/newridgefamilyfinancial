@@ -1528,7 +1528,7 @@ class NR2BottleServer(BottleServer):
         @app.get("/api/desk-smoke")
         @app.get("/api/health/desk-smoke")
         def desk_smoke_api():
-            """Desk confidence loop — close status, beams, Force Close, VERIFY BEAM."""
+            """Desk confidence loop — close status, beams, Force Close, VERIFY BEAM, this-patient."""
             from desk_smoke import last_smoke_state, run_desk_smoke
 
             run = str(bottle.request.params.get("run") or "1").strip().lower()
@@ -1539,7 +1539,12 @@ class NR2BottleServer(BottleServer):
                     "at": None,
                     "failures": ["never_run"],
                 }
-                last = {**last, "emptyNotZero": True, "source": "last"}
+                last = {
+                    **last,
+                    "emptyNotZero": True,
+                    "source": "last",
+                    "thisPatientShortcutCovered": bool(last.get("thisPatientShortcutCovered")),
+                }
                 return _json_response(last)
             result = run_desk_smoke(
                 probe_http=str(bottle.request.params.get("probeHttp") or "1").lower()

@@ -134,8 +134,23 @@ def test_desk_smoke_exposes_patient_attest_eligible(monkeypatch, tmp_path):
     monkeypatch.setattr(h, "_utc_now", lambda: "2026-07-16T01:00:00+00:00")
     h.clear_beam_attest_cache()
 
+    monkeypatch.setattr(
+        ds,
+        "smoke_patient_context_path",
+        lambda: {
+            "ok": True,
+            "covered": True,
+            "detectionOk": True,
+            "bindOk": True,
+            "unboundOk": True,
+            "boundOk": True,
+            "emptyNotZero": True,
+        },
+    )
+
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is True
     assert result["deskProof"] == "MATCH"
     assert result.get("patientAttestEligible") is True
     assert result.get("forceCloseAvailable") is False
+    assert result.get("thisPatientShortcutCovered") is True

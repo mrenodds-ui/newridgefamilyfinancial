@@ -71,12 +71,33 @@ def test_desk_smoke_green_path(monkeypatch, tmp_path):
     monkeypatch.setattr(h, "_utc_now", lambda: "2026-07-16T01:00:00+00:00")
     h.clear_beam_attest_cache()
 
+    monkeypatch.setattr(
+        ds,
+        "smoke_patient_context_path",
+        lambda: {
+            "ok": True,
+            "covered": True,
+            "detectionOk": True,
+            "bindOk": True,
+            "unboundOk": True,
+            "boundOk": True,
+            "monThuOk": True,
+            "emptyNotZero": True,
+            "phiSafe": True,
+            "unboundIntent": "policy:patient-summary-unbound",
+            "boundIntent": "policy:patient-summary-bound",
+            "initials": "SM",
+            "patientHash": "AAAA",
+        },
+    )
+
     # Skip HTTP probe so unit test does not depend on live 8765 process.
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is True
     assert result["status"] == "GREEN"
     assert result["deskProof"] == "MATCH"
     assert result.get("dataBeamHash")
+    assert result.get("thisPatientShortcutCovered") is True
     assert (tmp_path / "desk_smoke_log.jsonl").is_file()
 
 
@@ -124,7 +145,71 @@ def test_desk_smoke_fails_when_force_close_wrong(monkeypatch, tmp_path):
             "periodClose": {"dataBeamHash": "aaaaaaaaaaaaaaaa"},
         },
     )
+    monkeypatch.setattr(
+        ds,
+        "smoke_patient_context_path",
+        lambda: {"ok": True, "covered": True, "emptyNotZero": True},
+    )
 
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is False
     assert "force_close_availability" in result["failures"]
+
+
+def test_desk_smoke_this_patient_path_marks_covered(monkeypatch, tmp_path):
+    import desk_smoke as ds
+    import daily_closeout as dc
+    import hal_brain_tools as h
+
+    monkeypatch.setattr(ds, "OPS_DIR", tmp_path)
+    monkeypatch.setattr(ds, "SMOKE_LOG_PATH", tmp_path / "desk_smoke_log.jsonl")
+    monkeypatch.setattr(ds, "SMOKE_STATE_PATH", tmp_path / "desk_smoke_state.json")
+
+    ready = {
+        "ok": True,
+        "level": "fresh",
+        "blocking": [],
+        "alignmentLasers": {"red": False, "green": True},
+        "periodClose": {"status": "completed"},
+    }
+    monkeypatch.setattr(
+        dc,
+        "period_close_status",
+        lambda: {"ok": True, "status": "completed", "beamHash": "x", "completedAt": "t"},
+    )
+    monkeypatch.setattr(dc, "force_close_available", lambda *a, **k: False)
+    monkeypatch.setattr(
+        h,
+        "money_beam_attestation",
+        lambda readiness=None, bypass_cache=False: {
+            "ok": True,
+            "beamHash": "bbbbbbbbbbbbbbbb",
+            "dataBeamHash": "aaaaaaaaaaaaaaaa",
+            "softdent": {"display": "$1", "hasData": True},
+            "quickbooks": {"display": "$2", "hasData": True},
+        },
+    )
+    monkeypatch.setattr(
+        h,
+        "beam_desk_proof",
+        lambda readiness=None: {
+            "ok": True,
+            "deskProof": "MATCH",
+            "live": {"dataBeamHash": "aaaaaaaaaaaaaaaa"},
+            "periodClose": {"dataBeamHash": "aaaaaaaaaaaaaaaa"},
+        },
+    )
+    monkeypatch.setattr(
+        ds,
+        "smoke_patient_context_path",
+        lambda: {
+            "ok": False,
+            "covered": False,
+            "emptyNotZero": True,
+            "error": "forced",
+        },
+    )
+    result = ds.run_desk_smoke(probe_http=False, readiness=ready)
+    assert result["ok"] is False
+    assert "this_patient_shortcut" in result["failures"]
+    assert result.get("thisPatientShortcutCovered") is False

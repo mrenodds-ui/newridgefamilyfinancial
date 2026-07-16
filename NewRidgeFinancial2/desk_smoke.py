@@ -5,6 +5,7 @@ Validates:
 - money beams + dataBeamHash
 - Force Close availability vs lasers/stalled
 - beam desk proof (in-process + optional HTTP /api/hal/tools/beam-verify)
+- Mon–Thu → HAL patient-context bind → “this patient” / unbound intents
 
 Writes app_data/nr2/ops/desk_smoke_log.jsonl. SoftDent write-back forbidden. empty ≠ $0.
 """
@@ -14,11 +15,13 @@ from __future__ import annotations
 import json
 import os
 import ssl
+import sys
+import types
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OPS_DIR = REPO_ROOT / "app_data" / "nr2" / "ops"
@@ -67,6 +70,199 @@ def _http_get(path: str, *, base: str | None = None, timeout: float = 20.0) -> d
         return {"ok": False, "status": int(exc.code), "error": f"HTTP {exc.code}", "data": None}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "status": 0, "error": f"{type(exc).__name__}: {exc}"[:200], "data": None}
+
+
+def _with_smoke_rbac(fn: Callable[[], Any]) -> Any:
+    """Allow in-process dossier policy during smoke when bottle/RBAC is unavailable."""
+    try:
+        from nr2_rbac import has_capability  # noqa: F401
+
+        return fn()
+    except Exception:
+        fake = types.ModuleType("nr2_rbac")
+        fake.has_capability = lambda *_a, **_k: True  # type: ignore[attr-defined]
+        fake.current_role = lambda: "office_manager"  # type: ignore[attr-defined]
+        prev = sys.modules.get("nr2_rbac")
+        sys.modules["nr2_rbac"] = fake
+        try:
+            return fn()
+        finally:
+            if prev is None:
+                sys.modules.pop("nr2_rbac", None)
+            else:
+                sys.modules["nr2_rbac"] = prev
+
+
+def smoke_patient_context_path() -> dict[str, Any]:
+    """Mon–Thu slot → bind → this-patient / unbound policy (PHI = hash/initials only)."""
+    from patient_dossier import (
+        format_hal_patient_summary_reply,
+        patient_hash,
+        query_refers_to_bound_patient,
+        query_touches_patient_summary,
+    )
+    from hal_session_store import (
+        active_patient_context,
+        create_session,
+        set_patient_context,
+    )
+
+    detail: dict[str, Any] = {
+        "detectionOk": False,
+        "bindOk": False,
+        "unboundOk": False,
+        "boundOk": False,
+        "monThuOk": False,
+        "emptyNotZero": True,
+        "phiSafe": True,
+        "initials": None,
+        "patientHash": None,
+        "unboundIntent": None,
+        "boundIntent": None,
+        "monThuDays": 0,
+        "error": None,
+    }
+
+    try:
+        detection_ok = query_refers_to_bound_patient("Tell me about this patient") and query_touches_patient_summary(
+            "What's the copay for this patient?"
+        )
+        detail["detectionOk"] = bool(detection_ok)
+        if not detection_ok:
+            return {"ok": False, "covered": False, **detail, "error": "this_patient_detection_failed"}
+
+        pid = ""
+        initials = "SM"
+        ph = "SMOK"
+        mon_thu_days = 0
+        try:
+            from nr2_softdent_daily import appointments_range_snapshot, monday_of_week_iso
+
+            snap = appointments_range_snapshot(monday_of_week_iso(), days=4)
+            days = snap.get("days") if isinstance(snap, dict) else None
+            if isinstance(days, list):
+                mon_thu_days = len(days)
+                detail["monThuDays"] = mon_thu_days
+                detail["monThuOk"] = mon_thu_days >= 1
+                for day in days:
+                    if not isinstance(day, dict):
+                        continue
+                    for slot in day.get("slots") or []:
+                        if not isinstance(slot, dict):
+                            continue
+                        cand = str(slot.get("patientId") or "").strip()
+                        if cand:
+                            pid = cand
+                            initials = str(slot.get("initials") or initials)[:8]
+                            ph = str(slot.get("patientHash") or patient_hash(pid)).replace("#", "")[:4]
+                            break
+                    if pid:
+                        break
+        except Exception as exc:  # noqa: BLE001
+            detail["monThuError"] = f"{type(exc).__name__}: {exc}"[:160]
+
+        if not pid:
+            pid = "desk-smoke-patient"
+            ph = patient_hash(pid)
+            initials = "DS"
+            detail["monThuOk"] = detail["monThuOk"] or mon_thu_days >= 1
+
+        detail["initials"] = initials
+        detail["patientHash"] = ph
+
+        created = create_session(meta={"source": "desk_smoke", "purpose": "this_patient"})
+        sid = str(created.get("sessionId") or "").strip()
+        if not sid:
+            return {"ok": False, "covered": False, **detail, "error": "session_create_failed"}
+
+        bound = set_patient_context(
+            sid,
+            patient_id=pid,
+            patient_hash=ph,
+            initials=initials,
+        )
+        ctx = active_patient_context(sid)
+        bind_ok = bool(bound.get("ok")) and isinstance(ctx, dict) and str(ctx.get("patientId") or "") == pid
+        detail["bindOk"] = bind_ok
+        # Smoke trail keeps SoftDent id server-side; public fields are hash/initials only.
+        detail["phiSafe"] = bool(ph) and bool(initials) and " " not in str(initials)
+        if not bind_ok:
+            return {"ok": False, "covered": False, **detail, "error": "patient_context_bind_failed"}
+
+        def _unbound() -> dict[str, str]:
+            return format_hal_patient_summary_reply(
+                "What's the copay for this patient?",
+                session_id="desk-smoke-missing-session",
+            )
+
+        unbound = _with_smoke_rbac(_unbound)
+        unbound_intent = str(unbound.get("intent") or "")
+        detail["unboundIntent"] = unbound_intent
+        detail["unboundOk"] = unbound_intent == "policy:patient-summary-unbound"
+        if not detail["unboundOk"]:
+            return {
+                "ok": False,
+                "covered": False,
+                **detail,
+                "error": f"unbound_intent={unbound_intent or 'missing'}",
+            }
+
+        try:
+            from patient_dossier import _RATE
+
+            _RATE.clear()
+        except Exception:
+            pass
+
+        def _bound() -> dict[str, str]:
+            return format_hal_patient_summary_reply(
+                "What is the insurance for this patient?",
+                session_id=sid,
+            )
+
+        bound_reply = _with_smoke_rbac(_bound)
+        bound_intent = str(bound_reply.get("intent") or "")
+        bound_text = str(bound_reply.get("text") or "")
+        detail["boundIntent"] = bound_intent
+        # Bound path proves session resolution; rate-limit is acceptable after bind.
+        bound_ok = bound_intent in (
+            "policy:patient-summary-bound",
+            "policy:patient-summary-rate",
+        )
+        if bound_intent == "policy:patient-summary-bound":
+            bound_ok = "Using bound patient context" in bound_text
+        detail["boundOk"] = bound_ok
+        if bound_intent == "policy:patient-summary-bound":
+            compact = bound_text.replace(" ", "")
+            detail["emptyNotZero"] = "empty≠$0" in compact or "empty≠$0" in bound_text
+            if not detail["emptyNotZero"]:
+                return {
+                    "ok": False,
+                    "covered": False,
+                    **detail,
+                    "error": "missing_empty_ne_zero_footer",
+                }
+
+        if not bound_ok:
+            return {
+                "ok": False,
+                "covered": False,
+                **detail,
+                "error": f"bound_intent={bound_intent or 'missing'}",
+            }
+
+        covered = bool(
+            detail["detectionOk"]
+            and detail["bindOk"]
+            and detail["unboundOk"]
+            and detail["boundOk"]
+            and detail["emptyNotZero"]
+            and detail["phiSafe"]
+        )
+        return {"ok": covered, "covered": covered, **detail}
+    except Exception as exc:  # noqa: BLE001
+        detail["error"] = f"{type(exc).__name__}: {exc}"[:240]
+        return {"ok": False, "covered": False, **detail}
 
 
 def run_desk_smoke(
@@ -221,10 +417,39 @@ def run_desk_smoke(
         }
     )
 
+    # --- Mon–Thu → bind → this-patient / unbound (patient-context beam path) ---
+    try:
+        patient_ctx = smoke_patient_context_path()
+    except Exception as exc:  # noqa: BLE001
+        patient_ctx = {"ok": False, "covered": False, "error": str(exc)[:200]}
+    patient_ctx_ok = bool(patient_ctx.get("ok")) and bool(patient_ctx.get("covered"))
+    checks.append(
+        {
+            "id": "this_patient_shortcut",
+            "ok": patient_ctx_ok,
+            "covered": bool(patient_ctx.get("covered")),
+            "detectionOk": patient_ctx.get("detectionOk"),
+            "bindOk": patient_ctx.get("bindOk"),
+            "unboundOk": patient_ctx.get("unboundOk"),
+            "boundOk": patient_ctx.get("boundOk"),
+            "monThuOk": patient_ctx.get("monThuOk"),
+            "unboundIntent": patient_ctx.get("unboundIntent"),
+            "boundIntent": patient_ctx.get("boundIntent"),
+            "initials": patient_ctx.get("initials"),
+            "patientHash": patient_ctx.get("patientHash"),
+            "emptyNotZero": patient_ctx.get("emptyNotZero", True),
+            "deskProof": proof_status,
+            "forceCloseAvailable": bool(fc_available),
+            "error": patient_ctx.get("error"),
+        }
+    )
+    if not patient_ctx_ok:
+        failures.append("this_patient_shortcut")
+
     overall = len(failures) == 0
     row = {
         "ok": overall,
-        "emptyNotZero": True,
+        "emptyNotZero": True if patient_ctx.get("emptyNotZero", True) else False,
         "at": _iso_now(),
         "status": "GREEN" if overall else "RED",
         "failures": failures,
@@ -239,6 +464,7 @@ def run_desk_smoke(
         "beamHash": beam_hash or None,
         "forceCloseAvailable": bool(fc_available),
         "patientAttestEligible": patient_attest_eligible,
+        "thisPatientShortcutCovered": bool(patient_ctx.get("covered")),
         "logPath": str(SMOKE_LOG_PATH),
         "buildHint": None,
     }
@@ -260,6 +486,7 @@ def run_desk_smoke(
             "dataBeamHash": data_hash or None,
             "forceCloseAvailable": bool(fc_available),
             "patientAttestEligible": patient_attest_eligible,
+            "thisPatientShortcutCovered": bool(patient_ctx.get("covered")),
         }
     )
     return row
