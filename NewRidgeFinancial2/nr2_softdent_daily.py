@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime, timezone
 from typing import Any
@@ -1690,3 +1691,67 @@ def ar_aging() -> dict[str, Any]:
         "stale": stale,
         "honesty": "empty != $0",
     }
+
+
+_CLAIM_ID_IN_QUERY = re.compile(
+    r"\b((?:CLM|TXN|DS)-[\w-]+)\b",
+    re.IGNORECASE,
+)
+
+
+def query_touches_patient_balance_narrative(raw: str) -> bool:
+    q = str(raw or "").lower()
+    if not q.strip():
+        return False
+    return bool(
+        re.search(
+            r"\b("
+            r"patient\s+balance\s+narrative|"
+            r"balance\s+narrative|"
+            r"phone\s+script.{0,24}claim|"
+            r"what\s+(?:do\s+i|should\s+i)\s+(?:tell|say).{0,40}(?:patient|payer)|"
+            r"patient\s+owe.{0,24}claim"
+            r")\b",
+            q,
+        )
+    )
+
+
+def _claim_id_from_balance_query(query: str) -> str:
+    match = _CLAIM_ID_IN_QUERY.search(str(query or ""))
+    return str(match.group(1) or "").strip() if match else ""
+
+
+def format_patient_balance_hal_reply(query: str = "", *, claim_id: str | None = None) -> str:
+    """Staff paste narrative from a live outstanding claim row (empty ≠ $0)."""
+    cid = str(claim_id or _claim_id_from_balance_query(query) or "").strip()
+    if not cid:
+        sample = claims_outstanding(limit=1)
+        rows = sample.get("claims") if isinstance(sample, dict) else None
+        if isinstance(rows, list) and rows:
+            cid = str((rows[0] or {}).get("claimId") or "").strip()
+    if not cid:
+        return (
+            "NO SIGNAL — no outstanding claim row to narrate. "
+            "Open Claims page, click a row, or include claim id (CLM-/TXN-/DS-) in your ask. "
+            "empty ≠ $0 · SoftDent READ-ONLY."
+        )
+    review = claim_review(claim_id=cid)
+    if not review.get("ok") or not review.get("hasData"):
+        err = str(review.get("error") or review.get("emptyMessage") or "claim_not_found")
+        return (
+            f"Claim `{cid}` — no live review narrative ({err}). "
+            "Use Claims dossier or refresh sd_claims ingest. empty ≠ $0."
+        )
+    narrative = review.get("narrative") if isinstance(review.get("narrative"), dict) else {}
+    text = str(narrative.get("text") or "").strip()
+    if not text:
+        return f"Claim `{cid}` — narrative empty (not zero dollars). SoftDent READ-ONLY."
+    lines = [
+        "Patient balance narrative (from live claim row only — not aggregate AR):",
+        text,
+        "Phone copy:",
+        str(narrative.get("phoneCopy") or "—"),
+        "Before quoting office-wide AR, check money beams (empty ≠ $0).",
+    ]
+    return "\n".join(lines)

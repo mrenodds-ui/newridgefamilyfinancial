@@ -666,6 +666,20 @@ def try_local_policy_reply(
         pass
 
     try:
+        from nr2_softdent_daily import (
+            format_patient_balance_hal_reply,
+            query_touches_patient_balance_narrative,
+        )
+
+        if query_touches_patient_balance_narrative(raw):
+            return {
+                "text": format_patient_balance_hal_reply(raw),
+                "intent": "policy:patient-balance-narrative",
+            }
+    except Exception:
+        pass
+
+    try:
         from softdent_report_pull import (
             format_softdent_report_pull_hal_reply,
             query_touches_softdent_report_pull,

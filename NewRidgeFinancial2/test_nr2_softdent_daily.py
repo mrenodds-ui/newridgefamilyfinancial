@@ -14,9 +14,11 @@ from nr2_softdent_daily import (
     claim_review,
     claims_outstanding,
     collections_daily,
+    format_patient_balance_hal_reply,
     hygiene_recall_summary,
     new_patients_mtd,
     provider_production,
+    query_touches_patient_balance_narrative,
     refresh_nightly_claims_txn,
 )
 
@@ -144,6 +146,20 @@ class Nr2SoftdentDailyTests(unittest.TestCase):
             items = ((result.get("checklist") or {}).get("items")) or []
             self.assertTrue(any(i.get("id") == "unpaid" and i.get("ok") for i in items))
             self.assertEqual(len(result.get("procedures") or []), 1)
+
+    def test_patient_balance_hal_narrative_from_claim(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "analytics.sqlite3"
+            _seed_db(db_path)
+            with patch("nr2_softdent_daily.resolve_sd_sqlite_db", return_value=db_path):
+                with patch(
+                    "nr2_softdent_daily._procedure_lines_for_claim",
+                    return_value=[{"code": "1110", "kind": "procedure"}],
+                ):
+                    reply = format_patient_balance_hal_reply("patient balance narrative CLM-1")
+            self.assertIn("Patient balance narrative", reply)
+            self.assertIn("Jane", reply)
+            self.assertTrue(query_touches_patient_balance_narrative("phone script for claim"))
 
     def test_claim_review_rejects_paid(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
