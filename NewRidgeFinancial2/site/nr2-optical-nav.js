@@ -75,7 +75,13 @@
     crumb.id = "nr2-crumb";
     crumb.className = "nr2-crumb";
     crumb.setAttribute("aria-label", "Breadcrumb");
-    main.insertBefore(crumb, main.firstChild);
+    // Package 1 schema: keep `.ledge` as first child of main when present.
+    const ledge = main.querySelector(":scope > .ledge");
+    if (ledge && ledge.parentNode === main) {
+      main.insertBefore(crumb, ledge.nextSibling);
+    } else {
+      main.insertBefore(crumb, main.firstChild);
+    }
     return crumb;
   }
 

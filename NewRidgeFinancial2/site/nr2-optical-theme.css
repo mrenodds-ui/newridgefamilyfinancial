@@ -545,6 +545,92 @@ td.phi-name .phi-label,
 }
 
 .main { padding: var(--space-4) var(--space-4) var(--space-6); overflow-y: auto; }
+/* Moonshot Package 1 — Chrome Collapse Protocol (executive first-viewport) */
+.main {
+  padding-top: 0;
+  overflow-y: auto;
+  height: calc(100dvh - 36px - 20px);
+  padding-bottom: calc(var(--space-6) + 24px);
+  box-sizing: border-box;
+}
+body.has-ops-gates .main {
+  height: calc(100dvh - 68px - 20px);
+}
+.exec-compact-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+  min-height: 48px;
+  margin: 0 0 2px;
+  padding: 6px 0 2px;
+}
+.exec-compact-header .mode-eyebrow,
+.exec-compact-header .type-staff,
+.exec-compact-header h1.type-staff,
+.exec-compact-header .kicker {
+  display: inline;
+  font-size: 12px;
+  line-height: 1;
+  margin: 0;
+  max-width: none;
+}
+.exec-compact-header .mode-eyebrow {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--qb);
+}
+.exec-compact-header .type-staff,
+.exec-compact-header h1.type-staff {
+  font-family: var(--sans);
+  font-weight: 600;
+  color: var(--hal);
+  letter-spacing: 0.02em;
+}
+.exec-compact-header .kicker {
+  font-family: var(--sans);
+  color: var(--qb);
+  opacity: 0.92;
+}
+.main > .beam {
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  opacity: 1;
+  background: rgba(201, 162, 39, 0.3);
+  box-shadow: none;
+  overflow: hidden;
+}
+.main > .beam::after {
+  display: none;
+}
+body > .honesty {
+  position: fixed;
+  bottom: 0;
+  left: 220px;
+  right: 0;
+  height: 20px;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 2px 8px;
+  margin: 0;
+  background: rgba(8, 10, 12, 0.95);
+  border: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.25);
+  border-left: 0;
+  z-index: 200;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+@media (max-width: 900px) {
+  body > .honesty {
+    left: 0;
+  }
+}
 .main h1 {
   margin: 0 0 var(--space-1); font-family: var(--sans); font-size: 26px;
   font-weight: 600; color: var(--hal); letter-spacing: 0.02em;
@@ -581,6 +667,14 @@ td.phi-name .phi-label,
     0 1px 2px rgba(0, 0, 0, 0.35),
     0 10px 20px -10px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+/* Moonshot Package 1 — sticky money desk (first viewport) */
+.main > .ledge {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--vacuum);
+  margin-bottom: var(--space-3);
 }
 .ledge .money-strip { margin-bottom: 0; }
 .ledge > .exec-signature-block {
@@ -943,6 +1037,9 @@ html.nr2-reduced-motion .nr2-error-beam {
 @keyframes flow { to { background-position: 32px 0; } }
 
 /* Package 6: motion grammar — transform/opacity only · respect reduced-motion */
+/* Package 1 schema: ledge first · exec-compact-header · beam · content (honesty is body LED) */
+html.nr2-motion .main.nr2-motion-enter > .ledge,
+html.nr2-motion .main.nr2-motion-enter > .exec-compact-header,
 html.nr2-motion .main.nr2-motion-enter > .mode-eyebrow,
 html.nr2-motion .main.nr2-motion-enter > h1,
 html.nr2-motion .main.nr2-motion-enter > .kicker,
@@ -958,6 +1055,8 @@ html.nr2-motion .main.nr2-motion-enter > .om-claims,
 html.nr2-motion .main.nr2-motion-enter > section {
   animation: nr2-page-enter var(--nr2-dur-slow) var(--nr2-ease) both;
 }
+html.nr2-motion .main.nr2-motion-enter > .ledge { animation-delay: 0ms; }
+html.nr2-motion .main.nr2-motion-enter > .exec-compact-header { animation-delay: 40ms; }
 html.nr2-motion .main.nr2-motion-enter > h1 { animation-delay: 40ms; }
 html.nr2-motion .main.nr2-motion-enter > .kicker { animation-delay: 70ms; }
 html.nr2-motion .main.nr2-motion-enter > .beam { animation-delay: 90ms; }

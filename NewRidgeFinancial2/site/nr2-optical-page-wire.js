@@ -528,12 +528,17 @@
     }
     let chip = document.getElementById("nr2-excel-probe-chip");
     if (!chip) {
-      const strip = document.querySelector(".honesty, .honesty-strip");
-      if (strip && strip.parentNode) {
+      // Package 1: honesty is body LED — park chip after beam/compact header, not under fixed footer.
+      const anchor =
+        document.querySelector("main.main > .beam") ||
+        document.querySelector("main.main > .exec-compact-header") ||
+        document.querySelector("main.main .honesty, main.main .honesty-strip") ||
+        document.querySelector(".honesty, .honesty-strip");
+      if (anchor && anchor.parentNode) {
         chip = document.createElement("p");
         chip.id = "nr2-excel-probe-chip";
         chip.className = "excel-probe-chip";
-        strip.insertAdjacentElement("afterend", chip);
+        anchor.insertAdjacentElement("afterend", chip);
       }
     }
     if (chip) {
