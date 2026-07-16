@@ -1073,53 +1073,67 @@ def _populate_from_daysheet(conn: sqlite3.Connection, path: Path, *, extracted_a
     return counts
 
 
+def _purge_stale_daysheet_claim_rows(conn: sqlite3.Connection) -> int:
+    """Remove DS- line claims when TXN rebuild is authoritative (paid on full ledger)."""
+    cur = conn.cursor()
+    cur.execute("DELETE FROM sd_claims WHERE claim_id LIKE 'DS-%'")
+    deleted = int(cur.rowcount or 0)
+    if deleted:
+        conn.commit()
+    return deleted
+
+
 def _populate_from_claims_csv(conn: sqlite3.Connection, path: Path, *, extracted_at: str) -> int:
     if not path.is_file():
         return 0
     count = 0
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
-        for row in reader:
-            claim_id = str(row.get("ClaimId") or row.get("claim_id") or "").strip()
-            if not claim_id:
-                continue
-            amount_raw = str(row.get("ClaimAmount") or row.get("amount") or "0").replace(",", "").replace("$", "")
-            try:
-                amount = float(amount_raw)
-            except ValueError:
-                amount = 0.0
-            try:
-                from softdent_outstanding_claims_bridge import ensure_sd_claims_bridge_columns
+        rows = list(reader)
+    has_txn = any(str(row.get("ClaimId") or row.get("claim_id") or "").startswith("TXN-") for row in rows)
+    if has_txn:
+        _purge_stale_daysheet_claim_rows(conn)
+    for row in rows:
+        claim_id = str(row.get("ClaimId") or row.get("claim_id") or "").strip()
+        if not claim_id:
+            continue
+        amount_raw = str(row.get("ClaimAmount") or row.get("amount") or "0").replace(",", "").replace("$", "")
+        try:
+            amount = float(amount_raw)
+        except ValueError:
+            amount = 0.0
+        try:
+            from softdent_outstanding_claims_bridge import ensure_sd_claims_bridge_columns
 
-                ensure_sd_claims_bridge_columns(conn)
-            except Exception:
-                pass
-            bal_raw = str(row.get("Balance") or row.get("balance") or "").replace(",", "").replace("$", "").strip()
-            try:
-                balance = float(bal_raw) if bal_raw else None
-            except ValueError:
-                balance = None
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO sd_claims
-                (claim_id, patient_name, payer, service_date, claim_amount, claim_status,
-                 practice_id, extracted_at, total_fee, balance)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    claim_id,
-                    str(row.get("PatientName") or row.get("patient_name") or "").strip(),
-                    str(row.get("Payer") or row.get("payer") or "").strip(),
-                    str(row.get("ServiceDate") or row.get("service_date") or "").strip(),
-                    amount,
-                    str(row.get("ClaimStatus") or row.get("claim_status") or "").strip(),
-                    "",
-                    extracted_at,
-                    amount,
-                    balance,
-                ),
-            )
-            count += 1
+            ensure_sd_claims_bridge_columns(conn)
+        except Exception:
+            pass
+        bal_raw = str(row.get("Balance") or row.get("balance") or "").replace(",", "").replace("$", "").strip()
+        try:
+            balance = float(bal_raw) if bal_raw else None
+        except ValueError:
+            balance = None
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO sd_claims
+            (claim_id, patient_name, payer, service_date, claim_amount, claim_status,
+             practice_id, extracted_at, total_fee, balance)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                claim_id,
+                str(row.get("PatientName") or row.get("patient_name") or "").strip(),
+                str(row.get("Payer") or row.get("payer") or "").strip(),
+                str(row.get("ServiceDate") or row.get("service_date") or "").strip(),
+                amount,
+                str(row.get("ClaimStatus") or row.get("claim_status") or "").strip(),
+                "",
+                extracted_at,
+                amount,
+                balance,
+            ),
+        )
+        count += 1
     conn.commit()
     return count
 

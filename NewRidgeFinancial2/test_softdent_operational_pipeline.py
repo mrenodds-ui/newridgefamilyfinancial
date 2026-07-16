@@ -85,6 +85,37 @@ class SoftDentOperationalPipelineTests(unittest.TestCase):
         marked = build_claims_rows(transactions, unpaid_only=False)
         self.assertEqual(marked[0]["ClaimStatus"], "Paid")
 
+    def test_claim_is_unpaid_on_txn_rejects_settled_ds_row(self) -> None:
+        from softdent_operational_pipeline import claim_is_unpaid_on_txn
+
+        transactions = [
+            {
+                "patientId": "1080404",
+                "patientName": "Bernett, Jeffery Adam",
+                "code": "1110",
+                "description": "Prophy",
+                "production": 137.0,
+                "reportDate": "2026-05-28",
+            },
+            {
+                "patientId": "1080404",
+                "patientName": "Bernett, Jeffery Adam",
+                "code": "2",
+                "description": "Insurance Check Payment",
+                "production": None,
+                "reportDate": "2026-05-28",
+            },
+        ]
+        self.assertFalse(
+            claim_is_unpaid_on_txn(
+                patient_id="1080404",
+                service_date="2026-05-28",
+                claim_id="DS-20260528-1080404-1110-3",
+                claim_status="Pending Review",
+                transactions=transactions,
+            )
+        )
+
     def test_build_claims_prefers_sd_claims_payer_when_available(self) -> None:
         from softdent_operational_pipeline import _sd_claims_payer_index
 

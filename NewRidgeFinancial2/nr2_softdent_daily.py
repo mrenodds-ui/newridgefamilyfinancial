@@ -702,6 +702,62 @@ def provider_utilization_last_7d() -> dict[str, Any]:
     }
 
 
+def _resolve_claim_patient_id(
+    claim_id: str,
+    patient_name: str,
+    name_to_id: dict[str, str],
+) -> str:
+    """Prefer MRN embedded in TXN-/DS- claim ids for SoftDent ledger settlement."""
+    try:
+        from softdent_operational_pipeline import patient_id_from_claim_id
+
+        from_claim = patient_id_from_claim_id(str(claim_id or ""))
+        if from_claim:
+            return from_claim
+    except Exception:
+        pass
+    return _lookup_patient_id(name_to_id, str(patient_name or "").strip())
+
+
+def _filter_unpaid_claim_rows(
+    rows: list[tuple[Any, ...]],
+    *,
+    name_to_id: dict[str, str],
+    transactions: list[dict[str, Any]] | None = None,
+    settlement_index: dict[str, set[str]] | None = None,
+) -> list[tuple[Any, ...]]:
+    """Drop paid/settled rows using full SoftDent TXN ledger (not stale DS status)."""
+    if not rows:
+        return []
+    try:
+        from softdent_operational_pipeline import claim_is_unpaid_on_txn
+    except Exception:
+        return rows
+    txs = transactions
+    idx = settlement_index
+    if txs is None or idx is None:
+        try:
+            from softdent_operational_pipeline import load_txn_settlement_context
+
+            txs, idx = load_txn_settlement_context()
+        except Exception:
+            txs, idx = None, None
+    kept: list[tuple[Any, ...]] = []
+    for claim_id, patient, payer, service_date, amount, status in rows:
+        patient_raw = str(patient or "").strip()
+        patient_id = _resolve_claim_patient_id(str(claim_id or ""), patient_raw, name_to_id)
+        if claim_is_unpaid_on_txn(
+            patient_id=patient_id,
+            service_date=str(service_date or ""),
+            claim_id=str(claim_id or ""),
+            claim_status=str(status or ""),
+            transactions=txs,
+            settlement_index=idx,
+        ):
+            kept.append((claim_id, patient, payer, service_date, amount, status))
+    return kept
+
+
 def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
     """Open SoftDent claims sample + full outstanding total (empty ≠ $0).
 
@@ -710,6 +766,9 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
 
     When ``sd_patients`` exists, resolve ``patientId`` / hash / initials via
     patient_name lookup so Claims page can open mini dossier on click.
+
+    Re-checks each row against SoftDent Trans-for-a-Period so stale daysheet
+    (DS-) rows with insurance pay on/after DOS do not appear as unpaid.
     """
     conn, db_path = _connect()
     if not conn:
@@ -736,14 +795,8 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         """
         total = None
         count = 0
+        txn_ctx: tuple[list[dict[str, Any]], dict[str, set[str]]] | None = None
         if _table_exists(conn, "sd_claims"):
-            cur.execute(
-                "SELECT COUNT(*), SUM(COALESCE(claim_amount, 0)) FROM sd_claims WHERE " + open_where
-            )
-            row = cur.fetchone() or (0, None)
-            count = int(row[0] or 0)
-            if row[1] is not None:
-                total = round(float(row[1]), 2)
             cur.execute(
                 """
                 SELECT claim_id, patient_name, payer, service_date, claim_amount, claim_status
@@ -752,13 +805,28 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 + open_where
                 + """
                 ORDER BY claim_amount DESC
-                LIMIT ?
-                """,
-                (max(1, int(limit)),),
+                """
             )
-            rows = cur.fetchall()
+            candidate_rows = list(cur.fetchall())
+            name_to_id = _patient_name_to_id_index(conn)
+            try:
+                from softdent_operational_pipeline import load_txn_settlement_context
+
+                txn_ctx = load_txn_settlement_context()
+            except Exception:
+                txn_ctx = None
+            rows = _filter_unpaid_claim_rows(
+                candidate_rows,
+                name_to_id=name_to_id,
+                transactions=txn_ctx[0] if txn_ctx else None,
+                settlement_index=txn_ctx[1] if txn_ctx else None,
+            )
+            count = len(rows)
+            total = round(sum(float(r[4] or 0) for r in rows), 2) if rows else 0.0
+            rows = rows[: max(1, int(limit))]
         else:
             rows = []
+            name_to_id = {}
 
         if not rows and _table_exists(conn, "outstanding_claims"):
             source = "outstanding_claims"
@@ -784,15 +852,13 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 (max(1, int(limit)),),
             )
             rows = cur.fetchall()
-
-        # Name → patient_id (first match) for dossier click — sd_claims has no patient_id.
-        name_to_id = _patient_name_to_id_index(conn) if rows else {}
+            name_to_id = _patient_name_to_id_index(conn) if rows else {}
 
         claims = []
         with_patient_id = 0
         for claim_id, patient, payer, service_date, amount, status in rows:
             patient_raw = str(patient or "").strip()
-            patient_id = _lookup_patient_id(name_to_id, patient_raw)
+            patient_id = _resolve_claim_patient_id(str(claim_id or ""), patient_raw, name_to_id)
             if patient_id:
                 with_patient_id += 1
             entry: dict[str, Any] = {

@@ -359,8 +359,10 @@ def claim_is_unpaid_on_txn(
         return True
     txs = transactions
     idx = settlement_index
-    if txs is None or idx is None:
+    if txs is None:
         txs, idx = load_txn_settlement_context()
+    elif idx is None:
+        idx = _build_settlement_date_index(txs)
     if not txs:
         return True
     status = _claim_status_for_patient_day(pid, dos, txs, settlement_index=idx)
