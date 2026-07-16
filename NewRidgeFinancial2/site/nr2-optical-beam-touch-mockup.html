@@ -62,53 +62,84 @@
     }
     .beam-ray {
       position: absolute; left: 0; top: 0;
-      height: 4px; transform-origin: 0 50%;
-      border-radius: 2px;
-      opacity: 0.9;
+      height: 2px; transform-origin: 0 50%;
+      border-radius: 1px;
+      opacity: 0.95;
+      background: linear-gradient(
+        90deg,
+        rgba(255,0,68,0.05) 0%,
+        #ff0044 12%,
+        #ffb0c0 48%,
+        #ff0044 88%,
+        rgba(255,0,68,0.05) 100%
+      );
+      box-shadow:
+        0 0 2px #fff,
+        0 0 6px #ff0044,
+        0 0 14px rgba(255,0,68,0.95),
+        0 0 28px rgba(255,0,68,0.55);
+      animation: laser-pulse 1.35s ease-in-out infinite;
     }
-    .beam-ray.sd {
-      height: 5px; background: repeating-linear-gradient(90deg, #e0e6ed 0 8px, transparent 8px 16px);
-      box-shadow: 0 0 8px rgba(224,230,237,0.55);
-      animation: beam-bright 2s ease-in-out infinite, flow-x 1.1s linear infinite;
-    }
-    .beam-ray.qb {
-      height: 5px;
-      background: repeating-linear-gradient(90deg, #ffaa00 0 8px, transparent 8px 16px);
-      box-shadow: 0 0 8px rgba(255,170,0,0.55);
-      animation: beam-bright 2s ease-in-out infinite, flow-x 1.1s linear infinite;
-    }
-    .beam-ray.tax {
-      height: 5px;
-      background: repeating-linear-gradient(90deg, #ff66cc 0 8px, transparent 8px 16px);
-      box-shadow: 0 0 8px rgba(255,102,204,0.55);
-      animation: beam-bright 2s ease-in-out infinite, flow-x 1.1s linear infinite;
-    }
+    .beam-ray.sd,
+    .beam-ray.qb,
+    .beam-ray.tax,
     .beam-ray.ray-ctrl {
-      height: 5px;
-      background: repeating-linear-gradient(90deg, #00ced1 0 8px, transparent 8px 16px);
-      box-shadow: 0 0 8px rgba(0,206,209,0.55);
-      animation: beam-bright 2s ease-in-out infinite, flow-x 1.1s linear infinite;
+      height: 2px;
+      background: linear-gradient(
+        90deg,
+        rgba(255,0,68,0.05) 0%,
+        #ff0044 12%,
+        #ffb0c0 48%,
+        #ff0044 88%,
+        rgba(255,0,68,0.05) 100%
+      );
+      box-shadow:
+        0 0 2px #fff,
+        0 0 6px #ff0044,
+        0 0 14px rgba(255,0,68,0.95),
+        0 0 28px rgba(255,0,68,0.55);
+      animation: laser-pulse 1.35s ease-in-out infinite;
     }
     .beam-ray.is-dim {
-      opacity: 0.28;
-      filter: grayscale(0.35);
-      box-shadow: none;
-      animation: flow-x 1.8s linear infinite;
+      opacity: 0.32;
+      filter: saturate(0.7);
+      box-shadow:
+        0 0 2px rgba(255,0,68,0.4),
+        0 0 8px rgba(255,0,68,0.35);
+      animation: laser-pulse 2.2s ease-in-out infinite;
     }
     .beam-ray.is-cut {
       opacity: 0.14;
-      height: 2px;
-      filter: grayscale(0.7);
+      height: 1px;
+      filter: grayscale(0.5) brightness(0.7);
       box-shadow: none;
       animation: none;
-      background-image: repeating-linear-gradient(90deg, #667 0 3px, transparent 3px 12px) !important;
+      background: repeating-linear-gradient(90deg, #ff0044 0 4px, transparent 4px 14px) !important;
+    }
+    @keyframes laser-pulse {
+      0%, 100% {
+        opacity: 0.72;
+        box-shadow:
+          0 0 2px #fff,
+          0 0 5px #ff0044,
+          0 0 10px rgba(255,0,68,0.7),
+          0 0 18px rgba(255,0,68,0.35);
+      }
+      50% {
+        opacity: 1;
+        box-shadow:
+          0 0 3px #fff,
+          0 0 8px #ff0044,
+          0 0 18px rgba(255,0,68,1),
+          0 0 36px rgba(255,0,68,0.65);
+      }
     }
     @keyframes flow-x {
       to { background-position: 32px 0; }
     }
     @keyframes led-pulse {
       0%, 100% { opacity: 0.35; box-shadow: none; }
-      50% { opacity: 1; box-shadow: 0 0 12px #e0e6ed; }
+      50% { opacity: 1; box-shadow: 0 0 12px #ff0044; }
     }
 
     .emitter {
@@ -130,8 +161,8 @@
       content: "";
       position: absolute; right: -7px; top: 48%; width: 14px; height: 14px;
       margin-top: -7px;
-      border-radius: 50%; background: #e0e6ed;
-      box-shadow: 0 0 16px #e0e6ed, 0 0 32px rgba(224,230,237,0.6);
+      border-radius: 50%; background: #ff0044;
+      box-shadow: 0 0 16px #ff0044, 0 0 32px rgba(255,0,68,0.6);
       animation: led-pulse 1.2s ease-in-out infinite;
     }
     .emitter.qb {
@@ -146,8 +177,9 @@
       display: block;
       position: absolute; left: -7px; top: 48%; width: 14px; height: 14px;
       margin-top: -7px;
-      border-radius: 50%; background: #ffaa00;
-      box-shadow: 0 0 14px #ffaa00;
+      border-radius: 50%; background: #ff0044;
+      box-shadow: 0 0 14px #ff0044, 0 0 28px rgba(255,0,68,0.55);
+      animation: led-pulse 1.2s ease-in-out infinite;
     }
     .emitter.tax {
       right: 12px; top: 52px; border-color: rgba(255,102,204,0.55);
@@ -158,8 +190,9 @@
       content: "";
       position: absolute; left: -7px; top: 48%; width: 14px; height: 14px;
       margin-top: -7px;
-      border-radius: 50%; background: #ff66cc;
-      box-shadow: 0 0 14px #ff66cc;
+      border-radius: 50%; background: #ff0044;
+      box-shadow: 0 0 14px #ff0044, 0 0 28px rgba(255,0,68,0.55);
+      animation: led-pulse 1.2s ease-in-out infinite;
     }
     .emitter.tax .metric { color: #ff66cc; font-size: clamp(16px, 1.8vw, 20px); }
     .emitter.tax .paths {
@@ -286,32 +319,23 @@
       margin: -7px 0 0 -7px;
       left: 50%; top: 50%;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,0,68,0.9) 0%, transparent 70%);
-      box-shadow: 0 0 12px rgba(255,0,68,0.45);
+      background: radial-gradient(circle, #fff 0%, #ff0044 45%, transparent 72%);
+      box-shadow: 0 0 12px rgba(255,0,68,0.85);
       opacity: 0;
       transform: scale(0.4);
       animation: core-hit-flash 2s ease-in-out infinite;
     }
-    .core-hit[data-beam="sd"] {
-      background: radial-gradient(circle, #fff 0%, rgba(224,230,237,0.2) 55%, transparent 72%);
-      box-shadow: 0 0 16px rgba(224,230,237,0.85);
-      animation-duration: 2s;
-    }
-    .core-hit[data-beam="qb"] {
-      background: radial-gradient(circle, #ffd080 0%, rgba(255,170,0,0.25) 55%, transparent 72%);
-      box-shadow: 0 0 16px rgba(255,170,0,0.75);
-      animation-duration: 1.5s; animation-delay: 0.2s;
-    }
-    .core-hit[data-beam="tax"] {
-      background: radial-gradient(circle, #ffb0e0 0%, rgba(255,102,204,0.25) 55%, transparent 72%);
-      box-shadow: 0 0 16px rgba(255,102,204,0.7);
-      animation-duration: 1.5s; animation-delay: 0.45s;
-    }
+    .core-hit[data-beam="sd"],
+    .core-hit[data-beam="qb"],
+    .core-hit[data-beam="tax"],
     .core-hit[data-beam="ctrl"] {
-      background: radial-gradient(circle, #a8fff8 0%, rgba(0,206,209,0.25) 55%, transparent 72%);
-      box-shadow: 0 0 14px rgba(0,206,209,0.7);
-      animation-duration: 1.4s; animation-delay: 0.7s;
+      background: radial-gradient(circle, #fff 0%, #ff0044 45%, transparent 72%);
+      box-shadow: 0 0 16px rgba(255,0,68,0.9);
+      animation-duration: 1.35s;
     }
+    .core-hit[data-beam="qb"] { animation-delay: 0.2s; }
+    .core-hit[data-beam="tax"] { animation-delay: 0.45s; }
+    .core-hit[data-beam="ctrl"] { animation-delay: 0.7s; }
     /* One-shot recon fire burst */
     .core-burst {
       position: absolute; inset: -8px; border-radius: 50%;
@@ -587,14 +611,14 @@
       content: "";
       position: absolute; right: -7px; top: 48%; width: 14px; height: 14px;
       margin-top: -7px;
-      border-radius: 50%; background: #00ced1;
-      box-shadow: 0 0 14px #00ced1, 0 0 28px rgba(0,206,209,0.45);
+      border-radius: 50%; background: #ff0044;
+      box-shadow: 0 0 14px #ff0044, 0 0 28px rgba(255,0,68,0.55);
       animation: led-pulse 1.2s ease-in-out infinite;
     }
     .beam-ctrl {
       stroke-dasharray: 6 8;
       animation: flow 1.4s linear infinite;
-      filter: drop-shadow(0 0 3px #00ced1);
+      filter: drop-shadow(0 0 3px #ff0044);
     }
     .ctrl .cell { text-align: center; }
     .ctrl .cell h4 { margin: 0 0 8px; font-size: var(--text-sm); }
