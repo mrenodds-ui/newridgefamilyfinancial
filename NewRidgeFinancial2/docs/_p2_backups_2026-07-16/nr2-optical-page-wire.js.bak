@@ -528,9 +528,8 @@
     }
     let chip = document.getElementById("nr2-excel-probe-chip");
     if (!chip) {
-      // Package 1–2: honesty is body LED — park chip after ledge (beam/compact removed in P2).
+      // Package 1: honesty is body LED — park chip after beam/compact header, not under fixed footer.
       const anchor =
-        document.querySelector("main.main > .ledge") ||
         document.querySelector("main.main > .beam") ||
         document.querySelector("main.main > .exec-compact-header") ||
         document.querySelector("main.main .honesty, main.main .honesty-strip") ||
@@ -1530,13 +1529,11 @@
     });
     return true;
   }
-  /** Moonshot E1–E4 + Package 2: page letterhead owns banner; avoid duplicate E1 inject. */
+  /** Moonshot E1–E4: letterhead, seals, currency emboss, desk surface on every optical page. */
   function bootExecutiveChrome() {
     document.body.classList.add("exec-desk-surface");
-    const pageLh = document.getElementById("nr2-page-letterhead");
     const banner = document.querySelector(".banner");
-    // Package 2: `#nr2-page-letterhead` already maps title/meta/status — do not inject a second bar.
-    if (!pageLh && banner && !document.getElementById("nr2-exec-letterhead")) {
+    if (banner && !document.getElementById("nr2-exec-letterhead")) {
       const lh = document.createElement("header");
       lh.id = "nr2-exec-letterhead";
       lh.className = "exec-letterhead exec-practice-header";

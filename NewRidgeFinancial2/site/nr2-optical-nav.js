@@ -75,11 +75,12 @@
     crumb.id = "nr2-crumb";
     crumb.className = "nr2-crumb";
     crumb.setAttribute("aria-label", "Breadcrumb");
-    // Package 1: keep `.ledge` first child; park crumb after beam/compact (not between strip + title).
+    // Package 1+2: keep `.ledge` first child; crumb after ledge (compact/beam removed in Package 2).
+    const ledge = main.querySelector(":scope > .ledge");
     const beam = main.querySelector(":scope > .beam");
     const compact = main.querySelector(":scope > .exec-compact-header");
-    const ledge = main.querySelector(":scope > .ledge");
-    const anchor = beam || compact || ledge;
+    const halHdr = main.querySelector(":scope > .hal-cmd-header");
+    const anchor = ledge || halHdr || compact || beam;
     if (anchor && anchor.parentNode === main) {
       main.insertBefore(crumb, anchor.nextSibling);
     } else {

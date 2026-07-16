@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="/nr2-optical-hal-command.css" />
 </head>
 <body>
-  <div class="banner">
-    HAL · empty ≠ $0 · SoftDent+QB sync+navigate autonomous · write/outbound consent · no SoftDent write-back
-    <span class="bind">Local chat · multi-turn · autonomous ops on</span>
-  </div>
+  <header id="nr2-page-letterhead" class="banner exec-letterhead" role="banner" aria-label="Executive letterhead" title="HAL · empty ≠ $0 · SoftDent+QB sync+navigate autonomous · write/outbound consent · no SoftDent write-back">
+    <div class="exec-lh-title">HAL</div>
+    <div class="exec-lh-meta"><span class="exec-lh-mode">HAL · brains of the program</span><span class="exec-lh-kicker">SoftDent export + QB sync + navigate run free · SoftDent write-back / payer / email still consent-gated</span></div>
+    <div class="exec-lh-status"><span class="bind">Local chat · multi-turn · autonomous ops on</span><span class="exec-period-seal period-seal" id="nr2-period-seal">Period close · —</span></div>
+  </header>
   <div class="shell atmosphere">
     <nav class="nav" id="nav"></nav>
     <main class="main">
@@ -35,21 +36,14 @@
           </article>
         </section>
       </div>
-      <div class="exec-compact-header">
-        <p class="mode-eyebrow">HAL · brains of the program</p>
-        <h1 class="type-staff">HAL</h1>
-        <p class="kicker">SoftDent export + QB sync + navigate run free · SoftDent write-back / payer / email still consent-gated</p>
-      </div>
-      <div class="hal-cmd-header">
+<div class="hal-cmd-header">
         <span>
           <span class="hal-core-orb" id="halOrb" aria-hidden="true"></span>
           HAL CORE
         </span>
         <span id="systemTruth" class="hal-truth stale">SYSTEM: CHECKING</span>
       </div>
-      <div class="beam"></div>
-
-      <div class="hal-patient-ctx" id="patientContextBanner" hidden>
+<div class="hal-patient-ctx" id="patientContextBanner" hidden>
         <span class="hal-patient-ctx-lbl">Patient context</span>
         <span id="patientContextText">—</span>
         <button type="button" class="btn-quiet" id="btnClearPatientContext" title="Clear HAL patient context">Clear</button>

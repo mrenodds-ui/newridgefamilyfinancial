@@ -7,11 +7,10 @@
   <link rel="stylesheet" href="/nr2-optical-theme.css" />
 </head>
 <body>
-  <header id="nr2-page-letterhead" class="banner exec-letterhead" role="banner" aria-label="Executive letterhead" title="A/R Aging · empty ≠ $0 · no SoftDent write-back">
-    <div class="exec-lh-title">A/R Aging</div>
-    <div class="exec-lh-meta"><span class="exec-lh-mode">A/R · SoftDent buckets</span><span class="exec-lh-kicker">SoftDent AR buckets with STALE watermark when past TTL.</span></div>
-    <div class="exec-lh-status"><span class="bind">Wiring SoftDent AR…</span><span class="exec-period-seal period-seal" id="nr2-period-seal">Period close · —</span></div>
-  </header>
+  <div class="banner">
+    A/R Aging · empty ≠ $0 · no SoftDent write-back
+    <span class="bind">Wiring SoftDent AR…</span>
+  </div>
   <div class="shell atmosphere">
     <nav class="nav" id="nav"></nav>
     <main class="main">
@@ -39,7 +38,14 @@
         </article>
       </section>
       </div>
-<div class="om-claims-filters" id="ar-filters" aria-label="Filter SoftDent AR buckets">
+      <div class="exec-compact-header">
+        <p class="mode-eyebrow">A/R · SoftDent buckets</p>
+        <h1 class="type-staff">A/R Aging</h1>
+        <p class="kicker">SoftDent AR buckets with STALE watermark when past TTL.</p>
+      </div>
+      <div class="beam" aria-hidden="true"></div>
+
+      <div class="om-claims-filters" id="ar-filters" aria-label="Filter SoftDent AR buckets">
         <label class="om-claims-filter">
           Bucket
           <select id="ar-filter-bucket" title="Filter SoftDent AR aging bucket">
