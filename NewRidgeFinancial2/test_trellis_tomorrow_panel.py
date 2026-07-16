@@ -7,7 +7,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nr2_trellis_nightly import eligibility_report_html, eligibility_report_snapshot, tomorrow_insurance_snapshot
+from nr2_trellis_nightly import (
+    eligibility_report_html,
+    eligibility_report_snapshot,
+    tomorrow_insurance_snapshot,
+    trellis_am_benefits_proof,
+)
 
 
 class TomorrowInsuranceSnapshotTests(unittest.TestCase):
@@ -101,6 +106,47 @@ class TomorrowInsuranceSnapshotTests(unittest.TestCase):
             doc = eligibility_report_html(target_date="2026-07-20", out_dir=root)
             self.assertTrue(doc.get("hasReport"))
             self.assertIn("<h1>Trellis</h1>", str(doc.get("html") or ""))
+
+    def test_trellis_am_benefits_proof_passes_with_benefits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            html_path = root / "trellis_eligibility_report_2026-07-20.html"
+            html_path.write_text(
+                "<!DOCTYPE html><html><body><h1>Trellis</h1></body></html>",
+                encoding="utf-8",
+            )
+            results = {
+                "results": [
+                    {"benefits": {"scrapeOk": True, "categories": {"preventive": "100%"}}},
+                    {"benefits": {"scrapeOk": False}},
+                ]
+            }
+            (root / "tomorrow_trellis_verify_results_2026-07-20.json").write_text(
+                json.dumps(results), encoding="utf-8"
+            )
+            proof = trellis_am_benefits_proof(target_date="2026-07-20", out_dir=root)
+            self.assertTrue(proof.get("ok"))
+            self.assertTrue(proof.get("passed"))
+            self.assertEqual(proof.get("chipStatus"), "passed")
+            best = proof.get("best") or {}
+            self.assertEqual(best.get("withBenefits"), 1)
+
+    def test_trellis_am_benefits_proof_awaiting_when_status_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            html_path = root / "trellis_eligibility_report_2026-07-21.html"
+            html_path.write_text(
+                "<!DOCTYPE html><html><body><h1>Trellis</h1></body></html>",
+                encoding="utf-8",
+            )
+            results = {"results": [{"verifyStatus": "Eligible"}]}
+            (root / "tomorrow_trellis_verify_results_2026-07-21.json").write_text(
+                json.dumps(results), encoding="utf-8"
+            )
+            proof = trellis_am_benefits_proof(target_date="2026-07-21", out_dir=root)
+            self.assertTrue(proof.get("ok"))
+            self.assertFalse(proof.get("passed"))
+            self.assertEqual(proof.get("chipStatus"), "awaiting")
 
 
 if __name__ == "__main__":

@@ -627,6 +627,75 @@ def eligibility_report_snapshot(
     }
 
 
+def _am_proof_candidate_dates(explicit: str | None = None) -> list[str]:
+    if explicit:
+        return [explicit.strip()]
+    today = date.today()
+    days: list[date] = []
+    for offset in range(0, 5):
+        d = today + timedelta(days=offset)
+        if d.weekday() < 5:
+            days.append(d)
+    return [_iso(d) for d in days]
+
+
+def trellis_am_benefits_proof(
+    *,
+    target_date: str | None = None,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """AM proof: withBenefits > 0 on a clinical weekday (counts only · no $ invent)."""
+    rows: list[dict[str, Any]] = []
+    best: dict[str, Any] | None = None
+    for iso in _am_proof_candidate_dates(target_date):
+        snap = eligibility_report_snapshot(target_date=iso, out_dir=out_dir)
+        row = {
+            "targetDate": iso,
+            "ok": bool(snap.get("ok")),
+            "hasReport": bool(snap.get("hasReport")),
+            "patients": snap.get("patients"),
+            "withBenefits": snap.get("withBenefits"),
+            "statusOnly": snap.get("statusOnly"),
+            "reportUrl": snap.get("reportUrl"),
+            "boardPhi": snap.get("boardPhi"),
+            "emptyNotZero": True,
+        }
+        rows.append(row)
+        wb = snap.get("withBenefits")
+        if isinstance(wb, int) and wb > 0 and (
+            best is None or wb > int(best.get("withBenefits") or 0)
+        ):
+            best = row
+
+    passed = bool(best and int(best.get("withBenefits") or 0) > 0)
+    if passed and best:
+        chip_status = "passed"
+        chip_label = (
+            f"withBenefits {best.get('withBenefits')} on {best.get('targetDate')}"
+        )
+    elif any(r.get("ok") for r in rows):
+        chip_status = "awaiting"
+        chip_label = "Status-only until nightly ClearCoverage scrape"
+    else:
+        chip_status = "fault"
+        chip_label = "Trellis AM proof fault"
+
+    return {
+        "ok": True,
+        "passed": passed,
+        "chipStatus": chip_status,
+        "chipLabel": chip_label,
+        "candidates": rows,
+        "best": best,
+        "emptyNotZero": True,
+        "note": (
+            "Counts only — no deductible/$ invent. Board stays initials+hash. "
+            "Tonight 10:10 PM Trellis --verify raises withBenefits when ClearCoverage scrapes land."
+        ),
+        "at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+    }
+
+
 def eligibility_report_html(
     *,
     target_date: str | None = None,

@@ -12,6 +12,7 @@ from softdent_odbc_extract import (
     attribute_sd_claims_payers_from_insurance,
     ensure_sd_schema,
     extract_claim_chart_from_id,
+    extract_claim_patient_id_from_id,
     load_sensei_plan_carrier_map,
     populate_sensei_patient_insurance,
     refresh_claims_payer_attribution,
@@ -72,6 +73,36 @@ class PayerAttributionRefreshHal10581Tests(unittest.TestCase):
     def test_extract_claim_chart(self) -> None:
         self.assertEqual(extract_claim_chart_from_id("DS-20260528-1080404-1110-3"), "1080404")
         self.assertIsNone(extract_claim_chart_from_id("CLM-001"))
+
+    def test_extract_txn_claim_patient_id(self) -> None:
+        self.assertEqual(extract_claim_patient_id_from_id("TXN-20260310-1430001"), "1430001")
+        self.assertEqual(
+            extract_claim_patient_id_from_id("DS-20260528-1080404-1110-3"), "1080404"
+        )
+
+    def test_txn_claim_attribution_from_insurance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "datasync" / "0000950863"
+            _write_sensei_fixture(root)
+            db = Path(tmp) / "analytics.db"
+            conn = sqlite3.connect(str(db))
+            ensure_sd_schema(conn)
+            populate_sensei_patient_insurance(conn, root, extracted_at="2026-07-13T00:00:00+00:00")
+            conn.execute(
+                """
+                INSERT INTO sd_claims
+                (claim_id, patient_name, payer, service_date, claim_amount, claim_status, practice_id, extracted_at)
+                VALUES ('TXN-20260310-1080404', 'Bernett, Jeffery Adam', 'Insurance', '2026-03-10', 420.0, 'Pending Review', '', 't')
+                """
+            )
+            conn.commit()
+            attr = attribute_sd_claims_payers_from_insurance(conn)
+            self.assertEqual(attr["updated"], 1)
+            payer = conn.execute(
+                "SELECT payer FROM sd_claims WHERE claim_id='TXN-20260310-1080404'"
+            ).fetchone()[0]
+            self.assertEqual(payer, "DELTA DENTAL OF OH")
+            conn.close()
 
     def test_sensei_insurance_and_claim_attribution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

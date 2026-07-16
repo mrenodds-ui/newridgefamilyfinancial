@@ -3444,6 +3444,14 @@ class NR2BottleServer(BottleServer):
             target = str(bottle.request.params.get("date") or "").strip() or None
             return _json_response(eligibility_report_snapshot(target_date=target))
 
+        @app.get("/api/trellis/am-proof")
+        def trellis_am_benefits_proof_api():
+            """AM withBenefits proof — counts only · no $ invent · board initials+hash."""
+            from nr2_trellis_nightly import trellis_am_benefits_proof
+
+            target = str(bottle.request.params.get("date") or "").strip() or None
+            return _json_response(trellis_am_benefits_proof(target_date=target))
+
         @app.get("/api/trellis/eligibility-report.html")
         def trellis_eligibility_report_html_api():
             """Serve printable Trellis eligibility HTML for authenticated staff."""
@@ -3756,6 +3764,22 @@ class NR2BottleServer(BottleServer):
                 cid = str((result.get("claim") or {}).get("claimId") or claim_id)
                 result["actions"] = list_claim_actions(_local_store(), claim_id=cid, limit=12)
                 result["eraMatches"] = list_era_matches_for_claim(_local_store(), claim_id=cid, limit=5)
+            return _json_response(result)
+
+        @app.post("/api/softdent/claims-payer-backfill")
+        def softdent_claims_payer_backfill_api():
+            """Backfill generic Insurance payers on sd_claims from Sensei/ODBC insurance (READ-ONLY)."""
+            from softdent_odbc_extract import refresh_claims_payer_attribution
+
+            result = refresh_claims_payer_attribution()
+            if result.get("ok"):
+                _audit_mutation(
+                    "claims_payer_backfill",
+                    detail={
+                        "updated": (result.get("attribution") or {}).get("updated"),
+                        "namedPayerClaimCount": result.get("namedPayerClaimCount"),
+                    },
+                )
             return _json_response(result)
 
         @app.get("/api/softdent/ar-aging")

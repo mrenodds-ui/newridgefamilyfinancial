@@ -63,6 +63,7 @@
       smoke,
       aging,
       trellis,
+      trellisProof,
       collections,
       npm,
       production,
@@ -72,6 +73,7 @@
       W.getJson("/api/health/desk-smoke?run=0", 8000),
       W.getJson("/api/claims/aging-summary", 12000),
       W.getJson("/api/trellis/eligibility-report", 12000),
+      W.getJson("/api/trellis/am-proof", 12000),
       W.getJson("/api/softdent/collections-daily", 12000),
       W.getJson("/api/softdent/new-patients-mtd", 12000),
       W.getJson("/api/softdent/provider-production", 12000),
@@ -166,12 +168,36 @@
       }
       const link = document.getElementById("an-trellis-link");
       if (link && tr.reportUrl) link.href = tr.reportUrl;
+      if (trellisProof.ok && trellisProof.data) {
+        const proof = trellisProof.data;
+        const proofEl = document.getElementById("an-trellis-proof");
+        if (proofEl) {
+          const chip = String(proof.chipLabel || proof.chipStatus || "—");
+          proofEl.textContent =
+            "AM proof · " +
+            chip +
+            (proof.passed ? " · PASS" : " · pending scrape") +
+            " · counts only · empty ≠ $0";
+        }
+        if (proof.passed) live = true;
+      }
       live = true;
     } else {
       W.setText("an-trellis", null, "NO SIGNAL");
       W.setText("an-trellis-date", "—");
       const summary = document.getElementById("an-trellis-summary");
       if (summary) summary.textContent = "No Trellis report for target date yet";
+      if (trellisProof.ok && trellisProof.data) {
+        const proof = trellisProof.data;
+        const proofEl = document.getElementById("an-trellis-proof");
+        if (proofEl) {
+          proofEl.textContent =
+            "AM proof · " +
+            String(proof.chipLabel || proof.chipStatus || "—") +
+            (proof.passed ? " · PASS" : " · pending scrape") +
+            " · counts only · empty ≠ $0";
+        }
+      }
     }
 
     if (collections.ok && collections.data) {

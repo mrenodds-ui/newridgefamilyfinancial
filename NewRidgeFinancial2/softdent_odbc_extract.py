@@ -401,6 +401,7 @@ _REL_CODE_MAP = {
 
 # Daysheet/claim ids: DS-YYYYMMDD-{chart}-{proc}-{seq}
 _CLAIM_CHART_RE = re.compile(r"^DS-\d{8}-(\d+)(?:-|$)", re.IGNORECASE)
+_TXN_CLAIM_PATIENT_RE = re.compile(r"^TXN-\d{8}-(\d+)(?:-|$)", re.IGNORECASE)
 
 DEFAULT_INSURANCE_ODBC_QUERY = """
 SELECT
@@ -1916,6 +1917,16 @@ def extract_claim_chart_from_id(claim_id: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def extract_claim_patient_id_from_id(claim_id: str | None) -> str | None:
+    """SoftDent patient/chart id embedded in DS- or TXN- derived claim ids."""
+    cid = str(claim_id or "").strip()
+    chart = extract_claim_chart_from_id(cid)
+    if chart:
+        return chart
+    match = _TXN_CLAIM_PATIENT_RE.match(cid)
+    return match.group(1) if match else None
+
+
 def attribute_sd_claims_payers_from_insurance(
     conn: sqlite3.Connection,
     *,
@@ -1923,7 +1934,7 @@ def attribute_sd_claims_payers_from_insurance(
 ) -> dict[str, int]:
     """Set sd_claims.payer from sd_patient_insurance when payer is generic Insurance.
 
-    Match order: claim chart (DS-…-{chart}-…) → patient_id; else patient_name key via
+    Match order: claim id patient/chart (TXN-/DS-…) → patient_id; else patient_name key via
     sd_patients → insurance. Does not overwrite already-named payers. No invented carriers.
     """
     ensure_sd_schema(conn)
@@ -1974,9 +1985,9 @@ def attribute_sd_claims_payers_from_insurance(
             skipped_named += 1
             continue
         carrier = None
-        chart = extract_claim_chart_from_id(str(claim_id or ""))
-        if chart and chart in primary_by_patient:
-            carrier = primary_by_patient[chart]
+        patient_key = extract_claim_patient_id_from_id(str(claim_id or ""))
+        if patient_key and patient_key in primary_by_patient:
+            carrier = primary_by_patient[patient_key]
         if not carrier:
             name_key = _normalize_patient_name_key(str(patient_name or ""))
             patient_id = name_to_patient.get(name_key, "")

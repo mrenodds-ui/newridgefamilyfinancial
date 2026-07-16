@@ -111,6 +111,49 @@
     if (clClaimsCache) renderClaimsOutstanding(null);
   }
 
+  function payerStatsBit(data) {
+    const ps = data && data.payerStats && typeof data.payerStats === "object" ? data.payerStats : null;
+    if (!ps || ps.total == null) return "";
+    const generic = Number(ps.generic || 0);
+    const named = Number(ps.named != null ? ps.named : Math.max(0, Number(ps.total || 0) - generic));
+    if (!Number(ps.total)) return "";
+    return " · payer named " + String(named) + "/" + String(ps.total) + " · generic " + String(generic);
+  }
+
+  async function backfillClaimPayers() {
+    const summary = document.getElementById("cl-summary");
+    if (!W.postJson) {
+      if (summary) summary.textContent = "Payer backfill unavailable · POST required";
+      return;
+    }
+    if (summary) summary.textContent = "Backfilling generic Insurance payers from Sensei/ODBC…";
+    const res = await W.postJson("/api/softdent/claims-payer-backfill", {}, 120000);
+    const data = res && res.data ? res.data : null;
+    if (!res || !res.ok || !data || !data.ok) {
+      if (summary) {
+        summary.textContent =
+          "Payer backfill failed · " +
+          String((data && (data.error || data.detail)) || res.status || "NO SIGNAL") +
+          " · empty ≠ $0";
+      }
+      return;
+    }
+    const updated =
+      data.attribution && data.attribution.updated != null
+        ? Number(data.attribution.updated)
+        : 0;
+    const named =
+      data.namedPayerClaimCount != null ? Number(data.namedPayerClaimCount) : null;
+    await loadClaimsOutstanding();
+    if (summary) {
+      summary.textContent =
+        "Payer backfill done · updated " +
+        String(updated) +
+        (named != null ? " · named payers now " + String(named) : "") +
+        " · SoftDent READ-ONLY · empty ≠ $0";
+    }
+  }
+
   function exportPayerBatchCsv() {
     const EU = typeof ExportUtils !== "undefined" ? ExportUtils : null;
     if (!EU || !EU.rowsToCsv || !EU.downloadText) {
@@ -893,6 +936,7 @@
         totalOutstanding: data.totalOutstanding,
         hasData: data.hasData,
         emptyMessage: data.emptyMessage,
+        payerStats: data.payerStats,
       };
     }
     const source = data || clClaimsCache;
@@ -961,6 +1005,7 @@
         (claims.length !== beforeFilter
           ? " · filter " + String(claims.length) + "/" + String(beforeFilter)
           : "") +
+        payerStatsBit(source || clClaimsMeta) +
         " · SoftDent READ-ONLY · empty ≠ $0";
     }
     if (!claims.length) {
@@ -1137,6 +1182,19 @@
     if (exportBtn && !exportBtn._nr2ClBound) {
       exportBtn._nr2ClBound = true;
       exportBtn.addEventListener("click", exportPayerBatchCsv);
+    }
+    const payerBtn = document.getElementById("btn-cl-payer-backfill");
+    if (payerBtn && !payerBtn._nr2ClBound) {
+      payerBtn._nr2ClBound = true;
+      payerBtn.addEventListener("click", function () {
+        backfillClaimPayers().catch(function (err) {
+          const summary = document.getElementById("cl-summary");
+          if (summary) {
+            summary.textContent =
+              "Payer backfill fault · " + String(err && err.message ? err.message : err);
+          }
+        });
+      });
     }
     ["cl-filter-age", "cl-filter-gap", "cl-filter-payer"].forEach(function (id) {
       const el = document.getElementById(id);

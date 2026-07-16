@@ -795,6 +795,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         """
         total = None
         count = 0
+        generic_payer_count = 0
         txn_ctx: tuple[list[dict[str, Any]], dict[str, set[str]]] | None = None
         if _table_exists(conn, "sd_claims"):
             cur.execute(
@@ -823,10 +824,14 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             )
             count = len(rows)
             total = round(sum(float(r[4] or 0) for r in rows), 2) if rows else 0.0
+            generic_payer_count = sum(
+                1 for r in rows if _generic_payer_label(str(r[2] or ""))
+            )
             rows = rows[: max(1, int(limit))]
         else:
             rows = []
             name_to_id = {}
+            generic_payer_count = 0
 
         if not rows and _table_exists(conn, "outstanding_claims"):
             source = "outstanding_claims"
@@ -853,6 +858,9 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             )
             rows = cur.fetchall()
             name_to_id = _patient_name_to_id_index(conn) if rows else {}
+            generic_payer_count = sum(
+                1 for r in rows if _generic_payer_label(str(r[2] or ""))
+            )
 
         claims = []
         with_patient_id = 0
@@ -885,6 +893,11 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             claims.append(entry)
     finally:
         conn.close()
+    payer_stats = {
+        "generic": int(generic_payer_count),
+        "named": max(0, int(count) - int(generic_payer_count)),
+        "total": int(count),
+    }
     return {
         "hasData": count > 0 or bool(claims),
         "claims": claims,
@@ -892,6 +905,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         "count": count,
         "sampleLimit": max(1, int(limit)),
         "sampleWithPatientId": with_patient_id if rows else 0,
+        "payerStats": payer_stats,
         "source": source,
         "dbPath": str(db_path),
         "honesty": "empty != $0",
