@@ -328,8 +328,14 @@ body.exec-desk-surface {
     radial-gradient(ellipse 55% 40% at 60% 40%, rgba(20,40,50,0.4), transparent 70%),
     var(--vacuum);
 }
+body:has(#nr2-exec-letterhead) .shell {
+  min-height: calc(100dvh - 36px - 48px - 20px);
+}
 body.has-ops-gates .shell {
-  min-height: calc(100dvh - 68px);
+  min-height: calc(100dvh - 68px - 20px);
+}
+body.has-ops-gates:has(#nr2-exec-letterhead) .shell {
+  min-height: calc(100dvh - 116px - 20px);
 }
 /* Moonshot P1: atmosphere grain on vacuum (3% opacity) */
 .shell.atmosphere::before {
@@ -553,17 +559,28 @@ td.phi-name .phi-label,
   padding-bottom: calc(var(--space-6) + 24px);
   box-sizing: border-box;
 }
+/* Prior E1 letterhead (#nr2-exec-letterhead, 48px) sits under banner — include in scroll budget */
+body:has(#nr2-exec-letterhead) .main {
+  height: calc(100dvh - 36px - 48px - 20px);
+}
 body.has-ops-gates .main {
   height: calc(100dvh - 68px - 20px);
 }
+body.has-ops-gates:has(#nr2-exec-letterhead) .main {
+  height: calc(100dvh - 116px - 20px);
+}
+/* Exact Moonshot Package 1: 48px compact row · inline 12px · no wrap bloat */
 .exec-compact-header {
   display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 0.35rem 0.75rem;
-  min-height: 48px;
-  margin: 0 0 2px;
-  padding: 6px 0 2px;
+  height: 48px;
+  max-height: 48px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .exec-compact-header .mode-eyebrow,
 .exec-compact-header .type-staff,
@@ -581,6 +598,7 @@ body.has-ops-gates .main {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--qb);
+  flex: 0 0 auto;
 }
 .exec-compact-header .type-staff,
 .exec-compact-header h1.type-staff {
@@ -588,11 +606,17 @@ body.has-ops-gates .main {
   font-weight: 600;
   color: var(--hal);
   letter-spacing: 0.02em;
+  flex: 0 0 auto;
 }
 .exec-compact-header .kicker {
   font-family: var(--sans);
   color: var(--qb);
   opacity: 0.92;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .main > .beam {
   height: 1px;
@@ -647,6 +671,17 @@ body > .honesty {
   margin: 0 0 var(--space-2); font-family: var(--sans); font-size: 12px;
   font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--qb);
+}
+/* Package 1: later .main h1/.kicker/.mode-eyebrow must not inflate the 48px row */
+.main > .exec-compact-header .mode-eyebrow,
+.main > .exec-compact-header .type-staff,
+.main > .exec-compact-header h1.type-staff,
+.main > .exec-compact-header .kicker {
+  display: inline;
+  font-size: 12px;
+  line-height: 1;
+  margin: 0;
+  max-width: none;
 }
 .foot-nav {
   margin-top: var(--space-5); padding-top: var(--space-3);
