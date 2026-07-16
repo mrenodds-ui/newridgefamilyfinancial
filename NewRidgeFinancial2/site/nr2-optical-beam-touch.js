@@ -436,6 +436,13 @@
       setTimeout(clear, 800);
     }
   }
+  function aperturePoint(bench, rect, side) {
+    /* Match CSS ::after LEDs: 14px, inset -7px, vertical center at 48% */
+    const ledR = 7;
+    const y = rect.top + rect.height * 0.48;
+    const x = side === "right" ? rect.right + ledR : rect.left - ledR;
+    return localPoint(bench, x, y);
+  }
   function snapBeams() {
     const bench = document.getElementById("bench");
     const core = document.getElementById("core");
@@ -447,15 +454,12 @@
     const cr = core.getBoundingClientRect();
     if (cr.width < 4) return;
     const center = localPoint(bench, cr.left + cr.width / 2, cr.top + cr.height / 2);
+    /* Touch the visible core border (not outer halo) */
     const radius = cr.width / 2;
-    const sr = sd.getBoundingClientRect();
-    const sdStart = localPoint(bench, sr.right + 6, sr.top + sr.height * 0.42);
-    const qr = qb.getBoundingClientRect();
-    const qbStart = localPoint(bench, qr.left - 6, qr.top + qr.height * 0.42);
-    const tr = tax.getBoundingClientRect();
-    const taxStart = localPoint(bench, tr.left - 6, tr.top + tr.height * 0.5);
-    const ctr = ctrl.getBoundingClientRect();
-    const ctrlStart = localPoint(bench, ctr.right + 6, ctr.top + ctr.height * 0.5);
+    const sdStart = aperturePoint(bench, sd.getBoundingClientRect(), "right");
+    const qbStart = aperturePoint(bench, qb.getBoundingClientRect(), "left");
+    const taxStart = aperturePoint(bench, tax.getBoundingClientRect(), "left");
+    const ctrlStart = aperturePoint(bench, ctrl.getBoundingClientRect(), "right");
     const sdRim = rimPoint(center, sdStart, radius);
     const qbRim = rimPoint(center, qbStart, radius);
     const taxRim = rimPoint(center, taxStart, radius);
