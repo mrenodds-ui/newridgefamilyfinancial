@@ -688,6 +688,64 @@ def list_pending_era_matches(store, *, limit: int = 25) -> dict[str, Any]:
     return {"ok": True, "items": items, "count": len(items)}
 
 
+def list_era_matches_for_claim(
+    store,
+    *,
+    claim_id: str = "",
+    limit: int = 5,
+) -> dict[str, Any]:
+    """ERA/EOB rows linked to a SoftDent claim id (local inbox only · empty ≠ $0)."""
+    cid = str(claim_id or "").strip()
+    if not store:
+        return {"ok": False, "error": "no_store", "matches": []}
+    if not cid:
+        return {"ok": False, "error": "claim_id_required", "matches": []}
+    conn = store._connect()
+    init_employee_workflow_schemas(conn)
+    cur = conn.execute(
+        """
+        SELECT id, created_at_utc, source_type, reference_id, matched_claim_id, status, detail_json
+        FROM nr2_eob_match
+        WHERE matched_claim_id = ?
+           OR reference_id = ?
+        ORDER BY created_at_utc DESC
+        LIMIT ?
+        """,
+        (cid, cid, max(1, min(int(limit or 5), 20))),
+    )
+    matches = []
+    for row in cur.fetchall():
+        try:
+            detail = json.loads(row[6] or "{}")
+        except json.JSONDecodeError:
+            detail = {}
+        conf = float(detail.get("confidenceScore") or detail.get("confidence") or 0)
+        paid = detail.get("paidAmount")
+        if paid in (None, ""):
+            paid = detail.get("paid")
+        matches.append(
+            {
+                "id": row[0],
+                "eraLineId": row[0],
+                "createdAt": row[1],
+                "sourceType": row[2],
+                "referenceId": row[3],
+                "claimId": row[4] or cid,
+                "status": row[5],
+                "confidence": conf,
+                "paidAmount": paid,
+                "denialReason": detail.get("denialReason") or detail.get("denial_reason") or "",
+            }
+        )
+    return {
+        "ok": True,
+        "claimId": cid,
+        "matches": matches,
+        "count": len(matches),
+        "honesty": "empty != $0; local ERA inbox only; no SoftDent write-back",
+    }
+
+
 def _parse_money(value: Any) -> float:
     raw = str(value or "").replace("$", "").replace(",", "").strip()
     try:

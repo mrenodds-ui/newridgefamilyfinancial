@@ -46,11 +46,12 @@
           <h2>Outstanding Claims</h2>
           <span class="om-claims-range" id="cl-range-label">—</span>
           <button type="button" class="btn-quiet" id="btn-cl-refresh" title="Reload outstanding SoftDent claims">Refresh</button>
+          <button type="button" class="btn-quiet" id="btn-cl-export-batch" title="Export filtered payer phone batch CSV (initials+hash only)">Export phone batch</button>
         </div>
         <p class="om-claims-note">
           SoftDent read-only · full patient names · oldest first · click a row for claim review ·
           age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · filter Age + Gaps + Payer for phone batches ·
-          null amounts = — (empty ≠ $0) · sample capped at 200
+          J/K next claim · C copy phone line · null amounts = — (empty ≠ $0) · sample capped at 200
         </p>
         <div class="om-claims-filters" id="cl-filters" aria-label="Filter unpaid SoftDent claims">
           <label class="om-claims-filter">
@@ -114,6 +115,7 @@
     </main>
   </div>
   <script src="/nr2-optical-nav.js"></script>
+  <script src="/export-utils.js"></script>
   <script src="/nr2-optical-page-wire.js"></script>
   <script src="/nr2-optical-page-claims.js"></script>
 </body>

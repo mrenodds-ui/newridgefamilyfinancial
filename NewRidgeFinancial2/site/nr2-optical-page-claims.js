@@ -7,6 +7,7 @@
   let clActivePatientId = "";
   let clClaimsCache = null;
   let clClaimsMeta = null;
+  let clLastPhoneCopy = "";
 
   const CLAIM_ACTION_LABELS = {
     called_payer: "Called payer",
@@ -108,6 +109,161 @@
       sel.value = key;
     }
     if (clClaimsCache) renderClaimsOutstanding(null);
+  }
+
+  function exportPayerBatchCsv() {
+    const EU = typeof ExportUtils !== "undefined" ? ExportUtils : null;
+    if (!EU || !EU.rowsToCsv || !EU.downloadText) {
+      const summary = document.getElementById("cl-summary");
+      if (summary) summary.textContent = "Export unavailable · export-utils.js missing";
+      return;
+    }
+    const list = Array.isArray(clClaimsCache) ? clClaimsCache.filter(claimPassesFilters) : [];
+    if (!list.length) {
+      const summary = document.getElementById("cl-summary");
+      if (summary) {
+        summary.textContent =
+          "Phone batch export ∅ — no rows match current filters · empty ≠ $0";
+      }
+      return;
+    }
+    const payerSel = document.getElementById("cl-filter-payer");
+    const payerKey = payerSel ? String(payerSel.value || "all") : "all";
+    let payerLabel = "all-payers";
+    if (payerKey !== "all" && payerSel && payerSel.selectedIndex >= 0) {
+      payerLabel = String(payerSel.options[payerSel.selectedIndex].textContent || payerKey)
+        .replace(/\s*\(\d+\)\s*$/, "")
+        .trim();
+    }
+    const header = [
+      "initials",
+      "nameHash",
+      "patientHash",
+      "payer",
+      "serviceDate",
+      "ageDays",
+      "amount",
+      "status",
+      "claimId",
+    ];
+    const rows = [header];
+    list.forEach(function (c) {
+      const age = claimAgeDays(c && c.serviceDate);
+      const amt = c && c.amount != null ? String(c.amount) : "";
+      rows.push([
+        String((c && c.initials) || "P—"),
+        String((c && c.nameHash) || "——"),
+        String((c && c.patientHash) || "——"),
+        String((c && c.payer) || ""),
+        String((c && c.serviceDate) || ""),
+        age == null ? "" : String(age),
+        amt,
+        String((c && c.status) || ""),
+        String((c && c.claimId) || ""),
+      ]);
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    const safePayer = payerLabel.replace(/[^\w.-]+/g, "_").slice(0, 40) || "batch";
+    EU.downloadText(
+      "claims-phone-batch-" + safePayer + "-" + stamp + ".csv",
+      EU.rowsToCsv(rows),
+      "text/csv;charset=utf-8"
+    );
+    const summary = document.getElementById("cl-summary");
+    if (summary) {
+      summary.textContent =
+        "Exported phone batch CSV · " +
+        String(list.length) +
+        " row(s) · initials+hash only · no auto-dialer · empty ≠ $0";
+    }
+  }
+
+  function appendEraStrip(body, review) {
+    const eraWrap =
+      review && review.eraMatches && typeof review.eraMatches === "object"
+        ? review.eraMatches
+        : null;
+    const matches = eraWrap && Array.isArray(eraWrap.matches) ? eraWrap.matches : [];
+    const head = document.createElement("h4");
+    head.className = "wk-dossier-sub";
+    head.textContent = "ERA / denial inbox";
+    body.appendChild(head);
+    if (!matches.length) {
+      const empty = document.createElement("p");
+      empty.className = "wk-dossier-muted";
+      empty.textContent = "No local ERA/EOB match for this claim — empty ≠ $0";
+      body.appendChild(empty);
+      return;
+    }
+    const ul = document.createElement("ul");
+    ul.className = "wk-claim-list";
+    matches.slice(0, 5).forEach(function (m) {
+      if (!m || typeof m !== "object") return;
+      const li = document.createElement("li");
+      const when = String(m.createdAt || "").replace("T", " ").slice(0, 16);
+      const paid = m.paidAmount;
+      const paidBit =
+        paid != null && paid !== ""
+          ? " · paid " + String(paid)
+          : " · paid — (empty ≠ $0)";
+      const denial = String(m.denialReason || "").trim();
+      li.textContent =
+        when +
+        " · " +
+        String(m.sourceType || "era").toUpperCase() +
+        " · " +
+        String(m.status || "pending") +
+        paidBit +
+        (denial ? " · denial: " + denial : "");
+      ul.appendChild(li);
+    });
+    body.appendChild(ul);
+  }
+
+  function visibleClaimRows() {
+    return Array.prototype.slice.call(document.querySelectorAll("#cl-tbody tr[data-claim-id]"));
+  }
+
+  function claimFromRow(tr) {
+    const cid = String(tr.getAttribute("data-claim-id") || "").trim();
+    const list =
+      clClaimsCache && Array.isArray(clClaimsCache.claims) ? clClaimsCache.claims : [];
+    for (let i = 0; i < list.length; i++) {
+      if (String((list[i] && list[i].claimId) || "").trim() === cid) return list[i];
+    }
+    return null;
+  }
+
+  function moveClaimQueue(delta) {
+    const rows = visibleClaimRows();
+    if (!rows.length) return;
+    let idx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-claim-id") === clActiveClaimId) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx < 0) idx = 0;
+    else idx = Math.max(0, Math.min(rows.length - 1, idx + delta));
+    const tr = rows[idx];
+    const claim = claimFromRow(tr);
+    if (!claim) return;
+    rows.forEach(function (r) {
+      r.classList.remove("is-active");
+    });
+    tr.classList.add("is-active");
+    tr.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    openClaimContext(claim);
+  }
+
+  function copyPhoneLine() {
+    const text = String(clLastPhoneCopy || "").trim();
+    if (!text) return false;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(function () {});
+    }
+    return true;
   }
 
   function appendClaimActionLog(body, claim, rev) {
@@ -298,8 +454,11 @@
     ]);
 
     const rev = review && typeof review === "object" ? review : null;
+    clLastPhoneCopy = "";
     if (rev && rev.ok) {
       const nar = rev.narrative && typeof rev.narrative === "object" ? rev.narrative : null;
+      if (nar && nar.phoneCopy) clLastPhoneCopy = String(nar.phoneCopy);
+      appendEraStrip(body, rev);
       if (nar && nar.text) {
         const nHead = document.createElement("h4");
         nHead.className = "wk-dossier-sub";
@@ -974,6 +1133,11 @@
         });
       });
     }
+    const exportBtn = document.getElementById("btn-cl-export-batch");
+    if (exportBtn && !exportBtn._nr2ClBound) {
+      exportBtn._nr2ClBound = true;
+      exportBtn.addEventListener("click", exportPayerBatchCsv);
+    }
     ["cl-filter-age", "cl-filter-gap", "cl-filter-payer"].forEach(function (id) {
       const el = document.getElementById(id);
       if (el && !el._nr2ClBound) {
@@ -993,9 +1157,29 @@
         if (wrap) wrap.classList.remove("has-dossier");
         clActiveClaimId = "";
         clActivePatientId = "";
+        clLastPhoneCopy = "";
         document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
           el.classList.remove("is-active");
         });
+      });
+    }
+    if (!document._nr2ClKeysBound) {
+      document._nr2ClKeysBound = true;
+      document.addEventListener("keydown", function (e) {
+        const tag = String((e.target && e.target.tagName) || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
+        const key = String(e.key || "");
+        if (key === "j" || key === "J") {
+          e.preventDefault();
+          moveClaimQueue(1);
+        } else if (key === "k" || key === "K") {
+          e.preventDefault();
+          moveClaimQueue(-1);
+        } else if (key === "c" || key === "C") {
+          if (!clLastPhoneCopy) return;
+          e.preventDefault();
+          copyPhoneLine();
+        }
       });
     }
   }
@@ -1008,11 +1192,12 @@
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
     wireClaimsControls();
 
-    const [claimsRes, aging, adj, eraInbox, ready] = await Promise.all([
+    const [claimsRes, aging, adj, eraInbox, eraSuggestions, ready] = await Promise.all([
       loadClaimsOutstanding(),
       W.getJson("/api/claims/aging-summary", 12000),
       W.getJson("/api/softdent/adjustment-log", 12000),
       W.getJson("/api/apex/hal/era-inbox/status", 12000),
+      W.getJson("/api/nr2/era/suggestions?limit=5", 12000),
       W.getJson("/api/import-readiness", 12000),
     ]);
     const claims = {
@@ -1098,9 +1283,16 @@
       }
       const eraHint = document.getElementById("hint-era");
       if (eraHint) {
-        eraHint.textContent =
+        let hint =
           (chip || "ERA inbox") +
           " · read-only · empty ≠ $0 · no SoftDent write-back";
+        if (eraSuggestions.ok && eraSuggestions.data && eraSuggestions.data.ok) {
+          const sugCount = Number(eraSuggestions.data.count || 0);
+          if (sugCount > 0) {
+            hint += " · " + String(sugCount) + " QB suggestion(s) — manual approve only";
+          }
+        }
+        eraHint.textContent = hint;
       }
     } else if (
       adj.ok &&

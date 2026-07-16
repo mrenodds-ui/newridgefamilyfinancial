@@ -3730,7 +3730,7 @@ class NR2BottleServer(BottleServer):
         def softdent_claims_review_api():
             """Claim-click review: narrative + preflight + SoftDent DOS procedure lines."""
             import bottle
-            from hal_employee_workflows import list_claim_actions
+            from hal_employee_workflows import list_claim_actions, list_era_matches_for_claim
             from nr2_softdent_daily import claim_review
 
             claim_id = str(bottle.request.query.get("claimId") or "").strip()
@@ -3738,12 +3738,13 @@ class NR2BottleServer(BottleServer):
             if isinstance(result, dict) and result.get("ok"):
                 cid = str((result.get("claim") or {}).get("claimId") or claim_id)
                 result["actions"] = list_claim_actions(_local_store(), claim_id=cid, limit=12)
+                result["eraMatches"] = list_era_matches_for_claim(_local_store(), claim_id=cid, limit=5)
             return _json_response(result)
 
         @app.post("/api/softdent/claims-review")
         def softdent_claims_review_post_api():
             """Claim-click review with row payload (when list already has claim fields)."""
-            from hal_employee_workflows import list_claim_actions
+            from hal_employee_workflows import list_claim_actions, list_era_matches_for_claim
             from nr2_softdent_daily import claim_review
 
             payload = bottle.request.json or {}
@@ -3754,6 +3755,7 @@ class NR2BottleServer(BottleServer):
             if isinstance(result, dict) and result.get("ok"):
                 cid = str((result.get("claim") or {}).get("claimId") or claim_id)
                 result["actions"] = list_claim_actions(_local_store(), claim_id=cid, limit=12)
+                result["eraMatches"] = list_era_matches_for_claim(_local_store(), claim_id=cid, limit=5)
             return _json_response(result)
 
         @app.get("/api/softdent/ar-aging")

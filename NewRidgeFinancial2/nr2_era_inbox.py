@@ -274,6 +274,43 @@ def era835_widget(bundle: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
+def era_suggestions(*, limit: int = 50) -> dict[str, Any]:
+    """Read-only ERA remittance suggestions for manual QuickBooks approval."""
+    cap = max(1, min(int(limit), 200))
+    rows = _read_manifest_rows()[-cap:]
+    suggestions: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        suggestions.append(
+            {
+                "at": row.get("at"),
+                "payerName": row.get("payerName"),
+                "totalPaid": row.get("totalPaid"),
+                "claimCount": row.get("claimCount"),
+                "sourceFile": row.get("sourceFile"),
+                "status": "suggest_qb_manual",
+                "writeBack": False,
+                "softDentWriteBack": False,
+                "emptyNotZero": True,
+            }
+        )
+    gap = assess_era835_gap()
+    return {
+        "ok": True,
+        "suggestions": suggestions,
+        "count": len(suggestions),
+        "pending": bool(gap.get("pending")),
+        "gapCode": gap.get("gapCode"),
+        "readOnly": True,
+        "writeBack": False,
+        "softDentWriteBack": False,
+        "note": "Operator approves in QuickBooks manually — no auto-post.",
+        "emptyNotZero": True,
+        "at": _utc_now(),
+    }
+
+
 def ingest_era_inbox(*, ensure_dirs: bool = False, limit: int | None = None) -> dict[str, Any]:
     if ensure_dirs:
         ensure_era_inbox_dirs()

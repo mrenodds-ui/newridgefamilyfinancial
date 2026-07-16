@@ -893,6 +893,24 @@ class ClaimActionLogTests(unittest.TestCase):
         self.assertFalse(missing["ok"])
         self.assertEqual(missing["error"], "claim_id_required")
 
+    def test_list_era_matches_for_claim(self) -> None:
+        from hal_employee_workflows import list_era_matches_for_claim, process_eob_match
+
+        store = _FakeStore()
+        process_eob_match(
+            store,
+            {
+                "referenceId": "ERA-CLM-9",
+                "claimId": "TXN-20260310-9",
+                "paidAmount": 88.5,
+                "sourceType": "era",
+            },
+        )
+        hits = list_era_matches_for_claim(store, claim_id="TXN-20260310-9", limit=5)
+        self.assertTrue(hits["ok"])
+        self.assertEqual(hits["count"], 1)
+        self.assertEqual(hits["matches"][0]["claimId"], "TXN-20260310-9")
+
 
 class UsDentalCarrierCatalogTests(unittest.TestCase):
     def test_catalog_summary_and_search(self) -> None:

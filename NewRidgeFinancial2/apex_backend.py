@@ -7403,6 +7403,23 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         except Exception as exc:  # noqa: BLE001
             return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
 
+    @app.get("/api/nr2/era/suggestions")
+    def nr2_era_suggestions():
+        """P1.3 — ERA remittance suggestions for manual QB approval (read-only)."""
+        try:
+            import bottle
+            from nr2_era_inbox import era_suggestions
+
+            try:
+                limit = int(bottle.request.query.get("limit") or 50)
+            except (TypeError, ValueError):
+                limit = 50
+            result = era_suggestions(limit=limit)
+            result["buildId"] = BUILD_ID
+            return json_response_fn(result)
+        except Exception as exc:  # noqa: BLE001
+            return json_response_fn({"ok": False, "error": str(exc), "buildId": BUILD_ID}, status=500)
+
     @app.get("/api/apex/hal/collections-export/health")
     def apex_collections_export_health():
         """hal-10576 — Collections/Register Excel-temp readability (empty ≠ $0; no write-back)."""

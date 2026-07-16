@@ -7,6 +7,7 @@ import unittest
 from nr2_era_inbox import (
     assess_era835_gap,
     era_inbox_status,
+    era_suggestions,
     ingest_era_inbox,
     scan_era_inbox,
 )
@@ -38,6 +39,13 @@ class Nr2EraInboxTests(unittest.TestCase):
     def test_assess_gap_pending_when_empty(self) -> None:
         gap = assess_era835_gap()
         self.assertTrue(gap.get("pending") or gap.get("fileCount", 0) >= 0)
+
+    def test_era_suggestions_read_only(self) -> None:
+        out = era_suggestions(limit=5)
+        self.assertTrue(out.get("ok"))
+        self.assertTrue(out.get("emptyNotZero"))
+        self.assertFalse(out.get("writeBack"))
+        self.assertIsInstance(out.get("suggestions"), list)
 
 
 if __name__ == "__main__":

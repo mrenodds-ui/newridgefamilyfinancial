@@ -856,6 +856,10 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
 
         claims = []
         with_patient_id = 0
+        try:
+            from patient_dossier import name_hash as _name_hash
+        except Exception:
+            _name_hash = None  # type: ignore[assignment,misc]
         for claim_id, patient, payer, service_date, amount, status in rows:
             patient_raw = str(patient or "").strip()
             patient_id = _resolve_claim_patient_id(str(claim_id or ""), patient_raw, name_to_id)
@@ -870,6 +874,8 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 "status": str(status or ""),
                 "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
             }
+            if patient_raw and _name_hash:
+                entry["nameHash"] = _name_hash(patient_raw)
             if patient_id:
                 entry["patientId"] = patient_id
                 entry["patientHash"] = _hash_patient_id(patient_id)
