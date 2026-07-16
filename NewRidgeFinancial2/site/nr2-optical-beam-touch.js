@@ -829,6 +829,7 @@
         : [];
     slots.forEach((slot, i) => {
       const c = list[i];
+      slot.classList.remove("age-ok", "age-warn", "age-late", "age-critical", "age-unknown");
       if (!c) {
         slot.classList.add("empty");
         slot.innerHTML = "∅";
@@ -842,6 +843,9 @@
       const amt = money(c.amount);
       const claimId = String(c.claimId || "").trim();
       const patientId = String(c.patientId || "").trim();
+      const age = claimAgeDays(c.serviceDate);
+      const ageCls = claimAgeClass(age);
+      slot.classList.add(ageCls);
       const label =
         String(c.claimId || c.patientName || "claim").slice(0, 14) +
         (amt != null ? " · $" + Math.round(amt) : "");
@@ -850,6 +854,8 @@
         String(c.payer || "") +
         " · " +
         String(c.serviceDate || "") +
+        " · age " +
+        (age == null ? "unknown" : String(age) + "d") +
         " · " +
         String(c.status || "") +
         " · open Claims · read-only";
@@ -859,6 +865,42 @@
       else slot.removeAttribute("data-patient-id");
       slot.tabIndex = 0;
     });
+  }
+
+  function claimAgeDays(serviceDate) {
+    const sd = String(serviceDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(sd)) return null;
+    const d = new Date(sd + "T12:00:00");
+    if (Number.isNaN(d.getTime())) return null;
+    const today = new Date();
+    today.setHours(12, 0, 0, 0);
+    return Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86400000));
+  }
+
+  /** ≤30 green · ≤60 yellow · ≤90 amber · >90 red · unknown muted */
+  function claimAgeClass(ageDays) {
+    if (ageDays == null || !Number.isFinite(ageDays)) return "age-unknown";
+    if (ageDays <= 30) return "age-ok";
+    if (ageDays <= 60) return "age-warn";
+    if (ageDays <= 90) return "age-late";
+    return "age-critical";
+  }
+
+  function openEmitter(go) {
+    if (go === "claims") {
+      toast("SoftDent → Claims");
+      window.location.href = "/nr2-optical-page-claims.html";
+      return;
+    }
+    if (go === "hub") {
+      toast("QuickBooks → Alignment Bench");
+      window.location.href = "/nr2-optical-pages-hub.html";
+      return;
+    }
+    if (go === "tax") {
+      toast("Tax Prism → Tax page");
+      window.location.href = "/nr2-optical-page-taxes.html";
+    }
   }
 
   function openClaimsFromFilm(slot) {
@@ -1221,7 +1263,15 @@
         runCloseStep(closeStep);
         return;
       }
-      runAct(e.target.closest("[data-act]"));
+      const actBtn = e.target.closest("[data-act]");
+      if (actBtn) {
+        runAct(actBtn);
+        return;
+      }
+      const emitter = e.target.closest(".emitter[data-go]");
+      if (emitter) {
+        openEmitter(emitter.getAttribute("data-go"));
+      }
     });
     benchEl.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
@@ -1238,9 +1288,17 @@
         return;
       }
       const btn = e.target.closest("[data-act]");
-      if (!btn || btn.tagName === "BUTTON") return;
-      e.preventDefault();
-      runAct(btn);
+      if (btn) {
+        if (btn.tagName === "BUTTON") return;
+        e.preventDefault();
+        runAct(btn);
+        return;
+      }
+      const emitter = e.target.closest(".emitter[data-go]");
+      if (emitter && e.target === emitter) {
+        e.preventDefault();
+        openEmitter(emitter.getAttribute("data-go"));
+      }
     });
   }
 
