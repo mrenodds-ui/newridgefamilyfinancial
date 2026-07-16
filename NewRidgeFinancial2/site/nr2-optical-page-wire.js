@@ -20,6 +20,140 @@
     el.textContent = value;
     el.classList.remove("empty");
   }
+  /** Board-safe hash chip · "#a7f3" (never invent). */
+  function shortHash(h, len) {
+    const s = String(h || "")
+      .replace(/^#/, "")
+      .trim();
+    if (!s) return "—";
+    const n = typeof len === "number" && len > 0 ? len : 4;
+    return "#" + s.slice(0, n);
+  }
+  /** "Jane Doe" → "J.D." · empty → "P—". */
+  function initialsFromName(name) {
+    const parts = String(name || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (!parts.length) return "P—";
+    const letters = parts
+      .slice(0, 2)
+      .map(function (p) {
+        return p.charAt(0).toUpperCase();
+      })
+      .filter(Boolean);
+    if (!letters.length) return "P—";
+    if (letters.length === 1) return letters[0] + ".";
+    return letters[0] + "." + letters[1] + ".";
+  }
+  /** Prefer API initials; normalize "JD—" → "J.D."; never invent from hash. */
+  function formatPhiInitials(obj) {
+    const raw = String((obj && obj.initials) || "").trim();
+    if (raw) {
+      const compact = raw
+        .replace(/[—\-\s_.]/g, "")
+        .toUpperCase();
+      if (/^[A-Z]{1,3}$/.test(compact)) {
+        if (compact.length === 1) return compact + ".";
+        return compact[0] + "." + compact[1] + ".";
+      }
+      return raw;
+    }
+    const name = String((obj && (obj.patientName || obj.name)) || "").trim();
+    if (name) return initialsFromName(name);
+    return "P—";
+  }
+  /**
+   * Default board label: "J.D. #a7f3". Never returns a full First Last string.
+   * Pass { reveal: true } only after an explicit staff reveal action.
+   */
+  function formatPhiLabel(obj, opts) {
+    const o = opts || {};
+    if (o.reveal) {
+      const full = String((obj && (obj.patientName || obj.name)) || "").trim();
+      if (full) return full;
+    }
+    const ini = formatPhiInitials(obj);
+    const hash = shortHash(
+      (obj && (obj.patientHash || obj.nameHash || obj.hash)) || ""
+    );
+    if (hash === "—") return ini;
+    return ini + " " + hash;
+  }
+  /** Frosted PHI chip into el (initials + hash spans). */
+  function fillPhiCard(el, obj, opts) {
+    if (!el) return null;
+    const o = opts || {};
+    el.classList.add("phi-card");
+    el.textContent = "";
+    const label = document.createElement("span");
+    label.className = "phi-label";
+    const ini = document.createElement("span");
+    ini.className = "phi-initials";
+    ini.textContent = formatPhiInitials(obj);
+    const hash = document.createElement("span");
+    hash.className = "phi-hash";
+    hash.textContent = shortHash(
+      (obj && (obj.patientHash || obj.nameHash || obj.hash)) || ""
+    );
+    label.appendChild(ini);
+    label.appendChild(document.createTextNode(" "));
+    label.appendChild(hash);
+    el.appendChild(label);
+    if (o.title !== false) {
+      el.title = formatPhiLabel(obj) + " · PHI glass · empty ≠ $0";
+    }
+    return el;
+  }
+  /** Compact sample list of PHI cards (SoftDent / AR faces). */
+  function fillPhiSampleList(el, claims, limit) {
+    if (!el) return 0;
+    el.textContent = "";
+    el.classList.add("phi-sample");
+    const eyebrow = document.createElement("p");
+    eyebrow.className = "mode-eyebrow";
+    eyebrow.textContent = "PHI glass · open claims sample";
+    el.appendChild(eyebrow);
+    const list = Array.isArray(claims) ? claims : [];
+    const n = typeof limit === "number" && limit > 0 ? limit : 6;
+    const slice = list.slice(0, n);
+    if (!slice.length) {
+      const empty = document.createElement("p");
+      empty.className = "phi-sample-empty";
+      empty.textContent = "No open claim sample · empty ≠ $0 · initials+hash only";
+      el.appendChild(empty);
+      return 0;
+    }
+    const ul = document.createElement("ul");
+    ul.className = "phi-sample-list";
+    slice.forEach(function (c) {
+      const li = document.createElement("li");
+      li.className = "phi-sample-row";
+      fillPhiCard(li, c);
+      const meta = document.createElement("span");
+      meta.className = "phi-sample-meta";
+      const amt =
+        c && c.amount != null && Number.isFinite(Number(c.amount))
+          ? fmtMoney(Number(c.amount))
+          : null;
+      meta.textContent =
+        String((c && c.payer) || "—").slice(0, 18) +
+        (amt ? " · " + amt : " · ∅");
+      li.appendChild(meta);
+      ul.appendChild(li);
+    });
+    el.appendChild(ul);
+    const note = document.createElement("p");
+    note.className = "phi-sample-note";
+    note.textContent =
+      "PHI glass · " +
+      slice.length +
+      " of " +
+      list.length +
+      " · initials+hash only · no SoftDent write-back";
+    el.appendChild(note);
+    return slice.length;
+  }
   async function getJson(path, timeoutMs) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timer = ctrl && timeoutMs ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
@@ -731,6 +865,12 @@
     money: money,
     fmtMoney: fmtMoney,
     setText: setText,
+    shortHash: shortHash,
+    initialsFromName: initialsFromName,
+    formatPhiInitials: formatPhiInitials,
+    formatPhiLabel: formatPhiLabel,
+    fillPhiCard: fillPhiCard,
+    fillPhiSampleList: fillPhiSampleList,
     getJson: getJson,
     postJson: postJson,
     ensureSession: ensureSession,

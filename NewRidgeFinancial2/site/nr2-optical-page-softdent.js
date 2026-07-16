@@ -91,9 +91,15 @@
         W.setText("val-claims", null, "∅");
         if (!arFromBeam && !beamHit.applied) W.setText("val-ar", null, "∅");
       }
+      if (W.fillPhiSampleList) {
+        W.fillPhiSampleList(document.getElementById("phi-sample"), list, 6);
+      }
     } else {
       W.setText("val-claims", null, "NO SIGNAL");
       if (!arFromBeam && !beamHit.applied) W.setText("val-ar", null, "NO SIGNAL");
+      if (W.fillPhiSampleList) {
+        W.fillPhiSampleList(document.getElementById("phi-sample"), [], 6);
+      }
     }
 
     const prod = await W.getJson("/api/softdent/production-daily", 12000);

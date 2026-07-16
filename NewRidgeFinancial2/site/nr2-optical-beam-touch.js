@@ -772,10 +772,18 @@
       const ageCls = claimAgeClass(age);
       slot.classList.add(ageCls);
       const label =
-        String(c.claimId || c.patientName || "claim").slice(0, 14) +
+        (typeof window.NR2OpticalWire !== "undefined" &&
+        window.NR2OpticalWire.formatPhiLabel
+          ? window.NR2OpticalWire.formatPhiLabel(c)
+          : String(c.claimId || c.initials || "claim")
+        ).slice(0, 18) +
         (amt != null ? " · $" + Math.round(amt) : "");
       slot.innerHTML = '<div class="mini"></div>' + label.replace(/</g, "");
       slot.title =
+        (typeof window.NR2OpticalWire !== "undefined" &&
+        window.NR2OpticalWire.formatPhiLabel
+          ? window.NR2OpticalWire.formatPhiLabel(c) + " · "
+          : "") +
         String(c.payer || "") +
         " · " +
         String(c.serviceDate || "") +
@@ -783,7 +791,7 @@
         (age == null ? "unknown" : String(age) + "d") +
         " · " +
         String(c.status || "") +
-        " · open Claims · read-only";
+        " · open Claims · read-only · PHI glass";
       if (claimId) slot.setAttribute("data-claim-id", claimId);
       else slot.removeAttribute("data-claim-id");
       if (patientId) slot.setAttribute("data-patient-id", patientId);

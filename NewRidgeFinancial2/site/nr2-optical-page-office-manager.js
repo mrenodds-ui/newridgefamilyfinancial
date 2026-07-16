@@ -1,4 +1,4 @@
-/* Office Manager — readiness + SoftDent ops · Force Close · Mon–Thu list · full names */
+/* Office Manager — readiness + SoftDent ops · Force Close · Mon–Thu list · PHI initials+hash */
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
@@ -21,15 +21,16 @@
   }
 
   function shortHash(h) {
-    const s = String(h || "").replace(/^#/, "").trim();
-    if (!s) return "—";
-    return "#" + s.slice(0, 4);
+    return W.shortHash ? W.shortHash(h) : (function () {
+      const s = String(h || "").replace(/^#/, "").trim();
+      if (!s) return "—";
+      return "#" + s.slice(0, 4);
+    })();
   }
 
-  /** Staff OM lists: full name when present; never invent from hash. */
-  function displayPatientName(obj) {
-    const name = String((obj && obj.patientName) || "").trim();
-    if (name) return name;
+  /** Default OM/board lists: initials+hash only — never invent full name from hash. */
+  function displayPatientName(obj, opts) {
+    if (W.formatPhiLabel) return W.formatPhiLabel(obj, opts);
     const initials = String((obj && obj.initials) || "").trim();
     if (initials) return initials;
     return "—";
@@ -113,9 +114,10 @@
       body.appendChild(p);
       return;
     }
+    const phiSrc = Object.assign({}, fallback || {}, data || {});
     const rows = [
-      ["Patient", String(data.patientName || (fallback && fallback.patientName) || "—")],
-      ["Initials", String(data.initials || (fallback && fallback.initials) || "P—")],
+      ["Patient", displayPatientName(phiSrc)],
+      ["Initials", W.formatPhiInitials ? W.formatPhiInitials(phiSrc) : String(data.initials || (fallback && fallback.initials) || "P—")],
       ["Hash", shortHash(data.patientHash || (fallback && fallback.patientHash))],
       [
         "Appt time",
@@ -150,6 +152,21 @@
       row.appendChild(v);
       body.appendChild(row);
     });
+    const fullName = String(data.patientName || (fallback && fallback.patientName) || "").trim();
+    if (fullName) {
+      const reveal = document.createElement("button");
+      reveal.type = "button";
+      reveal.className = "btn-quiet";
+      reveal.textContent = "Reveal full name (this view only)";
+      reveal.title = "Explicit reveal · SoftDent READ-ONLY";
+      reveal.addEventListener("click", function () {
+        const first = body.querySelector(".d-row span:nth-child(2)");
+        if (first) first.textContent = fullName;
+        reveal.disabled = true;
+        reveal.textContent = "Full name revealed";
+      });
+      body.appendChild(reveal);
+    }
     if (data.schemaGap) {
       const note = document.createElement("p");
       note.style.margin = "8px 0 0";
@@ -618,8 +635,13 @@
           const phi = document.createElement("span");
           phi.className = "phi phi-name";
           const who = displayPatientName(slot);
-          phi.textContent = who;
-          phi.title = who + (slot.patientHash ? " · " + shortHash(slot.patientHash) : "");
+          if (W.fillPhiCard) {
+            W.fillPhiCard(phi, slot, { title: false });
+            phi.title = who + " · PHI glass";
+          } else {
+            phi.textContent = who;
+            phi.title = who + (slot.patientHash ? " · " + shortHash(slot.patientHash) : "");
+          }
           if (btn.classList.contains("is-next")) {
             const nextBadge = document.createElement("span");
             nextBadge.className = "next-badge";
@@ -813,14 +835,10 @@
             : st === "—" || st === "Not ready"
               ? "miss"
               : "mid";
-      // Trellis API ships initials only (no patientName yet) — show name when present.
-      const who = displayPatientName(p);
-      const whoBit =
-        who !== "—" && who !== String((p && p.initials) || "")
-          ? who
-          : String((p && p.initials) || "P—") + " · " + shortHash(p && p.patientHash);
+      // Trellis / OM board: initials+hash only (Package 2 PHI glass).
+      const whoBit = displayPatientName(p);
       row.innerHTML =
-        '<span class="tr-who">' +
+        '<span class="tr-who phi-label">' +
         whoBit +
         "</span>" +
         '<span class="tr-status ' +

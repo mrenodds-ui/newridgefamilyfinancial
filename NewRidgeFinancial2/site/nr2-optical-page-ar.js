@@ -93,8 +93,14 @@
     if (claims.ok && claims.data && claims.data.hasData) {
       const list = Array.isArray(claims.data.claims) ? claims.data.claims : [];
       W.setText("val-collect", String(list.length) + " open claims");
+      if (W.fillPhiSampleList) {
+        W.fillPhiSampleList(document.getElementById("phi-sample"), list, 6);
+      }
     } else {
       W.setText("val-collect", null, "∅");
+      if (W.fillPhiSampleList) {
+        W.fillPhiSampleList(document.getElementById("phi-sample"), [], 6);
+      }
     }
 
     const provenance = W.beamProvenanceLine(beams, readyData);
