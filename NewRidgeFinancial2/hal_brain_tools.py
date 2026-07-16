@@ -731,7 +731,7 @@ def softdent_export(*, consent: bool = True, report_id: str = "aging", days: int
     """SoftDent GUI Excel export → SoftDent folder, then copy to exports.
 
     HAL may run this without operator consent (read-only GUI export). SoftDent
-    Select File Name keeps SoftDent's own folder (e.g. OneDrive\\Documents).
+    Select File Name uses SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for all Excel reports.
     Never type SoftDentReportExports / C:\\SOFTDE~1 into SoftDent — invalid directory.
     NR2 copies the XLS into C:\\SoftDentReportExports after SoftDent saves.
     Output Options: Excel or Print Preview only — never Printer, never File.

@@ -11,7 +11,7 @@ NR2 morning bundle (`aging` → `register` → `collections`) needs SoftDent **E
 **Schedule (overall):** pull those SoftDent reports (and any other SoftDent GUI exports needed for the next business day) at **9:00 PM local the night before** — not on the morning of. SoftDent first; Trellis verify typically later (~10:10 PM).
 
 If Excel is greyed out, automation correctly uses Print Preview and keeps `morningBundle.ok=false` / `attest_only`.  
-If SoftDent opens **Select File Name** with an empty path, NR2 **refuses to invent** a folder (e.g. do not type `C:\SoftDentReportExports` into SoftDent).
+**Select File Name** for every Excel report is forced to SoftDent’s C: folder (`C:\SoftDent\softdentexportreports`) — never OneDrive, never `C:\SoftDentReportExports` inside SoftDent.
 
 ## Operator steps (attended, ~10–15 min)
 
@@ -33,8 +33,8 @@ If SoftDent opens **Select File Name** with an empty path, NR2 **refuses to inve
 
 When SoftDent shows **Select File Name** / Excel save:
 
-1. Use SoftDent’s **own C: folder** (`C:\SoftDent\softdentexportreports`). Override with `SOFTDENT_SELECT_FILE_FOLDER` if SoftDent shows a different last-used path.
-2. **Never** type `C:\SoftDentReportExports` or `C:\SOFTDE~1` into SoftDent.
+1. SoftDent **Select File Name** for **all** Excel reports must use SoftDent’s **C: folder** (`C:\SoftDent\softdentexportreports`). Override with `SOFTDENT_SELECT_FILE_FOLDER` only if SoftDent requires a different SoftDent-owned path.
+2. **Never** type `C:\SoftDentReportExports`, `C:\SOFTDE~1`, or OneDrive into SoftDent.
 3. After SoftDent saves, NR2 copies/lands Excel under `C:\SoftDentReportExports` (automation / Sync).
 
 ### 4) Attended morning-bundle re-run gate

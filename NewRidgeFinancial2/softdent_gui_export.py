@@ -1145,37 +1145,25 @@ def _set_edit_text_win32(edit_hwnd: int, text: str) -> None:
 
 
 def _softdent_select_file_path(stem_only: str, current: str = "") -> str:
-    """Build SoftDent Select File Name value using SoftDent's own directory.
+    """Build SoftDent Select File Name for EVERY report under SoftDent's C: folder.
 
-    SoftDent v19 shows ONE edit (e.g. ``C:\\SoftDent\\softdentexportreports\\AG260716``)
-    plus static ``.XLS``. That folder is SoftDent's valid C: export path —
-    never replace it with ``C:\\SOFTDE~1`` / SoftDentReportExports (SoftDent
-    rejects those as invalid directory). When the edit is empty or stem-only,
-    supply ``selectFileFolder`` from the menu map
-    (``C:\\SoftDent\\softdentexportreports``). Only swap the file stem when
-    SoftDent already shows a folder; NR2 copies into SoftDentReportExports
-    after SoftDent writes the XLS.
+    SoftDent v19 shows ONE edit (folder\\\\stem) + static ``.XLS``. All GUI Excel
+    reports (aging, register, collections, daysheet, transactions, …) must save
+    under ``C:\\SoftDent\\softdentexportreports`` (or ``SOFTDENT_SELECT_FILE_FOLDER`` /
+    menu-map ``selectFileFolder``). Never leave SoftDent on OneDrive, never use
+    SoftDentReportExports / ``C:\\SOFTDE~1`` in Select File Name — SoftDent rejects
+    those. NR2 copies the XLS into SoftDentReportExports after SoftDent writes.
     """
     stem = _softdent_file_stem(stem_only)
-    cur = str(current or "").strip().strip('"')
-    for suf in (".xls", ".XLS", ".xlsx", ".XLSX", ".csv", ".CSV"):
-        if cur.lower().endswith(suf.lower()):
-            cur = cur[: -len(suf)]
-            break
-    folder = ""
-    if cur:
-        p = Path(cur)
-        folder = str(p.parent) if str(p.parent) not in {".", ""} else ""
-        if folder and folder not in {".", ""} and (
-            "\\" in cur or "/" in cur or (len(cur) >= 2 and cur[1] == ":")
-        ):
-            return str(Path(folder) / stem)
     office_folder = resolve_select_file_folder()
-    logger.info(
-        "SoftDent Select File Name empty/invalid (%r) — using office folder %s",
-        current,
-        office_folder,
-    )
+    cur = str(current or "").strip().strip('"')
+    if cur:
+        logger.info(
+            "SoftDent Select File Name remapping %r → office folder %s\\%s",
+            current,
+            office_folder,
+            stem,
+        )
     return str(office_folder / stem)
 
 
@@ -1733,8 +1721,8 @@ def _complete_output_setup_and_save(
         time.sleep(0.25)
     if save:
         # SoftDent Select File Name: ONE path edit (SoftDentFolder\stem) + static .XLS.
-        # Keep SoftDent's C: folder verbatim (C:\SoftDent\softdentexportreports). Never
-        # substitute SoftDentReportExports / C:\SOFTDE~1 — SoftDent rejects those.
+        # Force SoftDent's C: folder (C:\SoftDent\softdentexportreports) for every report.
+        # Never SoftDentReportExports / C:\SOFTDE~1 / OneDrive in Select File Name.
         stem_only = _softdent_file_stem(short_stem)
         if any(ch in stem_only for ch in (":", "\\", "/", " ")):
             raise RuntimeError(
@@ -1744,7 +1732,7 @@ def _complete_output_setup_and_save(
         file_hwnd, current_path = _focus_select_file_name_filename_edit(save)
         save_path = _softdent_select_file_path(stem_only, current_path)
         logger.info(
-            "SoftDent Select File Name: keep SoftDent dir, current=%r → save=%r",
+            "SoftDent Select File Name: force office folder, current=%r → save=%r",
             current_path,
             save_path,
         )
@@ -1789,14 +1777,14 @@ def _complete_output_setup_and_save(
         time.sleep(2.0)
 
         dest_root.mkdir(parents=True, exist_ok=True)
-        # SoftDent writes into SoftDent's folder; NR2 then copies into dest_root.
+        # SoftDent writes into SoftDent's C: folder; NR2 then copies into dest_root.
         min_mtime = time.time() - 180.0
         search_roots: list[Path] = []
-        if preferred_folder and preferred_folder.is_dir():
+        office_folder = resolve_select_file_folder()
+        if office_folder.is_dir():
+            search_roots.append(office_folder)
+        if preferred_folder and preferred_folder.is_dir() and preferred_folder not in search_roots:
             search_roots.append(preferred_folder)
-        onedrive_docs = Path(r"E:\OneDrive\Documents")
-        if onedrive_docs.is_dir() and onedrive_docs not in search_roots:
-            search_roots.append(onedrive_docs)
         search_roots.extend(
             [
                 dest_root,
@@ -1804,8 +1792,19 @@ def _complete_output_setup_and_save(
                 Path(r"C:\SoftDentFinancialExports"),
                 Path(r"C:\SoftDent"),
                 Path(r"C:\SoftDent\softdentexportreports"),
+                Path(r"E:\OneDrive\Documents"),  # legacy SoftDent last-used path only
             ]
         )
+        # Dedupe while preserving order
+        seen: set[str] = set()
+        deduped: list[Path] = []
+        for root in search_roots:
+            key = str(root).lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            deduped.append(root)
+        search_roots = deduped
         candidates: list[Path] = []
         stem_patterns = {f"{stem_only}.*", f"{stem_only.upper()}.*"}
         if full_stem and full_stem != stem_only:

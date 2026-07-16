@@ -4646,7 +4646,7 @@ def build_export_playbook() -> dict[str, Any]:
             "COMPUTE/computer → Reports → <report> → Output Options → click Excel then Enter "
             "(or Print Preview then Enter) — NEVER Printer. Setup dates / doctor 999 → OK. "
             "NEVER type SoftDentReportExports or C:\\SOFTDE~1 into SoftDent Select File Name — "
-            "keep SoftDent's folder (e.g. OneDrive\\Documents). Temp SDWIN*.csv → Excel SaveCopyAs OK; "
+            "keep SoftDent's C: folder (C:\\SoftDent\\softdentexportreports) for all Excel reports. Temp SDWIN*.csv → Excel SaveCopyAs OK; "
             "NR2 copies into C:\\SoftDentReportExports after SoftDent saves. "
             "Preview: last page for totals. Then NR2 SoftDent → Sync. "
             "Ask HAL: how do I pull SoftDent reports? (policy softdent-report-pull).",
