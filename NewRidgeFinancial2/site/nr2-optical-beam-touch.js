@@ -404,10 +404,11 @@
     const dy = b.y - a.y;
     const len = Math.hypot(dx, dy);
     const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+    const height = parseFloat(getComputedStyle(el).height) || 5;
     el.style.transformOrigin = "0 50%";
     el.style.width = Math.max(len, 0) + "px";
     el.style.left = a.x + "px";
-    el.style.top = a.y - 2 + "px";
+    el.style.top = a.y - height / 2 + "px";
     el.style.transform = "rotate(" + deg + "deg)";
   }
   function placeCoreHit(beam, rim, center, radius) {
