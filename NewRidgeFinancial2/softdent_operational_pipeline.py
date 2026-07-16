@@ -306,6 +306,67 @@ def _build_settlement_date_index(transactions: list[dict[str, Any]]) -> dict[str
     return out
 
 
+_TXN_SETTLEMENT_CACHE: dict[str, Any] = {}
+
+
+def patient_id_from_claim_id(claim_id: str) -> str:
+    """Extract SoftDent MRN from TXN-/DS- derived claim ids."""
+    parts = str(claim_id or "").strip().split("-")
+    if len(parts) >= 3 and parts[0] in ("TXN", "DS"):
+        return str(parts[2] or "").strip()
+    return ""
+
+
+def load_txn_settlement_context() -> tuple[list[dict[str, Any]], dict[str, set[str]]]:
+    """Cached SoftDent Trans-for-a-Period rows + account settlement index."""
+    path = resolve_softdent_transactions_xls_path()
+    cache_key = str(path) if path else ""
+    try:
+        mtime = float(path.stat().st_mtime) if path and path.is_file() else 0.0
+    except OSError:
+        mtime = 0.0
+    hit = _TXN_SETTLEMENT_CACHE.get(cache_key)
+    if hit and hit.get("mtime") == mtime:
+        txs = hit.get("transactions")
+        idx = hit.get("index")
+        if isinstance(txs, list) and isinstance(idx, dict):
+            return txs, idx
+    transactions = load_softdent_transactions_xls(path)
+    index = _build_settlement_date_index(transactions)
+    _TXN_SETTLEMENT_CACHE[cache_key] = {
+        "mtime": mtime,
+        "transactions": transactions,
+        "index": index,
+    }
+    return transactions, index
+
+
+def claim_is_unpaid_on_txn(
+    *,
+    patient_id: str = "",
+    service_date: str = "",
+    claim_id: str = "",
+    claim_status: str = "",
+    transactions: list[dict[str, Any]] | None = None,
+    settlement_index: dict[str, set[str]] | None = None,
+) -> bool:
+    """True when SoftDent TXN ledger still shows no insurance pay/write-off on/after DOS."""
+    if claim_status and not is_active_claim_status(claim_status):
+        return False
+    pid = str(patient_id or "").strip() or patient_id_from_claim_id(claim_id)
+    dos = str(service_date or "").strip()[:10]
+    if not pid or not dos:
+        return True
+    txs = transactions
+    idx = settlement_index
+    if txs is None or idx is None:
+        txs, idx = load_txn_settlement_context()
+    if not txs:
+        return True
+    status = _claim_status_for_patient_day(pid, dos, txs, settlement_index=idx)
+    return is_active_claim_status(status)
+
+
 def _claim_status_for_patient_day(
     patient_id: str,
     report_date: str,
