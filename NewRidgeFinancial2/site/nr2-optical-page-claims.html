@@ -49,7 +49,8 @@
         </div>
         <p class="om-claims-note">
           SoftDent read-only · full patient names · oldest first · click a row for claim review ·
-          age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · null amounts = — (empty ≠ $0) · sample capped at 200
+          age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · filter Age + Gaps + Payer for phone batches ·
+          null amounts = — (empty ≠ $0) · sample capped at 200
         </p>
         <div class="om-claims-filters" id="cl-filters" aria-label="Filter unpaid SoftDent claims">
           <label class="om-claims-filter">
@@ -69,6 +70,12 @@
               <option value="unnamed_payer">Unnamed payer</option>
               <option value="no_patient">No patient join</option>
               <option value="any_gap">Any gap (payer or patient)</option>
+            </select>
+          </label>
+          <label class="om-claims-filter">
+            Payer
+            <select id="cl-filter-payer" title="Batch unpaid claims by same payer">
+              <option value="all">All payers</option>
             </select>
           </label>
         </div>

@@ -637,6 +637,23 @@ a:hover { color: var(--hal); }
   margin: 0 0.3rem 0.3rem 0;
   max-width: 100%;
 }
+.cl-appeal-box {
+  margin: 0.45rem 0 0.6rem;
+  padding: 0.4rem 0.45rem;
+  border: 1px solid #2a3544;
+  background: rgba(6, 10, 14, 0.85);
+}
+.cl-appeal-pre {
+  margin: 0.35rem 0;
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: #cfd8e3;
+  line-height: 1.35;
+}
 .om-claims-summary {
   font-family: var(--mono); font-size: 11px; color: #b8c2d0;
 }

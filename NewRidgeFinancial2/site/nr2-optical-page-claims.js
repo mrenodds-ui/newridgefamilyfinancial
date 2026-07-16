@@ -24,11 +24,20 @@
     return !p || p === "insurance" || p === "unknown" || p === "n/a" || p === "-" || p === "—";
   }
 
+  function normalizePayerKey(payer) {
+    return String(payer || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+  }
+
   function claimPassesFilters(c) {
     const ageSel = document.getElementById("cl-filter-age");
     const gapSel = document.getElementById("cl-filter-gap");
+    const payerSel = document.getElementById("cl-filter-payer");
     const ageMode = ageSel ? String(ageSel.value || "all") : "all";
     const gapMode = gapSel ? String(gapSel.value || "all") : "all";
+    const payerMode = payerSel ? String(payerSel.value || "all") : "all";
     const age = claimAgeDays(c && c.serviceDate);
     if (ageMode === "0-30" && !(age != null && age <= 30)) return false;
     if (ageMode === "31-60" && !(age != null && age >= 31 && age <= 60)) return false;
@@ -39,7 +48,66 @@
     if (gapMode === "unnamed_payer" && !unnamed) return false;
     if (gapMode === "no_patient" && !noPatient) return false;
     if (gapMode === "any_gap" && !(unnamed || noPatient)) return false;
+    if (payerMode !== "all" && normalizePayerKey(c && c.payer) !== payerMode) return false;
     return true;
+  }
+
+  function refreshPayerFilterOptions(claims) {
+    const sel = document.getElementById("cl-filter-payer");
+    if (!sel) return;
+    const prev = String(sel.value || "all");
+    const counts = {};
+    const labels = {};
+    (claims || []).forEach(function (c) {
+      const raw = String((c && c.payer) || "").trim() || "—";
+      const key = normalizePayerKey(raw);
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
+      if (!labels[key]) labels[key] = raw;
+    });
+    const keys = Object.keys(counts).sort(function (a, b) {
+      const ca = counts[b] - counts[a];
+      if (ca !== 0) return ca;
+      return String(labels[a] || a).localeCompare(String(labels[b] || b));
+    });
+    sel.textContent = "";
+    const allOpt = document.createElement("option");
+    allOpt.value = "all";
+    allOpt.textContent = "All payers";
+    sel.appendChild(allOpt);
+    keys.forEach(function (key) {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = String(labels[key] || key) + " (" + String(counts[key]) + ")";
+      sel.appendChild(opt);
+    });
+    if (prev !== "all" && counts[prev]) sel.value = prev;
+    else sel.value = "all";
+  }
+
+  function setPayerBatchFilter(payer) {
+    const sel = document.getElementById("cl-filter-payer");
+    if (!sel) return;
+    const key = normalizePayerKey(payer);
+    if (!key || key === "all") {
+      sel.value = "all";
+    } else {
+      let found = false;
+      for (let i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === key) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        const opt = document.createElement("option");
+        opt.value = key;
+        opt.textContent = String(payer || key);
+        sel.appendChild(opt);
+      }
+      sel.value = key;
+    }
+    if (clClaimsCache) renderClaimsOutstanding(null);
   }
 
   function appendClaimActionLog(body, claim, rev) {
@@ -328,7 +396,103 @@
         });
         revActions.appendChild(copyBtn);
       }
+      if (!isGenericPayer(claim && claim.payer)) {
+        const batchBtn = document.createElement("button");
+        batchBtn.type = "button";
+        batchBtn.className = "btn-quiet";
+        batchBtn.textContent = "Same payer batch";
+        batchBtn.title = "Filter unpaid list to this payer (combine with Age for phone block)";
+        batchBtn.addEventListener("click", function () {
+          setPayerBatchFilter(claim.payer);
+        });
+        revActions.appendChild(batchBtn);
+      }
+      const appealBtn = document.createElement("button");
+      appealBtn.type = "button";
+      appealBtn.className = "btn-quiet";
+      appealBtn.textContent = "Appeal packet";
+      appealBtn.title = "Local denial/appeal draft — SoftDent READ-ONLY · not submitted";
+      const appealBox = document.createElement("div");
+      appealBox.className = "cl-appeal-box";
+      appealBox.hidden = true;
+      appealBtn.addEventListener("click", function () {
+        if (!W.postJson) return;
+        appealBtn.disabled = true;
+        appealBtn.textContent = "Building…";
+        const procs = Array.isArray(rev.procedures) ? rev.procedures : [];
+        const procCodes = procs
+          .map(function (p) {
+            return String((p && p.code) || "").trim();
+          })
+          .filter(Boolean)
+          .slice(0, 6);
+        W.postJson(
+          "/api/claims/appeal-packet",
+          {
+            claimId: String((claim && claim.claimId) || ""),
+            payer: String((claim && claim.payer) || ""),
+            patientId: String((claim && claim.patientId) || ""),
+            patient: displayPatientName(claim),
+            PatientName: displayPatientName(claim),
+            status: String((claim && claim.status) || ""),
+            amount: claim && claim.amount,
+            procedure: procCodes.join(" ") || String((claim && claim.procedure) || ""),
+            cdt: procCodes[0] || "",
+            narrative: nar && nar.summary ? String(nar.summary) : "",
+            denialReason: "",
+          },
+          20000
+        )
+          .then(function (res) {
+            appealBtn.disabled = false;
+            appealBtn.textContent = "Appeal packet";
+            const data = res && res.data ? res.data : null;
+            if (!res || !res.ok || !data || !data.ok) {
+              appealBox.hidden = false;
+              appealBox.textContent =
+                "Appeal packet failed · " +
+                String((data && (data.error || data.emptyMessage)) || res.status || "NO SIGNAL") +
+                " · empty ≠ $0";
+              return;
+            }
+            appealBox.hidden = false;
+            appealBox.textContent = "";
+            const head = document.createElement("p");
+            head.className = "wk-dossier-muted";
+            head.textContent =
+              "Local appeal draft · not submitted · SoftDent READ-ONLY" +
+              (data.consentRequiredForZip ? " · zip needs consent" : "");
+            appealBox.appendChild(head);
+            const pre = document.createElement("pre");
+            pre.className = "cl-appeal-pre";
+            pre.textContent = String(data.narrative || data.summary || "—");
+            appealBox.appendChild(pre);
+            const copyAppeal = document.createElement("button");
+            copyAppeal.type = "button";
+            copyAppeal.className = "btn-quiet";
+            copyAppeal.textContent = "Copy appeal draft";
+            copyAppeal.addEventListener("click", function () {
+              const text = String(data.narrative || "");
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).catch(function () {});
+              }
+              copyAppeal.textContent = "Copied";
+              setTimeout(function () {
+                copyAppeal.textContent = "Copy appeal draft";
+              }, 1200);
+            });
+            appealBox.appendChild(copyAppeal);
+          })
+          .catch(function () {
+            appealBtn.disabled = false;
+            appealBtn.textContent = "Appeal packet";
+            appealBox.hidden = false;
+            appealBox.textContent = "Appeal packet fault · empty ≠ $0";
+          });
+      });
+      revActions.appendChild(appealBtn);
       body.appendChild(revActions);
+      body.appendChild(appealBox);
 
       appendClaimActionLog(body, claim, rev);
     } else if (rev && rev.error) {
@@ -616,6 +780,7 @@
       }
       return true;
     });
+    if (data) refreshPayerFilterOptions(claims);
     const beforeFilter = claims.length;
     claims = claims.filter(claimPassesFilters);
     if (rangeEl) {
@@ -767,7 +932,7 @@
         });
       });
     }
-    ["cl-filter-age", "cl-filter-gap"].forEach(function (id) {
+    ["cl-filter-age", "cl-filter-gap", "cl-filter-payer"].forEach(function (id) {
       const el = document.getElementById(id);
       if (el && !el._nr2ClBound) {
         el._nr2ClBound = true;
