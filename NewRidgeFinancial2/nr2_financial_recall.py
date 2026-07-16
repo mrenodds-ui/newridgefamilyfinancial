@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Any
 
 _REPO = Path(__file__).resolve().parents[1]
+_NR2 = Path(__file__).resolve().parent
 _OFFICE = _REPO / "app_data" / "nr2" / "office"
 _CONFIG_PATH = _OFFICE / "lighthouse_config.yaml"
 _CONFIG_EXAMPLE = _OFFICE / "lighthouse_config.yaml.example"
+_CONFIG_DOC_EXAMPLE = _NR2 / "docs" / "examples" / "lighthouse_config.yaml.example"
 
 _DEFAULTS: dict[str, Any] = {
     "financialRecall": {
@@ -29,8 +31,12 @@ def _utc_now() -> str:
 
 
 def load_lighthouse_config() -> dict[str, Any]:
-    path = _CONFIG_PATH if _CONFIG_PATH.is_file() else _CONFIG_EXAMPLE
-    if not path.is_file():
+    path = _CONFIG_PATH if _CONFIG_PATH.is_file() else None
+    if path is None and _CONFIG_EXAMPLE.is_file():
+        path = _CONFIG_EXAMPLE
+    if path is None and _CONFIG_DOC_EXAMPLE.is_file():
+        path = _CONFIG_DOC_EXAMPLE
+    if path is None:
         return dict(_DEFAULTS)
     try:
         import yaml  # type: ignore[import-untyped]
@@ -263,7 +269,7 @@ def format_financial_recall_hal_reply(query: str = "") -> str:
             f"min months since visit {cfg.get('minMonthsSinceVisit')}."
         ),
         "GET /api/nr2/financial-recall — JSON · GET /api/nr2/financial-recall/export.csv — staff CSV.",
-        "Copy lighthouse_config.yaml.example → lighthouse_config.yaml to tune thresholds locally.",
+        "Copy docs/examples/lighthouse_config.yaml.example → app_data/nr2/office/lighthouse_config.yaml to tune thresholds locally.",
         "Empty ≠ $0 — phone last-4 only when Sensei/ODBC phone is wired; otherwise —.",
     ]
     if count:

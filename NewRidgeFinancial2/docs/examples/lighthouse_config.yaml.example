@@ -1,0 +1,11 @@
+# Copy to: app_data/nr2/office/lighthouse_config.yaml (local only — not committed)
+# Lighthouse 360 bridge — NR2 exports board-safe recall CSV; no SMS/chat embed in NR2.
+
+financialRecall:
+  minBalance: 100.0
+  minMonthsSinceVisit: 6
+  maxRows: 200
+
+lighthouse:
+  enabled: false
+  note: "Subscribe Lighthouse 360 when ready. Import nr2-financial-recall.csv manually."
