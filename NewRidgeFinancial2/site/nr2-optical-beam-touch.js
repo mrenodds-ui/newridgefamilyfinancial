@@ -438,10 +438,9 @@
     }
   }
   function aperturePoint(bench, rect, side) {
-    /* Match CSS ::after LEDs: 14px, inset -7px, vertical center at 48% */
-    const ledR = 7;
+    /* Match CSS ::after LEDs: 14px at right/left -7px → center sits on the widget edge */
     const y = rect.top + rect.height * 0.48;
-    const x = side === "right" ? rect.right + ledR : rect.left - ledR;
+    const x = side === "right" ? rect.right : rect.left;
     return localPoint(bench, x, y);
   }
   function snapBeams() {
