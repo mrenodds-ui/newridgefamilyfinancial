@@ -15,8 +15,22 @@ GAP_ERA835_PENDING = "ERA835_PENDING"
 
 _REPO = Path(__file__).resolve().parents[1]
 _OFFICE = _REPO / "app_data" / "nr2" / "office"
-_MANIFEST = _OFFICE / "era_inbox" / "ingest_manifest.jsonl"
-_PROCESSED = _OFFICE / "era_inbox" / "processed"
+_DEFAULT_MANIFEST = _OFFICE / "era_inbox" / "ingest_manifest.jsonl"
+_DEFAULT_PROCESSED = _OFFICE / "era_inbox" / "processed"
+
+
+def _manifest_path() -> Path:
+    env_inbox = str(os.environ.get("NR2_ERA835_INBOX") or "").strip()
+    if env_inbox:
+        return Path(env_inbox).expanduser() / "ingest_manifest.jsonl"
+    return _DEFAULT_MANIFEST
+
+
+def _processed_dir() -> Path:
+    env_inbox = str(os.environ.get("NR2_ERA835_INBOX") or "").strip()
+    if env_inbox:
+        return Path(env_inbox).expanduser() / "processed"
+    return _DEFAULT_PROCESSED
 
 
 def _utc_now() -> str:
@@ -48,8 +62,10 @@ def ensure_era_inbox_dirs() -> list[str]:
         if not root.is_dir():
             root.mkdir(parents=True, exist_ok=True)
             created.append(str(root))
-    _MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-    _PROCESSED.mkdir(parents=True, exist_ok=True)
+    manifest = _manifest_path()
+    processed = _processed_dir()
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    processed.mkdir(parents=True, exist_ok=True)
     return created
 
 
@@ -130,11 +146,12 @@ def era_inbox_status(*, ensure_dirs: bool = False) -> dict[str, Any]:
 
 
 def _read_manifest_rows() -> list[dict[str, Any]]:
-    if not _MANIFEST.is_file():
+    manifest = _manifest_path()
+    if not manifest.is_file():
         return []
     rows: list[dict[str, Any]] = []
     try:
-        for line in _MANIFEST.read_text(encoding="utf-8", errors="replace").splitlines():
+        for line in manifest.read_text(encoding="utf-8", errors="replace").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -243,8 +260,8 @@ def ingest_era835_to_unified(
         "softDentWriteBack": False,
         "emptyNotZero": True,
     }
-    _MANIFEST.parent.mkdir(parents=True, exist_ok=True)
-    with _MANIFEST.open("a", encoding="utf-8") as handle:
+    _manifest_path().parent.mkdir(parents=True, exist_ok=True)
+    with _manifest_path().open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(entry, default=str) + "\n")
     return {
         "ok": True,
@@ -360,12 +377,13 @@ def ingest_era_inbox(*, ensure_dirs: bool = False, limit: int | None = None) -> 
             "softDentWriteBack": False,
             "emptyNotZero": True,
         }
-        with _MANIFEST.open("a", encoding="utf-8") as handle:
+        with _manifest_path().open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(entry, default=str) + "\n")
         ingested += 1
         rows_inserted += max(claim_count, 1)
         try:
-            dest = _PROCESSED / path.name
+            dest = _processed_dir() / path.name
+            _processed_dir().mkdir(parents=True, exist_ok=True)
             if not dest.exists():
                 dest.write_bytes(path.read_bytes())
         except OSError:

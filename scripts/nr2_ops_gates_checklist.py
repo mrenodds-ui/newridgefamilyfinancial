@@ -192,7 +192,7 @@ def main() -> int:
                 "era_inbox",
                 "GREEN" if int(inbox.get("fileCount") or 0) or int(sug.get("count") or 0) else "YELLOW",
                 f"inbox={inbox.get('fileCount') or 0} · suggestions={sug.get('count') or 0} · {inbox.get('chipLabel') or '—'}",
-                r"Drop 835 into app_data\nr2\office\era_inbox\drop then ingest",
+                r"Drop real 835 into app_data\nr2\office\era_inbox\drop (or C:\SoftDentFinancialExports\era) then python scripts/run_era_inbox_ingest_ops.py — see docs/runbooks/era_835_inbox_drop_nr2.md",
             )
         )
     except Exception as exc:  # noqa: BLE001
