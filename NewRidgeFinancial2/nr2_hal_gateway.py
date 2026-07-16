@@ -1228,7 +1228,7 @@ def try_local_policy_reply(
         q,
     ):
         try:
-            from apex_era835_pack import discover_era_candidates
+            from nr2_era_inbox import discover_era_candidates
 
             found = discover_era_candidates(limit=8)
             count = int(found.get("candidateCount") or 0)
@@ -1272,7 +1272,7 @@ def try_local_policy_reply(
         q,
     ):
         try:
-            from apex_era835_pack import scan_era_inbox
+            from nr2_era_inbox import scan_era_inbox
 
             scanned = scan_era_inbox(ensure_dirs=True)
             chip = scanned.get("chipLabel") or "Awaiting first 835 drop"

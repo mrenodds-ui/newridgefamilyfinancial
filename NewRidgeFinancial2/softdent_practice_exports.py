@@ -1550,7 +1550,7 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
     Ensures drop-box dirs exist and scans for files. Does not invent dollars or write SoftDent.
     """
     try:
-        from apex_era835_pack import scan_era_inbox
+        from nr2_era_inbox import scan_era_inbox
 
         inbox = scan_era_inbox(ensure_dirs=True)
         return {
@@ -1574,10 +1574,9 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
             "candidateRoots": inbox.get("candidateRoots") or [],
             "existingRoots": inbox.get("existingRoots") or [],
             "ingestHooks": [
-                "apex_era835_pack.ingest_era835_to_unified",
-                "apex_era835_pack.scan_era_inbox",
-                "apex_era835_pack.ingest_era_inbox",
-                "apex_era835_pack.discover_era_candidates",
+                "nr2_era_inbox.ingest_era_inbox",
+                "nr2_era_inbox.scan_era_inbox",
+                "nr2_era_inbox.discover_era_candidates",
                 "nr2_contracts.softdent_era.attach_era_to_ingest",
             ],
             "inbox": inbox,
@@ -1614,7 +1613,7 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
             "existingRoots": existing,
             "error": f"{type(exc).__name__}:{exc}",
             "ingestHooks": [
-                "apex_era835_pack.ingest_era835_to_unified",
+                "nr2_era_inbox.ingest_era_inbox",
                 "nr2_contracts.softdent_era.attach_era_to_ingest",
             ],
         }
@@ -1622,7 +1621,7 @@ def stub_era835_ingestion_path() -> dict[str, Any]:
 
 def discover_era_candidates(**kwargs: Any) -> dict[str, Any]:
     """hal-10576 — thin export wrapper for remittance discovery (read-only)."""
-    from apex_era835_pack import discover_era_candidates as _discover
+    from nr2_era_inbox import discover_era_candidates as _discover
 
     return _discover(**kwargs)
 

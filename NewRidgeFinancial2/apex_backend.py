@@ -2671,7 +2671,7 @@ def _softdent_widgets(reports: dict[str, Any], bundle: dict[str, Any]) -> list[d
     except Exception:
         pass
     try:
-        from apex_era835_pack import era835_widget
+        from nr2_era_inbox import era835_widget
 
         widgets.append(era835_widget(bundle))
     except Exception:
@@ -7332,7 +7332,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     @app.get("/api/apex/hal/era835-status")
     def apex_era835_status():
         try:
-            from apex_era835_pack import era835_status
+            from nr2_era_inbox import era835_status
 
             result = era835_status()
             result["buildId"] = BUILD_ID
@@ -7344,7 +7344,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     def apex_era_inbox_status():
         """hal-10576 — ERA-835 drop-box status + mutation-auth contract (empty ≠ $0)."""
         try:
-            from apex_era835_pack import era_inbox_status
+            from nr2_era_inbox import era_inbox_status
             from nr2_browser_security import (
                 era_inbox_mutation_contract,
                 request_mutation_token_if_bound,
@@ -7367,7 +7367,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     def apex_era_inbox_ingest():
         """hal-10576 — ingest ERA drop-box (requires X-NR2-Session-Token in browser; empty ≠ $0)."""
         try:
-            from apex_era835_pack import ingest_era_inbox
+            from nr2_era_inbox import ingest_era_inbox
 
             result = ingest_era_inbox(ensure_dirs=True)
             result["buildId"] = BUILD_ID
@@ -7381,7 +7381,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     def apex_era_inbox_discover_get():
         """hal-10576 — read-only remittance discovery across SoftDent/export roots."""
         try:
-            from apex_era835_pack import discover_era_candidates
+            from nr2_era_inbox import discover_era_candidates
 
             result = discover_era_candidates()
             result["buildId"] = BUILD_ID
@@ -7393,7 +7393,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     def apex_era_inbox_discover_post():
         """hal-10576 — same discovery via CSRF session POST (UI Scan for ERA Files)."""
         try:
-            from apex_era835_pack import discover_era_candidates
+            from nr2_era_inbox import discover_era_candidates
 
             result = discover_era_candidates()
             result["buildId"] = BUILD_ID
@@ -7418,7 +7418,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
     @app.get("/api/apex/hal/era835-payments")
     def apex_era835_payments():
         try:
-            from apex_era835_pack import list_era835_payments
+            from nr2_era_inbox import list_era835_payments
 
             rows = list_era835_payments(limit=50)
             return json_response_fn(
@@ -7432,7 +7432,7 @@ def register_apex_routes(app: Any, json_response_fn: Callable[..., Any]) -> None
         """Phase U1 — parse ERA 835 EDI/CSV into payer aggregates (no PHI)."""
         try:
             import bottle
-            from apex_era835_pack import ingest_era835_to_unified
+            from nr2_era_inbox import ingest_era835_to_unified
 
             upload = bottle.request.files.get("file") if bottle.request.files else None
             text = ""

@@ -10,6 +10,7 @@
     { href: "/nr2-optical-page-hal.html", label: "HAL + Chat" },
     { href: "/nr2-optical-page-claims.html", label: "Claims + ERA" },
     { href: "/nr2-optical-page-narratives.html", label: "Narratives" },
+    { href: "/nr2-optical-page-analytics.html", label: "Analytics / Huddle" },
     { group: "PLANNING" },
     { href: "/nr2-optical-page-taxes.html", label: "Taxes" },
     { href: "/nr2-optical-page-office-manager.html", label: "Office Manager" },

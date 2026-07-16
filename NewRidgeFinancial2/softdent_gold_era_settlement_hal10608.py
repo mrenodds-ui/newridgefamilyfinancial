@@ -104,7 +104,7 @@ def gold_lane_status(*, db_path: Path | None = None) -> dict[str, Any]:
 
 def era_lane_status() -> dict[str, Any]:
     try:
-        from apex_era835_pack import (
+        from nr2_era_inbox import (
             GAP_ERA835_PENDING,
             assess_era835_gap,
             era_inbox_status,
@@ -238,7 +238,7 @@ def run_ops_10608_gold_era_settlement(
 
     if attempt_era_ingest and int(era.get("fileCount") or 0) > 0:
         try:
-            from apex_era835_pack import ingest_era_inbox
+            from nr2_era_inbox import ingest_era_inbox
 
             actions["eraIngest"] = ingest_era_inbox(limit=20, ensure_dirs=True)
             era = era_lane_status()

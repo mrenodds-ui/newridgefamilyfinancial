@@ -11,6 +11,7 @@
     { id: "hub-claims", prefixes: ["softdent.claims"] },
     { id: "hub-taxes", prefixes: ["taxes.", "tax."] },
     { id: "hub-ar", prefixes: ["softdent.ar"] },
+    { id: "hub-analytics", prefixes: ["softdent.", "quickbooks.", "financial"] },
     { id: "hub-om", prefixes: ["softdent.", "quickbooks."] },
     { id: "hub-docs", prefixes: ["documents.", "softdent."] },
   ];

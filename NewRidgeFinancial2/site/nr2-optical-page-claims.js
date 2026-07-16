@@ -966,10 +966,11 @@
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
     wireClaimsControls();
 
-    const [claimsRes, aging, adj, ready] = await Promise.all([
+    const [claimsRes, aging, adj, eraInbox, ready] = await Promise.all([
       loadClaimsOutstanding(),
       W.getJson("/api/claims/aging-summary", 12000),
       W.getJson("/api/softdent/adjustment-log", 12000),
+      W.getJson("/api/apex/hal/era-inbox/status", 12000),
       W.getJson("/api/import-readiness", 12000),
     ]);
     const claims = {
@@ -1035,7 +1036,28 @@
       W.setText("val-over30", null, "∅");
     }
 
-    if (
+    let eraLive = false;
+    if (eraInbox.ok && eraInbox.data && eraInbox.data.ok !== false) {
+      const era = eraInbox.data;
+      const count = Number(era.fileCount != null ? era.fileCount : (era.inbox && era.inbox.fileCount) || 0);
+      const chip = String(era.chipLabel || (era.inbox && era.inbox.chipLabel) || "").trim();
+      const ingested = era.gap && era.gap.rowCount != null ? Number(era.gap.rowCount) : null;
+      if (count > 0) {
+        W.setText("val-era", String(count) + " in inbox");
+        eraLive = true;
+      } else if (ingested != null && ingested > 0) {
+        W.setText("val-era", String(ingested) + " ingested");
+        eraLive = true;
+      } else {
+        W.setText("val-era", null, "∅");
+      }
+      const eraHint = document.getElementById("hint-era");
+      if (eraHint) {
+        eraHint.textContent =
+          (chip || "ERA inbox") +
+          " · read-only · empty ≠ $0 · no SoftDent write-back";
+      }
+    } else if (
       adj.ok &&
       adj.data &&
       adj.data.hasData &&
@@ -1048,24 +1070,25 @@
       const eraHint = document.getElementById("hint-era");
       if (eraHint) {
         eraHint.textContent =
-          "ERA UNAVAILABLE · SoftDent adjustment-log" +
+          "ERA inbox NO SIGNAL · SoftDent adjustment-log" +
           (tip && tip.date ? " · " + tip.date : "") +
           " · read-only";
       }
       live = true;
     } else {
-      W.setText("val-era", "UNAVAILABLE");
+      W.setText("val-era", null, "NO SIGNAL");
       const eraHint = document.getElementById("hint-era");
       if (eraHint) {
-        eraHint.textContent = "ERA ingest pack removed · no SoftDent write-back";
+        eraHint.textContent = "ERA inbox unavailable · no SoftDent write-back";
       }
     }
+    if (eraLive) live = true;
 
     W.setBanner(
       claimsStale ? "partial" : live ? "live" : "partial",
       claimsStale
         ? "Claims STALE · lasers red on softdent · list + dossier · empty ≠ $0"
-        : "Claims list LIVE · click row for context · ERA UNAVAILABLE · empty ≠ $0"
+        : "Claims list LIVE · click row for context · ERA inbox read-only · empty ≠ $0"
     );
   }
 
