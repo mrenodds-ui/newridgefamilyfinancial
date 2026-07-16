@@ -506,10 +506,21 @@
   });
   setTimeout(snapBeams, 50);
   setTimeout(snapBeams, 250);
-  window.addEventListener("resize", snapBeams);
+  let snapRaf = 0;
+  function scheduleSnapBeams() {
+    if (snapRaf) return;
+    snapRaf = requestAnimationFrame(function () {
+      snapRaf = 0;
+      snapBeams();
+    });
+  }
+  window.addEventListener("resize", scheduleSnapBeams, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", scheduleSnapBeams, { passive: true });
+  }
   if (typeof ResizeObserver !== "undefined") {
     const bench = document.getElementById("bench");
-    if (bench) new ResizeObserver(snapBeams).observe(bench);
+    if (bench) new ResizeObserver(scheduleSnapBeams).observe(bench);
   }
 
   /* —— live wires —— */
@@ -1140,7 +1151,7 @@
         return;
       }
     }
-    benchEl.addEventListener("click", (e) => {
+    function handleBenchPointer(e) {
       const filmSlot = e.target.closest("#film .slot");
       if (filmSlot) {
         openClaimsFromFilm(filmSlot);
@@ -1160,7 +1171,8 @@
       if (emitter) {
         openEmitter(emitter.getAttribute("data-go"));
       }
-    });
+    }
+    benchEl.addEventListener("click", handleBenchPointer);
     benchEl.addEventListener("keydown", (e) => {
       if (e.key !== "Enter" && e.key !== " ") return;
       const filmSlot = e.target.closest("#film .slot");

@@ -759,6 +759,136 @@
       background: rgba(8,16,14,0.55);
     }
     .metric.empty { color: var(--stale) !important; font-size: clamp(16px, 1.8vw, 22px); }
+
+    /* Package 5: tablet / iPad beam-touch — no horizontal scroll · ≥44px hits · cheap beams */
+    .emitter,
+    .ctrl,
+    .core,
+    .slot:not(.empty),
+    .lever,
+    .wheel button,
+    .core-acts button,
+    .close-steps span,
+    .banner a {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .beam-ray {
+      will-change: transform;
+      contain: layout style;
+    }
+    @media (max-width: 1180px) {
+      html, body { overflow-x: clip; max-width: 100vw; }
+      .banner {
+        min-height: 44px;
+        gap: 8px;
+        padding: 6px 10px;
+      }
+      .banner .bind { min-width: 0; flex: 1 1 140px; }
+      .banner a { min-height: 44px; display: inline-flex; align-items: center; padding: 0 8px; }
+      .wire-mark { max-width: min(280px, 40vw); }
+      body.has-ops-gates .bench { height: calc(100dvh - 76px); }
+      .bench { overflow-x: clip; overflow-y: hidden; }
+      .emitter {
+        width: min(280px, calc(50% - 20px));
+        min-height: 120px;
+        padding: 10px 12px;
+      }
+      .emitter.sd { left: 8px; bottom: 72px; }
+      .emitter.qb { right: 8px; bottom: 72px; }
+      .emitter.tax { right: 8px; top: 48px; width: min(260px, calc(50% - 20px)); }
+      .ctrl {
+        left: 8px; top: 48px;
+        width: min(280px, calc(50% - 20px));
+        min-height: 120px;
+        gap: 6px; padding: 10px;
+      }
+      .core {
+        width: min(200px, 28vw);
+        height: min(200px, 28vw);
+        top: 40%;
+      }
+      .core-acts button,
+      .lever,
+      .wheel button,
+      .ctrl button,
+      .emitter.tax button {
+        min-height: 44px;
+      }
+      .close-steps span { min-height: 44px; font-size: 11px; }
+      .film { height: 72px; gap: 8px; padding: 0 8px; overflow-x: auto; overflow-y: hidden; }
+      .film .cap { position: static; flex: 0 0 auto; }
+      .slot {
+        width: min(148px, 28vw);
+        height: 44px;
+        flex: 0 0 auto;
+      }
+      /* Prefer opacity pulse over multi-layer box-shadow for 60fps on tablets */
+      .beam-ray,
+      .beam-ray.sd,
+      .beam-ray.qb,
+      .beam-ray.tax,
+      .beam-ray.ray-ctrl {
+        animation: laser-pulse-lite 1.6s ease-in-out infinite;
+        box-shadow: 0 0 8px rgba(255, 0, 68, 0.55);
+      }
+      .beam-ray.is-dim { animation: none; opacity: 0.3; }
+      .beam-ray.is-cut { animation: none; }
+      .core { animation: none; }
+      .core::before { animation: none; opacity: 0.5; }
+      .core::after { animation: core-sweep 10s linear infinite; opacity: 0.55; }
+      .core-ripple,
+      .core-ripple-delay { animation: none; opacity: 0.25; }
+      .core-glint { animation: none; }
+    }
+    @keyframes laser-pulse-lite {
+      0%, 100% { opacity: 0.65; }
+      50% { opacity: 1; }
+    }
+    @media (max-width: 900px) {
+      .emitter.sd,
+      .emitter.qb {
+        width: calc(50% - 14px);
+        bottom: 76px;
+      }
+      .emitter.tax { display: none; }
+      .ctrl {
+        width: calc(50% - 14px);
+        grid-template-columns: 1fr;
+      }
+      .ctrl .cell:nth-child(n + 3) { display: none; }
+      .core { width: 168px; height: 168px; top: 36%; }
+      .core .brief { display: none; }
+      #ray-tax { display: none; }
+    }
+    @media (max-width: 700px) {
+      .bench { overflow-y: auto; }
+      .emitter.sd,
+      .emitter.qb,
+      .ctrl {
+        position: relative;
+        left: auto; right: auto; top: auto; bottom: auto;
+        width: calc(100% - 24px);
+        margin: 8px 12px;
+        clip-path: none;
+      }
+      .emitter.sd::after,
+      .emitter.qb::after,
+      .ctrl::after { display: none; }
+      .core {
+        position: relative;
+        left: auto; top: auto;
+        transform: none;
+        margin: 12px auto;
+        width: 180px; height: 180px;
+      }
+      .core:hover,
+      .core:focus-visible,
+      .core:active { transform: none; }
+      .beam-layer { display: none; }
+      .film { position: relative; margin-top: 8px; }
+      .align { display: none; }
+    }
   </style>
 </head>
 <body>
