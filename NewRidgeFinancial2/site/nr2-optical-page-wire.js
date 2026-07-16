@@ -290,6 +290,22 @@
           const proof = String(data.deskProof || "NO SIGNAL");
           const liveData = formatBeamHash(live.dataBeamHash, 16);
           const closeData = formatBeamHash(close.dataBeamHash, 16);
+          let driftBit = "";
+          const drift = data.drift;
+          if (drift && typeof drift === "object") {
+            const parts = [];
+            if (drift.softdentDisplay) {
+              parts.push(
+                "SD " + String(drift.softdentDisplay.close || "—") + "→" + String(drift.softdentDisplay.live || "—")
+              );
+            }
+            if (drift.qbDisplay) {
+              parts.push(
+                "QB " + String(drift.qbDisplay.close || "—") + "→" + String(drift.qbDisplay.live || "—")
+              );
+            }
+            if (parts.length) driftBit = " · drift " + parts.join(" · ");
+          }
           const bit =
             "VERIFY BEAM · " +
             proof +
@@ -297,6 +313,8 @@
             liveData +
             " · close " +
             closeData +
+            driftBit +
+            (data.refreshCloseSuggested ? " · re-close suggested" : "") +
             " · empty ≠ $0";
           if (typeof o.onDone === "function") {
             o.onDone({ ok: !!(res && res.ok && data.ok), res: res, bit: bit, data: data });

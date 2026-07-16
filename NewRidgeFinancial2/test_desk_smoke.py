@@ -3,6 +3,51 @@
 from __future__ import annotations
 
 
+def test_beam_desk_proof_reports_drift(monkeypatch):
+    import daily_closeout as dc
+    import hal_brain_tools as h
+
+    live_hash = h.compute_beam_hashes(
+        {"display": "$60,411", "totalOutstanding": 60411.0},
+        {"display": "$78,399", "monthlyRevenue": 78399.22},
+    )["dataBeamHash"]
+    monkeypatch.setattr(
+        h,
+        "money_beam_attestation",
+        lambda **_: {
+            "ok": True,
+            "beamHash": "livebeam",
+            "dataBeamHash": live_hash,
+            "softdent": {"display": "$60,411", "totalOutstanding": 60411.0},
+            "quickbooks": {"display": "$78,399", "monthlyRevenue": 78399.22},
+        },
+    )
+    monkeypatch.setattr(
+        dc,
+        "period_close_status",
+        lambda: {
+            "ok": True,
+            "status": "completed",
+            "beamHash": "closebeam",
+            "lastClose": {
+                "softdentDisplay": "$7,714",
+                "softdentTotal": 7714.0,
+                "qbDisplay": "$78,399",
+                "qbRevenue": 78399.22,
+                "dataBeamHash": h.compute_beam_hashes(
+                    {"display": "$7,714", "totalOutstanding": 7714.0},
+                    {"display": "$78,399", "monthlyRevenue": 78399.22},
+                )["dataBeamHash"],
+            },
+        },
+    )
+    proof = h.beam_desk_proof()
+    assert proof["deskProof"] == "MISMATCH"
+    assert proof.get("refreshCloseSuggested") is True
+    drift = proof.get("drift") or {}
+    assert drift.get("softdentDisplay") == {"close": "$7,714", "live": "$60,411"}
+
+
 def test_desk_smoke_green_path(monkeypatch, tmp_path):
     import desk_smoke as ds
     import daily_closeout as dc

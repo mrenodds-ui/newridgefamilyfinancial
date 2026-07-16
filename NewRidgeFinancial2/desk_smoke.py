@@ -381,6 +381,14 @@ def run_desk_smoke(
             "closeDataBeamHash": (proof.get("periodClose") or {}).get("dataBeamHash")
             if isinstance(proof.get("periodClose"), dict)
             else None,
+            "drift": proof.get("drift"),
+            "refreshCloseSuggested": bool(proof.get("refreshCloseSuggested")),
+            "hint": (
+                "Live money beams changed since last period close — run shadow period-close "
+                "(python daily_closeout.py --auto) or attended morning bundle."
+                if proof_status == "MISMATCH" and proof.get("refreshCloseSuggested")
+                else None
+            ),
         }
     )
     if not proof_ok:

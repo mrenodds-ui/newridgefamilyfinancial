@@ -407,10 +407,34 @@ def beam_desk_proof(*, readiness: dict[str, Any] | None = None) -> dict[str, Any
         )["dataBeamHash"]
 
     match = bool(live_data and close_data and live_data == close_data)
+    live_sd = live.get("softdent") if isinstance(live.get("softdent"), dict) else {}
+    live_qb = live.get("quickbooks") if isinstance(live.get("quickbooks"), dict) else {}
+    drift: dict[str, Any] = {}
+    if last:
+        if str(last.get("softdentDisplay") or "") != str(live_sd.get("display") or ""):
+            drift["softdentDisplay"] = {
+                "close": last.get("softdentDisplay"),
+                "live": live_sd.get("display"),
+            }
+        if last.get("softdentTotal") != live_sd.get("totalOutstanding"):
+            drift["softdentTotal"] = {
+                "close": last.get("softdentTotal"),
+                "live": live_sd.get("totalOutstanding"),
+            }
+        if str(last.get("qbDisplay") or "") != str(live_qb.get("display") or ""):
+            drift["qbDisplay"] = {"close": last.get("qbDisplay"), "live": live_qb.get("display")}
+        if last.get("qbRevenue") != live_qb.get("monthlyRevenue"):
+            drift["qbRevenue"] = {
+                "close": last.get("qbRevenue"),
+                "live": live_qb.get("monthlyRevenue"),
+            }
+    refresh_close_suggested = bool(drift) and not match and bool(close_data)
     return {
         "ok": True,
         "emptyNotZero": True,
         "hashFormat": "sha256-16",
+        "drift": drift or None,
+        "refreshCloseSuggested": refresh_close_suggested,
         "live": {
             "beamHash": live_beam,
             "dataBeamHash": live_data,
