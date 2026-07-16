@@ -9,7 +9,6 @@
   };
 
   let sessionToken = "";
-  let role = "om";
   let syncBusy = false;
   let selectedPeriod = "60";
   let lastReady = null;
@@ -412,35 +411,6 @@
   }
   tick();
   setInterval(tick, 1000);
-
-  function applyRole() {
-    const locked = role === "fd";
-    document.querySelectorAll(".inst, .ctrl").forEach((n) => n.classList.toggle("locked", locked));
-    document.querySelectorAll("[data-act], #wheel button").forEach((n) => {
-      if (n.getAttribute("data-act") === "ask-hal" || n.getAttribute("data-act") === "align") {
-        n.disabled = false;
-        return;
-      }
-      n.disabled = locked;
-    });
-    const om = document.getElementById("role-om");
-    const fd = document.getElementById("role-fd");
-    if (om) om.classList.toggle("on", role === "om");
-    if (fd) fd.classList.toggle("on", role === "fd");
-  }
-  const roleOm = document.getElementById("role-om");
-  const roleFd = document.getElementById("role-fd");
-  if (roleOm) roleOm.onclick = () => {
-    role = "om";
-    applyRole();
-    toast("RBAC: office_manager keys inserted");
-  };
-  if (roleFd) roleFd.onclick = () => {
-    role = "fd";
-    applyRole();
-    toast("RBAC shutters closed — Front Desk view-only");
-  };
-  applyRole();
 
   /* —— beams —— */
   function localPoint(bench, clientX, clientY) {
@@ -963,10 +933,7 @@
   }
 
   async function runCloseStep(stepEl) {
-    if (!stepEl || role === "fd") {
-      if (role === "fd") toast("Shutter locked — Front Desk cannot mutate");
-      return;
-    }
+    if (!stepEl) return;
     const step = stepEl.getAttribute("data-step");
     if (step === "bundle") {
       if (stepEl.classList.contains("on")) {
@@ -1039,7 +1006,7 @@
   if (wheel) {
     wheel.onclick = async (e) => {
       const b = e.target.closest("button[data-period]");
-      if (!b || role === "fd") return;
+      if (!b) return;
       document.querySelectorAll("#wheel button").forEach((x) => x.classList.remove("on"));
       b.classList.add("on");
       selectedPeriod = b.dataset.period || selectedPeriod;
@@ -1101,7 +1068,7 @@
     });
     if (timer) clearTimeout(timer);
     if (btn) {
-      btn.disabled = role === "fd";
+      btn.disabled = false;
       btn.classList.remove("busy");
     }
     if (r.aborted || r.status === 408 || r.status === 504) {
@@ -1152,10 +1119,6 @@
   if (benchEl) {
     function runAct(btn) {
       if (!btn) return;
-      if (role === "fd") {
-        toast("Shutter locked — Front Desk cannot mutate");
-        return;
-      }
       const act = btn.dataset.act;
       if (act === "sync") return void doSync(btn);
       if (act === "refresh") return void doRefreshPeriod();

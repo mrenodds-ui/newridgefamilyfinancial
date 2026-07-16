@@ -738,18 +738,6 @@
       border-color: rgba(255,0,68,0.55); color: var(--fringe);
     }
 
-    /* RBAC shutter */
-    .shutter {
-      position: absolute; inset: 0; z-index: 15; display: none;
-      background: repeating-linear-gradient(
-        -45deg, rgba(120,20,20,0.12), rgba(120,20,20,0.12) 8px, transparent 8px 16px
-      );
-      border: 1px solid rgba(255,0,68,0.35);
-      align-items: center; justify-content: center;
-      font-family: var(--mono); font-size: var(--text-sm); color: #ff8899; letter-spacing: 0.08em;
-      pointer-events: all; cursor: not-allowed;
-    }
-    .locked .shutter { display: flex; }
     .toast {
       position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
       z-index: 30; background: #121820; border: 1px solid #334; padding: 10px 14px;
@@ -877,7 +865,6 @@
         </div>
         <span class="bind-hint" id="close-hint">Morning bundle · lasers · period-close</span>
       </div>
-      <div class="shutter" style="position:absolute;inset:0">FRONT DESK — CONTROLS LOCKED</div>
     </div>
 
     <div class="film" id="film">
