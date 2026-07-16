@@ -1,4 +1,4 @@
-/* nr2-12021-recon-unavailable — recon honesty (CSP script-src 'self') */
+/* nr2 optical landing — money fusion bench (CSP script-src 'self') */
 (function () {
   const toast = (msg) => {
     const el = document.getElementById("toast");
@@ -12,7 +12,6 @@
   let role = "om";
   let syncBusy = false;
   let selectedPeriod = "60";
-  let reconAvailable = false;
   let lastReady = null;
   let lastSessionOk = false;
   let coreSyncMode = null;
@@ -86,31 +85,6 @@
       return;
     }
     setWireMark(true, "LIVE SIGNAL · empty ≠ $0 · no SoftDent write-back");
-  }
-
-  function setReconUi(mode, detail) {
-    const btn = document.querySelector('.plunger[data-act="recon"]');
-    if (btn) {
-      const off = mode === "unavailable";
-      btn.disabled = off;
-      btn.classList.toggle("unavailable", off);
-      btn.setAttribute("aria-disabled", off ? "true" : "false");
-      btn.title = off
-        ? "SoftDent×QB recon pack removed (clean-slate) — never COHERENT · empty ≠ $0"
-        : detail || "Run SoftDent×QB reconciliation";
-      if (off) {
-        btn.textContent = "RECONCILE · UNAVAILABLE";
-      } else if (mode === "running") {
-        btn.textContent = "RECONCILE · RUNNING";
-      } else if (mode === "coherent") {
-        btn.textContent = "RECONCILE · COHERENT";
-      } else if (mode === "incoherent") {
-        btn.textContent = "RECONCILE · INCOHERENT";
-      } else {
-        btn.textContent = "RECONCILE";
-      }
-    }
-    reconAvailable = mode !== "unavailable";
   }
 
   function morningBundleBit(ready) {
@@ -378,21 +352,6 @@
     window.location.href = "/nr2-optical-page-hal.html?q=" + q + "&autoAsk=1";
   }
 
-  async function refreshReconHonesty() {
-    const r = await api("/api/apex/hal/reconciliation-status");
-    const unavailable =
-      !r.ok ||
-      r.status === 503 ||
-      (r.data &&
-        (r.data.available === false || r.data.status === "UNAVAILABLE"));
-    if (unavailable) {
-      setReconUi("unavailable", (r.data && (r.data.detail || r.data.reason)) || "");
-      return false;
-    }
-    setReconUi("standby");
-    return true;
-  }
-
   function money(n) {
     if (n == null || !Number.isFinite(Number(n))) return null;
     return Number(n);
@@ -463,9 +422,6 @@
         return;
       }
       n.disabled = locked;
-      if (!locked && n.getAttribute("data-act") === "recon" && !reconAvailable) {
-        n.disabled = true;
-      }
     });
     const om = document.getElementById("role-om");
     const fd = document.getElementById("role-fd");
@@ -629,7 +585,6 @@
     applyMetricLaserHonesty(ready);
     updateHalCore(ready);
     updateClosePath(ready);
-    // Import alignment only — recon status from refreshReconHonesty (never fake COHERENT).
     return ready;
   }
 
@@ -1066,7 +1021,6 @@
       const okSession = await ensureSession();
       lastSessionOk = !!okSession;
       const ready = await refreshLasers();
-      await refreshReconHonesty();
       await refreshMetrics(ready);
       applyWireHonesty(ready, okSession);
       if (okSession && ready && !lasersRed(ready) && !periodCloseTrouble(ready)) {
@@ -1127,7 +1081,6 @@
     setCoreSyncPulse("ok");
     toast("Sync ok · refreshing lasers + metrics");
     await refreshLasers();
-    await refreshReconHonesty();
     await refreshMetrics();
   }
 
@@ -1165,42 +1118,7 @@
     }
     toast(r.data && r.data.ok ? "SoftDent period refresh ok" : "Refresh returned · check SoftDent sign-on");
     await refreshLasers();
-    await refreshReconHonesty();
     await refreshMetrics();
-  }
-
-  async function doRecon() {
-    if (!reconAvailable) {
-      setReconUi("unavailable");
-      fireCoreBurst("fail");
-      toast("Reconciliation UNAVAILABLE · pack removed (clean-slate) · never COHERENT · empty ≠ $0");
-      return;
-    }
-    fireCoreBurst("ok");
-    setReconUi("running");
-    toast("HAL → POST /api/apex/hal/reconciliation …");
-    const r = await api("/api/apex/hal/reconciliation", {
-      method: "POST",
-      body: JSON.stringify({ classifyOnly: false, explain: false }),
-    });
-    if (
-      !r.ok ||
-      r.status === 503 ||
-      (r.data && (r.data.available === false || r.data.status === "UNAVAILABLE"))
-    ) {
-      setReconUi("unavailable", (r.data && (r.data.detail || r.data.reason)) || "");
-      fireCoreBurst("fail");
-      toast(
-        "Reconciliation UNAVAILABLE · " +
-          ((r.data && (r.data.detail || r.data.reason || r.data.error)) || r.status) +
-          " · never COHERENT without pack"
-      );
-      return;
-    }
-    const ok = !!(r.data && r.data.ok && r.data.coherent !== false);
-    setReconUi(ok ? "coherent" : "incoherent");
-    fireCoreBurst(ok ? "ok" : "fail");
-    toast(ok ? "Reconciliation ok" : "Reconciliation completed with gaps");
   }
 
   async function doTax() {
@@ -1241,7 +1159,6 @@
       const act = btn.dataset.act;
       if (act === "sync") return void doSync(btn);
       if (act === "refresh") return void doRefreshPeriod();
-      if (act === "recon") return void doRecon();
       if (act === "tax") return void doTax();
       if (act === "ask-hal") {
         openAskHal();
