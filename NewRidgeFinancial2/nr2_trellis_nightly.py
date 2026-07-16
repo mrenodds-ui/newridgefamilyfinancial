@@ -725,7 +725,8 @@ def trellis_am_benefits_proof(
         "emptyNotZero": True,
         "note": (
             "Counts only — no deductible/$ invent. Board stays initials+hash. "
-            "Mon–Thu 1:00 AM Trellis --same-day --verify raises withBenefits when ClearCoverage scrapes land."
+            "Mon–Thu 1:00 AM Trellis --same-day --verify raises withBenefits; "
+            "2:00 AM prove_trellis_withbenefits_am.py checks the streak."
         ),
         "at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
     }

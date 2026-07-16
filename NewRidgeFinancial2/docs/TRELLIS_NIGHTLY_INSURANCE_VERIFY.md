@@ -9,6 +9,7 @@ SoftDent schedule → Vyne Trellis **Add Patient → Verify → ClearCoverage** 
 | SoftDent GUI money pulls | **9:00 PM** night-before | Aging / register / collections (Excel\|Preview only) |
 | APScheduler `nr2-trellis-verify` | Mon–Thu **22:00** local (while NR2 runs) | Build **next clinical day** worklist + pending |
 | Windows Task Scheduler | Mon–Thu **1:00 AM** interactive | Headed Playwright Verify + report pull (`--force --verify --same-day`) for **today's** chairs |
+| Windows Task Scheduler | Mon–Thu **2:00 AM** interactive | AM withBenefits proof (`prove_trellis_withbenefits_am.py`) |
 
 Thu night worklist targets **Monday**. Mon–Wed night worklists target the next calendar day. The **1:00 AM** pull uses `--same-day` so Monday 1 AM verifies Monday chairs (using the worklist built Thu night).
 

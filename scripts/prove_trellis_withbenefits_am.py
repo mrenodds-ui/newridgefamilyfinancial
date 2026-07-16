@@ -1,6 +1,6 @@
-"""Prove Trellis ClearCoverage withBenefits > 0 after 1:00 AM scrape (AM check).
+"""Prove Trellis ClearCoverage withBenefits > 0 after 1:00 AM scrape (2:00 AM check).
 
-Usage (after Mon–Thu 1:00 AM Trellis --same-day --verify):
+Usage (Mon–Thu after 1:00 AM Trellis --same-day --verify; Task Scheduler at 2:00 AM):
   python scripts/prove_trellis_withbenefits_am.py
   python scripts/prove_trellis_withbenefits_am.py --date 2026-07-17
 
