@@ -1,0 +1,42 @@
+{
+  "ts": "2026-07-16T22:49:45.230031+00:00",
+  "track": "A_viewport_hub_parity",
+  "hub": {
+    "chrome_frame": true,
+    "letterhead": true,
+    "tabs_after_ledge": true,
+    "summary_default": true,
+    "bench_hidden": true,
+    "honesty_body_led": true,
+    "no_old_h1_stack": true,
+    "ids_ok": true
+  },
+  "hub_fail": [],
+  "landing": {
+    "overflow_hidden": true,
+    "landing_ledge": true,
+    "money_strip": true,
+    "no_chrome_frame_required": true
+  },
+  "landing_fail": [],
+  "theme": {
+    "hub_chrome_rule": true,
+    "hub_rail_max_h": true
+  },
+  "theme_fail": [],
+  "http": [
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-pages-hub.html",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "http_fail": [],
+  "pass_static": true,
+  "gate": [
+    "Hub: letterhead + chrome-frame + ledge + exec-tabs",
+    "Default Summary; Bench heavy faces tabbed",
+    "Honesty body LED",
+    "Landing: overflow hidden + money ledge (no chrome-frame)"
+  ]
+}

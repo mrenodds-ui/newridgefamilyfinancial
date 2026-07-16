@@ -774,32 +774,6 @@ body.has-ops-gates:has(#nr2-page-letterhead) .main {
   margin-top: calc(32px + var(--nr2-chrome-frame-h));
   height: calc(100dvh - 32px - var(--nr2-chrome-frame-h) - 20px);
 }
-/* Track A — Hub asymmetric: chrome-frame spans main column only (nav | main | rail) */
-@media (min-width: 1401px) {
-  body.page-hub .chrome-frame {
-    left: 240px;
-    /* grid 240px 1.2fr 0.8fr → rail ≈ 40% of remaining width */
-    right: calc((100vw - 240px) * 0.4);
-  }
-}
-@media (max-width: 1400px) {
-  body.page-hub .chrome-frame {
-    left: 220px;
-    right: 0;
-  }
-}
-body.page-hub .hub-rail {
-  /* Rail stays viewport-tall beside locked money desk; scroll rail independently */
-  max-height: calc(100dvh - 20px);
-}
-body.has-ops-gates.page-hub .hub-rail {
-  max-height: calc(100dvh - 32px - 20px);
-  margin-top: 0;
-  padding-top: calc(var(--space-4) + 4px);
-}
-body.page-hub .main > .tab-panel .hal-chip {
-  margin: 0 0 8px;
-}
 /* Exact Moonshot Package 1: 48px compact row · inline 12px · no wrap bloat */
 .exec-compact-header {
   display: flex;
