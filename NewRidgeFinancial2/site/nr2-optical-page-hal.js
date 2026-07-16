@@ -1189,6 +1189,19 @@
           showPatientContextBanner(ctx);
         }
       }
+
+      const landingQ = String(params.get("q") || "").trim();
+      const autoAsk = String(params.get("autoAsk") || "") === "1";
+      if (landingQ && input) {
+        input.value = landingQ;
+        if (chatBind) {
+          chatBind.textContent =
+            "Landing HAL core · contextual ask · POST /api/hal/chat · empty ≠ $0";
+        }
+        if (autoAsk && !busy) {
+          form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event("submit", { cancelable: true }));
+        }
+      }
     } catch (_) {}
   })();
 })();

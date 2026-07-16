@@ -193,7 +193,7 @@
 
     let mode = "fault";
     let label = "NO SIGNAL";
-    let hintText = "SoftDent+QB beams · empty ≠ $0 · click → Alignment Bench";
+    let hintText = "SoftDent+QB beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
     const mb = morningBundleBit(ready);
 
     if (!ready) {
@@ -203,23 +203,26 @@
       const keys = laserKeys(ready).slice(0, 2).join(",") || "blocking";
       label = "LASERS · RED";
       hintText =
-        "Blocking · " + keys + mb + " · empty ≠ $0 · click → Alignment Bench";
+        "Blocking · " + keys + mb + " · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
       mode = "fault";
     } else if (periodCloseTrouble(ready)) {
       label = periodCloseBit(ready);
-      hintText = label + mb + " · money gated · empty ≠ $0 · click → Alignment Bench";
+      hintText =
+        label + mb + " · money gated · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
       mode = "warn";
     } else if (!lastSessionOk) {
       label = "READY · SESSION WEAK";
       hintText =
-        "Readiness ok · session may 403 mutations" + mb + " · click → Alignment Bench";
+        "Readiness ok · session may 403 mutations" +
+        mb +
+        " · click Ask HAL · Shift+click Alignment";
       mode = "warn";
     } else {
       label = "LIVE · GREEN-PATH";
       hintText =
         periodCloseBit(ready) +
         mb +
-        " · money-beams · empty ≠ $0 · click → Alignment Bench";
+        " · money-beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
       mode = "live";
     }
 
@@ -229,7 +232,50 @@
     core.classList.toggle("core--live", mode === "live");
     core.classList.toggle("core--warn", mode === "warn");
     core.classList.toggle("core--fault", mode === "fault");
-    core.title = "HAL core · " + label + " · open Alignment Bench";
+    core.title = "HAL core · " + label + " · Ask HAL · Shift+click Alignment";
+  }
+
+  function halCoreAskPrompt(ready) {
+    if (!ready) {
+      return "What's the import readiness status on the optical bench? empty ≠ $0.";
+    }
+    if (lasersRed(ready)) {
+      const keys = laserKeys(ready).slice(0, 3).join(", ") || "blocking imports";
+      return (
+        "Lasers are red (" +
+        keys +
+        "). What is blocking money-beams and what should I do next? empty ≠ $0."
+      );
+    }
+    if (periodCloseTrouble(ready)) {
+      return (
+        periodCloseBit(ready) +
+        morningBundleBit(ready) +
+        " — what is blocking period close / morning bundle, and what should I do next? empty ≠ $0."
+      );
+    }
+    const sd = (document.getElementById("metric-sd") || {}).textContent || "—";
+    const qb = (document.getElementById("metric-qb") || {}).textContent || "—";
+    return (
+      "Give me today's money fusion brief: SoftDent claims " +
+      sd +
+      ", QuickBooks " +
+      qb +
+      ". empty ≠ $0."
+    );
+  }
+
+  function openAlignmentBench() {
+    fireCoreBurst(lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "fail" : "ok");
+    toast("HAL → Alignment Bench · honesty lasers + period-close");
+    window.location.href = "/nr2-optical-pages-hub.html";
+  }
+
+  function openAskHal() {
+    fireCoreBurst(lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "fail" : "ok");
+    const q = encodeURIComponent(halCoreAskPrompt(lastReady));
+    toast("HAL → Ask HAL · contextual bench prompt");
+    window.location.href = "/nr2-optical-page-hal.html?q=" + q + "&autoAsk=1";
   }
 
   async function refreshReconHonesty() {
@@ -312,7 +358,7 @@
     const locked = role === "fd";
     document.querySelectorAll(".inst, .ctrl").forEach((n) => n.classList.toggle("locked", locked));
     document.querySelectorAll("[data-act], #wheel button").forEach((n) => {
-      if (n.getAttribute("data-act") === "align") {
+      if (n.getAttribute("data-act") === "ask-hal") {
         n.disabled = false;
         return;
       }
@@ -879,14 +925,22 @@
       if (act === "refresh") return void doRefreshPeriod();
       if (act === "recon") return void doRecon();
       if (act === "tax") return void doTax();
+      if (act === "ask-hal") {
+        if (window.__nr2ShiftAsk) {
+          window.__nr2ShiftAsk = false;
+          openAlignmentBench();
+          return;
+        }
+        openAskHal();
+        return;
+      }
       if (act === "align") {
-        fireCoreBurst(lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "fail" : "ok");
-        toast("HAL → Alignment Bench · honesty lasers + period-close");
-        window.location.href = "/nr2-optical-pages-hub.html";
+        openAlignmentBench();
         return;
       }
     }
     benchEl.addEventListener("click", (e) => {
+      window.__nr2ShiftAsk = !!(e.shiftKey);
       runAct(e.target.closest("[data-act]"));
     });
     benchEl.addEventListener("keydown", (e) => {
