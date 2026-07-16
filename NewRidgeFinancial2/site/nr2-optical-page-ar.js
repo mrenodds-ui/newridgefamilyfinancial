@@ -20,6 +20,12 @@
   async function boot() {
     W.markFacesLoading(["val-total", "val-buckets", "val-collect", "val-status"]);
     W.setBanner("partial", "Wiring SoftDent AR + money-beams · empty ≠ $0 · no invent $");
+    if (W.bindPrintHygiene) {
+      W.bindPrintHygiene({
+        breakSelector: ".phi-sample-list li",
+        breakEvery: 3,
+      });
+    }
 
     const aging = await W.getJson("/api/softdent/ar-aging", 12000);
     const claims = await W.getJson("/api/softdent/claims-outstanding", 12000);

@@ -1324,28 +1324,94 @@ html.nr2-motion .om-claims-table tbody tr {
   .money-strip { grid-template-columns: 1fr; }
 }
 
+/* Screen: print header is invisible until Ctrl+P */
+.nr2-print-header { display: none; }
+
 @media print {
+  @page {
+    size: letter;
+    margin: 0.6in 0.55in 0.7in;
+  }
+  .nr2-print-header {
+    display: block !important;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #333;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 12pt;
+    font-weight: 700;
+    color: #111;
+    letter-spacing: 0.01em;
+  }
   .banner, .nr2-ops-gates, .nr2-crumb, .nav, .beam, .money-strip, .foot-nav, .ops-row,
-  .wk-filter, #btn-wk-refresh, #btn-wk-dossier-close, .wk-dossier,
-  #btn-tr-refresh, #btn-cl-refresh, #btn-cl-dossier-close, #cl-dossier {
+  .wk-filter, #btn-wk-refresh, #btn-wk-dossier-close, .wk-dossier, .cl-dossier-below,
+  #btn-tr-refresh, #btn-cl-refresh, #btn-cl-dossier-close, #cl-dossier,
+  #btn-cl-payer-backfill, #btn-cl-export-batch, .om-claims-filters, .om-claims-note,
+  .nr2-error-rail, .nr2-retry-chip, .excel-probe-chip, .honesty, .mode-eyebrow,
+  .shell > .nav {
     display: none !important;
   }
-  body { background: #fff; color: #111; }
-  .om-weekly, .om-trellis, .om-claims {
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .shell {
+    display: block;
+    max-width: none;
+    width: 100%;
+  }
+  .main {
+    padding: 0;
+    overflow: visible;
+    max-width: none;
+  }
+  .main h1 {
+    color: #111;
+    font-size: 16pt;
+    margin: 0 0 6px;
+  }
+  .kicker { color: #333; font-size: 10pt; margin: 0 0 12px; }
+  .om-weekly, .om-trellis, .om-claims, .phi-sample {
     border: 1px solid #333; background: #fff; border-top-color: #333;
+    box-shadow: none;
+    break-inside: avoid-page;
   }
   .om-weekly-head h2, .wk-day-head, .wk-slot .phi, .om-weekly-next, .wk-prov-group,
   .om-trellis-head h2, .tr-who, .om-trellis-summary,
   .om-claims-head h2, .om-claims-summary, .om-claims-table td.phi-name {
     color: #111;
   }
+  .om-claims-range, .btn-quiet { display: none !important; }
   .om-claims-wrap { max-height: none; overflow: visible; border-color: #999; }
   .om-claims-body { grid-template-columns: 1fr; }
   .om-claims-table th, .om-claims-table td { border-color: #ccc; color: #222; }
+  .om-claims-table thead { display: table-header-group; }
+  .om-claims-table tbody tr { break-inside: avoid; page-break-inside: avoid; }
+  .om-claims-table tbody tr.nr2-print-break {
+    break-before: page;
+    page-break-before: always;
+  }
   .om-claims-table tbody tr.age-ok td { color: #0a8; }
   .om-claims-table tbody tr.age-warn td { color: #a80; }
   .om-claims-table tbody tr.age-late td { color: #c60; }
   .om-claims-table tbody tr.age-critical td { color: #c33; }
+  .nr2-print-redacted,
+  .phi-hash.nr2-print-redacted,
+  td.phi-name.nr2-print-redacted {
+    color: #666 !important;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .phi-sample-list li {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border-bottom: 1px solid #ddd;
+    padding: 4px 0;
+  }
+  .phi-sample-list li.nr2-print-break {
+    break-before: page;
+    page-break-before: always;
+  }
   .om-weekly-body { grid-template-columns: 1fr; }
   .wk-days-grid { grid-template-columns: repeat(4, 1fr); }
   .wk-day { border-color: #999; background: #fff; break-inside: avoid; }

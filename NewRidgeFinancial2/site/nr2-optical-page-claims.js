@@ -1441,6 +1441,12 @@
     W.markFacesLoading(["val-snap", "val-era", "val-denials", "val-over30"]);
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
     wireClaimsControls();
+    if (W.bindPrintHygiene) {
+      W.bindPrintHygiene({
+        breakSelector: "#cl-tbody tr[data-claim-id]",
+        breakEvery: 25,
+      });
+    }
     if (W.bindOfflineRail) {
       W.bindOfflineRail(function () {
         return loadClaimsOutstanding();

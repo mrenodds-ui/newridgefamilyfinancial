@@ -1353,6 +1353,91 @@
     }
     return bar;
   }
+  /** Package 9: print header + PHI scrub (initials+hash → REDACTED) + optional row breaks. */
+  function ensurePrintHeader() {
+    let el = document.getElementById("nr2-print-header");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "nr2-print-header";
+    el.className = "nr2-print-header";
+    el.setAttribute("aria-hidden", "true");
+    el.textContent =
+      "NewRidge Financial — Confidential · SoftDent READ-ONLY · empty ≠ $0 · no write-back";
+    document.body.insertBefore(el, document.body.firstChild);
+    return el;
+  }
+  function redactPhiForPrint() {
+    const sel =
+      ".phi-hash, .phi-name, td.phi-name, .wk-slot .phi, .phi-card .phi-label, .phi-sample-row .phi-label";
+    document.querySelectorAll(sel).forEach(function (el) {
+      if (!el || el.getAttribute("data-nr2-print-orig") != null) return;
+      const hashChild = el.querySelector && el.querySelector(".phi-hash");
+      if (hashChild && !hashChild.getAttribute("data-nr2-print-orig")) {
+        hashChild.setAttribute("data-nr2-print-orig", hashChild.textContent || "");
+        hashChild.textContent = "REDACTED";
+        hashChild.classList.add("nr2-print-redacted");
+        if (el.getAttribute("title")) {
+          el.setAttribute("data-nr2-print-title", el.getAttribute("title"));
+          el.removeAttribute("title");
+        }
+        return;
+      }
+      el.setAttribute("data-nr2-print-orig", el.textContent || "");
+      if (el.getAttribute("title")) {
+        el.setAttribute("data-nr2-print-title", el.getAttribute("title"));
+        el.removeAttribute("title");
+      }
+      el.textContent = "REDACTED";
+      el.classList.add("nr2-print-redacted");
+    });
+  }
+  function restorePhiAfterPrint() {
+    document.querySelectorAll("[data-nr2-print-orig]").forEach(function (el) {
+      el.textContent = el.getAttribute("data-nr2-print-orig") || "";
+      el.removeAttribute("data-nr2-print-orig");
+      el.classList.remove("nr2-print-redacted");
+      if (el.hasAttribute("data-nr2-print-title")) {
+        el.setAttribute("title", el.getAttribute("data-nr2-print-title"));
+        el.removeAttribute("data-nr2-print-title");
+      }
+    });
+  }
+  function markPrintPageBreaks(selector, everyN) {
+    document.querySelectorAll(".nr2-print-break").forEach(function (el) {
+      el.classList.remove("nr2-print-break");
+    });
+    if (!selector) return 0;
+    const n = typeof everyN === "number" && everyN > 0 ? everyN : 25;
+    const rows = document.querySelectorAll(selector);
+    let marked = 0;
+    rows.forEach(function (el, i) {
+      if (i > 0 && i % n === 0) {
+        el.classList.add("nr2-print-break");
+        marked += 1;
+      }
+    });
+    return marked;
+  }
+  function bindPrintHygiene(opts) {
+    document._nr2PrintOpts = opts || {};
+    ensurePrintHeader();
+    if (document._nr2PrintBound) return true;
+    document._nr2PrintBound = true;
+    window.addEventListener("beforeprint", function () {
+      const cfg = document._nr2PrintOpts || {};
+      redactPhiForPrint();
+      if (cfg.breakSelector) {
+        markPrintPageBreaks(cfg.breakSelector, cfg.breakEvery);
+      }
+    });
+    window.addEventListener("afterprint", function () {
+      restorePhiAfterPrint();
+      document.querySelectorAll(".nr2-print-break").forEach(function (el) {
+        el.classList.remove("nr2-print-break");
+      });
+    });
+    return true;
+  }
   function bootOpsGates() {
     try {
       mountOpsGates({ refreshMs: 60000 });
@@ -1363,6 +1448,11 @@
       bootMotionGrammar();
     } catch (_) {
       /* motion optional */
+    }
+    try {
+      bindPrintHygiene();
+    } catch (_) {
+      /* print hygiene optional */
     }
   }
   if (document.readyState === "loading") {
@@ -1438,5 +1528,10 @@
     fetchOpsGates: fetchOpsGates,
     renderOpsGates: renderOpsGates,
     mountOpsGates: mountOpsGates,
+    ensurePrintHeader: ensurePrintHeader,
+    redactPhiForPrint: redactPhiForPrint,
+    restorePhiAfterPrint: restorePhiAfterPrint,
+    markPrintPageBreaks: markPrintPageBreaks,
+    bindPrintHygiene: bindPrintHygiene,
   };
 })(window);
