@@ -1105,8 +1105,17 @@ html.nr2-motion .om-claims-table tbody tr {
   gap: var(--space-3);
   align-items: start;
 }
+/* Claim context sits below Outstanding Claims (not a side column). */
 .om-claims-body.has-dossier {
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 280px);
+  grid-template-columns: 1fr;
+}
+.cl-dossier-below {
+  margin-top: var(--space-3);
+  max-width: none;
+  width: 100%;
+}
+.cl-dossier-below:not([hidden]) {
+  display: block;
 }
 .om-claims-wrap {
   max-height: 420px;
