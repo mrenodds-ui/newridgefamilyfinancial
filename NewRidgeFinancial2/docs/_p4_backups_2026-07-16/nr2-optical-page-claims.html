@@ -46,20 +46,8 @@
         </article>
       </section>
       </div>
-            <nav class="exec-tabs" role="tablist" aria-label="Claims content deck">
-        <button type="button" role="tab" id="tab-btn-summary" aria-controls="tab-summary" aria-selected="true" tabindex="0" data-tab="summary">Summary</button>
-        <button type="button" role="tab" id="tab-btn-outstanding" aria-controls="tab-outstanding" aria-selected="false" tabindex="-1" data-tab="outstanding">Outstanding</button>
-      </nav>
       </div>
 
-      <div class="tab-panel" id="tab-summary" role="tabpanel" data-tab-panel="summary" aria-labelledby="tab-btn-summary">
-        <p class="exec-tab-summary">Money faces above · unpaid SoftDent claims open in Outstanding · empty ≠ $0 · no SoftDent write-back</p>
-        <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
-        <p class="om-claims-age-buckets" id="cl-age-buckets" aria-live="polite">
-          Age buckets · counts only · empty ≠ $0
-        </p>
-      </div>
-      <div class="tab-panel" id="tab-outstanding" role="tabpanel" data-tab-panel="outstanding" aria-labelledby="tab-btn-outstanding" hidden>
 <section class="om-claims" id="om-claims-outstanding" aria-label="Outstanding SoftDent claims list">
         <div class="om-claims-head">
           <h2>Outstanding Claims</h2>
@@ -102,6 +90,9 @@
             </select>
           </label>
         </div>
+        <p class="om-claims-age-buckets" id="cl-age-buckets" aria-live="polite">
+          Age buckets · counts only · empty ≠ $0
+        </p>
         <div class="om-claims-suppress" id="cl-suppress-panel" aria-label="Paid suppress honesty">
           <label class="om-claims-suppress-toggle">
             <input type="checkbox" id="cl-show-staff-hidden" />
@@ -112,6 +103,7 @@
             Paid suppress · totals stay unpaid-only · empty ≠ $0 · no SoftDent write-back
           </p>
         </div>
+        <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
         <div class="om-claims-body" id="cl-body">
           <div class="om-claims-wrap">
             <table class="om-claims-table" id="cl-table">
@@ -139,8 +131,6 @@
           <p style="margin:0">Click a claim row to load SoftDent claim + patient context.</p>
         </div>
       </aside>
-      </div>
-
       <p class="foot-nav">
         <a href="/nr2-optical-pages-hub.html">← Alignment Bench</a>
         <a href="/nr2-optical-beam-touch-mockup.html">Main bench</a>

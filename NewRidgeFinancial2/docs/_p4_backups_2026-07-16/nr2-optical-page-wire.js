@@ -1585,61 +1585,6 @@
     });
     return true;
   }
-  /** Moonshot Package 4 — Tabbed Content Deck (vanilla display toggle; default Summary). */
-  function bootExecTabs() {
-    const frame = document.querySelector("main.main > .chrome-frame");
-    const tabs = frame && frame.querySelector(":scope > .exec-tabs");
-    if (!tabs) return null;
-    const main = document.querySelector("main.main");
-    const panels = main
-      ? Array.prototype.slice.call(main.querySelectorAll(":scope > .tab-panel"))
-      : [];
-    if (!panels.length) return null;
-    function activate(id) {
-      const tabBtns = tabs.querySelectorAll('[role="tab"]');
-      tabBtns.forEach(function (btn) {
-        const on = btn.getAttribute("data-tab") === id;
-        btn.setAttribute("aria-selected", on ? "true" : "false");
-        btn.tabIndex = on ? 0 : -1;
-      });
-      panels.forEach(function (p) {
-        const on = p.getAttribute("data-tab-panel") === id;
-        if (on) p.removeAttribute("hidden");
-        else p.setAttribute("hidden", "");
-      });
-      try {
-        main.scrollTop = 0;
-      } catch (_) {
-        /* ignore */
-      }
-    }
-    tabs.addEventListener("click", function (e) {
-      const btn = e.target && e.target.closest ? e.target.closest('[role="tab"]') : null;
-      if (!btn || !tabs.contains(btn)) return;
-      const id = btn.getAttribute("data-tab");
-      if (id) activate(id);
-    });
-    tabs.addEventListener("keydown", function (e) {
-      const keys = { ArrowLeft: -1, ArrowRight: 1, Home: "home", End: "end" };
-      const move = keys[e.key];
-      if (move == null) return;
-      const list = Array.prototype.slice.call(tabs.querySelectorAll('[role="tab"]'));
-      if (!list.length) return;
-      let i = list.findIndex(function (b) {
-        return b.getAttribute("aria-selected") === "true";
-      });
-      if (i < 0) i = 0;
-      if (move === "home") i = 0;
-      else if (move === "end") i = list.length - 1;
-      else i = (i + move + list.length) % list.length;
-      e.preventDefault();
-      list[i].focus();
-      activate(list[i].getAttribute("data-tab"));
-    });
-    // Gate: always open on Summary so first viewport = money-strip + tabs.
-    activate("summary");
-    return true;
-  }
   /** Package 1 §8 / Package 3: ledge height var (sticky legacy or chrome-frame density). */
   function bootPackage1StickyStack() {
     const main = document.querySelector("main.main");
@@ -1687,11 +1632,6 @@
       bootPackage1StickyStack();
     } catch (_) {
       /* Package 1 sticky stack optional until ledge present */
-    }
-    try {
-      bootExecTabs();
-    } catch (_) {
-      /* Package 4 tabs optional until exec-tabs present */
     }
     try {
       bootMotionGrammar();

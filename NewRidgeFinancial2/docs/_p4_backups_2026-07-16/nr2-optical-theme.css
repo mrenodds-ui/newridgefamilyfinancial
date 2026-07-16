@@ -631,17 +631,13 @@ td.phi-name .phi-label,
 }
 
 .main { padding: var(--space-4) var(--space-4) var(--space-6); overflow-y: auto; }
-/* Moonshot Package 3+4 — Viewport-Locked Chrome + tab bar after ledge */
-:root {
-  --nr2-chrome-frame-h: 172px; /* 140 desk + 32 exec-tabs */
-  --nr2-exec-tabs-h: 32px;
-}
+/* Moonshot Package 3 — Viewport-Locked Chrome (fixed pane) */
 .chrome-frame {
   position: fixed;
   top: 36px;
   left: 220px;
   right: 0;
-  height: var(--nr2-chrome-frame-h);
+  height: 140px;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -694,85 +690,26 @@ body.has-ops-gates:has(#nr2-page-letterhead) .chrome-frame {
 .chrome-frame > .ledge .metric-face .hint {
   display: none;
 }
-/* Moonshot Package 4 — Tabbed Content Deck (after .ledge, inside chrome-frame) */
-.chrome-frame > .exec-tabs {
-  flex: 0 0 var(--nr2-exec-tabs-h);
-  height: var(--nr2-exec-tabs-h);
-  min-height: var(--nr2-exec-tabs-h);
-  max-height: var(--nr2-exec-tabs-h);
-  display: flex;
-  align-items: stretch;
-  gap: 0;
-  margin: 0;
-  padding: 0;
-  border-top: 1px solid rgba(201, 162, 39, 0.28);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.exec-tabs [role="tab"] {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: #8a93a0;
-  font-family: var(--sans);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  padding: 0 12px;
-  margin: 0;
-  cursor: pointer;
-  line-height: 1;
-  white-space: nowrap;
-}
-.exec-tabs [role="tab"]:hover {
-  color: #d6dde6;
-}
-.exec-tabs [role="tab"][aria-selected="true"] {
-  color: #e8c96a;
-  border-bottom-color: rgba(201, 162, 39, 0.9);
-}
-.exec-tabs [role="tab"]:focus-visible {
-  outline: 1px solid rgba(201, 162, 39, 0.55);
-  outline-offset: -2px;
-}
-.main > .tab-panel {
-  display: block;
-  margin: 0;
-  padding: 8px 0 0;
-}
-.main > .tab-panel[hidden] {
-  display: none !important;
-}
-.main > .tab-panel .exec-tab-summary {
-  margin: 0 0 8px;
-  font-family: var(--sans);
-  font-size: 12px;
-  line-height: 1.35;
-  color: #8a93a0;
-}
-/* Moonshot Package 3/4 main scroll pane — frame locked; honesty LED stays body-fixed (P1) */
+/* Moonshot Package 3 main scroll pane — frame locked; honesty LED stays body-fixed (P1) */
 .main {
   padding-top: 0;
   overflow-y: auto;
-  margin-top: var(--nr2-chrome-frame-h);
-  height: calc(100dvh - 36px - var(--nr2-chrome-frame-h) - 20px);
+  margin-top: 140px;
+  height: calc(100dvh - 36px - 140px - 20px);
   padding-bottom: calc(var(--space-6) + 24px);
   box-sizing: border-box;
 }
 body:has(#nr2-page-letterhead) .main {
-  margin-top: var(--nr2-chrome-frame-h);
-  height: calc(100dvh - var(--nr2-chrome-frame-h) - 20px);
+  margin-top: 140px;
+  height: calc(100dvh - 140px - 20px);
 }
 body.has-ops-gates .main {
-  margin-top: calc(32px + var(--nr2-chrome-frame-h));
-  height: calc(100dvh - 32px - var(--nr2-chrome-frame-h) - 20px);
+  margin-top: calc(32px + 140px);
+  height: calc(100dvh - 32px - 140px - 20px);
 }
 body.has-ops-gates:has(#nr2-page-letterhead) .main {
-  margin-top: calc(32px + var(--nr2-chrome-frame-h));
-  height: calc(100dvh - 32px - var(--nr2-chrome-frame-h) - 20px);
+  margin-top: calc(32px + 140px);
+  height: calc(100dvh - 32px - 140px - 20px);
 }
 /* Exact Moonshot Package 1: 48px compact row · inline 12px · no wrap bloat */
 .exec-compact-header {

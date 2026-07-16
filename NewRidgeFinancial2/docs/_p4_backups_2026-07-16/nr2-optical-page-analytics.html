@@ -50,18 +50,9 @@
         </article>
       </section>
       </div>
-            <nav class="exec-tabs" role="tablist" aria-label="Analytics content deck">
-        <button type="button" role="tab" id="tab-btn-summary" aria-controls="tab-summary" aria-selected="true" tabindex="0" data-tab="summary">Summary</button>
-        <button type="button" role="tab" id="tab-btn-mtd" aria-controls="tab-mtd" aria-selected="false" tabindex="-1" data-tab="mtd">MTD Metrics</button>
-        <button type="button" role="tab" id="tab-btn-gates" aria-controls="tab-gates" aria-selected="false" tabindex="-1" data-tab="gates">Gates & Recall</button>
-      </nav>
       </div>
 
-      <div class="tab-panel" id="tab-summary" role="tabpanel" data-tab-panel="summary" aria-labelledby="tab-btn-summary">
-        <p class="exec-tab-summary">Huddle faces above · MTD metrics and Trellis/Excel/recall gates in tabs · empty ≠ $0</p>
-      </div>
-      <div class="tab-panel" id="tab-mtd" role="tabpanel" data-tab-panel="mtd" aria-labelledby="tab-btn-mtd" hidden>
-        <section class="money-strip" aria-label="Production MTD">
+<section class="money-strip" aria-label="Production MTD">
         <article class="metric-face sd">
           <div class="face-lbl">Collections MTD</div>
           <div class="val sd" id="an-coll">—</div>
@@ -88,9 +79,7 @@
           <p class="hint" id="hint-an-hygiene">Due / completed · counts only</p>
         </article>
       </section>
-      </div>
-      <div class="tab-panel" id="tab-gates" role="tabpanel" data-tab-panel="gates" aria-labelledby="tab-btn-gates" hidden>
-<section class="om-trellis" id="an-trellis-panel" aria-label="Trellis eligibility summary">
+      <section class="om-trellis" id="an-trellis-panel" aria-label="Trellis eligibility summary">
         <div class="om-trellis-head">
           <h2>Eligibility report</h2>
           <span class="om-trellis-date" id="an-trellis-date">—</span>
@@ -124,8 +113,6 @@
           · tune via <code>app_data/nr2/office/lighthouse_config.yaml</code> (see docs/examples/lighthouse_config.yaml.example)
         </p>
       </section>
-      </div>
-
       <p class="foot-nav">
         <a href="/nr2-optical-pages-hub.html">← Alignment Bench</a>
         <a href="/nr2-optical-page-office-manager.html">Office Manager</a>

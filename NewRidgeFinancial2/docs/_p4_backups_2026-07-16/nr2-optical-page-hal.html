@@ -37,31 +37,24 @@
           </article>
         </section>
       </div>
-            <nav class="exec-tabs" role="tablist" aria-label="HAL content deck">
-        <button type="button" role="tab" id="tab-btn-summary" aria-controls="tab-summary" aria-selected="true" tabindex="0" data-tab="summary">Summary</button>
-        <button type="button" role="tab" id="tab-btn-command" aria-controls="tab-command" aria-selected="false" tabindex="-1" data-tab="command">Command</button>
-      </nav>
       </div>
 
-      <div class="tab-panel" id="tab-summary" role="tabpanel" data-tab-panel="summary" aria-labelledby="tab-btn-summary">
-        <p class="exec-tab-summary">Money faces above · open Command for chat, memory, beams, and consent queue · empty ≠ $0</p>
-        <div class="hal-cmd-header">
+<div class="hal-cmd-header">
         <span>
           <span class="hal-core-orb" id="halOrb" aria-hidden="true"></span>
           HAL CORE
         </span>
         <span id="systemTruth" class="hal-truth stale">SYSTEM: CHECKING</span>
       </div>
-        <div class="hal-stale-banner" id="staleBanner">[DATA SOFT-STALE] — refresh imports before trusting money answers</div>
-      <div class="hal-stale-banner money" id="moneyHonestyBanner">[MONEY HONESTY] — beams stale or unavailable · empty ≠ $0 · refresh SoftDent/QB</div>
-      </div>
-      <div class="tab-panel" id="tab-command" role="tabpanel" data-tab-panel="command" aria-labelledby="tab-btn-command" hidden>
-        <div class="hal-patient-ctx" id="patientContextBanner" hidden>
+<div class="hal-patient-ctx" id="patientContextBanner" hidden>
         <span class="hal-patient-ctx-lbl">Patient context</span>
         <span id="patientContextText">—</span>
         <button type="button" class="btn-quiet" id="btnClearPatientContext" title="Clear HAL patient context">Clear</button>
       </div>
-        <div class="hal-cmd">
+      <div class="hal-stale-banner" id="staleBanner">[DATA SOFT-STALE] — refresh imports before trusting money answers</div>
+      <div class="hal-stale-banner money" id="moneyHonestyBanner">[MONEY HONESTY] — beams stale or unavailable · empty ≠ $0 · refresh SoftDent/QB</div>
+
+      <div class="hal-cmd">
         <!-- LEFT: Memory + Import -->
         <aside class="hal-panel" aria-label="Memory and import">
           <h3>Memory (MemoAI)</h3>
@@ -147,8 +140,7 @@
           </p>
         </aside>
       </div>
-      </div>
-</main>
+    </main>
   </div>
 
   <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent dollars · money topics respect import-readiness</div>

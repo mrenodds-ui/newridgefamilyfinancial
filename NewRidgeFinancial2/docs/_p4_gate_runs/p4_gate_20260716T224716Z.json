@@ -1,0 +1,115 @@
+{
+  "ts": "2026-07-16T22:47:16.839069+00:00",
+  "moonshot_package": 4,
+  "schema": [
+    {
+      "page": "nr2-optical-page-analytics.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-ar.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-claims.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-content.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-hal.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-narratives.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-office-manager.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-quickbooks.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-softdent.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    },
+    {
+      "page": "nr2-optical-page-taxes.html",
+      "has_exec_tabs": true,
+      "has_summary_tab": true,
+      "tabs_in_frame_after_ledge": true,
+      "summary_not_hidden": true,
+      "has_tab_panel": true
+    }
+  ],
+  "schema_fail": [],
+  "theme": {
+    "chrome_h_172": true,
+    "exec_tabs_rule": true,
+    "tab_panel_hidden": true,
+    "main_uses_chrome_var": true
+  },
+  "theme_fail": [],
+  "wire": {
+    "bootExecTabs_fn": true,
+    "bootExecTabs_call": true,
+    "default_summary": true
+  },
+  "wire_fail": [],
+  "http": [
+    {
+      "url": "https://127.0.0.1:8765/nr2-optical-page-claims.html",
+      "status": 200,
+      "ok": true
+    }
+  ],
+  "http_fail": [],
+  "pass_static": true,
+  "gate": [
+    "exec-tabs immediately after .ledge inside chrome-frame",
+    "default Summary tab visible; heavy panels hidden",
+    "chrome-frame height 172px (desk + tabs)",
+    "1080p: money-strip + tab bar without scroll (manual/CDP)"
+  ]
+}
