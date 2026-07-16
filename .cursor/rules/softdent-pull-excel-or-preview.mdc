@@ -1,0 +1,33 @@
+---
+description: Universal SoftDent data pull — Output Options Excel or Print Preview only; never Printer or File
+alwaysApply: true
+---
+
+# SoftDent data pull (universal)
+
+Whenever SoftDent desktop is used to pull financial or report data (aging, register, collections, daysheet, transactions, claims, or any other SoftDent report):
+
+## Allowed Output Options only
+
+1. **Excel** — select Excel → Enter → complete SoftDent Setup / save flow. Prefer for money beams and morning bundle.
+2. **Print Preview** — select Print Preview → Enter → read the **last page** for totals when Excel is unavailable.
+
+## Forbidden
+
+- **Never Printer** — if SoftDent waits on a printer dialog, Cancel (`Alt+C`). Do not OK a print job.
+- **Never File** — do not use SoftDent “File” / invent Select File Name paths under `C:\SoftDentReportExports` in the SoftDent UI.
+- **Never invent dollars** — empty export ≠ `$0` (`emptyNotZero`).
+- **Never SoftDent write-back** — read-only pulls only.
+
+## Defaults
+
+- Launch SoftDent only via **CS SoftDent Software.lnk** (`-sus`), never bare `SDWIN.EXE`.
+- Sign On: prefer `SOFTDENT_SIGNON_*` / `SOFTDENT_GUI_*` when set; else **`COMPUTE`** / **`computer`** (lowercase, case-sensitive).
+- SoftDent UI: keyboard or mouse only. **Never Esc** on SoftDent main (quit prompt).
+- Next-business-day money reports: pull at **9:00 PM local the night before**.
+
+## Agents / automation
+
+- GUI export code and HAL playbooks must enforce Excel | Print Preview only.
+- If Excel is greyed: run attended Excel enablement runbook / probe — do not fall through to Printer or File.
+- After Excel save, SoftDent may open a temp workbook — SaveCopyAs to the office export folder as documented; do not invent SoftDent’s Select File Name directory.

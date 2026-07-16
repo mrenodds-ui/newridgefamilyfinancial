@@ -33,15 +33,23 @@ def _utc_stamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _safe_print(text: str) -> None:
+    """Avoid cp1252 crash on empty ≠ $0 / en-dash gate strings."""
+    try:
+        print(text)
+    except UnicodeEncodeError:
+        print(str(text).encode("ascii", "replace").decode("ascii"))
+
+
 def _print_gate(bundle: dict) -> None:
     gate = bundle.get("excelEnablementGate")
     if gate:
-        print("\n--- EXCEL ENABLEMENT GATE ---")
-        print(gate)
-        print(f"\nRunbook: {RUNBOOK}")
+        _safe_print("\n--- EXCEL ENABLEMENT GATE ---")
+        _safe_print(str(gate))
+        _safe_print(f"\nRunbook: {RUNBOOK}")
     if bundle.get("excelDisabled"):
-        print("\nSoftDent Output Options: Excel appears DISABLED (greyed).")
-        print("Print Preview may succeed but money beams stay attest_only.")
+        _safe_print("\nSoftDent Output Options: Excel appears DISABLED (greyed).")
+        _safe_print("Print Preview may succeed but money beams stay attest_only.")
 
 
 def main() -> int:
