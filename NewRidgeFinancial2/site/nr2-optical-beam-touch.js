@@ -169,6 +169,51 @@
     );
   }
 
+  function setRayHealth(id, tone) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle("is-dim", tone === "dim");
+    el.classList.toggle("is-cut", tone === "cut");
+  }
+
+  function laneBeamTone(statusText, metricText) {
+    const s = String(statusText || "");
+    const m = String(metricText || "").trim();
+    if (/NO SIGNAL|UNAVAILABLE/i.test(s) || m === "—" || m === "∅" || m === "") return "cut";
+    if (/STALE|CLOSE STALL|STALE \/ ∅|NO SIGNAL/i.test(s) || /STALE|∅|STALE \/ ∅/.test(m)) {
+      return "dim";
+    }
+    if (/LIVE|CLAIMS · LIVE|COHERENT|GREEN/i.test(s)) return "live";
+    if (/\$/.test(m) || /\d/.test(m)) return "live";
+    return "dim";
+  }
+
+  function updateBeamHealth() {
+    const sdStatus = (document.getElementById("sd-status") || {}).textContent || "";
+    const qbStatus = (document.getElementById("qb-status") || {}).textContent || "";
+    const sdMetric = (document.getElementById("metric-sd") || {}).textContent || "";
+    const qbMetric = (document.getElementById("metric-qb") || {}).textContent || "";
+    const taxMetric = (document.getElementById("metric-tax") || {}).textContent || "";
+    setRayHealth("ray-sd", laneBeamTone(sdStatus, sdMetric));
+    setRayHealth("ray-qb", laneBeamTone(qbStatus, qbMetric));
+    setRayHealth(
+      "ray-tax",
+      /ERR|FAIL/i.test(taxMetric) ? "cut" : /PLANS|PLAN|%|\$/.test(taxMetric) ? "live" : "dim"
+    );
+    setRayHealth(
+      "ray-ctrl",
+      !lastSessionOk ? "dim" : lasersRed(lastReady) || periodCloseTrouble(lastReady) ? "dim" : "live"
+    );
+    const hits = document.querySelectorAll(".core-hit");
+    hits.forEach(function (hit) {
+      const beam = hit.getAttribute("data-beam");
+      const ray = document.getElementById(beam === "ctrl" ? "ray-ctrl" : "ray-" + beam);
+      const cut = ray && ray.classList.contains("is-cut");
+      const dim = ray && ray.classList.contains("is-dim");
+      hit.style.opacity = cut ? "0.05" : dim ? "0.2" : "";
+    });
+  }
+
   function setCoreSyncPulse(mode) {
     coreSyncMode = mode || null;
     const core = document.getElementById("core");
@@ -230,6 +275,7 @@
         : (document.getElementById("metric-qb") || {}).textContent || "—";
     if (fusion) fusion.textContent = "SD " + sdText + " · QB " + qbText;
     if (brief) brief.textContent = halMorningBrief(ready, sdText, qbText);
+    updateBeamHealth();
 
     if (coreSyncMode === "running" || coreSyncMode === "ok" || coreSyncMode === "fail") {
       return;
@@ -237,7 +283,7 @@
 
     let mode = "fault";
     let label = "NO SIGNAL";
-    let hintText = "SoftDent+QB beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
+    let hintText = "empty ≠ $0 · no SoftDent write-back";
     const mb = morningBundleBit(ready);
 
     if (!ready) {
@@ -246,27 +292,19 @@
     } else if (lasersRed(ready)) {
       const keys = laserKeys(ready).slice(0, 2).join(",") || "blocking";
       label = "LASERS · RED";
-      hintText =
-        "Blocking · " + keys + mb + " · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
+      hintText = "Blocking · " + keys + mb + " · empty ≠ $0";
       mode = "fault";
     } else if (periodCloseTrouble(ready)) {
       label = periodCloseBit(ready);
-      hintText =
-        label + mb + " · money gated · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
+      hintText = label + mb + " · money gated · empty ≠ $0";
       mode = "warn";
     } else if (!lastSessionOk) {
       label = "READY · SESSION WEAK";
-      hintText =
-        "Readiness ok · session may 403 mutations" +
-        mb +
-        " · click Ask HAL · Shift+click Alignment";
+      hintText = "Session may 403 mutations" + mb + " · empty ≠ $0";
       mode = "warn";
     } else {
       label = "LIVE · GREEN-PATH";
-      hintText =
-        periodCloseBit(ready) +
-        mb +
-        " · money-beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment";
+      hintText = periodCloseBit(ready) + mb + " · empty ≠ $0";
       mode = "live";
     }
 
@@ -276,7 +314,7 @@
     core.classList.toggle("core--live", mode === "live");
     core.classList.toggle("core--warn", mode === "warn");
     core.classList.toggle("core--fault", mode === "fault");
-    core.title = "HAL core · " + label + " · Ask HAL · Shift+click Alignment";
+    core.title = "HAL core · " + label;
   }
 
   function halCoreAskPrompt(ready) {
@@ -402,7 +440,7 @@
     const locked = role === "fd";
     document.querySelectorAll(".inst, .ctrl").forEach((n) => n.classList.toggle("locked", locked));
     document.querySelectorAll("[data-act], #wheel button").forEach((n) => {
-      if (n.getAttribute("data-act") === "ask-hal") {
+      if (n.getAttribute("data-act") === "ask-hal" || n.getAttribute("data-act") === "align") {
         n.disabled = false;
         return;
       }
@@ -758,6 +796,7 @@
       sd: sdEl ? sdEl.textContent : "—",
       qb: qbEl ? qbEl.textContent : "—",
     });
+    updateBeamHealth();
   }
 
   async function refreshFilm(claimsData) {
@@ -974,11 +1013,6 @@
       if (act === "recon") return void doRecon();
       if (act === "tax") return void doTax();
       if (act === "ask-hal") {
-        if (window.__nr2ShiftAsk) {
-          window.__nr2ShiftAsk = false;
-          openAlignmentBench();
-          return;
-        }
         openAskHal();
         return;
       }
@@ -988,7 +1022,6 @@
       }
     }
     benchEl.addEventListener("click", (e) => {
-      window.__nr2ShiftAsk = !!(e.shiftKey);
       runAct(e.target.closest("[data-act]"));
     });
     benchEl.addEventListener("keydown", (e) => {

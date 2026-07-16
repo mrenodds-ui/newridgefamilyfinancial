@@ -18,34 +18,34 @@
       font-size: var(--text-base);
     }
     .banner {
-      min-height: 36px; display: flex; align-items: center; justify-content: center; gap: 12px;
-      flex-wrap: wrap; padding: 6px 12px;
-      border-bottom: 1px solid #2a2410; background: #100e08; color: #c9a227;
-      font-family: var(--mono); font-size: var(--text-sm); letter-spacing: 0.06em; text-transform: uppercase;
+      min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex-wrap: wrap; padding: 4px 14px;
+      border-bottom: 1px solid #1e2430; background: #080a0c; color: #9aa3ad;
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em;
     }
+    .banner b { color: #e8eef5; font-weight: 600; letter-spacing: 0.06em; }
     .banner .bind {
-      color: #e8e8f0; letter-spacing: 0.04em; text-transform: none; font-size: 13px;
+      color: #cfd8e3; letter-spacing: 0.03em; text-transform: none; font-size: 12px;
+      flex: 1; text-align: center; min-width: 180px;
     }
+    .banner a {
+      color: var(--sd); text-decoration: none; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+    .banner a:hover { color: #e8eef5; }
+    .banner #clock { color: var(--muted); }
     .bench {
-      position: relative; height: calc(100dvh - 36px - 44px); width: 100%; max-width: none;
+      position: relative; height: calc(100dvh - 36px); width: 100%; max-width: none;
       margin: 0; overflow: hidden;
       background:
         radial-gradient(ellipse 65% 48% at 50% 44%, rgba(20,40,50,0.35), transparent 70%),
         var(--vacuum);
     }
-    /* Landing mode-strip is absolute over the bench — distinct from Hub .mode-strip */
-    .bench > .mode-strip {
-      position: absolute; inset: 0 0 auto 0; height: 44px; z-index: 20;
-      display: flex; align-items: center; justify-content: space-between; padding: 0 16px;
-      font-family: var(--mono); font-size: var(--text-sm); letter-spacing: 0.06em;
-      background: linear-gradient(180deg, rgba(5,6,7,0.96), transparent);
-    }
-    .mode-strip b { color: #e8eef5; font-weight: 600; font-size: var(--text-base); }
-    .mode-strip .muted { color: var(--muted); }
+    /* Landing mode-strip retired — status lives in .banner */
+    .bench > .mode-strip { display: none; }
 
     /* Alignment lasers */
     .align {
-      position: absolute; inset: 44px 0 120px 0; pointer-events: none; z-index: 1;
+      position: absolute; inset: 0 0 120px 0; pointer-events: none; z-index: 1;
       background:
         linear-gradient(90deg, transparent 49.6%, rgba(0,255,102,0.08) 49.6% 50.4%, transparent 50.4%),
         linear-gradient(0deg, transparent 49.6%, rgba(0,255,102,0.06) 49.6% 50.4%, transparent 50.4%);
@@ -88,6 +88,20 @@
       background: repeating-linear-gradient(90deg, #00ced1 0 8px, transparent 8px 16px);
       box-shadow: 0 0 8px rgba(0,206,209,0.55);
       animation: beam-bright 2s ease-in-out infinite, flow-x 1.1s linear infinite;
+    }
+    .beam-ray.is-dim {
+      opacity: 0.28;
+      filter: grayscale(0.35);
+      box-shadow: none;
+      animation: flow-x 1.8s linear infinite;
+    }
+    .beam-ray.is-cut {
+      opacity: 0.14;
+      height: 2px;
+      filter: grayscale(0.7);
+      box-shadow: none;
+      animation: none;
+      background-image: repeating-linear-gradient(90deg, #667 0 3px, transparent 3px 12px) !important;
     }
     @keyframes flow-x {
       to { background-position: 32px 0; }
@@ -447,6 +461,37 @@
       color: #c5cdd8;
       max-width: 190px;
     }
+    .core-acts {
+      display: flex; gap: 6px; justify-content: center; margin-top: 8px;
+    }
+    .core-acts button {
+      border: 1px solid rgba(255,0,68,0.4); background: rgba(8,12,16,0.9);
+      color: #e8eef5; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+      text-transform: uppercase; min-height: 32px; padding: 0 10px; cursor: pointer;
+    }
+    .core-acts button:hover,
+    .core-acts button:focus-visible {
+      border-color: rgba(255,0,68,0.85); color: #fff; outline: none;
+    }
+    .core.core--live {
+      animation-duration: 4.8s;
+    }
+    .core.core--live::before {
+      animation-duration: 4.8s;
+      opacity: 0.45;
+    }
+    .core.core--live::after {
+      animation-duration: 14s;
+      opacity: 0.4;
+    }
+    .core.core--live .core-ripple,
+    .core.core--live .core-ripple-delay {
+      animation-duration: 5.5s;
+      opacity: 0.35;
+    }
+    .core.core--live .core-ticks {
+      opacity: 0.28;
+    }
     .core.core--syncing {
       animation: core-red-pulse 0.9s ease-in-out infinite;
     }
@@ -619,48 +664,37 @@
     }
     .locked .shutter { display: flex; }
     .toast {
-      position: absolute; left: 50%; top: 52px; transform: translateX(-50%);
+      position: absolute; left: 50%; top: 12px; transform: translateX(-50%);
       z-index: 30; background: #121820; border: 1px solid #334; padding: 10px 14px;
       font-family: var(--mono); font-size: var(--text-sm); color: #cfd8e3; display: none;
       max-width: min(720px, 92vw); text-align: center;
     }
     .toast.show { display: block; }
     .wire-mark {
-      position: absolute; left: 50%; bottom: 72px; transform: translateX(-50%);
-      z-index: 25; pointer-events: none;
-      font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
-      padding: 6px 14px; border: 1px solid rgba(201,162,39,0.55);
-      background: rgba(16,14,8,0.88); color: #c9a227;
-      max-width: min(720px, 92vw); text-align: center;
+      font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+      padding: 2px 10px; border: 1px solid rgba(201,162,39,0.45);
+      background: rgba(16,14,8,0.55); color: #c9a227;
+      max-width: min(420px, 46vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .wire-mark.live {
       border-color: rgba(0,212,170,0.45); color: var(--sd);
-      background: rgba(8,16,14,0.88);
+      background: rgba(8,16,14,0.55);
     }
     .metric.empty { color: var(--stale) !important; font-size: clamp(16px, 1.8vw, 22px); }
   </style>
 </head>
 <body>
   <div class="banner">
-    Optical landing · empty ≠ $0 · money-beams · period-close · no SoftDent write-back
-    <span class="bind" id="banner-bind">Wiring money-beams + lasers + period-close…</span>
-  </div>
-  <div class="honesty-strip" style="margin:0;border-radius:0">
-    Honesty: empty ≠ $0 · no SoftDent write-back · no invent $ ·
-    <span class="laser-bit">same tokens as Alignment Bench</span>
+    <b>NR2</b>
+    <span class="bind" id="banner-bind">Wiring money-beams + lasers…</span>
+    <span class="wire-mark" id="wire-mark">CONNECTING</span>
+    <span id="clock">--:--:-- UTC</span>
+    <a href="/nr2-optical-pages-hub.html">Align</a>
   </div>
 
   <div class="bench" id="bench">
-    <div class="mode-strip">
-      <div><b>NR2 MAIN BENCH</b> <span class="muted">· SoftDent left · QB right · scan first</span>
-        <a href="/nr2-optical-pages-hub.html" style="margin-left:12px;color:var(--sd);font-size:13px;letter-spacing:0.04em">ALIGNMENT BENCH</a>
-      </div>
-      <div class="muted" id="clock">--:--:-- UTC</div>
-    </div>
-
     <div class="align bad" id="align" title="Import readiness lasers — red = blocking critical gap"></div>
     <div class="toast" id="toast"></div>
-    <div class="wire-mark" id="wire-mark">CONNECTING · APIs NOT CONFIRMED</div>
 
     <div class="beam-layer" id="beam-layer" aria-hidden="true">
       <div class="beam-ray ray-ctrl" id="ray-ctrl"></div>
@@ -701,7 +735,7 @@
     </article>
     <!-- HAL peripheral emitter removed — HAL lives in center core -->
 
-    <div class="core" id="core" title="HAL core · Ask HAL · Shift+click Alignment Bench" data-act="ask-hal" tabindex="0" role="button" aria-label="HAL core · Ask HAL">
+    <div class="core" id="core" title="HAL core · money fusion" tabindex="-1">
       <span class="core-ripple" aria-hidden="true"></span>
       <span class="core-ripple-delay" aria-hidden="true"></span>
       <span class="core-glint" aria-hidden="true"></span>
@@ -719,7 +753,11 @@
         <div class="v" id="hal-fusion">SD — · QB —</div>
         <div class="state" id="hal-state">WIRING…</div>
         <p class="brief" id="hal-brief">Wiring SoftDent + QuickBooks honesty…</p>
-        <span class="bind-hint" id="hal-hint">SoftDent+QB beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment</span>
+        <div class="core-acts">
+          <button type="button" data-act="ask-hal">Ask HAL</button>
+          <button type="button" data-act="align">Align</button>
+        </div>
+        <span class="bind-hint" id="hal-hint">empty ≠ $0 · no SoftDent write-back</span>
       </div>
     </div>
 
