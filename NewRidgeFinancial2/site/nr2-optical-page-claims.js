@@ -2,12 +2,15 @@
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
+  const Nav = window.NR2OpticalNav;
+  const CLAIMS_NS = "claims";
 
   let clActiveClaimId = "";
   let clActivePatientId = "";
   let clClaimsCache = null;
   let clClaimsMeta = null;
   let clLastPhoneCopy = "";
+  let clPreferredPayer = null;
 
   const CLAIM_ACTION_LABELS = {
     called_payer: "Called payer",
@@ -54,10 +57,46 @@
     return true;
   }
 
+  function persistClaimsFilters() {
+    if (!Nav || !Nav.persistBeamState) return;
+    const ageSel = document.getElementById("cl-filter-age");
+    const gapSel = document.getElementById("cl-filter-gap");
+    const payerSel = document.getElementById("cl-filter-payer");
+    Nav.persistBeamState(CLAIMS_NS, {
+      age: ageSel ? String(ageSel.value || "all") : "all",
+      gap: gapSel ? String(gapSel.value || "all") : "all",
+      payer: payerSel ? String(payerSel.value || "all") : "all",
+    });
+  }
+
+  function restoreClaimsFiltersEarly() {
+    if (!Nav || !Nav.restoreBeamState) return;
+    const st = Nav.restoreBeamState(CLAIMS_NS);
+    if (!st) return;
+    const ageSel = document.getElementById("cl-filter-age");
+    const gapSel = document.getElementById("cl-filter-gap");
+    const payerSel = document.getElementById("cl-filter-payer");
+    function applySelect(sel, value) {
+      if (!sel || value == null) return;
+      const v = String(value);
+      if ([].some.call(sel.options, function (o) {
+        return o.value === v;
+      })) {
+        sel.value = v;
+      }
+    }
+    applySelect(ageSel, st.age);
+    applySelect(gapSel, st.gap);
+    if (st.payer) {
+      clPreferredPayer = String(st.payer);
+      applySelect(payerSel, clPreferredPayer);
+    }
+  }
+
   function refreshPayerFilterOptions(claims) {
     const sel = document.getElementById("cl-filter-payer");
     if (!sel) return;
-    const prev = String(sel.value || "all");
+    const prev = clPreferredPayer || String(sel.value || "all");
     const counts = {};
     const labels = {};
     (claims || []).forEach(function (c) {
@@ -85,6 +124,7 @@
     });
     if (prev !== "all" && counts[prev]) sel.value = prev;
     else sel.value = "all";
+    clPreferredPayer = null;
   }
 
   function setPayerBatchFilter(payer) {
@@ -109,6 +149,7 @@
       }
       sel.value = key;
     }
+    persistClaimsFilters();
     if (clClaimsCache) renderClaimsOutstanding(null);
   }
 
@@ -1407,6 +1448,7 @@
       if (el && !el._nr2ClBound) {
         el._nr2ClBound = true;
         el.addEventListener("change", function () {
+          persistClaimsFilters();
           if (clClaimsCache) renderClaimsOutstanding(null);
         });
       }
@@ -1440,6 +1482,8 @@
   async function boot() {
     W.markFacesLoading(["val-snap", "val-era", "val-denials", "val-over30"]);
     W.setBanner("partial", "Wiring claims feed · empty ≠ $0 · no SoftDent write-back");
+    // Restore filters before first list paint — no flash of unfiltered rows.
+    restoreClaimsFiltersEarly();
     wireClaimsControls();
     if (W.bindPrintHygiene) {
       W.bindPrintHygiene({
@@ -1612,6 +1656,9 @@
         : "Claims list LIVE · click row for context · ERA inbox read-only · empty ≠ $0"
     );
     applyClaimsJoinHonesty(claims.ok ? claims.data : null);
+
+    if (Nav && Nav.bindBeamBusScroll) Nav.bindBeamBusScroll(CLAIMS_NS);
+    if (Nav && Nav.restoreScroll) Nav.restoreScroll(CLAIMS_NS);
   }
 
   boot().catch(function (err) {

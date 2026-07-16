@@ -2,10 +2,61 @@
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
+  const Nav = window.NR2OpticalNav;
+  const AR_NS = "ar";
+  let arBucketsCache = null;
 
-  function bucketLine(buckets) {
+  function bucketNorm(label) {
+    const s = String(label || "")
+      .toLowerCase()
+      .replace(/\s+/g, "");
+    if (!s) return "";
+    if (s.indexOf("90") >= 0 && (s.indexOf("+") >= 0 || s.indexOf("over") >= 0 || s.indexOf(">") >= 0)) {
+      return "90+";
+    }
+    if (/0[-–]?30|≦?30|<=?30/.test(s) || s === "current" || s.indexOf("0-30") >= 0) return "0-30";
+    if (/31[-–]?60|30[-–]?60/.test(s)) return "31-60";
+    if (/61[-–]?90|60[-–]?90/.test(s)) return "61-90";
+    if (s.indexOf("90") >= 0) return "90+";
+    return s;
+  }
+
+  function currentBucketFilter() {
+    const sel = document.getElementById("ar-filter-bucket");
+    return sel ? String(sel.value || "all") : "all";
+  }
+
+  function restoreArFilterEarly() {
+    const sel = document.getElementById("ar-filter-bucket");
+    if (!sel || !Nav || !Nav.restoreBeamState) return "all";
+    const st = Nav.restoreBeamState(AR_NS);
+    if (st && st.bucket) {
+      const v = String(st.bucket);
+      if ([].some.call(sel.options, function (o) {
+        return o.value === v;
+      })) {
+        sel.value = v;
+      }
+    }
+    return currentBucketFilter();
+  }
+
+  function persistArFilter() {
+    if (!Nav || !Nav.persistBeamState) return;
+    Nav.persistBeamState(AR_NS, { bucket: currentBucketFilter() });
+  }
+
+  function bucketLine(buckets, filterKey) {
     if (!Array.isArray(buckets) || !buckets.length) return null;
-    return buckets
+    const key = filterKey || "all";
+    const list =
+      key === "all"
+        ? buckets
+        : buckets.filter(function (b) {
+            return bucketNorm(b && b.bucket) === key;
+          });
+    if (!list.length) return null;
+    return list
       .map(function (b) {
         const v = W.money(b.amount != null ? b.amount : b.balance);
         let amt = "—";
@@ -17,7 +68,43 @@
       .join(" · ");
   }
 
+  function paintBuckets(buckets) {
+    const key = currentBucketFilter();
+    const line = bucketLine(buckets, key);
+    const summary = document.getElementById("ar-bucket-summary");
+    if (line) {
+      W.setText("val-buckets", line, "∅");
+      if (summary) {
+        summary.textContent =
+          key === "all"
+            ? "SoftDent AR buckets · all · empty ≠ $0"
+            : "SoftDent AR · filter " + key + " · empty ≠ $0";
+      }
+    } else {
+      W.setText("val-buckets", null, key === "all" ? "∅" : "no match");
+      if (summary) {
+        summary.textContent =
+          key === "all"
+            ? "No SoftDent AR bucket signal · empty ≠ $0"
+            : "No SoftDent AR rows for " + key + " · empty ≠ $0";
+      }
+    }
+  }
+
+  function wireArFilter() {
+    const sel = document.getElementById("ar-filter-bucket");
+    if (!sel || sel._nr2ArBound) return;
+    sel._nr2ArBound = true;
+    sel.addEventListener("change", function () {
+      persistArFilter();
+      if (arBucketsCache) paintBuckets(arBucketsCache);
+    });
+  }
+
   async function boot() {
+    // Restore filter before paint — no flash of unfiltered buckets.
+    restoreArFilterEarly();
+    wireArFilter();
     W.markFacesLoading(["val-total", "val-buckets", "val-collect", "val-status"]);
     W.setBanner("partial", "Wiring SoftDent AR + money-beams · empty ≠ $0 · no invent $");
     if (W.bindPrintHygiene) {
@@ -59,7 +146,6 @@
     if (beamHit.applied && beamHit.live) {
       live = true;
     } else if (!beamHit.applied) {
-      // Fallback to domain APIs only when money-beams unavailable
       if (aging.ok && aging.data && aging.data.hasData) {
         const hit = W.setMoneyText
           ? W.setMoneyText("val-total", aging.data.total, { emptyLabel: "∅" })
@@ -100,8 +186,8 @@
     }
 
     if (aging.ok && aging.data && aging.data.hasData) {
-      const line = bucketLine(aging.data.buckets);
-      W.setText("val-buckets", line, "∅");
+      arBucketsCache = Array.isArray(aging.data.buckets) ? aging.data.buckets : [];
+      paintBuckets(arBucketsCache);
       if (aging.data.stale) stale = true;
       const ageHint = document.getElementById("hint-buckets");
       if (ageHint) {
@@ -111,6 +197,7 @@
           " · empty ≠ $0";
       }
     } else {
+      arBucketsCache = [];
       W.setText("val-buckets", null, aging.ok ? "∅" : "NO SIGNAL");
     }
 
@@ -141,6 +228,9 @@
         "SoftDent A/R · money-beams · " + provenance + " · empty ≠ $0"
       );
     }
+
+    if (Nav && Nav.bindBeamBusScroll) Nav.bindBeamBusScroll(AR_NS);
+    if (Nav && Nav.restoreScroll) Nav.restoreScroll(AR_NS);
   }
 
   boot();

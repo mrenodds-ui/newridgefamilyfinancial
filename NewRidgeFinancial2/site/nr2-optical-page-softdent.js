@@ -2,6 +2,8 @@
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
+  const Nav = window.NR2OpticalNav;
+  const SD_NS = "softdent";
 
   function lastProduction(data) {
     if (!data) return { amount: null, label: "" };
@@ -200,6 +202,9 @@
         "SoftDent · money-beams · " + provenance + " · no write-back"
       );
     }
+
+    if (Nav && Nav.bindBeamBusScroll) Nav.bindBeamBusScroll(SD_NS);
+    if (Nav && Nav.restoreScroll) Nav.restoreScroll(SD_NS);
   }
 
   boot().catch((err) => {

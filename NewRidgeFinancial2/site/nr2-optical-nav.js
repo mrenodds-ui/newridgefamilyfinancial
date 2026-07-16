@@ -164,8 +164,113 @@
     }
   }
 
+  /** Package 10: sessionStorage beam bus — filters/scroll survive breadcrumb hops. */
+  const BEAM_BUS_KEY = "nr2.optical.beamBus";
+
+  function pageKey() {
+    const file = (location.pathname.split("/").pop() || "").toLowerCase() || "index";
+    if (file.indexOf("beam-touch") >= 0) return "landing";
+    if (file.indexOf("pages-hub") >= 0) return "hub";
+    const m = file.match(/^nr2-optical-page-(.+)\.html$/);
+    if (m) return m[1];
+    return file.replace(/\.html$/, "") || "index";
+  }
+
+  function readBeamBus() {
+    try {
+      const raw = sessionStorage.getItem(BEAM_BUS_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeBeamBus(bus) {
+    try {
+      sessionStorage.setItem(BEAM_BUS_KEY, JSON.stringify(bus || {}));
+    } catch (_) {
+      /* quota / private mode */
+    }
+  }
+
+  function persistBeamState(namespace, state) {
+    const key = String(namespace || pageKey());
+    const bus = readBeamBus();
+    const prev = bus[key] && typeof bus[key] === "object" ? bus[key] : {};
+    bus[key] = Object.assign({}, prev, state || {}, { savedAt: Date.now() });
+    writeBeamBus(bus);
+    return bus[key];
+  }
+
+  function restoreBeamState(namespace) {
+    const key = String(namespace || pageKey());
+    const bus = readBeamBus();
+    const st = bus[key];
+    return st && typeof st === "object" ? st : null;
+  }
+
+  function persistScroll(namespace) {
+    const main = document.querySelector(".shell > .main, main.main");
+    const y = main ? main.scrollTop : window.scrollY || window.pageYOffset || 0;
+    return persistBeamState(namespace || pageKey(), { scrollTop: y });
+  }
+
+  function restoreScroll(namespace) {
+    const st = restoreBeamState(namespace || pageKey());
+    if (!st || st.scrollTop == null || !Number.isFinite(Number(st.scrollTop))) return false;
+    const y = Number(st.scrollTop);
+    const main = document.querySelector(".shell > .main, main.main");
+    function apply() {
+      if (main) main.scrollTop = y;
+      else window.scrollTo(0, y);
+    }
+    apply();
+    requestAnimationFrame(apply);
+    setTimeout(apply, 50);
+    return true;
+  }
+
+  function bindBeamBusScroll(namespace) {
+    const ns = namespace || pageKey();
+    const main = document.querySelector(".shell > .main, main.main");
+    const target = main || window;
+    if (target._nr2BeamScrollBound) return;
+    target._nr2BeamScrollBound = true;
+    let t = null;
+    const onScroll = function () {
+      if (t) clearTimeout(t);
+      t = setTimeout(function () {
+        persistScroll(ns);
+      }, 120);
+    };
+    if (main) main.addEventListener("scroll", onScroll, { passive: true });
+    else window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("pagehide", function () {
+      persistScroll(ns);
+    });
+  }
+
+  function bindNavPersist() {
+    if (document._nr2BeamNavBound) return;
+    document._nr2BeamNavBound = true;
+    document.addEventListener(
+      "click",
+      function (e) {
+        const a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+        if (!a) return;
+        const inNav = a.closest("#nav, #nr2-crumb");
+        if (!inNav) return;
+        persistScroll(pageKey());
+      },
+      true
+    );
+  }
+
   buildNav();
   renderCrumb();
+  bindNavPersist();
 
   function bootMotionFromNav() {
     if (window.NR2OpticalWire && typeof window.NR2OpticalWire.bootMotionGrammar === "function") {
@@ -208,5 +313,11 @@
     clearDeepTrail: clearDeepTrail,
     renderCrumb: renderCrumb,
     focusPageHeading: focusPageHeading,
+    persistBeamState: persistBeamState,
+    restoreBeamState: restoreBeamState,
+    persistScroll: persistScroll,
+    restoreScroll: restoreScroll,
+    bindBeamBusScroll: bindBeamBusScroll,
+    pageKey: pageKey,
   };
 })();
