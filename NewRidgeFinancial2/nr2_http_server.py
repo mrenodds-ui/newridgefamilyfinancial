@@ -3056,6 +3056,34 @@ class NR2BottleServer(BottleServer):
             payload = bottle.request.json or {}
             return _json_response(stage_claim_preflight(_local_store(), payload))
 
+        @app.get("/api/softdent/claims-actions")
+        def softdent_claims_actions_list_api():
+            import bottle
+            from hal_employee_workflows import list_claim_actions
+
+            claim_id = str(bottle.request.query.get("claimId") or "").strip()
+            try:
+                limit = int(bottle.request.query.get("limit") or 20)
+            except (TypeError, ValueError):
+                limit = 20
+            return _json_response(list_claim_actions(_local_store(), claim_id=claim_id, limit=limit))
+
+        @app.post("/api/softdent/claims-actions")
+        def softdent_claims_actions_add_api():
+            from hal_employee_workflows import add_claim_action
+
+            payload = bottle.request.json or {}
+            result = add_claim_action(_local_store(), payload if isinstance(payload, dict) else {})
+            if result.get("ok"):
+                _audit_mutation(
+                    "claim_staff_action",
+                    detail={
+                        "claimId": result.get("claimId"),
+                        "action": result.get("action"),
+                    },
+                )
+            return _json_response(result)
+
         @app.post("/api/claims/appeal-packet")
         def claims_appeal_packet_api():
             from hal_employee_workflows import build_appeal_packet
@@ -3702,21 +3730,31 @@ class NR2BottleServer(BottleServer):
         def softdent_claims_review_api():
             """Claim-click review: narrative + preflight + SoftDent DOS procedure lines."""
             import bottle
+            from hal_employee_workflows import list_claim_actions
             from nr2_softdent_daily import claim_review
 
             claim_id = str(bottle.request.query.get("claimId") or "").strip()
-            return _json_response(claim_review(claim_id=claim_id))
+            result = claim_review(claim_id=claim_id)
+            if isinstance(result, dict) and result.get("ok"):
+                cid = str((result.get("claim") or {}).get("claimId") or claim_id)
+                result["actions"] = list_claim_actions(_local_store(), claim_id=cid, limit=12)
+            return _json_response(result)
 
         @app.post("/api/softdent/claims-review")
         def softdent_claims_review_post_api():
             """Claim-click review with row payload (when list already has claim fields)."""
+            from hal_employee_workflows import list_claim_actions
             from nr2_softdent_daily import claim_review
 
             payload = bottle.request.json or {}
             if not isinstance(payload, dict):
                 payload = {}
             claim_id = str(payload.get("claimId") or payload.get("claim_id") or "").strip()
-            return _json_response(claim_review(claim_id=claim_id, claim=payload))
+            result = claim_review(claim_id=claim_id, claim=payload)
+            if isinstance(result, dict) and result.get("ok"):
+                cid = str((result.get("claim") or {}).get("claimId") or claim_id)
+                result["actions"] = list_claim_actions(_local_store(), claim_id=cid, limit=12)
+            return _json_response(result)
 
         @app.get("/api/softdent/ar-aging")
         def softdent_ar_aging_api():

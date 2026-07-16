@@ -1155,6 +1155,13 @@
           }
         } catch (_) {}
         const setRes = await setHalPatientContext(ctx);
+        let seedPrompt = "";
+        try {
+          seedPrompt = String(sessionStorage.getItem("nr2.hal.seedPrompt") || "").trim();
+          if (seedPrompt) sessionStorage.removeItem("nr2.hal.seedPrompt");
+        } catch (_) {
+          seedPrompt = "";
+        }
         if (setRes.ok) {
           addMsg(
             "hal",
@@ -1162,13 +1169,15 @@
               String(ctx.initials || "P—") +
               " · #" +
               String(ctx.patientHash || "").slice(0, 4) +
+              (ctx.claimId ? " · claim " + String(ctx.claimId) : "") +
               " · SoftDent READ-ONLY · empty ≠ $0"
           );
           if (input) {
             input.value =
+              seedPrompt ||
               "Summarize patient " +
-              ctx.patientId +
-              " — insurance, claims, clinical notes. empty ≠ $0.";
+                ctx.patientId +
+                " — insurance, claims, clinical notes. empty ≠ $0.";
           }
           if (chatBind) {
             chatBind.textContent =
@@ -1177,7 +1186,21 @@
               " · bound to session · POST /api/hal/chat";
           }
           if (auto && !busy) {
-            await runPatientSummary(ctx.patientId);
+            if (seedPrompt) {
+              const q = seedPrompt;
+              if (input) input.value = "";
+              addMsg("user", q);
+              busy = true;
+              try {
+                await streamChat(q);
+              } catch (_) {
+                await runPatientSummary(ctx.patientId);
+              }
+              busy = false;
+              refreshActions();
+            } else {
+              await runPatientSummary(ctx.patientId);
+            }
           }
         } else {
           addMsg(

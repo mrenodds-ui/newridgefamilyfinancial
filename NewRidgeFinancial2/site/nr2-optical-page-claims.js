@@ -5,6 +5,134 @@
 
   let clActiveClaimId = "";
   let clActivePatientId = "";
+  let clClaimsCache = null;
+  let clClaimsMeta = null;
+
+  const CLAIM_ACTION_LABELS = {
+    called_payer: "Called payer",
+    waiting_era: "Waiting ERA",
+    needs_attachment: "Needs attachment",
+    resubmit_path: "Resubmit path",
+    patient_followup: "Patient follow-up",
+    note: "Note",
+  };
+
+  function isGenericPayer(payer) {
+    const p = String(payer || "")
+      .trim()
+      .toLowerCase();
+    return !p || p === "insurance" || p === "unknown" || p === "n/a" || p === "-" || p === "—";
+  }
+
+  function claimPassesFilters(c) {
+    const ageSel = document.getElementById("cl-filter-age");
+    const gapSel = document.getElementById("cl-filter-gap");
+    const ageMode = ageSel ? String(ageSel.value || "all") : "all";
+    const gapMode = gapSel ? String(gapSel.value || "all") : "all";
+    const age = claimAgeDays(c && c.serviceDate);
+    if (ageMode === "0-30" && !(age != null && age <= 30)) return false;
+    if (ageMode === "31-60" && !(age != null && age >= 31 && age <= 60)) return false;
+    if (ageMode === "61-90" && !(age != null && age >= 61 && age <= 90)) return false;
+    if (ageMode === "90+" && !(age != null && age > 90)) return false;
+    const unnamed = isGenericPayer(c && c.payer);
+    const noPatient = !String((c && c.patientId) || "").trim();
+    if (gapMode === "unnamed_payer" && !unnamed) return false;
+    if (gapMode === "no_patient" && !noPatient) return false;
+    if (gapMode === "any_gap" && !(unnamed || noPatient)) return false;
+    return true;
+  }
+
+  function appendClaimActionLog(body, claim, rev) {
+    const actWrap = (rev && rev.actions && typeof rev.actions === "object" ? rev.actions : {}) || {};
+    const actions = Array.isArray(actWrap.actions) ? actWrap.actions : [];
+    const choices = Array.isArray(actWrap.choices) && actWrap.choices.length
+      ? actWrap.choices
+      : Object.keys(CLAIM_ACTION_LABELS);
+    const head = document.createElement("h4");
+    head.className = "wk-dossier-sub";
+    head.textContent = "Staff actions (local)";
+    body.appendChild(head);
+    if (actions.length) {
+      const ul = document.createElement("ul");
+      ul.className = "wk-claim-list";
+      actions.slice(0, 8).forEach(function (a) {
+        if (!a || typeof a !== "object") return;
+        const li = document.createElement("li");
+        const label = CLAIM_ACTION_LABELS[a.action] || String(a.action || "action");
+        const when = String(a.at || "").replace("T", " ").slice(0, 16);
+        li.textContent =
+          when +
+          " · " +
+          label +
+          (a.note ? " — " + String(a.note) : "") +
+          (a.actor ? " · " + String(a.actor) : "");
+        ul.appendChild(li);
+      });
+      body.appendChild(ul);
+    } else {
+      const empty = document.createElement("p");
+      empty.className = "wk-dossier-muted";
+      empty.textContent = "No staff actions yet · SoftDent READ-ONLY log";
+      body.appendChild(empty);
+    }
+    const form = document.createElement("div");
+    form.className = "cl-action-log";
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", "Staff action type");
+    choices.forEach(function (key) {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = CLAIM_ACTION_LABELS[key] || key;
+      sel.appendChild(opt);
+    });
+    const note = document.createElement("input");
+    note.type = "text";
+    note.placeholder = "Optional note";
+    note.setAttribute("aria-label", "Staff action note");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn-quiet";
+    btn.textContent = "Log action";
+    btn.addEventListener("click", function () {
+      if (!W.postJson) return;
+      btn.disabled = true;
+      W.postJson(
+        "/api/softdent/claims-actions",
+        {
+          claimId: String((claim && claim.claimId) || ""),
+          patientId: String((claim && claim.patientId) || ""),
+          patientName: displayPatientName(claim),
+          action: String(sel.value || "note"),
+          note: String(note.value || "").trim(),
+          actor: "Staff",
+        },
+        12000
+      )
+        .then(function (res) {
+          btn.disabled = false;
+          if (!res || !res.ok || !res.data || !res.data.ok) {
+            btn.textContent = "Failed";
+            setTimeout(function () {
+              btn.textContent = "Log action";
+            }, 1200);
+            return;
+          }
+          note.value = "";
+          openClaimContext(claim);
+        })
+        .catch(function () {
+          btn.disabled = false;
+          btn.textContent = "Failed";
+          setTimeout(function () {
+            btn.textContent = "Log action";
+          }, 1200);
+        });
+    });
+    form.appendChild(sel);
+    form.appendChild(note);
+    form.appendChild(btn);
+    body.appendChild(form);
+  }
 
   function shortHash(h) {
     const s = String(h || "").replace(/^#/, "").trim();
@@ -201,6 +329,8 @@
         revActions.appendChild(copyBtn);
       }
       body.appendChild(revActions);
+
+      appendClaimActionLog(body, claim, rev);
     } else if (rev && rev.error) {
       const p = document.createElement("p");
       p.className = "wk-dossier-muted";
@@ -432,46 +562,38 @@
     const rangeEl = document.getElementById("cl-range-label");
     if (!tbody) return;
     tbody.textContent = "";
-    let claims = data && Array.isArray(data.claims) ? data.claims.slice() : [];
-    const count = data && data.count != null ? Number(data.count) : claims.length;
+    if (data) {
+      clClaimsCache = data;
+      clClaimsMeta = {
+        count: data.count != null ? Number(data.count) : null,
+        sampleLimit: data.sampleLimit != null ? Number(data.sampleLimit) : null,
+        totalOutstanding: data.totalOutstanding,
+        hasData: data.hasData,
+        emptyMessage: data.emptyMessage,
+      };
+    }
+    const source = data || clClaimsCache;
+    let claims = source && Array.isArray(source.claims) ? source.claims.slice() : [];
+    const count =
+      clClaimsMeta && clClaimsMeta.count != null ? clClaimsMeta.count : claims.length;
     const sampleLimit =
-      data && data.sampleLimit != null ? Number(data.sampleLimit) : claims.length;
-    const total =
-      data && data.totalOutstanding != null ? W.money(data.totalOutstanding) : null;
+      clClaimsMeta && clClaimsMeta.sampleLimit != null
+        ? clClaimsMeta.sampleLimit
+        : claims.length;
+    const totalRaw =
+      clClaimsMeta && clClaimsMeta.totalOutstanding != null
+        ? clClaimsMeta.totalOutstanding
+        : source && source.totalOutstanding;
+    const total = totalRaw != null ? W.money(totalRaw) : null;
     let totalBit = "total —";
     if (total != null && total !== 0) {
       const shown = W.fmtMoney ? W.fmtMoney(total) : "$" + String(total);
       if (shown) totalBit = "total " + shown;
-    } else if (data && data.hasData && (total == null || total === 0)) {
+    } else if (
+      ((clClaimsMeta && clClaimsMeta.hasData) || (source && source.hasData)) &&
+      (total == null || total === 0)
+    ) {
       totalBit = "total empty (not zero)";
-    }
-    if (rangeEl) {
-      rangeEl.textContent =
-        String(Math.min(claims.length, sampleLimit || claims.length)) +
-        " of " +
-        String(count) +
-        " open";
-    }
-    if (summary) {
-      summary.textContent =
-        String(count) +
-        " open claim" +
-        (count === 1 ? "" : "s") +
-        " · " +
-        totalBit +
-        " · SoftDent READ-ONLY · empty ≠ $0";
-    }
-    if (!claims.length) {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.colSpan = 6;
-      td.className = "cl-empty";
-      td.textContent =
-        (data && data.emptyMessage) ||
-        "No outstanding SoftDent claims in sample — sync SoftDent or empty queue.";
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-      return;
     }
     // SoftDent unpaid only — never show paid/completed/denied/closed rows.
     claims = claims.filter(function (c) {
@@ -494,12 +616,39 @@
       }
       return true;
     });
+    const beforeFilter = claims.length;
+    claims = claims.filter(claimPassesFilters);
+    if (rangeEl) {
+      rangeEl.textContent =
+        String(claims.length) +
+        " shown · " +
+        String(Math.min(beforeFilter, sampleLimit || beforeFilter)) +
+        " of " +
+        String(count) +
+        " open";
+    }
+    if (summary) {
+      summary.textContent =
+        String(count) +
+        " open claim" +
+        (count === 1 ? "" : "s") +
+        " · " +
+        totalBit +
+        (claims.length !== beforeFilter
+          ? " · filter " + String(claims.length) + "/" + String(beforeFilter)
+          : "") +
+        " · SoftDent READ-ONLY · empty ≠ $0";
+    }
     if (!claims.length) {
       const tr = document.createElement("tr");
       const td = document.createElement("td");
       td.colSpan = 6;
       td.className = "cl-empty";
-      td.textContent = "No unpaid SoftDent claims in sample — empty ≠ $0.";
+      td.textContent =
+        beforeFilter > 0
+          ? "No unpaid SoftDent claims match this filter — empty ≠ $0."
+          : (source && source.emptyMessage) ||
+            "No unpaid SoftDent claims in sample — empty ≠ $0.";
       tr.appendChild(td);
       tbody.appendChild(tr);
       return;
@@ -618,6 +767,15 @@
         });
       });
     }
+    ["cl-filter-age", "cl-filter-gap"].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el && !el._nr2ClBound) {
+        el._nr2ClBound = true;
+        el.addEventListener("change", function () {
+          if (clClaimsCache) renderClaimsOutstanding(null);
+        });
+      }
+    });
     const closeBtn = document.getElementById("btn-cl-dossier-close");
     if (closeBtn && !closeBtn._nr2ClBound) {
       closeBtn._nr2ClBound = true;

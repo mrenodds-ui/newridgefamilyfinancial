@@ -48,9 +48,30 @@
           <button type="button" class="btn-quiet" id="btn-cl-refresh" title="Reload outstanding SoftDent claims">Refresh</button>
         </div>
         <p class="om-claims-note">
-          SoftDent read-only · full patient names · oldest first · click a row for claim + patient context ·
+          SoftDent read-only · full patient names · oldest first · click a row for claim review ·
           age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · null amounts = — (empty ≠ $0) · sample capped at 200
         </p>
+        <div class="om-claims-filters" id="cl-filters" aria-label="Filter unpaid SoftDent claims">
+          <label class="om-claims-filter">
+            Age
+            <select id="cl-filter-age" title="Filter by SoftDent claim age band">
+              <option value="all">All ages</option>
+              <option value="0-30">≤30 days</option>
+              <option value="31-60">31–60</option>
+              <option value="61-90">61–90</option>
+              <option value="90+">&gt;90 days</option>
+            </select>
+          </label>
+          <label class="om-claims-filter">
+            Gaps
+            <select id="cl-filter-gap" title="Filter by review gaps">
+              <option value="all">All</option>
+              <option value="unnamed_payer">Unnamed payer</option>
+              <option value="no_patient">No patient join</option>
+              <option value="any_gap">Any gap (payer or patient)</option>
+            </select>
+          </label>
+        </div>
         <p class="om-claims-summary" id="cl-summary">Loading outstanding claims…</p>
         <div class="om-claims-body" id="cl-body">
           <div class="om-claims-wrap">

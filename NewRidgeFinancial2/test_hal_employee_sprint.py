@@ -859,6 +859,41 @@ class CollectionLetterTests(unittest.TestCase):
         self.assertIn("Dear Jane Doe", result["letter"])
 
 
+class ClaimActionLogTests(unittest.TestCase):
+    def test_add_and_list_claim_actions(self) -> None:
+        from hal_employee_workflows import CLAIM_ACTION_CHOICES, add_claim_action, list_claim_actions
+
+        store = _FakeStore()
+        bad = add_claim_action(store, {"claimId": "c-1", "action": "not_a_real_action"})
+        self.assertFalse(bad["ok"])
+        self.assertEqual(bad["error"], "invalid_action")
+
+        added = add_claim_action(
+            store,
+            {
+                "claimId": "c-1",
+                "patientId": "p-9",
+                "patientName": "Test Patient",
+                "action": "called_payer",
+                "note": "Left voicemail",
+                "actor": "Staff",
+            },
+        )
+        self.assertTrue(added["ok"])
+        self.assertEqual(added["action"], "called_payer")
+        self.assertFalse(added.get("softdentWriteBack"))
+
+        listed = list_claim_actions(store, claim_id="c-1", limit=10)
+        self.assertTrue(listed["ok"])
+        self.assertEqual(listed["count"], 1)
+        self.assertEqual(listed["actions"][0]["note"], "Left voicemail")
+        self.assertEqual(listed["choices"], list(CLAIM_ACTION_CHOICES))
+
+        missing = list_claim_actions(store, claim_id="", limit=5)
+        self.assertFalse(missing["ok"])
+        self.assertEqual(missing["error"], "claim_id_required")
+
+
 class UsDentalCarrierCatalogTests(unittest.TestCase):
     def test_catalog_summary_and_search(self) -> None:
         from us_dental_carrier_catalog import catalog_summary, format_carrier_hits, search_carriers

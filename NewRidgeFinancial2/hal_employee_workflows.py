@@ -60,6 +60,26 @@ def init_employee_workflow_schemas(conn: sqlite3.Connection) -> None:
     )
     conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS nr2_claim_actions (
+            id TEXT PRIMARY KEY,
+            created_at_utc TEXT NOT NULL,
+            claim_id TEXT NOT NULL,
+            patient_id TEXT,
+            patient_name TEXT,
+            action TEXT NOT NULL,
+            note TEXT,
+            actor TEXT NOT NULL DEFAULT 'Staff'
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_nr2_claim_actions_claim
+        ON nr2_claim_actions (claim_id, created_at_utc DESC)
+        """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS nr2_eob_match (
             id TEXT PRIMARY KEY,
             created_at_utc TEXT NOT NULL,
@@ -1665,6 +1685,114 @@ def stage_claim_preflight(store, payload: dict[str, Any] | None = None) -> dict[
         "genericPayer": inferred.get("genericPayer"),
         "feeDetail": inferred.get("feeDetail"),
         "eligibilityHit": inferred.get("eligibilityHit"),
+    }
+
+
+CLAIM_ACTION_CHOICES = (
+    "called_payer",
+    "waiting_era",
+    "needs_attachment",
+    "resubmit_path",
+    "patient_followup",
+    "note",
+)
+
+
+def list_claim_actions(
+    store,
+    *,
+    claim_id: str = "",
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Local SoftDent claim work log (READ-ONLY SoftDent; staff notes only)."""
+    if not store:
+        return {"ok": False, "error": "no_store", "actions": []}
+    cid = str(claim_id or "").strip()
+    if not cid:
+        return {"ok": False, "error": "claim_id_required", "actions": []}
+    with store._connect() as conn:
+        init_employee_workflow_schemas(conn)
+        rows = conn.execute(
+            """
+            SELECT id, created_at_utc, claim_id, patient_id, patient_name, action, note, actor
+            FROM nr2_claim_actions
+            WHERE claim_id = ?
+            ORDER BY created_at_utc DESC
+            LIMIT ?
+            """,
+            (cid, max(1, min(int(limit or 20), 100))),
+        ).fetchall()
+    actions = [
+        {
+            "id": str(r[0] or ""),
+            "at": str(r[1] or ""),
+            "claimId": str(r[2] or ""),
+            "patientId": str(r[3] or ""),
+            "patientName": str(r[4] or ""),
+            "action": str(r[5] or ""),
+            "note": str(r[6] or ""),
+            "actor": str(r[7] or "Staff"),
+        }
+        for r in rows
+    ]
+    return {
+        "ok": True,
+        "claimId": cid,
+        "actions": actions,
+        "count": len(actions),
+        "choices": list(CLAIM_ACTION_CHOICES),
+        "honesty": "empty != $0; SoftDent READ-ONLY; local staff log only",
+    }
+
+
+def add_claim_action(store, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Append a staff action on an unpaid SoftDent claim (no SoftDent write-back)."""
+    if not store:
+        return {"ok": False, "error": "no_store"}
+    data = payload if isinstance(payload, dict) else {}
+    claim_id = str(data.get("claimId") or data.get("claim_id") or "").strip()
+    action = str(data.get("action") or "").strip().lower().replace(" ", "_")
+    if not claim_id:
+        return {"ok": False, "error": "claim_id_required"}
+    if action not in CLAIM_ACTION_CHOICES:
+        return {
+            "ok": False,
+            "error": "invalid_action",
+            "choices": list(CLAIM_ACTION_CHOICES),
+        }
+    note = str(data.get("note") or data.get("notes") or "").strip()[:500]
+    actor = str(data.get("actor") or data.get("employeeId") or "Staff").strip()[:80] or "Staff"
+    entry_id = str(uuid.uuid4())
+    created = _utc_now()
+    with store._connect() as conn:
+        init_employee_workflow_schemas(conn)
+        conn.execute(
+            """
+            INSERT INTO nr2_claim_actions
+            (id, created_at_utc, claim_id, patient_id, patient_name, action, note, actor)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                entry_id,
+                created,
+                claim_id,
+                str(data.get("patientId") or data.get("patient_id") or "").strip(),
+                str(data.get("patientName") or data.get("patient_name") or "").strip(),
+                action,
+                note,
+                actor,
+            ),
+        )
+    return {
+        "ok": True,
+        "id": entry_id,
+        "claimId": claim_id,
+        "action": action,
+        "note": note,
+        "actor": actor,
+        "at": created,
+        "softdentWriteBack": False,
+        "honesty": "empty != $0; SoftDent READ-ONLY; local staff log only",
     }
 
 
