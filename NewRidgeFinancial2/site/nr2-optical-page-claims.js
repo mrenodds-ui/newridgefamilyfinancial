@@ -80,7 +80,7 @@
     });
   }
 
-  function renderClaimDossier(claim, mini) {
+  function renderClaimDossier(claim, mini, review) {
     const panel = document.getElementById("cl-dossier");
     const body = document.getElementById("cl-dossier-body");
     const wrap = document.getElementById("cl-body");
@@ -100,6 +100,115 @@
       ["Age", age == null ? "—" : String(age) + " days"],
       ["Hash", shortHash((claim && claim.patientHash) || (mini && mini.patientHash))],
     ]);
+
+    const rev = review && typeof review === "object" ? review : null;
+    if (rev && rev.ok) {
+      const nar = rev.narrative && typeof rev.narrative === "object" ? rev.narrative : null;
+      if (nar && nar.text) {
+        const nHead = document.createElement("h4");
+        nHead.className = "wk-dossier-sub";
+        nHead.textContent = "Review narrative";
+        body.appendChild(nHead);
+        const nP = document.createElement("p");
+        nP.className = "wk-dossier-muted";
+        nP.style.whiteSpace = "pre-wrap";
+        nP.textContent = String(nar.text);
+        body.appendChild(nP);
+        if (nar.nextAction) {
+          const act = document.createElement("p");
+          act.style.margin = "0.35rem 0 0";
+          act.innerHTML = "";
+          const strong = document.createElement("strong");
+          strong.textContent = "Next: ";
+          act.appendChild(strong);
+          act.appendChild(document.createTextNode(String(nar.nextAction)));
+          body.appendChild(act);
+        }
+      }
+
+      const check = rev.checklist && typeof rev.checklist === "object" ? rev.checklist : null;
+      const items = check && Array.isArray(check.items) ? check.items : [];
+      if (items.length) {
+        const cHead = document.createElement("h4");
+        cHead.className = "wk-dossier-sub";
+        cHead.textContent =
+          "Preflight" +
+          (check.ready ? " · clear" : " · " + String(check.gapCount || items.filter(function (i) { return !i.ok; }).length) + " gap(s)");
+        body.appendChild(cHead);
+        const ul = document.createElement("ul");
+        ul.className = "wk-claim-list";
+        items.forEach(function (it) {
+          if (!it || typeof it !== "object") return;
+          const li = document.createElement("li");
+          li.textContent =
+            (it.ok ? "✓ " : "✗ ") +
+            String(it.label || it.id || "check") +
+            (it.detail ? " — " + String(it.detail) : "");
+          if (!it.ok) li.style.color = "var(--nr2-warn, #a67c00)";
+          ul.appendChild(li);
+        });
+        body.appendChild(ul);
+      }
+
+      const procs = Array.isArray(rev.procedures) ? rev.procedures : [];
+      const pHead = document.createElement("h4");
+      pHead.className = "wk-dossier-sub";
+      pHead.textContent = "SoftDent procedures (DOS)";
+      body.appendChild(pHead);
+      if (!procs.length) {
+        const empty = document.createElement("p");
+        empty.className = "wk-dossier-muted";
+        empty.textContent = "No SoftDent TXN lines for this DOS — empty ≠ $0";
+        body.appendChild(empty);
+      } else {
+        const ul = document.createElement("ul");
+        ul.className = "wk-claim-list";
+        procs.slice(0, 12).forEach(function (p) {
+          if (!p || typeof p !== "object") return;
+          const li = document.createElement("li");
+          const amt =
+            p.production == null || p.production === ""
+              ? ""
+              : " · $" + Number(p.production).toLocaleString("en-US", { maximumFractionDigits: 2 });
+          li.textContent =
+            String(p.code || "—") +
+            " · " +
+            String(p.kind || "line") +
+            amt +
+            (p.providerId ? " · Dr " + String(p.providerId) : "");
+          ul.appendChild(li);
+        });
+        body.appendChild(ul);
+      }
+
+      const revActions = document.createElement("div");
+      revActions.className = "wk-dossier-actions";
+      if (nar && nar.phoneCopy) {
+        const copyBtn = document.createElement("button");
+        copyBtn.type = "button";
+        copyBtn.className = "btn-quiet";
+        copyBtn.textContent = "Copy for phone";
+        copyBtn.addEventListener("click", function () {
+          const text = String(nar.phoneCopy || "");
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).catch(function () {});
+          }
+          copyBtn.textContent = "Copied";
+          setTimeout(function () {
+            copyBtn.textContent = "Copy for phone";
+          }, 1200);
+        });
+        revActions.appendChild(copyBtn);
+      }
+      body.appendChild(revActions);
+    } else if (rev && rev.error) {
+      const p = document.createElement("p");
+      p.className = "wk-dossier-muted";
+      p.textContent =
+        String(rev.emptyMessage || rev.error || "Review unavailable") +
+        " · SoftDent READ-ONLY · empty ≠ $0";
+      body.appendChild(p);
+    }
 
     if (!mini) {
       const note = document.createElement("p");
@@ -180,27 +289,32 @@
       body.appendChild(ul);
     }
 
-    const pid = String((claim && claim.patientId) || "").trim();
-    const ph = shortHash((claim && claim.patientHash) || (mini && mini.patientHash)).replace(
-      /^#/,
-      ""
-    );
+    const pid = String(
+      (claim && claim.patientId) ||
+        (rev && rev.claim && rev.claim.patientId) ||
+        ""
+    ).trim();
+    const ph = shortHash(
+      (claim && claim.patientHash) ||
+        (mini && mini.patientHash) ||
+        (rev && rev.claim && rev.claim.patientHash)
+    ).replace(/^#/, "");
     if (pid) {
       const actions = document.createElement("div");
       actions.className = "wk-dossier-actions";
       const halBtn = document.createElement("button");
       halBtn.type = "button";
       halBtn.className = "btn-quiet";
-      halBtn.textContent = "Ask HAL about this patient →";
+      halBtn.textContent = "Ask HAL about this claim →";
       halBtn.addEventListener("click", function () {
-        askHalAboutPatient(pid, ph, String((claim && claim.initials) || "P—"));
+        askHalAboutClaim(claim, pid, ph);
       });
       actions.appendChild(halBtn);
       body.appendChild(actions);
     }
   }
 
-  function askHalAboutPatient(patientId, patientHash, initials) {
+  function askHalAboutClaim(claim, patientId, patientHash) {
     const pid = String(patientId || "").trim();
     const ph = String(patientHash || "").replace(/^#/, "").trim();
     if (!pid) {
@@ -210,12 +324,28 @@
     const ctx = {
       patientId: pid,
       patientHash: ph,
-      initials: String(initials || "P—"),
+      initials: String((claim && claim.initials) || "P—"),
+      claimId: String((claim && claim.claimId) || ""),
+      payer: String((claim && claim.payer) || ""),
+      serviceDate: String((claim && claim.serviceDate) || "").slice(0, 10),
+      amount: claim && claim.amount,
       at: Date.now(),
       ttlMs: 30 * 60 * 1000,
     };
     try {
       sessionStorage.setItem("nr2.hal.patientContext", JSON.stringify(ctx));
+      sessionStorage.setItem(
+        "nr2.hal.seedPrompt",
+        "Review unpaid SoftDent claim " +
+          String(ctx.claimId || "") +
+          " for " +
+          displayPatientName(claim) +
+          " · payer " +
+          String(ctx.payer || "—") +
+          " · DOS " +
+          String(ctx.serviceDate || "—") +
+          " · SoftDent READ-ONLY · empty ≠ $0. Give a short narrative and next staff action."
+      );
     } catch (_) {}
     if (W.postJson && ph) {
       W.postJson(
@@ -223,7 +353,7 @@
         {
           patientHash: ph,
           action: "context_set",
-          toolsUsed: '["claims_ask_hal_link"]',
+          toolsUsed: '["claims_ask_hal_claim"]',
         },
         8000
       ).catch(function () {});
@@ -236,6 +366,14 @@
       "&autoSummarize=1";
   }
 
+  function askHalAboutPatient(patientId, patientHash, initials) {
+    askHalAboutClaim(
+      { patientId: patientId, patientHash: patientHash, initials: initials },
+      patientId,
+      patientHash
+    );
+  }
+
   async function openClaimContext(claim) {
     const cid = String((claim && claim.claimId) || "").trim();
     const pid = String((claim && claim.patientId) || "").trim();
@@ -245,11 +383,9 @@
     document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
       el.classList.remove("is-active");
     });
-    setDossierMessage("Loading claim context…");
-    if (!pid) {
-      renderClaimDossier(claim, null);
-      return;
-    }
+    setDossierMessage("Loading claim review…");
+    let review = null;
+    let mini = null;
     try {
       if (W.ensureSession) await W.ensureSession();
       if (ph && W.postJson) {
@@ -259,31 +395,34 @@
           8000
         ).catch(function () {});
       }
-      const res = await W.getJson(
-        "/api/apex/patient-dossier-mini/" + encodeURIComponent(pid),
-        12000
-      );
+      const reviewReq = W.postJson
+        ? W.postJson("/api/softdent/claims-review", claim || {}, 15000)
+        : W.getJson(
+            "/api/softdent/claims-review?claimId=" + encodeURIComponent(cid),
+            15000
+          );
+      const miniReq = pid
+        ? W.getJson("/api/apex/patient-dossier-mini/" + encodeURIComponent(pid), 12000)
+        : Promise.resolve({ ok: false, data: null });
+      const settled = await Promise.all([reviewReq, miniReq]);
       if (clActiveClaimId !== cid) return;
-      if (!res.ok) {
-        setDossierMessage(
-          "Mini dossier " +
-            (res.status === 403 ? "capability rejected" : "NO SIGNAL") +
-            " · " +
-            String((res.data && res.data.error) || res.status) +
-            " — showing claim row only",
-          true
-        );
-        renderClaimDossier(claim, null);
-        return;
+      const revRes = settled[0];
+      const miniRes = settled[1];
+      if (revRes && revRes.ok && revRes.data) review = revRes.data;
+      if (miniRes && miniRes.ok && miniRes.data) mini = miniRes.data;
+      if (review && review.claim && review.claim.patientId && !claim.patientId) {
+        claim.patientId = review.claim.patientId;
+        claim.patientHash = review.claim.patientHash || claim.patientHash;
+        clActivePatientId = String(claim.patientId || "");
       }
-      renderClaimDossier(claim, res.data);
+      renderClaimDossier(claim, mini, review);
     } catch (err) {
       if (clActiveClaimId !== cid) return;
       setDossierMessage(
-        "Claim context fault · " + String(err && err.message ? err.message : err),
+        "Claim review fault · " + String(err && err.message ? err.message : err),
         true
       );
-      renderClaimDossier(claim, null);
+      renderClaimDossier(claim, null, null);
     }
   }
 

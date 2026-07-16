@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from softdent_odbc_extract import ensure_sd_schema
 from nr2_softdent_daily import (
+    claim_review,
     claims_outstanding,
     collections_daily,
     new_patients_mtd,
@@ -68,6 +69,48 @@ class Nr2SoftdentDailyTests(unittest.TestCase):
                 result = claims_outstanding()
             self.assertTrue(result["hasData"])
             self.assertEqual(result["claims"][0]["claimId"], "CLM-1")
+
+    def test_claim_review_narrative_and_checklist(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "analytics.sqlite3"
+            _seed_db(db_path)
+            with patch("nr2_softdent_daily.resolve_sd_sqlite_db", return_value=db_path):
+                with patch(
+                    "nr2_softdent_daily._procedure_lines_for_claim",
+                    return_value=[
+                        {
+                            "code": "1110",
+                            "kind": "procedure",
+                            "production": 120.0,
+                            "providerId": "1",
+                            "patientId": "1001",
+                        }
+                    ],
+                ):
+                    result = claim_review(claim_id="CLM-1")
+            self.assertTrue(result.get("ok"))
+            self.assertTrue(result.get("hasData"))
+            self.assertIn("narrative", result)
+            self.assertTrue(str((result.get("narrative") or {}).get("text") or ""))
+            self.assertIn("checklist", result)
+            items = ((result.get("checklist") or {}).get("items")) or []
+            self.assertTrue(any(i.get("id") == "unpaid" and i.get("ok") for i in items))
+            self.assertEqual(len(result.get("procedures") or []), 1)
+
+    def test_claim_review_rejects_paid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "analytics.sqlite3"
+            _seed_db(db_path)
+            conn = sqlite3.connect(db_path)
+            conn.execute(
+                "UPDATE sd_claims SET claim_status='Paid' WHERE claim_id='CLM-1'"
+            )
+            conn.commit()
+            conn.close()
+            with patch("nr2_softdent_daily.resolve_sd_sqlite_db", return_value=db_path):
+                result = claim_review(claim_id="CLM-1")
+            self.assertFalse(result.get("ok"))
+            self.assertEqual(result.get("error"), "claim_not_unpaid")
 
     def test_provider_production(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

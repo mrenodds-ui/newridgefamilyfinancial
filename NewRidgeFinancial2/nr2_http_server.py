@@ -3698,6 +3698,26 @@ class NR2BottleServer(BottleServer):
             limit = max(1, min(limit, 500))
             return _json_response(claims_outstanding(limit=limit))
 
+        @app.get("/api/softdent/claims-review")
+        def softdent_claims_review_api():
+            """Claim-click review: narrative + preflight + SoftDent DOS procedure lines."""
+            import bottle
+            from nr2_softdent_daily import claim_review
+
+            claim_id = str(bottle.request.query.get("claimId") or "").strip()
+            return _json_response(claim_review(claim_id=claim_id))
+
+        @app.post("/api/softdent/claims-review")
+        def softdent_claims_review_post_api():
+            """Claim-click review with row payload (when list already has claim fields)."""
+            from nr2_softdent_daily import claim_review
+
+            payload = bottle.request.json or {}
+            if not isinstance(payload, dict):
+                payload = {}
+            claim_id = str(payload.get("claimId") or payload.get("claim_id") or "").strip()
+            return _json_response(claim_review(claim_id=claim_id, claim=payload))
+
         @app.get("/api/softdent/ar-aging")
         def softdent_ar_aging_api():
             """SoftDent A/R buckets from softdent_ar_aging.csv — empty ≠ $0 · read-only."""

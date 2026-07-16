@@ -808,6 +808,348 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
     }
 
 
+def _generic_payer_label(payer: str) -> bool:
+    return str(payer or "").strip().lower() in {"", "insurance", "unknown", "n/a", "-", "—"}
+
+
+def _claim_age_days(service_date: str) -> int | None:
+    text = str(service_date or "").strip()[:10]
+    if len(text) < 10:
+        return None
+    try:
+        dos = datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    return max(0, (datetime.now(timezone.utc).date() - dos).days)
+
+
+def _procedure_lines_for_claim(
+    *,
+    patient_id: str,
+    service_date: str,
+    patient_name: str = "",
+) -> list[dict[str, Any]]:
+    """SoftDent Trans-for-a-Period lines for patient+DOS (READ-ONLY)."""
+    pid = str(patient_id or "").strip()
+    dos = str(service_date or "").strip()[:10]
+    if not dos:
+        return []
+    try:
+        from softdent_operational_pipeline import (
+            INSURANCE_PAYMENT_CODES,
+            INSURANCE_WRITEOFF_CODES,
+            load_softdent_transactions_xls,
+            _account_stem,
+        )
+    except Exception:
+        return []
+    try:
+        txs = load_softdent_transactions_xls()
+    except Exception:
+        return []
+    stem = _account_stem(pid) if pid else ""
+    name_key = str(patient_name or "").strip().casefold()
+    lines: list[dict[str, Any]] = []
+    for row in txs:
+        if str(row.get("reportDate") or "")[:10] != dos:
+            continue
+        row_pid = str(row.get("patientId") or "").strip()
+        row_name = str(row.get("patientName") or "").strip().casefold()
+        if pid and row_pid == pid:
+            pass
+        elif stem and _account_stem(row_pid) == stem:
+            pass
+        elif name_key and row_name == name_key:
+            pass
+        else:
+            continue
+        code = str(row.get("code") or "").strip()
+        base = code.split(".")[0] if code else ""
+        production = row.get("production")
+        try:
+            prod_f = float(production) if production not in (None, "") else None
+        except (TypeError, ValueError):
+            prod_f = None
+        kind = "procedure"
+        if base in INSURANCE_PAYMENT_CODES or base == "2":
+            kind = "insurance_payment"
+        elif base in INSURANCE_WRITEOFF_CODES:
+            kind = "insurance_writeoff"
+        elif prod_f in (None, 0):
+            kind = "other"
+        lines.append(
+            {
+                "code": code,
+                "kind": kind,
+                "production": round(prod_f, 2) if prod_f not in (None, 0) else None,
+                "providerId": str(row.get("providerId") or ""),
+                "patientId": row_pid,
+            }
+        )
+    return lines
+
+
+def _build_claim_review_checklist(
+    *,
+    claim: dict[str, Any],
+    procedures: list[dict[str, Any]],
+    age_days: int | None,
+) -> dict[str, Any]:
+    payer = str(claim.get("payer") or "")
+    named_payer = not _generic_payer_label(payer)
+    has_patient = bool(str(claim.get("patientId") or "").strip())
+    proc_lines = [p for p in procedures if p.get("kind") == "procedure"]
+    pay_lines = [p for p in procedures if p.get("kind") == "insurance_payment"]
+    wo_lines = [p for p in procedures if p.get("kind") == "insurance_writeoff"]
+    status = str(claim.get("status") or "").strip().lower()
+    unpaid = status not in {"paid", "closed", "complete", "completed", "denied", "settled"}
+    items = [
+        {
+            "id": "unpaid",
+            "label": "Claim still unpaid (not paid/completed)",
+            "ok": unpaid,
+            "detail": str(claim.get("status") or "—"),
+        },
+        {
+            "id": "named_payer",
+            "label": "Named SoftDent payer (not generic Insurance)",
+            "ok": named_payer,
+            "detail": payer or "empty",
+        },
+        {
+            "id": "patient_join",
+            "label": "Patient id joined for dossier",
+            "ok": has_patient,
+            "detail": str(claim.get("patientId") or "missing"),
+        },
+        {
+            "id": "procedures",
+            "label": "SoftDent procedure lines on DOS",
+            "ok": bool(proc_lines),
+            "detail": f"{len(proc_lines)} line(s)" if proc_lines else "none on SoftDent TXN",
+        },
+        {
+            "id": "no_same_day_settlement",
+            "label": "No SoftDent pay/write-off on DOS",
+            "ok": not pay_lines and not wo_lines,
+            "detail": (
+                f"pay={len(pay_lines)} writeoff={len(wo_lines)}"
+                if (pay_lines or wo_lines)
+                else "clear"
+            ),
+        },
+        {
+            "id": "age_action",
+            "label": "Age action band",
+            "ok": age_days is not None and age_days <= 90,
+            "detail": (
+                f"{age_days}d · follow up now"
+                if age_days is not None and age_days > 90
+                else (f"{age_days}d" if age_days is not None else "unknown DOS")
+            ),
+        },
+    ]
+    gaps = [i["label"] for i in items if not i.get("ok")]
+    return {
+        "items": items,
+        "ready": len(gaps) == 0,
+        "gaps": gaps,
+        "gapCount": len(gaps),
+    }
+
+
+def _build_claim_review_narrative(
+    *,
+    claim: dict[str, Any],
+    checklist: dict[str, Any],
+    age_days: int | None,
+    procedures: list[dict[str, Any]],
+) -> dict[str, Any]:
+    patient = str(claim.get("patientName") or "Patient").strip() or "Patient"
+    payer = str(claim.get("payer") or "Insurance").strip() or "Insurance"
+    dos = str(claim.get("serviceDate") or "—")[:10]
+    amount = claim.get("amount")
+    try:
+        amount_txt = f"${float(amount):,.2f}" if amount not in (None, "") else "amount unknown"
+    except (TypeError, ValueError):
+        amount_txt = "amount unknown"
+    age_txt = f"{age_days} days old" if age_days is not None else "age unknown"
+    if age_days is None:
+        action = "Confirm SoftDent DOS, then review payer status in SoftDent (READ-ONLY)."
+    elif age_days <= 30:
+        action = "Monitor — still in 0–30 day band; verify submission if not already sent."
+    elif age_days <= 60:
+        action = "Follow up with payer — claim is in the 31–60 day band."
+    elif age_days <= 90:
+        action = "Escalate follow-up — claim is in the 61–90 day band."
+    else:
+        action = "Priority follow-up — claim is over 90 days; call payer or resubmit path in SoftDent."
+    proc_codes = [
+        str(p.get("code") or "")
+        for p in procedures
+        if p.get("kind") == "procedure" and p.get("code")
+    ]
+    proc_bit = (", ".join(proc_codes[:6]) + ("…" if len(proc_codes) > 6 else "")) if proc_codes else "no SoftDent procedure lines on file"
+    gaps = checklist.get("gaps") if isinstance(checklist.get("gaps"), list) else []
+    gap_bit = (" Gaps: " + "; ".join(str(g) for g in gaps[:4]) + ".") if gaps else " Preflight clear."
+    text = (
+        f"{patient} · unpaid SoftDent claim for {payer} · DOS {dos} · {amount_txt} · {age_txt}. "
+        f"Billed codes: {proc_bit}. Next: {action}{gap_bit} "
+        "SoftDent READ-ONLY · empty ≠ $0."
+    )
+    phone = (
+        f"{patient} | claim {claim.get('claimId') or '—'} | {payer} | "
+        f"DOS {dos} | {amount_txt} | {claim.get('status') or '—'}"
+    )
+    return {
+        "text": text,
+        "nextAction": action,
+        "phoneCopy": phone,
+        "source": "deterministic-softdent-claim-review",
+        "honesty": "empty != $0; SoftDent READ-ONLY; not SoftDent Outstanding Claims Excel",
+    }
+
+
+def claim_review(*, claim_id: str = "", claim: dict[str, Any] | None = None) -> dict[str, Any]:
+    """SoftDent claim click review: narrative + preflight + DOS procedure lines.
+
+    Unpaid-only. SoftDent READ-ONLY. empty ≠ $0.
+    """
+    body = claim if isinstance(claim, dict) else {}
+    cid = str(claim_id or body.get("claimId") or body.get("claim_id") or "").strip()
+    out: dict[str, Any] = {
+        "ok": False,
+        "hasData": False,
+        "claimId": cid,
+        "honesty": "empty != $0",
+        "readOnly": True,
+        "softdentWriteBack": False,
+    }
+    claim_row: dict[str, Any] | None = None
+    if body.get("patientName") or body.get("amount") is not None or body.get("serviceDate"):
+        claim_row = {
+            "claimId": cid or str(body.get("claimId") or ""),
+            "patientName": str(body.get("patientName") or "").strip(),
+            "payer": str(body.get("payer") or "").strip(),
+            "serviceDate": str(body.get("serviceDate") or "")[:10],
+            "amount": body.get("amount"),
+            "status": str(body.get("status") or "").strip(),
+            "patientId": str(body.get("patientId") or "").strip() or None,
+            "patientHash": body.get("patientHash"),
+            "initials": body.get("initials"),
+        }
+    conn, db_path = _connect()
+    if conn and cid:
+        try:
+            if _table_exists(conn, "sd_claims"):
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT claim_id, patient_name, payer, service_date, claim_amount, claim_status
+                    FROM sd_claims
+                    WHERE claim_id = ?
+                    LIMIT 1
+                    """,
+                    (cid,),
+                )
+                hit = cur.fetchone()
+                if hit:
+                    claim_row = {
+                        "claimId": str(hit[0] or ""),
+                        "patientName": str(hit[1] or "").strip(),
+                        "payer": str(hit[2] or "").strip(),
+                        "serviceDate": str(hit[3] or "")[:10],
+                        "amount": round(float(hit[4] or 0), 2) if hit[4] is not None else None,
+                        "status": str(hit[5] or "").strip(),
+                        "patientId": (claim_row or {}).get("patientId"),
+                        "patientHash": (claim_row or {}).get("patientHash"),
+                        "initials": (claim_row or {}).get("initials")
+                        or _initials_from_name(str(hit[1] or "")),
+                    }
+                    # Name → patient_id join when missing
+                    if not claim_row.get("patientId") and _table_exists(conn, "sd_patients"):
+                        nm = str(claim_row.get("patientName") or "").strip().lower()
+                        if nm:
+                            cur.execute(
+                                """
+                                SELECT patient_id FROM sd_patients
+                                WHERE lower(trim(COALESCE(patient_name, ''))) = ?
+                                ORDER BY patient_id LIMIT 1
+                                """,
+                                (nm,),
+                            )
+                            p = cur.fetchone()
+                            if p and p[0]:
+                                claim_row["patientId"] = str(p[0]).strip()
+                                claim_row["patientHash"] = _hash_patient_id(str(p[0]))
+        finally:
+            conn.close()
+        out["dbPath"] = str(db_path)
+
+    if not claim_row or not str(claim_row.get("claimId") or cid):
+        out["error"] = "claim_not_found"
+        out["emptyMessage"] = "SoftDent claim not found — empty ≠ $0"
+        return out
+
+    # TXN claim ids embed MRN: TXN-YYYYMMDD-{patientId}
+    if not claim_row.get("patientId"):
+        parts = str(claim_row.get("claimId") or "").split("-")
+        if len(parts) >= 3 and parts[0].upper() == "TXN" and parts[-1].isdigit():
+            claim_row["patientId"] = parts[-1]
+            claim_row["patientHash"] = _hash_patient_id(parts[-1])
+
+    status = str(claim_row.get("status") or "").strip().lower()
+    if status in {"paid", "closed", "complete", "completed", "denied", "settled"}:
+        out["error"] = "claim_not_unpaid"
+        out["claim"] = claim_row
+        out["emptyMessage"] = "Claim is paid/completed — not shown for unpaid review · empty ≠ $0"
+        return out
+
+    age_days = _claim_age_days(str(claim_row.get("serviceDate") or ""))
+    mrn = str(claim_row.get("patientId") or "").strip()
+    # SoftDent TXN MRN may differ from sd_patients id — also try claim id tail
+    procedures = _procedure_lines_for_claim(
+        patient_id=mrn,
+        service_date=str(claim_row.get("serviceDate") or ""),
+        patient_name=str(claim_row.get("patientName") or ""),
+    )
+    if not procedures and str(claim_row.get("claimId") or "").upper().startswith("TXN-"):
+        tail = str(claim_row.get("claimId") or "").split("-")[-1]
+        if tail and tail != mrn:
+            procedures = _procedure_lines_for_claim(
+                patient_id=tail,
+                service_date=str(claim_row.get("serviceDate") or ""),
+                patient_name=str(claim_row.get("patientName") or ""),
+            )
+            if procedures and not claim_row.get("patientId"):
+                claim_row["patientId"] = tail
+                claim_row["patientHash"] = _hash_patient_id(tail)
+
+    checklist = _build_claim_review_checklist(
+        claim=claim_row, procedures=procedures, age_days=age_days
+    )
+    narrative = _build_claim_review_narrative(
+        claim=claim_row,
+        checklist=checklist,
+        age_days=age_days,
+        procedures=procedures,
+    )
+    out.update(
+        {
+            "ok": True,
+            "hasData": True,
+            "claim": claim_row,
+            "ageDays": age_days,
+            "procedures": procedures,
+            "procedureCount": len(procedures),
+            "checklist": checklist,
+            "narrative": narrative,
+            "source": "softdent-claim-review",
+        }
+    )
+    return out
+
+
 def provider_production(*, limit: int = 8) -> dict[str, Any]:
     conn, db_path = _open_db()
     if not conn:
