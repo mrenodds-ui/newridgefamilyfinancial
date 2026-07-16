@@ -147,6 +147,13 @@ def test_desk_smoke_exposes_patient_attest_eligible(monkeypatch, tmp_path):
             "emptyNotZero": True,
         },
     )
+    import nr2_softdent_daily as daily
+
+    monkeypatch.setattr(
+        daily,
+        "appointments_range_snapshot",
+        lambda *a, **k: {"apptTimeColumn": True, "days": [{"slots": [{"time": "09:00"}]}]},
+    )
 
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is True

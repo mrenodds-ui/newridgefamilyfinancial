@@ -446,6 +446,49 @@ def run_desk_smoke(
     if not patient_ctx_ok:
         failures.append("this_patient_shortcut")
 
+    # --- Mon–Thu appt_time coverage (honest — only when extract has times) ---
+    try:
+        from nr2_softdent_daily import appointments_range_snapshot, monday_of_week_iso
+
+        snap = appointments_range_snapshot(monday_of_week_iso(), days=4)
+        slots: list[dict[str, Any]] = []
+        for day in snap.get("days") or []:
+            if isinstance(day, dict):
+                for slot in day.get("slots") or []:
+                    if isinstance(slot, dict):
+                        slots.append(slot)
+        with_time = sum(1 for s in slots if str(s.get("time") or "").strip() not in ("", "—"))
+        total = len(slots)
+        ratio = (with_time / total) if total else 0.0
+        # Soft threshold: empty week is ok; when slots exist expect majority times (Sensei lane).
+        time_ok = total == 0 or ratio >= 0.5
+        checks.append(
+            {
+                "id": "mon_thu_appt_time",
+                "ok": time_ok,
+                "slotCount": total,
+                "withTime": with_time,
+                "ratio": round(ratio, 3),
+                "apptTimeColumn": bool(snap.get("apptTimeColumn"))
+                if isinstance(snap, dict)
+                else None,
+                "note": "Informational floor 50% when slots exist; empty≠invent 09:00.",
+            }
+        )
+        if not time_ok:
+            failures.append("mon_thu_appt_time")
+        row_time_covered = time_ok
+    except Exception as exc:  # noqa: BLE001
+        checks.append(
+            {
+                "id": "mon_thu_appt_time",
+                "ok": False,
+                "error": str(exc)[:200],
+            }
+        )
+        failures.append("mon_thu_appt_time")
+        row_time_covered = False
+
     overall = len(failures) == 0
     row = {
         "ok": overall,
@@ -465,6 +508,7 @@ def run_desk_smoke(
         "forceCloseAvailable": bool(fc_available),
         "patientAttestEligible": patient_attest_eligible,
         "thisPatientShortcutCovered": bool(patient_ctx.get("covered")),
+        "monThuApptTimeOk": bool(row_time_covered),
         "logPath": str(SMOKE_LOG_PATH),
         "buildHint": None,
     }
@@ -487,6 +531,7 @@ def run_desk_smoke(
             "forceCloseAvailable": bool(fc_available),
             "patientAttestEligible": patient_attest_eligible,
             "thisPatientShortcutCovered": bool(patient_ctx.get("covered")),
+            "monThuApptTimeOk": bool(row_time_covered),
         }
     )
     return row

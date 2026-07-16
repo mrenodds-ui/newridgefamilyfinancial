@@ -90,6 +90,25 @@ def test_desk_smoke_green_path(monkeypatch, tmp_path):
             "patientHash": "AAAA",
         },
     )
+    import nr2_softdent_daily as daily
+
+    monkeypatch.setattr(
+        daily,
+        "appointments_range_snapshot",
+        lambda *a, **k: {
+            "apptTimeColumn": True,
+            "days": [
+                {
+                    "slots": [
+                        {"time": "09:00"},
+                        {"time": "10:30"},
+                        {"time": "—"},
+                    ]
+                }
+            ],
+        },
+    )
+    monkeypatch.setattr(daily, "monday_of_week_iso", lambda: "2026-07-13")
 
     # Skip HTTP probe so unit test does not depend on live 8765 process.
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
@@ -150,6 +169,13 @@ def test_desk_smoke_fails_when_force_close_wrong(monkeypatch, tmp_path):
         "smoke_patient_context_path",
         lambda: {"ok": True, "covered": True, "emptyNotZero": True},
     )
+    import nr2_softdent_daily as daily
+
+    monkeypatch.setattr(
+        daily,
+        "appointments_range_snapshot",
+        lambda *a, **k: {"apptTimeColumn": True, "days": [{"slots": [{"time": "08:00"}]}]},
+    )
 
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is False
@@ -208,6 +234,13 @@ def test_desk_smoke_this_patient_path_marks_covered(monkeypatch, tmp_path):
             "emptyNotZero": True,
             "error": "forced",
         },
+    )
+    import nr2_softdent_daily as daily
+
+    monkeypatch.setattr(
+        daily,
+        "appointments_range_snapshot",
+        lambda *a, **k: {"apptTimeColumn": True, "days": [{"slots": [{"time": "08:00"}]}]},
     )
     result = ds.run_desk_smoke(probe_http=False, readiness=ready)
     assert result["ok"] is False

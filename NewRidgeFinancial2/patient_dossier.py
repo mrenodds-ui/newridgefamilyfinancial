@@ -708,11 +708,14 @@ def build_patient_dossier(
         else:
             dossier["gaps"].append("sd_patients table missing")
 
-        # Appointments (last 3 past-ish + recent 5 total — schema has no appt_time)
+        # Appointments (recent 5 — use appt_time when extract provides it; else honest —)
         if _table_exists(conn, "sd_appointments"):
+            cols = _column_names(conn, "sd_appointments")
+            has_time = "appt_time" in cols
+            time_sel = "appt_time" if has_time else "'' AS appt_time"
             cur.execute(
-                """
-                SELECT appt_date, provider_code, status
+                f"""
+                SELECT appt_date, provider_code, status, {time_sel}
                 FROM sd_appointments
                 WHERE patient_id=?
                 ORDER BY appt_date DESC
@@ -721,12 +724,14 @@ def build_patient_dossier(
                 (pid,),
             )
             for r in cur.fetchall():
+                raw_time = str(r["appt_time"] or "").strip() if has_time else ""
+                time_disp = raw_time if raw_time else "—"
                 dossier["appointments"].append(
                     {
                         "date": r["appt_date"] or "unknown",
                         "provider": r["provider_code"] or "unknown",
                         "status": r["status"] or "unknown",
-                        "time": "—",  # SoftDent schema lacks appt_time
+                        "time": time_disp,
                     }
                 )
         else:

@@ -1292,6 +1292,7 @@ def _populate_from_odbc(conn: sqlite3.Connection, *, extracted_at: str) -> dict[
                         mapping.get("appt_time")
                         or mapping.get("ApptTime")
                         or mapping.get("AppointmentTime")
+                        or mapping.get("StartTime")
                         or mapping.get("Time")
                         or ""
                     )
@@ -2080,8 +2081,31 @@ def backfill_appt_times_from_sensei(
             (appt_time, extracted_at, patient_id, appt_date, provider_code),
         )
         updated += int(cur.rowcount or 0)
-        # If row missing entirely, upsert with Sensei status/time
         if cur.rowcount == 0:
+            # Provider code mismatch: fill when exactly one empty-time row for patient+date.
+            loose = conn.execute(
+                """
+                SELECT provider_code FROM sd_appointments
+                WHERE practice_id = ''
+                  AND patient_id = ?
+                  AND appt_date = ?
+                  AND COALESCE(appt_time, '') = ''
+                """,
+                (patient_id, appt_date),
+            ).fetchall()
+            if len(loose) == 1:
+                cur2 = conn.execute(
+                    """
+                    UPDATE sd_appointments
+                    SET appt_time = ?, extracted_at = ?
+                    WHERE practice_id = ''
+                      AND patient_id = ?
+                      AND appt_date = ?
+                      AND COALESCE(appt_time, '') = ''
+                    """,
+                    (appt_time, extracted_at, patient_id, appt_date),
+                )
+                updated += int(cur2.rowcount or 0)
             exists = conn.execute(
                 """
                 SELECT 1 FROM sd_appointments

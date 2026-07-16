@@ -381,3 +381,139 @@ def query_touches_trellis_nightly(raw: str) -> bool:
             q,
         )
     )
+
+
+def _load_json(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else None
+    except Exception:
+        return None
+
+
+def tomorrow_insurance_snapshot(
+    *,
+    target_date: str | None = None,
+    out_dir: Path | None = None,
+) -> dict[str, Any]:
+    """PHI-safe OM panel: tomorrow Trellis worklist + verify status (no names, no $0 money)."""
+    root = Path(out_dir) if out_dir else OUT_DIR
+    target: date | None = None
+    if target_date:
+        try:
+            target = date.fromisoformat(str(target_date).strip()[:10])
+        except ValueError:
+            target = None
+    if target is None:
+        target = next_clinical_day()
+    if target is None:
+        return {
+            "ok": False,
+            "hasData": False,
+            "error": "no_clinical_day",
+            "emptyNotZero": True,
+            "patients": [],
+        }
+
+    iso = _iso(target)
+    work_path = root / f"tomorrow_trellis_add_worklist_{iso}.json"
+    results_path = root / f"tomorrow_trellis_verify_results_{iso}.json"
+    work = _load_json(work_path)
+    results = _load_json(results_path)
+
+    try:
+        from patient_dossier import patient_hash
+    except Exception:
+
+        def patient_hash(pid: str) -> str:  # type: ignore[misc]
+            import hashlib
+
+            raw = str(pid or "").strip()
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:4].upper() if raw else "——"
+
+    def _initials(name: str, first: str = "", last: str = "") -> str:
+        f = str(first or "").strip()
+        l = str(last or "").strip()
+        if f or l:
+            letters = ((f[:1] if f else "") + (l[:1] if l else "")).upper()
+            return f"{letters or 'P'}—"
+        parts = [x for x in str(name or "").replace(",", " ").split() if x]
+        letters = "".join(p[0] for p in parts[:2] if p).upper()
+        return f"{letters or 'P'}—"
+
+    by_id: dict[str, dict[str, Any]] = {}
+    by_name: dict[str, dict[str, Any]] = {}
+    for row in (results or {}).get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        pid = str(row.get("patient_id") or "").strip()
+        nm = str(row.get("patient_name") or "").strip().lower()
+        if pid:
+            by_id[pid] = row
+        if nm:
+            by_name[nm] = row
+
+    patients_out: list[dict[str, Any]] = []
+    ready_count = 0
+    verified_count = 0
+    by_status: dict[str, int] = {}
+
+    for row in (work or {}).get("patients") or []:
+        if not isinstance(row, dict):
+            continue
+        pid = str(row.get("patient_id") or "").strip()
+        if not pid:
+            continue
+        demo = row.get("demo") if isinstance(row.get("demo"), dict) else {}
+        ins = row.get("insurance") if isinstance(row.get("insurance"), dict) else {}
+        ready = bool(row.get("ready"))
+        if ready:
+            ready_count += 1
+        name = str(row.get("patient_name") or "")
+        initials = _initials(
+            name,
+            str(demo.get("first") or ""),
+            str(demo.get("last") or ""),
+        )
+        ph = patient_hash(pid)
+        match = by_id.get(pid) or by_name.get(name.strip().lower())
+        status = "—"
+        carrier = str(ins.get("insurance_name") or "").strip() or "—"
+        if match:
+            status = str(match.get("status") or "—").strip() or "—"
+            carrier = str(match.get("carrier") or carrier).strip() or "—"
+            verified_count += 1
+        elif not ready:
+            status = "Not ready"
+        skip = str(row.get("skip_reason") or "").strip() or None
+        by_status[status] = by_status.get(status, 0) + 1
+        patients_out.append(
+            {
+                "patientHash": ph,
+                "initials": initials,
+                "ready": ready,
+                "verifyStatus": status,
+                "carrier": carrier[:80],
+                "skipReason": skip,
+            }
+        )
+
+    has_data = bool(work) and bool(patients_out)
+    return {
+        "ok": True,
+        "hasData": has_data,
+        "emptyNotZero": True,
+        "targetDate": iso,
+        "builtAt": (work or {}).get("builtAt"),
+        "updatedAt": (results or {}).get("updatedAt"),
+        "worklistPath": str(work_path) if work_path.is_file() else None,
+        "resultsPath": str(results_path) if results_path.is_file() else None,
+        "total": int((work or {}).get("total") or len(patients_out) or 0),
+        "readyCount": ready_count,
+        "verifiedCount": verified_count,
+        "byStatus": by_status,
+        "patients": patients_out,
+        "signal": "ok" if has_data else ("NO SIGNAL — worklist missing" if not work else "NO SIGNAL — empty worklist"),
+    }

@@ -75,6 +75,14 @@ COLUMN_CANDIDATES: dict[str, dict[str, tuple[str, ...]]] = {
         "appt_date": ("apptdate", "appt_date", "appointmentdate", "date"),
         "provider_code": ("providercode", "provider_code", "providerid"),
         "status": ("status",),
+        "appt_time": (
+            "appttime",
+            "appt_time",
+            "appointmenttime",
+            "time",
+            "starttime",
+            "start_time",
+        ),
     },
     "sd_providers": {
         "provider_code": ("providercode", "provider_code", "providerid", "code", "id"),
@@ -114,7 +122,7 @@ SUGGESTED_QUERIES = {
     ),
     "sd_appointments": (
         "SELECT PatientID AS patient_id, ApptDate AS appt_date, ProviderCode AS provider_code, "
-        "Status AS status "
+        "Status AS status, ApptTime AS appt_time "
         "FROM Appointments WHERE ApptDate >= CAST(GETDATE() AS DATE)"
     ),
     "sd_providers": (

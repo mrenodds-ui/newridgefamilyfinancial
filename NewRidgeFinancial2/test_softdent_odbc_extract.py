@@ -75,6 +75,7 @@ def _sample_sensei_root(path: Path) -> None:
                     "Date": "2026/06/15",
                     "Dr": 1,
                     "CheckedIn": "09:30",
+                    "Time": "09:30",
                     "Proc0_Code": "1110",
                     "Proc0_Fee": "120.00",
                 }
@@ -114,7 +115,7 @@ class SoftdentOdbcExtractTests(unittest.TestCase):
             self.assertGreaterEqual(counts["sd_adjustments"], 1)
 
     def test_sensei_datasync_populates_sd_tables(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db_path = Path(tmp) / "analytics.sqlite3"
             sensei_root = Path(tmp) / "sensei"
             _sample_sensei_root(sensei_root)
@@ -131,6 +132,16 @@ class SoftdentOdbcExtractTests(unittest.TestCase):
             self.assertEqual(counts["sd_providers"], 1)
             self.assertEqual(counts["sd_appointments"], 1)
             self.assertEqual(counts["sd_procedures"], 1)
+            conn = sqlite3.connect(str(db_path))
+            try:
+                row = conn.execute(
+                    "SELECT appt_time FROM sd_appointments WHERE patient_id = ?",
+                    ("1001",),
+                ).fetchone()
+            finally:
+                conn.close()
+            self.assertIsNotNone(row)
+            self.assertEqual(str(row[0] or ""), "09:30")
 
     def test_sensei_plus_json_fallback_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

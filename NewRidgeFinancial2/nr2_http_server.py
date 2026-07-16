@@ -3395,6 +3395,14 @@ class NR2BottleServer(BottleServer):
                 )
             )
 
+        @app.get("/api/trellis/tomorrow-insurance")
+        def trellis_tomorrow_insurance_api():
+            """PHI-safe tomorrow Trellis worklist + verify status for OM morning huddle."""
+            from nr2_trellis_nightly import tomorrow_insurance_snapshot
+
+            target = str(bottle.request.params.get("date") or "").strip() or None
+            return _json_response(tomorrow_insurance_snapshot(target_date=target))
+
         @app.get("/api/qb/auth-url")
         def qb_auth_url_api():
             from qb_connector import auth_url

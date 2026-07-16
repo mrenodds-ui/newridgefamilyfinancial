@@ -722,6 +722,79 @@
     return !!(res.data.hasData || (res.data.days && res.data.days.length));
   }
 
+  async function loadTomorrowInsurance() {
+    const summary = document.getElementById("tr-summary");
+    const list = document.getElementById("tr-list");
+    const dateLbl = document.getElementById("tr-date-label");
+    if (summary) summary.textContent = "Loading tomorrow insurance…";
+    if (list) list.textContent = "";
+    const res = await W.getJson("/api/trellis/tomorrow-insurance", 20000);
+    if (!res.ok || !res.data) {
+      if (summary) summary.textContent = "NO SIGNAL — could not load Trellis worklist";
+      return false;
+    }
+    const data = res.data;
+    if (dateLbl) dateLbl.textContent = data.targetDate || "—";
+    if (!data.hasData) {
+      if (summary) summary.textContent = String(data.signal || "NO SIGNAL — empty worklist");
+      return true;
+    }
+    const by = data.byStatus || {};
+    const statusBits = Object.keys(by)
+      .map(function (k) {
+        return k + " " + by[k];
+      })
+      .join(" · ");
+    if (summary) {
+      summary.textContent =
+        "Ready " +
+        (data.readyCount || 0) +
+        " · Verified " +
+        (data.verifiedCount || 0) +
+        " · Total " +
+        (data.total || 0) +
+        (statusBits ? " · " + statusBits : "") +
+        " · empty ≠ $0";
+    }
+    if (!list) return true;
+    const patients = Array.isArray(data.patients) ? data.patients : [];
+    if (!patients.length) {
+      list.textContent = "No patients in worklist.";
+      return true;
+    }
+    const frag = document.createDocumentFragment();
+    patients.forEach(function (p) {
+      const row = document.createElement("div");
+      row.className = "tr-row";
+      const st = String((p && p.verifyStatus) || "—");
+      const stClass =
+        st === "Eligible"
+          ? "ok"
+          : /fail|error|issue/i.test(st)
+            ? "bad"
+            : st === "—" || st === "Not ready"
+              ? "miss"
+              : "mid";
+      row.innerHTML =
+        '<span class="tr-who">' +
+        String((p && p.initials) || "P—") +
+        " · " +
+        shortHash(p && p.patientHash) +
+        "</span>" +
+        '<span class="tr-status ' +
+        stClass +
+        '">' +
+        st +
+        "</span>" +
+        '<span class="tr-carrier">' +
+        String((p && p.carrier) || "—") +
+        "</span>";
+      frag.appendChild(row);
+    });
+    list.appendChild(frag);
+    return true;
+  }
+
   function wireWeeklyControls() {
     const btn = document.getElementById("btn-wk-refresh");
     if (btn && !btn._nr2WkBound) {
@@ -757,6 +830,16 @@
         wkActivePatientId = "";
         document.querySelectorAll(".wk-slot.is-active").forEach(function (el) {
           el.classList.remove("is-active");
+        });
+      });
+    }
+    const trBtn = document.getElementById("btn-tr-refresh");
+    if (trBtn && !trBtn._nr2TrBound) {
+      trBtn._nr2TrBound = true;
+      trBtn.addEventListener("click", function () {
+        loadTomorrowInsurance().catch(function () {
+          const summary = document.getElementById("tr-summary");
+          if (summary) summary.textContent = "NO SIGNAL — Trellis refresh fault";
         });
       });
     }
@@ -859,6 +942,9 @@
       W.getJson("/api/softdent/new-patients-mtd", 12000),
       W.getJson("/api/softdent/appointments-today", 12000),
       loadWeeklySchedule().catch(function () {
+        return false;
+      }),
+      loadTomorrowInsurance().catch(function () {
         return false;
       }),
     ]);
