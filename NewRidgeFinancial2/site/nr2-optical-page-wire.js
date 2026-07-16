@@ -40,6 +40,7 @@
   function setText(id, value, emptyLabel) {
     const el = document.getElementById(id);
     if (!el) return;
+    const wasLoading = el.classList.contains("is-loading");
     clearLoadingFace(el);
     el.classList.remove("empty", "zero", "nosignal");
     if (value == null || value === "") {
@@ -50,6 +51,7 @@
       if (/^\$?\s*0(\.0+)?$/i.test(String(label).trim())) {
         el.textContent = "Empty ≠ $0";
       }
+      if (wasLoading) pulseFaceSettle(el);
       return;
     }
     const raw = String(value).trim();
@@ -57,9 +59,62 @@
     if (/^\$?\s*0(\.0+)?$/.test(raw)) {
       el.textContent = "Empty ≠ $0";
       el.classList.add("empty");
+      if (wasLoading) pulseFaceSettle(el);
       return;
     }
     el.textContent = value;
+    if (wasLoading) pulseFaceSettle(el);
+  }
+  function prefersReducedMotion() {
+    try {
+      return !!(
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      );
+    } catch (_) {
+      return false;
+    }
+  }
+  function pulseFaceSettle(elOrId) {
+    const el = typeof elOrId === "string" ? document.getElementById(elOrId) : elOrId;
+    if (!el || prefersReducedMotion()) return;
+    el.classList.remove("nr2-face-settle");
+    void el.offsetWidth;
+    el.classList.add("nr2-face-settle");
+    window.setTimeout(function () {
+      el.classList.remove("nr2-face-settle");
+    }, 400);
+  }
+  function markRowsEnter(nodes, staggerMs) {
+    if (prefersReducedMotion()) return 0;
+    const list = nodes && nodes.length != null ? Array.prototype.slice.call(nodes) : [];
+    const step = typeof staggerMs === "number" ? staggerMs : 18;
+    list.forEach(function (el, i) {
+      if (!el || !el.classList) return;
+      el.classList.add("nr2-row-enter");
+      el.style.setProperty("--nr2-stagger", Math.min(i, 16) * step + "ms");
+    });
+    return list.length;
+  }
+  function bootMotionGrammar() {
+    if (document.documentElement.getAttribute("data-nr2-motion") === "off") return false;
+    if (prefersReducedMotion()) {
+      document.documentElement.classList.add("nr2-reduced-motion");
+      document.documentElement.classList.remove("nr2-motion");
+      return false;
+    }
+    document.documentElement.classList.add("nr2-motion");
+    document.documentElement.classList.remove("nr2-reduced-motion");
+    const main = document.querySelector(".shell > .main, main.main");
+    if (main) main.classList.add("nr2-motion-enter");
+    const faces = document.querySelectorAll(
+      ".money-strip .metric-face, .align-bench .beam-face, .metric-face"
+    );
+    faces.forEach(function (el, i) {
+      el.classList.add("nr2-face-enter");
+      el.style.setProperty("--nr2-stagger", Math.min(i, 8) * 40 + "ms");
+    });
+    return true;
   }
   /**
    * Money face honesty: null → empty label · 0 → "Empty ≠ $0" · else fmtMoney.
@@ -950,6 +1005,11 @@
     } catch (_) {
       /* ignore mount faults — page faces still load */
     }
+    try {
+      bootMotionGrammar();
+    } catch (_) {
+      /* motion optional */
+    }
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootOpsGates);
@@ -965,6 +1025,10 @@
     clearLoadingFace: clearLoadingFace,
     setMoneyText: setMoneyText,
     applyExcelProbeHint: applyExcelProbeHint,
+    prefersReducedMotion: prefersReducedMotion,
+    pulseFaceSettle: pulseFaceSettle,
+    markRowsEnter: markRowsEnter,
+    bootMotionGrammar: bootMotionGrammar,
     shortHash: shortHash,
     initialsFromName: initialsFromName,
     formatPhiInitials: formatPhiInitials,

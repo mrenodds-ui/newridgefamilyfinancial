@@ -1180,6 +1180,9 @@
       });
       tbody.appendChild(tr);
     });
+    if (W.markRowsEnter) {
+      W.markRowsEnter(tbody.querySelectorAll("tr"), 16);
+    }
   }
 
   function patientJoinBit(data, list) {

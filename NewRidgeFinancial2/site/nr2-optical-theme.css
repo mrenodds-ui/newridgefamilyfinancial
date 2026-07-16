@@ -453,8 +453,116 @@ td.phi-name .phi-label,
   height: 2px; margin: var(--space-3) 0; background: repeating-linear-gradient(
     90deg, var(--hal) 0 8px, transparent 8px 16px
   ); opacity: 0.35; animation: flow 1.2s linear infinite;
+  will-change: background-position;
 }
 @keyframes flow { to { background-position: 32px 0; } }
+
+/* Package 6: motion grammar — transform/opacity only · respect reduced-motion */
+:root {
+  --nr2-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --nr2-dur: 280ms;
+  --nr2-dur-slow: 420ms;
+}
+html.nr2-motion .main.nr2-motion-enter > .mode-eyebrow,
+html.nr2-motion .main.nr2-motion-enter > h1,
+html.nr2-motion .main.nr2-motion-enter > .kicker,
+html.nr2-motion .main.nr2-motion-enter > .honesty,
+html.nr2-motion .main.nr2-motion-enter > .honesty-strip,
+html.nr2-motion .main.nr2-motion-enter > .beam,
+html.nr2-motion .main.nr2-motion-enter > .money-strip,
+html.nr2-motion .main.nr2-motion-enter > .align-bench,
+html.nr2-motion .main.nr2-motion-enter > .phi-sample,
+html.nr2-motion .main.nr2-motion-enter > .om-weekly,
+html.nr2-motion .main.nr2-motion-enter > .om-trellis,
+html.nr2-motion .main.nr2-motion-enter > .om-claims,
+html.nr2-motion .main.nr2-motion-enter > section {
+  animation: nr2-page-enter var(--nr2-dur-slow) var(--nr2-ease) both;
+}
+html.nr2-motion .main.nr2-motion-enter > h1 { animation-delay: 40ms; }
+html.nr2-motion .main.nr2-motion-enter > .kicker { animation-delay: 70ms; }
+html.nr2-motion .main.nr2-motion-enter > .beam { animation-delay: 90ms; }
+html.nr2-motion .main.nr2-motion-enter > .honesty,
+html.nr2-motion .main.nr2-motion-enter > .honesty-strip { animation-delay: 110ms; }
+html.nr2-motion .main.nr2-motion-enter > .money-strip,
+html.nr2-motion .main.nr2-motion-enter > .align-bench { animation-delay: 140ms; }
+@keyframes nr2-page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+html.nr2-motion .nr2-face-enter {
+  animation: nr2-face-enter var(--nr2-dur) var(--nr2-ease) both;
+  animation-delay: var(--nr2-stagger, 0ms);
+}
+@keyframes nr2-face-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+html.nr2-motion .nr2-face-settle {
+  animation: nr2-face-settle 360ms var(--nr2-ease) 1;
+}
+@keyframes nr2-face-settle {
+  0% { opacity: 0.55; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+html.nr2-motion .nr2-row-enter {
+  animation: nr2-row-enter var(--nr2-dur) var(--nr2-ease) both;
+  animation-delay: var(--nr2-stagger, 0ms);
+}
+@keyframes nr2-row-enter {
+  from { opacity: 0; transform: translateX(-6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+html.nr2-motion .msg {
+  animation: nr2-msg-enter var(--nr2-dur) var(--nr2-ease) both;
+}
+@keyframes nr2-msg-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+html.nr2-motion .metric-face,
+html.nr2-motion .beam-face {
+  transition: border-color var(--nr2-dur) var(--nr2-ease),
+    background-color var(--nr2-dur) var(--nr2-ease),
+    transform var(--nr2-dur) var(--nr2-ease);
+}
+html.nr2-motion .metric-face:hover,
+html.nr2-motion .beam-face:hover {
+  transform: translateY(-1px);
+}
+html.nr2-motion .beam {
+  animation-duration: 1.1s;
+}
+html.nr2-motion .nr2-ops-gate.pulse {
+  animation-duration: 1.5s;
+}
+html.nr2-motion .wk-slot,
+html.nr2-motion .om-claims-table tbody tr {
+  transition: background-color 160ms var(--nr2-ease), border-color 160ms var(--nr2-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.nr2-motion .main.nr2-motion-enter > *,
+  html.nr2-motion .nr2-face-enter,
+  html.nr2-motion .nr2-face-settle,
+  html.nr2-motion .nr2-row-enter,
+  html.nr2-motion .msg,
+  .nr2-ops-gate.pulse,
+  .nr2-skeleton,
+  .beam,
+  html.nr2-motion .metric-face,
+  html.nr2-motion .beam-face {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  html.nr2-motion .metric-face:hover,
+  html.nr2-motion .beam-face:hover {
+    transform: none;
+  }
+  .nr2-skeleton {
+    background: #1a222c;
+  }
+}
 
 .honesty, .honesty-strip {
   border-left: 3px solid var(--lock); padding: var(--space-2) var(--space-3);

@@ -152,6 +152,38 @@
   buildNav();
   renderCrumb();
 
+  function bootMotionFromNav() {
+    if (window.NR2OpticalWire && typeof window.NR2OpticalWire.bootMotionGrammar === "function") {
+      window.NR2OpticalWire.bootMotionGrammar();
+      return;
+    }
+    try {
+      if (
+        window.matchMedia &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        document.documentElement.classList.add("nr2-reduced-motion");
+        return;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    if (document.documentElement.getAttribute("data-nr2-motion") === "off") return;
+    document.documentElement.classList.add("nr2-motion");
+    const main = document.querySelector(".shell > .main, main.main");
+    if (main) main.classList.add("nr2-motion-enter");
+  }
+  // page-wire may load after nav — retry once for HAL / thin pages
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () {
+      bootMotionFromNav();
+      setTimeout(bootMotionFromNav, 0);
+    });
+  } else {
+    bootMotionFromNav();
+    setTimeout(bootMotionFromNav, 0);
+  }
+
   window.NR2OpticalNav = {
     pages: pages,
     currentPage: currentPage,

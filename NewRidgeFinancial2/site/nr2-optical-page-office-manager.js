@@ -714,6 +714,9 @@
           li.appendChild(btn);
           ul.appendChild(li);
         });
+        if (W.markRowsEnter) {
+          W.markRowsEnter(ul.querySelectorAll(".wk-slot"), 14);
+        }
         col.appendChild(ul);
       }
       grid.appendChild(col);
@@ -861,6 +864,9 @@
       frag.appendChild(row);
     });
     list.appendChild(frag);
+    if (W.markRowsEnter) {
+      W.markRowsEnter(list.querySelectorAll(".tr-row"), 16);
+    }
     return true;
   }
 
