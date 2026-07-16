@@ -158,8 +158,17 @@
       }
       const closeHint = document.getElementById("hint-close");
       if (closeHint) {
+        let mb = "";
+        const bundle = pc.morningBundle;
+        if (bundle && typeof bundle === "object") {
+          mb =
+            " · morning bundle " +
+            (bundle.ok ? "OK" : bundle.fallback ? "fallback" : "FAIL") +
+            (bundle.okCount != null ? " " + bundle.okCount : "");
+        }
         closeHint.textContent =
           closeBit +
+          mb +
           " · FORCE CLOSE pulls SoftDent when lasers red / stalled · empty ≠ $0";
       }
     }
