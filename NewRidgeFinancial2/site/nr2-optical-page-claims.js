@@ -25,12 +25,24 @@
       const count =
         claims.data.count != null ? Number(claims.data.count) : list.length;
       const total = W.money(claims.data.totalOutstanding);
-      const shown = W.fmtMoney(total);
-      if (shown) {
-        W.setText("val-snap", shown + " · " + count);
-        live = true;
+      // empty ≠ $0 — never paint $0.00 as a live claims snap
+      if (total == null || Number(total) === 0) {
+        W.setText("val-snap", null, "empty (not zero)");
+        const sh = document.getElementById("hint-snap");
+        if (sh) {
+          sh.textContent =
+            "Outstanding total empty · count " +
+            count +
+            " · SoftDent READ-ONLY · empty ≠ $0";
+        }
       } else {
-        W.setText("val-snap", null, "∅");
+        const shown = W.fmtMoney(total);
+        if (shown) {
+          W.setText("val-snap", shown + " · " + count);
+          live = true;
+        } else {
+          W.setText("val-snap", null, "∅");
+        }
       }
       const pending = list.filter((c) => /pending|denial|denied|review/i.test(String(c.status || "")));
       if (pending.length) {

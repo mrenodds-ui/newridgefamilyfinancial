@@ -45,11 +45,18 @@
   }
 
   function honestyMoney(hasData, display) {
+    if (window.NR2OpticalWire && typeof window.NR2OpticalWire.honestyMoney === "function") {
+      return window.NR2OpticalWire.honestyMoney(hasData, display);
+    }
     if (!hasData) return { text: "NO SIGNAL", empty: true };
-    if (display == null || display === "" || display === "$0" || display === "0") {
+    const d = String(display == null ? "" : display).trim();
+    if (!d || /^[∅⊘]|no signal|unavailable/i.test(d)) {
+      return { text: "NO SIGNAL", empty: true };
+    }
+    if (/^\$?\s*0(\.0+)?$/.test(d) || d === "0") {
       return { text: "empty (not zero)", empty: true };
     }
-    return { text: String(display), empty: false };
+    return { text: d, empty: false };
   }
 
   function rememberSession(id) {

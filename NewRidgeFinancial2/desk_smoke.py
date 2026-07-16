@@ -509,11 +509,10 @@ def run_desk_smoke(
         failures.append("mon_thu_appt_time")
         row_time_covered = False
 
-    overall = len(failures) == 0
     # Morning confidence: GREEN+MATCH is healthy; period Force Close stays laser-gated.
     morning_confidence = {
         "deskProof": proof_status,
-        "status": "GREEN" if overall else "RED",
+        "status": "GREEN" if len(failures) == 0 else "RED",
         "forceCloseAvailable": bool(fc_available),
         "patientAttestEligible": patient_attest_eligible,
         "forceCloseLaserGated": True,

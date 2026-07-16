@@ -324,6 +324,19 @@ def period_close_status() -> dict[str, Any]:
     force_close = bool((last or {}).get("forceClose")) or bool(
         last_force and str((last or {}).get("completedAt") or "") == str(last_force.get("completedAt") or "")
     )
+    export_blob = (last or {}).get("export") if isinstance(last, dict) else None
+    morning_bundle: dict[str, Any] | None = None
+    if isinstance(export_blob, dict):
+        morning_bundle = {
+            "ok": bool(export_blob.get("ok")),
+            "partial": bool(export_blob.get("partial")),
+            "okCount": export_blob.get("okCount"),
+            "failed": list(export_blob.get("failed") or [])[:8],
+            "reportIds": list(export_blob.get("reportIds") or [])[:8],
+            "fallback": export_blob.get("fallback"),
+            "error": str(export_blob.get("error") or "")[:200] or None,
+            "emptyNotZero": True,
+        }
     return {
         "ok": True,
         "emptyNotZero": True,
@@ -333,6 +346,7 @@ def period_close_status() -> dict[str, Any]:
         "lastClose": last,
         "lastForceClose": last_force,
         "forceClose": force_close,
+        "morningBundle": morning_bundle,
         "auto": None if last is None else bool((last or {}).get("auto")),
         "beamHash": (last or {}).get("beamHash") or state.get("beamHash"),
         "softdentTotal": sd_total,

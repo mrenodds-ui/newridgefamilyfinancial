@@ -870,39 +870,15 @@
   }
 
   function wireForceClose(readyData, readyOk) {
-    const btn = document.getElementById("btn-force-close");
-    if (!btn || btn._nr2ForceBound) return;
-    btn._nr2ForceBound = true;
-    btn.addEventListener("click", async function () {
-      if (btn.disabled || btn.classList.contains("busy")) return;
-      btn.classList.add("busy");
-      btn.disabled = true;
-      btn.textContent = "CLOSING…";
-      W.setBanner("partial", "OM FORCE CLOSE · SoftDent pull if lasers red / stalled · empty ≠ $0");
-      try {
-        await W.ensureSession();
-        const res = await W.forcePeriodClose({ actor: "optical-om" });
-        const data = res && res.data ? res.data : {};
-        const ok = !!(res && res.ok && data.ok);
+    if (!W.bindForceCloseButton) return;
+    W.bindForceCloseButton("btn-force-close", {
+      ready: readyOk ? readyData : null,
+      actor: "optical-om",
+      hintId: "hint-close",
+      onDone: function (r) {
+        const data = (r && r.data) || {};
+        const ok = !!(r && r.ok);
         const status = String(data.status || (ok ? "completed" : "failed")).toUpperCase();
-        const pull =
-          data.pullSoftdentDecided === true
-            ? " · SoftDent pull"
-            : data.pullSoftdentDecided === false
-              ? " · attest-only"
-              : "";
-        const hash = data.beamHash ? " · hash " + String(data.beamHash).slice(0, 8) : "";
-        const fallback = data.fallback ? " · " + String(data.fallback) : "";
-        W.setBanner(
-          ok ? "live" : "partial",
-          "OM FORCE CLOSE · " +
-            status +
-            pull +
-            fallback +
-            hash +
-            (ok ? "" : " · " + String(data.error || "failed")) +
-            " · empty ≠ $0"
-        );
         if (ok) {
           W.setText("val-close", status);
           const el = document.getElementById("val-close");
@@ -912,18 +888,13 @@
           const el = document.getElementById("val-close");
           if (el) el.classList.add("stale");
         }
-      } catch (err) {
-        W.setBanner(
-          "partial",
-          "OM FORCE CLOSE fault · " + String(err && err.message ? err.message : err)
-        );
-      } finally {
-        btn.classList.remove("busy");
-        btn.textContent = "FORCE CLOSE";
+        if (r && r.bit) W.setBanner(ok ? "live" : "partial", "OM " + r.bit);
+      },
+      onFinally: function () {
         setTimeout(function () {
           boot();
         }, 400);
-      }
+      },
     });
   }
 
@@ -1046,6 +1017,9 @@
         ? W.forceCloseAvailable(readyData)
         : false;
       btn.disabled = !ready.ok || !available;
+      btn.title = available
+        ? "FORCE CLOSE · SoftDent pull when lasers red or close stalled; else attest-only · empty ≠ $0"
+        : "FORCE CLOSE · available when lasers red or period-close stalled/blocked (not on MATCH alone)";
     }
 
     const opsBits = [];

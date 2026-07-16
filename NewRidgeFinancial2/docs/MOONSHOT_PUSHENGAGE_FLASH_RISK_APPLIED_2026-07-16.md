@@ -27,3 +27,4 @@ Moonshot later invented paths (`integrations/push_risk/`, `optical/hal_push_brid
 - Do not paste third-party chat / web-push embeds into NR2 production pages.
 - Visiting the PushEngage URL in a browser does not inject code into NR2.
 - Adobe Flash / .swf risk: none for the listed widgets (HTML5).
+- Cursor rule: `.cursor/rules/no-third-party-chat-embeds.mdc`

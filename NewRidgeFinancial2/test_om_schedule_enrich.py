@@ -66,6 +66,16 @@ def _seed(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def test_appointments_range_early_returns_emit_appt_time_column(monkeypatch):
+    import nr2_softdent_daily as daily
+
+    monkeypatch.setattr(daily, "_open_db", lambda: (None, None))
+    snap = daily.appointments_range_snapshot("2026-07-14", days=2)
+    assert snap.get("apptTimeColumn") is False
+    assert snap.get("emptyNotZero") is True
+    assert snap.get("hasData") is False
+
+
 def test_appointments_range_ada_and_time(monkeypatch, tmp_path):
     import nr2_softdent_daily as daily
 

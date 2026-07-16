@@ -408,7 +408,14 @@ def appointments_range_snapshot(
 
     conn, db_path = _open_db()
     if not conn:
-        return {"hasData": False, "days": [], "source": "none", "dbPath": str(db_path) if db_path else None}
+        return {
+            "hasData": False,
+            "days": [],
+            "source": "none",
+            "dbPath": str(db_path) if db_path else None,
+            "apptTimeColumn": False,
+            "emptyNotZero": True,
+        }
 
     try:
         if not _table_exists(conn, "sd_appointments"):
@@ -417,6 +424,8 @@ def appointments_range_snapshot(
                 "days": [],
                 "source": "none",
                 "dbPath": str(db_path),
+                "apptTimeColumn": False,
+                "emptyNotZero": True,
                 "emptyMessage": "sd_appointments table missing — run SoftDent extract.",
             }
 
@@ -434,7 +443,14 @@ def appointments_range_snapshot(
         try:
             start_dt = datetime.fromisoformat(start_raw)
         except ValueError:
-            return {"hasData": False, "days": [], "source": "none", "error": "invalid start date"}
+            return {
+                "hasData": False,
+                "days": [],
+                "source": "none",
+                "error": "invalid start date",
+                "apptTimeColumn": "appt_time" in appt_cols,
+                "emptyNotZero": True,
+            }
 
         day_count = max(1, min(int(days or 4), 14))
         dates = [(start_dt + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(day_count)]

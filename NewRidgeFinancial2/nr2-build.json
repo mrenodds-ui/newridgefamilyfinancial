@@ -3,7 +3,7 @@
   "BUILD_ID": "nr2-12070-trellis-om-huddle",
   "assetVersion": "nr2-12070-trellis-om-huddle",
   "builtAt": "2026-07-16T12:40:00.000Z",
-  "notes": "nr2-12070: OM Trellis tomorrow-insurance panel + GET /api/trellis/tomorrow-insurance; PushEngage consult hygiene (AVOID embeds); desk smoke probes Trellis route. SoftDent write-back forbidden. Restart NR2 server to load new routes.",
+  "notes": "nr2-12070: OM Trellis tomorrow-insurance + desk smoke Trellis/morningConfidence; appointments-range always emits apptTimeColumn; PushEngage AVOID embeds; Force Close stays laser-gated. SoftDent write-back forbidden. Restart NR2 server to load new routes.",
   "staffRenderMode": "nr2-clean",
   "package": "NR2-12070-TRELLIS-OM-HUDDLE",
   "compat": false,
