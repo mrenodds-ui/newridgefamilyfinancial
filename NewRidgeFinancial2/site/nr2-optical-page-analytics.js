@@ -3,15 +3,78 @@
   const W = window.NR2OpticalWire;
   if (!W) return;
 
+  function currentMonthPrefix() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0");
+  }
+
+  function sumCollectionsMtd(data) {
+    if (!data || !data.hasData || !Array.isArray(data.values)) return null;
+    const labels = Array.isArray(data.labels) ? data.labels : [];
+    const prefix = currentMonthPrefix();
+    let sum = 0;
+    let any = false;
+    data.values.forEach(function (v, i) {
+      const day = String(labels[i] || "");
+      if (!day.startsWith(prefix)) return;
+      const n = W.money(v);
+      if (n != null) {
+        sum += n;
+        any = true;
+      }
+    });
+    return any ? sum : null;
+  }
+
+  function morningBundleLabel(ready) {
+    const bundle = ready && ready.periodClose && ready.periodClose.morningBundle;
+    if (!bundle || typeof bundle !== "object") return { text: "—", tone: "NO SIGNAL", hint: "No morning bundle signal" };
+    if (bundle.ok) {
+      return {
+        text: "OK",
+        tone: "hal",
+        hint:
+          "Morning bundle ok" +
+          (bundle.okCount != null ? " · " + bundle.okCount + " reports" : "") +
+          " · empty ≠ $0",
+      };
+    }
+    if (bundle.fallback) {
+      return {
+        text: "FALLBACK",
+        tone: "stale",
+        hint: "Attest-only fallback · run morning_bundle_attended after Excel enable",
+      };
+    }
+    const err = bundle.error || bundle.detail || "";
+    return {
+      text: "FAIL",
+      tone: "stale",
+      hint: "Excel gate or export fault" + (err ? " · " + String(err).slice(0, 40) : ""),
+    };
+  }
+
   async function boot() {
     W.setBanner("partial", "Wiring morning huddle · empty ≠ $0");
 
-    const [beamsRes, ready, smoke, aging, trellis] = await Promise.all([
+    const [
+      beamsRes,
+      ready,
+      smoke,
+      aging,
+      trellis,
+      collections,
+      npm,
+      production,
+    ] = await Promise.all([
       W.getMoneyBeams(12000),
       W.getJson("/api/import-readiness", 12000),
       W.getJson("/api/health/desk-smoke?run=0", 8000),
       W.getJson("/api/claims/aging-summary", 12000),
       W.getJson("/api/trellis/eligibility-report", 12000),
+      W.getJson("/api/softdent/collections-daily", 12000),
+      W.getJson("/api/softdent/new-patients-mtd", 12000),
+      W.getJson("/api/softdent/provider-production", 12000),
     ]);
 
     const readyData = ready.ok ? ready.data : null;
@@ -35,12 +98,22 @@
     if (beams && beams.ok) live = true;
 
     const pc = (readyData && readyData.periodClose) || {};
-    const closeStatus = String(pc.status || (readyData && readyData.operationContext && readyData.operationContext.periodCloseStatus) || "—").toUpperCase();
+    const closeStatus = String(
+      pc.status ||
+        (readyData &&
+          readyData.operationContext &&
+          readyData.operationContext.periodCloseStatus) ||
+        "—"
+    ).toUpperCase();
     W.setText("an-close", closeStatus, closeStatus === "COMPLETED" ? "hal" : "stale");
     const hintClose = document.getElementById("hint-an-close");
     if (hintClose) {
+      const mb = morningBundleLabel(readyData);
       hintClose.textContent =
-        "Shadow SOR=false · completedAt " + String(pc.completedAt || pc.lastCloseAt || "—");
+        "Shadow SOR=false · completedAt " +
+        String(pc.completedAt || pc.lastCloseAt || "—") +
+        " · bundle " +
+        mb.text;
     }
 
     if (smoke.ok && smoke.data) {
@@ -101,10 +174,83 @@
       if (summary) summary.textContent = "No Trellis report for target date yet";
     }
 
+    if (collections.ok && collections.data) {
+      const mtd = sumCollectionsMtd(collections.data);
+      const shown = W.fmtMoney(mtd);
+      if (shown) {
+        W.setText("an-coll", shown);
+        live = true;
+      } else {
+        W.setText("an-coll", null, "∅");
+      }
+      const hintColl = document.getElementById("hint-an-coll");
+      if (hintColl) {
+        hintColl.textContent =
+          "MTD " +
+          currentMonthPrefix() +
+          " · source " +
+          String(collections.data.source || "sd_payments") +
+          " · empty ≠ $0";
+      }
+    } else {
+      W.setText("an-coll", null, "NO SIGNAL");
+    }
+
+    if (npm.ok && npm.data && npm.data.hasData) {
+      const n = npm.data.count != null ? Number(npm.data.count) : null;
+      W.setText("an-npm", n != null ? String(n) : "—");
+      const hintNpm = document.getElementById("hint-an-npm");
+      if (hintNpm) {
+        hintNpm.textContent =
+          "Period " +
+          String(npm.data.period || currentMonthPrefix()) +
+          " · " +
+          String(npm.data.source || "sd_patients");
+      }
+      live = true;
+    } else {
+      W.setText("an-npm", null, "∅");
+    }
+
+    if (production.ok && production.data && production.data.hasData) {
+      const shown = W.fmtMoney(W.money(production.data.total));
+      if (shown) {
+        W.setText("an-prod", shown);
+        live = true;
+      } else {
+        W.setText("an-prod", null, "∅");
+      }
+      const providers = Array.isArray(production.data.providers)
+        ? production.data.providers.slice(0, 3)
+        : [];
+      const hintProd = document.getElementById("hint-an-prod");
+      if (hintProd) {
+        hintProd.textContent = providers.length
+          ? providers
+              .map(function (p) {
+                return (
+                  String(p.providerCode || "?") +
+                  " " +
+                  (W.fmtMoney(W.money(p.production)) || "∅")
+                );
+              })
+              .join(" · ")
+          : String(production.data.source || "sd_procedures");
+      }
+    } else {
+      W.setText("an-prod", null, "NO SIGNAL");
+    }
+
+    const bundle = morningBundleLabel(readyData);
+    W.setText("an-bundle", bundle.text, bundle.tone === "hal" ? "hal" : bundle.tone === "stale" ? "stale" : null);
+    const hintBundle = document.getElementById("hint-an-bundle");
+    if (hintBundle) hintBundle.textContent = bundle.hint;
+    if (bundle.tone === "hal") live = true;
+
     W.setBanner(
       live ? "live" : "partial",
       live
-        ? "Morning huddle LIVE · beams + counts · empty ≠ $0"
+        ? "Morning huddle LIVE · beams + MTD + counts · empty ≠ $0"
         : "Morning huddle partial · check import readiness"
     );
   }

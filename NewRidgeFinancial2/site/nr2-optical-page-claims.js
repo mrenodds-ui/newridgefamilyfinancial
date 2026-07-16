@@ -866,6 +866,47 @@
     });
   }
 
+  function patientJoinBit(data, list) {
+    const sample = Array.isArray(list) ? list : [];
+    if (data && data.sampleWithPatientId != null && Number.isFinite(Number(data.sampleWithPatientId))) {
+      return {
+        joined: Number(data.sampleWithPatientId),
+        sample: sample.length,
+      };
+    }
+    const joined = sample.filter(function (c) {
+      return !!(c && c.patientId);
+    }).length;
+    return { joined: joined, sample: sample.length };
+  }
+
+  function snapHintText(data, count, totalBit) {
+    const list = data && Array.isArray(data.claims) ? data.claims : [];
+    const pj = patientJoinBit(data, list);
+    let base =
+      totalBit ||
+      "Outstanding total · count " + count + " · SoftDent READ-ONLY · empty ≠ $0";
+    if (pj.sample > 0) {
+      base += " · patient join " + pj.joined + "/" + pj.sample + " in sample";
+    }
+    return base;
+  }
+
+  function applyClaimsJoinHonesty(data) {
+    const honesty = document.getElementById("cl-honesty");
+    if (!honesty || !data) return;
+    const list = Array.isArray(data.claims) ? data.claims : [];
+    const pj = patientJoinBit(data, list);
+    if (pj.sample > 0) {
+      honesty.textContent =
+        "Honesty: empty ≠ $0 · patient join " +
+        pj.joined +
+        "/" +
+        pj.sample +
+        " in sample · no SoftDent write-back · staff shows full names";
+    }
+  }
+
   async function loadClaimsOutstanding() {
     const summary = document.getElementById("cl-summary");
     const tbody = document.getElementById("cl-tbody");
@@ -892,6 +933,7 @@
       return { ok: false, data: null };
     }
     renderClaimsOutstanding(res.data);
+    applyClaimsJoinHonesty(res.data);
     try {
       const raw = sessionStorage.getItem("nr2.claims.focus");
       if (raw) {
@@ -992,10 +1034,11 @@
         W.setText("val-snap", null, "empty (not zero)");
         const sh = document.getElementById("hint-snap");
         if (sh) {
-          sh.textContent =
-            "Outstanding total empty · count " +
-            count +
-            " · SoftDent READ-ONLY · empty ≠ $0";
+          sh.textContent = snapHintText(
+            claims.data,
+            count,
+            "Outstanding total empty · count " + count + " · SoftDent READ-ONLY · empty ≠ $0"
+          );
         }
       } else {
         const shown = W.fmtMoney(total);
@@ -1005,6 +1048,8 @@
         } else {
           W.setText("val-snap", null, "∅");
         }
+        const sh = document.getElementById("hint-snap");
+        if (sh) sh.textContent = snapHintText(claims.data, count);
       }
       const pending = list.filter(function (c) {
         return /pending|denial|denied|review/i.test(String(c.status || ""));
@@ -1090,6 +1135,7 @@
         ? "Claims STALE · lasers red on softdent · list + dossier · empty ≠ $0"
         : "Claims list LIVE · click row for context · ERA inbox read-only · empty ≠ $0"
     );
+    applyClaimsJoinHonesty(claims.ok ? claims.data : null);
   }
 
   boot().catch(function (err) {
