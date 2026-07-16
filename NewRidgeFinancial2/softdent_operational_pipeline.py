@@ -264,11 +264,13 @@ def build_clinical_notes_rows(transactions: list[dict[str, Any]]) -> list[dict[s
 
 
 def _code_is_insurance_payment(code: str) -> bool:
+    """SoftDent insurance check payment codes only (not ADA 2xxx procedures)."""
     text = str(code or "").strip()
     if not text:
         return False
     base = text.split(".")[0]
-    return base in INSURANCE_PAYMENT_CODES or text.startswith("2")
+    # Exact SoftDent payment family: 2, 2.01, … — never startswith("2") (ADA 2110/2740…).
+    return base == "2"
 
 
 def _code_is_insurance_writeoff(code: str) -> bool:
@@ -276,15 +278,42 @@ def _code_is_insurance_writeoff(code: str) -> bool:
     if not text:
         return False
     base = text.split(".")[0]
-    return base in INSURANCE_WRITEOFF_CODES or text.startswith("51") or text.startswith("52")
+    return base in INSURANCE_WRITEOFF_CODES
+
+
+def _account_stem(patient_id: str) -> str:
+    """SoftDent account family stem (patient IDs share a prefix within an account)."""
+    pid = str(patient_id or "").strip()
+    if pid.isdigit() and len(pid) > 4:
+        return pid[:-2]
+    return pid
+
+
+def _build_settlement_date_index(transactions: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """Account-stem → SoftDent dates with insurance payment or contractual write-off."""
+    out: dict[str, set[str]] = {}
+    for row in transactions:
+        code = str(row.get("code") or "").strip()
+        if not (_code_is_insurance_payment(code) or _code_is_insurance_writeoff(code)):
+            continue
+        report_date = str(row.get("reportDate") or "").strip()
+        if not report_date:
+            continue
+        stem = _account_stem(str(row.get("patientId") or ""))
+        if not stem:
+            continue
+        out.setdefault(stem, set()).add(report_date)
+    return out
 
 
 def _claim_status_for_patient_day(
     patient_id: str,
     report_date: str,
     transactions: list[dict[str, Any]],
+    *,
+    settlement_index: dict[str, set[str]] | None = None,
 ) -> str:
-    """Active vs settled for SoftDent patient+DOS (Paid/Denied are not active)."""
+    """Active vs settled for SoftDent patient+DOS (Paid/Denied are not unpaid/active)."""
     same_day = [
         row
         for row in transactions
@@ -295,14 +324,13 @@ def _claim_status_for_patient_day(
         return "Paid"
     if any(_code_is_insurance_writeoff(c) for c in codes):
         return "Denied"
-    # SoftDent insurance payment posted on/after DOS ⇒ treat as completed/paid (not active).
-    for row in transactions:
-        if str(row.get("patientId") or "") != patient_id:
-            continue
-        later = str(row.get("reportDate") or "")
-        if not later or later < report_date:
-            continue
-        if _code_is_insurance_payment(str(row.get("code") or "")):
+    index = settlement_index
+    if index is None:
+        index = _build_settlement_date_index(transactions)
+    stem = _account_stem(patient_id)
+    for settle_date in index.get(stem, ()):
+        if settle_date >= report_date:
+            # SoftDent insurance pay or write-off on/after DOS ⇒ claim is paid/completed.
             return "Paid"
     return "Pending Review"
 
@@ -370,15 +398,21 @@ def build_claims_rows(
     *,
     claim_id_prefix: str = "DS",
     awaiting_reason: str = "Awaiting insurance response.",
+    unpaid_only: bool = True,
 ) -> list[dict[str, Any]]:
     claims: list[dict[str, Any]] = []
     seen: set[str] = set()
     prefix = str(claim_id_prefix or "DS").strip().upper() or "DS"
+    settlement_index = _build_settlement_date_index(transactions)
     for idx, row in enumerate(transactions):
         code = str(row.get("code") or "").strip()
         if not code or code in INSURANCE_PAYMENT_CODES or code in INSURANCE_WRITEOFF_CODES:
             continue
         if code in SKIP_CLINICAL_CODES:
+            continue
+        # Never treat SoftDent ADA 2xxx as insurance payment codes here.
+        base = code.split(".")[0]
+        if base in INSURANCE_PAYMENT_CODES or base in INSURANCE_WRITEOFF_CODES:
             continue
         production = row.get("production")
         if production in (None, 0):
@@ -394,7 +428,14 @@ def build_claims_rows(
         if claim_key in seen:
             continue
         seen.add(claim_key)
-        status = _claim_status_for_patient_day(patient_id, report_date, transactions)
+        status = _claim_status_for_patient_day(
+            patient_id,
+            report_date,
+            transactions,
+            settlement_index=settlement_index,
+        )
+        if unpaid_only and not is_active_claim_status(status):
+            continue
         claim_id = f"{prefix}-{report_date.replace('-', '')}-{patient_id}-{code}-{idx + 1}"
         claims.append(
             {
@@ -543,9 +584,10 @@ def build_transactions_claims_dataset(path: Path | None = None) -> dict[str, Any
     line_rows = build_claims_rows(
         transactions,
         claim_id_prefix="TXN",
+        unpaid_only=True,
         awaiting_reason=(
-            "SoftDent Trans-for-a-Period: production with no same-day insurance "
-            "payment/write-off (Outstanding Claims Excel greyed — SoftDent estimate)."
+            "SoftDent Trans-for-a-Period: production with no SoftDent insurance "
+            "payment/write-off on or after DOS (Outstanding Claims Excel greyed)."
         ),
     )
     # Roll up procedure lines → SoftDent-like claim batches (patient + DOS).

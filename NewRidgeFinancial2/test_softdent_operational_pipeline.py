@@ -48,9 +48,42 @@ class SoftDentOperationalPipelineTests(unittest.TestCase):
             {"patientId": "9", "patientName": "Kelley, Reese", "code": "1110", "description": "Prophylaxis - Adult", "production": 137.0, "reportDate": "2026-05-28"},
             {"patientId": "9", "patientName": "Kelley, Reese", "code": "2", "description": "Insurance Check Payment", "production": None, "reportDate": "2026-05-28"},
         ]
-        claims = build_claims_rows(transactions)
+        claims = build_claims_rows(transactions, unpaid_only=False)
         self.assertEqual(len(claims), 1)
         self.assertEqual(claims[0]["ClaimStatus"], "Paid")
+        self.assertEqual(build_claims_rows(transactions, unpaid_only=True), [])
+
+    def test_ada_2xxx_is_not_insurance_payment(self) -> None:
+        from softdent_operational_pipeline import _code_is_insurance_payment
+
+        self.assertTrue(_code_is_insurance_payment("2"))
+        self.assertTrue(_code_is_insurance_payment("2.01"))
+        self.assertFalse(_code_is_insurance_payment("2740"))
+        self.assertFalse(_code_is_insurance_payment("2110"))
+
+    def test_later_writeoff_excludes_unpaid_claim(self) -> None:
+        transactions = [
+            {
+                "patientId": "405802",
+                "patientName": "Vo, Ngau Thi",
+                "code": "1110",
+                "description": "Prophy",
+                "production": 137.0,
+                "reportDate": "2026-01-07",
+            },
+            {
+                "patientId": "405802",
+                "patientName": "Vo, Ngau Thi",
+                "code": "51",
+                "description": "Insurance Co Write-Off",
+                "production": None,
+                "reportDate": "2026-01-12",
+            },
+        ]
+        unpaid = build_claims_rows(transactions, unpaid_only=True)
+        self.assertEqual(unpaid, [])
+        marked = build_claims_rows(transactions, unpaid_only=False)
+        self.assertEqual(marked[0]["ClaimStatus"], "Paid")
 
     def test_build_claims_prefers_sd_claims_payer_when_available(self) -> None:
         from softdent_operational_pipeline import _sd_claims_payer_index

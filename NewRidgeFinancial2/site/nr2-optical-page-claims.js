@@ -293,7 +293,7 @@
     const rangeEl = document.getElementById("cl-range-label");
     if (!tbody) return;
     tbody.textContent = "";
-    const claims = data && Array.isArray(data.claims) ? data.claims.slice() : [];
+    let claims = data && Array.isArray(data.claims) ? data.claims.slice() : [];
     const count = data && data.count != null ? Number(data.count) : claims.length;
     const sampleLimit =
       data && data.sampleLimit != null ? Number(data.sampleLimit) : claims.length;
@@ -330,6 +330,37 @@
       td.textContent =
         (data && data.emptyMessage) ||
         "No outstanding SoftDent claims in sample — sync SoftDent or empty queue.";
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+      return;
+    }
+    // SoftDent unpaid only — never show paid/completed/denied/closed rows.
+    claims = claims.filter(function (c) {
+      const st = String((c && c.status) || "")
+        .trim()
+        .toLowerCase();
+      if (!st) return true;
+      if (
+        st === "paid" ||
+        st === "closed" ||
+        st === "complete" ||
+        st === "completed" ||
+        st === "denied" ||
+        st === "done" ||
+        st === "settled" ||
+        st.indexOf("paid") === 0 ||
+        st.indexOf("complete") >= 0
+      ) {
+        return false;
+      }
+      return true;
+    });
+    if (!claims.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.className = "cl-empty";
+      td.textContent = "No unpaid SoftDent claims in sample — empty ≠ $0.";
       tr.appendChild(td);
       tbody.appendChild(tr);
       return;
