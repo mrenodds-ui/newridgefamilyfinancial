@@ -10,8 +10,10 @@ from unittest import mock
 from softdent_gui_export import (
     _is_reclaimable_focus_title,
     _is_softdent_excel_workbook_name,
+    _softdent_select_file_path,
     load_menu_map,
     resolve_menu_keys,
+    resolve_select_file_folder,
     run_catalog_exports,
     run_safe_period_exports,
     softdent_report_preview_visible,
@@ -40,6 +42,17 @@ class SoftDentGuiExportTests(unittest.TestCase):
     def test_ag_excel_stem_recognized(self):
         self.assertTrue(_is_softdent_excel_workbook_name("AG260716.XLS"))
         self.assertTrue(_is_softdent_excel_workbook_name("AGE260716.XLS"))
+
+    def test_select_file_path_keeps_softdent_folder(self):
+        self.assertEqual(
+            _softdent_select_file_path("AG260716", r"E:\OneDrive\Documents\AcctAge\OLD"),
+            r"E:\OneDrive\Documents\AcctAge\AG260716",
+        )
+
+    def test_select_file_path_uses_office_folder_when_empty(self):
+        office = resolve_select_file_folder()
+        self.assertEqual(_softdent_select_file_path("AG260716", ""), str(office / "AG260716"))
+        self.assertEqual(_softdent_select_file_path("REG2607", "REG2607"), str(office / "REG2607"))
 
     def test_menu_map_phase1_ids(self):
         catalog = load_menu_map()

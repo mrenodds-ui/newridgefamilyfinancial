@@ -16,6 +16,8 @@
   ],
   "pathPrefix": "{F10} r a",
   "pathPrefixPracticeManagement": "{F10} r p",
+  "selectFileFolder": "E:\\OneDrive\\Documents",
+  "selectFileFolderEnv": "SOFTDENT_SELECT_FILE_FOLDER",
   "reports": {
     "register": {
       "id": "register",

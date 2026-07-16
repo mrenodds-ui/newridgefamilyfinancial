@@ -1036,6 +1036,28 @@ def load_menu_map(path: Path | None = None) -> dict[str, Any]:
     return json.loads(map_path.read_text(encoding="utf-8-sig"))
 
 
+DEFAULT_SELECT_FILE_FOLDER = Path(r"E:\OneDrive\Documents")
+
+
+def resolve_select_file_folder(catalog: dict[str, Any] | None = None) -> Path:
+    """Office folder SoftDent accepts in Select File Name (never SoftDentReportExports)."""
+    env_name = ""
+    if catalog is None:
+        try:
+            catalog = load_menu_map()
+        except Exception:
+            catalog = {}
+    env_name = str((catalog or {}).get("selectFileFolderEnv") or "SOFTDENT_SELECT_FILE_FOLDER").strip()
+    if env_name:
+        env_val = str(os.environ.get(env_name) or "").strip()
+        if env_val:
+            return Path(env_val)
+    folder = str((catalog or {}).get("selectFileFolder") or "").strip()
+    if folder:
+        return Path(folder)
+    return DEFAULT_SELECT_FILE_FOLDER
+
+
 def resolve_menu_keys(report: dict[str, Any], override: str | None = None) -> str:
     if override and str(override).strip():
         return str(override).strip()
@@ -1127,7 +1149,9 @@ def _softdent_select_file_path(stem_only: str, current: str = "") -> str:
     SoftDent v19 shows ONE edit (e.g. ``E:\\OneDrive\\Documents\\AcctAge``) plus
     static ``.XLS``. That folder is SoftDent's valid export path for this office —
     never replace it with ``C:\\SOFTDE~1`` / SoftDentReportExports (SoftDent
-    rejects those as invalid directory). Only swap the file stem; NR2 copies
+    rejects those as invalid directory). When the edit is empty or stem-only,
+    supply ``selectFileFolder`` from the menu map (``E:\\OneDrive\\Documents``).
+    Only swap the file stem when SoftDent already shows a folder; NR2 copies
     into SoftDentReportExports after SoftDent writes the XLS.
     """
     stem = _softdent_file_stem(stem_only)
@@ -1136,23 +1160,21 @@ def _softdent_select_file_path(stem_only: str, current: str = "") -> str:
         if cur.lower().endswith(suf.lower()):
             cur = cur[: -len(suf)]
             break
-    if not cur:
-        raise RuntimeError(
-            "SoftDent Select File Name has no path — refuse inventing a directory. "
-            "SoftDent must show its own folder (e.g. OneDrive\\Documents\\AcctAge)."
-        )
-    p = Path(cur)
-    folder = str(p.parent) if str(p.parent) not in {".", ""} else ""
-    # SoftDent must already have a real folder (drive/UNC). Do not invent one.
-    if not folder or folder in {".", ""} or not (
-        "\\" in cur or "/" in cur or (len(cur) >= 2 and cur[1] == ":")
-    ):
-        raise RuntimeError(
-            f"SoftDent Select File Name folder invalid/missing from {current!r}. "
-            "Do not substitute SoftDentReportExports — SoftDent rejects it."
-        )
-    # SoftDent File dialog: SoftDentFolder\STEM (no extension — UI shows .XLS)
-    return str(Path(folder) / stem)
+    folder = ""
+    if cur:
+        p = Path(cur)
+        folder = str(p.parent) if str(p.parent) not in {".", ""} else ""
+        if folder and folder not in {".", ""} and (
+            "\\" in cur or "/" in cur or (len(cur) >= 2 and cur[1] == ":")
+        ):
+            return str(Path(folder) / stem)
+    office_folder = resolve_select_file_folder()
+    logger.info(
+        "SoftDent Select File Name empty/invalid (%r) — using office folder %s",
+        current,
+        office_folder,
+    )
+    return str(office_folder / stem)
 
 
 def _focus_select_file_name_filename_edit(dlg) -> tuple[int, str]:
