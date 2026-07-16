@@ -3816,6 +3816,51 @@ class NR2BottleServer(BottleServer):
             period = str(bottle.request.query.get("period") or "").strip() or None
             return _json_response(hygiene_recall_summary(period=period))
 
+        @app.get("/api/nr2/financial-recall")
+        def nr2_financial_recall_api():
+            """Board-safe financial recall candidates for Lighthouse CSV import."""
+            import bottle
+            from nr2_financial_recall import financial_recall_candidates
+
+            def _float_param(name: str) -> float | None:
+                raw = str(bottle.request.query.get(name) or "").strip()
+                if not raw:
+                    return None
+                try:
+                    return float(raw)
+                except ValueError:
+                    return None
+
+            def _int_param(name: str) -> int | None:
+                raw = str(bottle.request.query.get(name) or "").strip()
+                if not raw:
+                    return None
+                try:
+                    return int(raw)
+                except ValueError:
+                    return None
+
+            return _json_response(
+                financial_recall_candidates(
+                    min_balance=_float_param("minBalance"),
+                    min_months_since_visit=_int_param("minMonths"),
+                    max_rows=_int_param("limit"),
+                )
+            )
+
+        @app.get("/api/nr2/financial-recall/export.csv")
+        def nr2_financial_recall_csv_api():
+            import bottle
+            from nr2_financial_recall import financial_recall_csv
+
+            csv_text = financial_recall_csv()
+            bottle.response.content_type = "text/csv; charset=utf-8"
+            bottle.response.set_header(
+                "Content-Disposition",
+                'attachment; filename="nr2-financial-recall.csv"',
+            )
+            return csv_text
+
         @app.get("/api/softdent/operatory-grid")
         def softdent_operatory_grid_api():
             from nr2_softdent_daily import operatory_grid

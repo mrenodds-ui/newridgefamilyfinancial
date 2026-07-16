@@ -68,6 +68,7 @@
       npm,
       production,
       hygiene,
+      recall,
     ] = await Promise.all([
       W.getMoneyBeams(12000),
       W.getJson("/api/import-readiness", 12000),
@@ -79,6 +80,7 @@
       W.getJson("/api/softdent/new-patients-mtd", 12000),
       W.getJson("/api/softdent/provider-production", 12000),
       W.getJson("/api/softdent/hygiene-recall", 12000),
+      W.getJson("/api/nr2/financial-recall", 12000),
     ]);
 
     const readyData = ready.ok ? ready.data : null;
@@ -307,6 +309,26 @@
       }
     } else {
       W.setText("an-hygiene", null, "NO SIGNAL");
+    }
+
+    const recallSummary = document.getElementById("an-recall-summary");
+    if (recall.ok && recall.data && recall.data.ok) {
+      const count = Number(recall.data.count || 0);
+      if (recallSummary) {
+        recallSummary.textContent =
+          count > 0
+            ? "Recall candidates " +
+              String(count) +
+              " · min $" +
+              String((recall.data.config && recall.data.config.minBalance) || "—") +
+              " · " +
+              String((recall.data.config && recall.data.config.minMonthsSinceVisit) || "—") +
+              " mo since visit · board-safe"
+            : "No recall rows match filters yet · empty ≠ $0";
+      }
+      if (count > 0) live = true;
+    } else if (recallSummary) {
+      recallSummary.textContent = "Financial recall NO SIGNAL · check sd_claims + sd_patients";
     }
 
     W.setBanner(

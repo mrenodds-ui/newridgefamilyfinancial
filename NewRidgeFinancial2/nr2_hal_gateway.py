@@ -1299,6 +1299,31 @@ def try_local_policy_reply(
 
     if re.search(
         r"\b("
+        r"financial\s+recall|"
+        r"lighthouse\s+recall|"
+        r"balance\s+recall\s+list|"
+        r"recall\s+export"
+        r")\b",
+        q,
+    ):
+        try:
+            from nr2_financial_recall import format_financial_recall_hal_reply
+
+            return {
+                "text": format_financial_recall_hal_reply(q),
+                "intent": "policy:financial-recall-export",
+            }
+        except Exception:
+            return {
+                "text": (
+                    "Financial recall export is read-only: GET /api/nr2/financial-recall "
+                    "or export.csv (initials+hash · balance band · no Lighthouse SMS embed)."
+                ),
+                "intent": "policy:financial-recall-export",
+            }
+
+    if re.search(
+        r"\b("
         r"re[- ]?export\s+(?:the\s+)?(?:july\s+)?register|"
         r"export\s+(?:the\s+)?(?:july\s+)?register\s+again|"
         r"(hope|hoping|want|need).{0,40}ins\s*plan.{0,20}(>\s*0|greater|positive)|"
