@@ -660,9 +660,48 @@ a:hover { color: var(--hal); }
 .om-claims-table tbody tr {
   cursor: pointer;
 }
+.om-claims-table tbody tr.age-ok {
+  background: rgba(0, 212, 170, 0.1);
+  box-shadow: inset 3px 0 0 var(--sd);
+}
+.om-claims-table tbody tr.age-warn {
+  background: rgba(232, 168, 56, 0.12);
+  box-shadow: inset 3px 0 0 #e8a838;
+}
+.om-claims-table tbody tr.age-late {
+  background: rgba(232, 140, 40, 0.14);
+  box-shadow: inset 3px 0 0 #e07a28;
+}
+.om-claims-table tbody tr.age-critical {
+  background: rgba(220, 72, 72, 0.14);
+  box-shadow: inset 3px 0 0 #dc4848;
+}
+.om-claims-table tbody tr.age-unknown {
+  opacity: 0.85;
+}
+.om-claims-table tbody tr.age-ok .age-cell { color: var(--sd); }
+.om-claims-table tbody tr.age-warn .age-cell { color: #e8a838; }
+.om-claims-table tbody tr.age-late .age-cell { color: #e07a28; }
+.om-claims-table tbody tr.age-critical .age-cell { color: #f07070; }
 .om-claims-table tbody tr:hover,
 .om-claims-table tbody tr.is-active {
-  background: rgba(232, 168, 56, 0.08);
+  filter: brightness(1.12);
+}
+.om-claims-table tbody tr.age-ok:hover,
+.om-claims-table tbody tr.age-ok.is-active {
+  background: rgba(0, 212, 170, 0.18);
+}
+.om-claims-table tbody tr.age-warn:hover,
+.om-claims-table tbody tr.age-warn.is-active {
+  background: rgba(232, 168, 56, 0.2);
+}
+.om-claims-table tbody tr.age-late:hover,
+.om-claims-table tbody tr.age-late.is-active {
+  background: rgba(232, 140, 40, 0.22);
+}
+.om-claims-table tbody tr.age-critical:hover,
+.om-claims-table tbody tr.age-critical.is-active {
+  background: rgba(220, 72, 72, 0.22);
 }
 .om-claims-table .cl-empty,
 .om-claims-table .cl-fault {
@@ -765,6 +804,10 @@ a:hover { color: var(--hal); }
   .om-claims-wrap { max-height: none; overflow: visible; border-color: #999; }
   .om-claims-body { grid-template-columns: 1fr; }
   .om-claims-table th, .om-claims-table td { border-color: #ccc; color: #222; }
+  .om-claims-table tbody tr.age-ok { background: #e8fff6; box-shadow: inset 3px 0 0 #0a8; }
+  .om-claims-table tbody tr.age-warn { background: #fff6e0; box-shadow: inset 3px 0 0 #c90; }
+  .om-claims-table tbody tr.age-late { background: #ffecd8; box-shadow: inset 3px 0 0 #d60; }
+  .om-claims-table tbody tr.age-critical { background: #ffe0e0; box-shadow: inset 3px 0 0 #c33; }
   .om-weekly-body { grid-template-columns: 1fr; }
   .wk-days-grid { grid-template-columns: repeat(4, 1fr); }
   .wk-day { border-color: #999; background: #fff; break-inside: avoid; }

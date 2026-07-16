@@ -30,6 +30,15 @@
     return Math.max(0, Math.floor((today.getTime() - d.getTime()) / 86400000));
   }
 
+  /** ≤30 green · ≤60 yellow · ≤90 amber · >90 red · unknown muted */
+  function claimAgeClass(ageDays) {
+    if (ageDays == null || !Number.isFinite(ageDays)) return "age-unknown";
+    if (ageDays <= 30) return "age-ok";
+    if (ageDays <= 60) return "age-warn";
+    if (ageDays <= 90) return "age-late";
+    return "age-critical";
+  }
+
   function fmtClaimAmount(amount) {
     if (amount == null || amount === "") return "—";
     const n = W.money ? W.money(amount) : Number(amount);
@@ -337,10 +346,12 @@
       if (!c || typeof c !== "object") return;
       const tr = document.createElement("tr");
       const cid = String(c.claimId || "");
+      const age = claimAgeDays(c.serviceDate);
+      const ageCls = claimAgeClass(age);
+      tr.classList.add(ageCls);
       if (clActiveClaimId && cid && cid === clActiveClaimId) {
         tr.classList.add("is-active");
       }
-      const age = claimAgeDays(c.serviceDate);
       const cells = [
         displayPatientName(c),
         String(c.payer || "—") || "—",
@@ -353,10 +364,15 @@
         const td = document.createElement("td");
         if (idx === 0) td.className = "phi-name";
         if (idx === 3 || idx === 5) td.className = "num";
+        if (idx === 5) td.classList.add("age-cell");
         td.textContent = text;
         tr.appendChild(td);
       });
-      tr.title = "Open claim context · " + (cid || "—");
+      tr.title =
+        "Open claim context · " +
+        (cid || "—") +
+        " · age " +
+        (age == null ? "unknown" : String(age) + "d");
       tr.addEventListener("click", function () {
         tr.classList.add("is-active");
         openClaimContext(c);
