@@ -164,14 +164,12 @@
     rail.hidden = true;
     rail.setAttribute("role", "status");
     rail.setAttribute("aria-live", "polite");
-    const frame = document.querySelector("main.main > .chrome-frame");
-    const main = document.querySelector("main.main") || document.querySelector(".main");
-    if (frame && frame.parentNode) {
-      frame.insertAdjacentElement("afterend", rail);
-    } else if (main) {
-      main.insertBefore(rail, main.firstChild);
+    const banner = document.querySelector(".banner");
+    if (banner && banner.parentNode) {
+      banner.insertAdjacentElement("afterend", rail);
     } else {
-      document.body.insertBefore(rail, document.body.firstChild);
+      const main = document.querySelector(".main") || document.body;
+      main.insertBefore(rail, main.firstChild);
     }
     return rail;
   }
@@ -530,11 +528,12 @@
     }
     let chip = document.getElementById("nr2-excel-probe-chip");
     if (!chip) {
-      // Package 3: park excel chip after chrome-frame (scrollable), not inside fixed pane.
+      // Package 1–2: honesty is body LED — park chip after ledge (beam/compact removed in P2).
       const anchor =
-        document.querySelector("main.main > .chrome-frame") ||
         document.querySelector("main.main > .ledge") ||
-        document.querySelector(".chrome-frame > .ledge") ||
+        document.querySelector("main.main > .beam") ||
+        document.querySelector("main.main > .exec-compact-header") ||
+        document.querySelector("main.main .honesty, main.main .honesty-strip") ||
         document.querySelector(".honesty, .honesty-strip");
       if (anchor && anchor.parentNode) {
         chip = document.createElement("p");
@@ -1387,10 +1386,9 @@
       bar.setAttribute("aria-label", "Ops gates · morning bundle · Trellis · shadow clock");
       bar.innerHTML =
         '<span class="nr2-ops-gate tone-yellow"><span class="lbl">OPS</span><span class="val">…</span></span>';
-      // Package 3: letterhead lives inside .chrome-frame — park ops gates before .shell.
-      const shell = document.querySelector(".shell");
-      if (shell && shell.parentNode) {
-        shell.insertAdjacentElement("beforebegin", bar);
+      const banner = document.querySelector(".banner");
+      if (banner && banner.parentNode) {
+        banner.insertAdjacentElement("afterend", bar);
       } else if (document.body.firstChild) {
         document.body.insertBefore(bar, document.body.firstChild);
       } else {
@@ -1585,13 +1583,10 @@
     });
     return true;
   }
-  /** Package 1 §8 / Package 3: ledge height var (sticky legacy or chrome-frame density). */
+  /** Package 1 §8: sticky compact header/beam sit under sticky ledge height. */
   function bootPackage1StickyStack() {
     const main = document.querySelector("main.main");
-    const ledge =
-      main &&
-      (main.querySelector(":scope > .chrome-frame > .ledge") ||
-        main.querySelector(":scope > .ledge"));
+    const ledge = main && main.querySelector(":scope > .ledge");
     if (!main || !ledge) return null;
     const halHdr = main.querySelector(":scope > .hal-cmd-header");
     const apply = function () {

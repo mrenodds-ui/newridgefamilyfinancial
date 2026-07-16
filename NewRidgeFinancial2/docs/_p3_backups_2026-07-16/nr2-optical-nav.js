@@ -75,11 +75,12 @@
     crumb.id = "nr2-crumb";
     crumb.className = "nr2-crumb";
     crumb.setAttribute("aria-label", "Breadcrumb");
-    // Package 3: keep `.chrome-frame` first; crumb after frame (scrollable), not inside fixed pane.
-    const frame = main.querySelector(":scope > .chrome-frame");
-    const ledge = main.querySelector(":scope > .ledge") || (frame && frame.querySelector(":scope > .ledge"));
+    // Package 1+2: keep `.ledge` first child; crumb after ledge (compact/beam removed in Package 2).
+    const ledge = main.querySelector(":scope > .ledge");
+    const beam = main.querySelector(":scope > .beam");
+    const compact = main.querySelector(":scope > .exec-compact-header");
     const halHdr = main.querySelector(":scope > .hal-cmd-header");
-    const anchor = frame || ledge || halHdr;
+    const anchor = ledge || halHdr || compact || beam;
     if (anchor && anchor.parentNode === main) {
       main.insertBefore(crumb, anchor.nextSibling);
     } else {

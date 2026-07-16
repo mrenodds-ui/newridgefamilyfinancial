@@ -407,15 +407,21 @@ body.exec-desk-surface {
 }
 
 .shell {
-  display: grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 20px);
+  display: grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 48px - 20px);
   position: relative;
   isolation: isolate;
   background:
     radial-gradient(ellipse 55% 40% at 60% 40%, rgba(20,40,50,0.4), transparent 70%),
     var(--vacuum);
 }
+body:has(#nr2-exec-letterhead):not(:has(#nr2-page-letterhead)) .shell {
+  min-height: calc(100dvh - 36px - 48px - 20px);
+}
 body.has-ops-gates .shell {
-  min-height: calc(100dvh - 32px - 20px);
+  min-height: calc(100dvh - 48px - 32px - 20px);
+}
+body.has-ops-gates:has(#nr2-exec-letterhead):not(:has(#nr2-page-letterhead)) .shell {
+  min-height: calc(100dvh - 116px - 20px);
 }
 /* Moonshot P1: atmosphere grain on vacuum (3% opacity) */
 .shell.atmosphere::before {
@@ -631,85 +637,24 @@ td.phi-name .phi-label,
 }
 
 .main { padding: var(--space-4) var(--space-4) var(--space-6); overflow-y: auto; }
-/* Moonshot Package 3 — Viewport-Locked Chrome (fixed pane) */
-.chrome-frame {
-  position: fixed;
-  top: 36px;
-  left: 220px;
-  right: 0;
-  height: 140px;
-  z-index: 100;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0 18px;
-  box-sizing: border-box;
-  background: var(--vacuum);
-  overflow: hidden;
-}
-/* Package 2 letterhead lives inside frame — no separate body banner; top aligns to ops or 0 */
-body:has(#nr2-page-letterhead) .chrome-frame {
-  top: 0;
-}
-body.has-ops-gates .chrome-frame {
-  top: 32px;
-}
-body.has-ops-gates:has(#nr2-page-letterhead) .chrome-frame {
-  top: 32px;
-}
-@media (max-width: 900px) {
-  .chrome-frame {
-    left: 0;
-  }
-}
-.chrome-frame > #nr2-page-letterhead.banner.exec-letterhead {
-  position: relative;
-  top: auto;
-  z-index: 1;
-  flex: 0 0 48px;
-  height: 48px;
-  max-height: 48px;
-  padding-left: 0;
-  padding-right: 0;
-}
-.chrome-frame > .ledge {
-  position: relative;
-  top: auto;
-  z-index: 1;
-  flex: 1 1 auto;
-  min-height: 0;
-  margin: 0;
-  padding: 4px 6px;
-  overflow: hidden;
-  background: var(--vacuum);
-}
-.chrome-frame > .ledge .metric-face {
-  min-height: 64px;
-  padding: var(--space-2);
-}
-.chrome-frame > .ledge .metric-face .hint {
-  display: none;
-}
-/* Moonshot Package 3 main scroll pane — frame locked; honesty LED stays body-fixed (P1) */
+/* Moonshot Package 1+2 — Chrome Collapse + Letterhead Unification */
 .main {
   padding-top: 0;
   overflow-y: auto;
-  margin-top: 140px;
-  height: calc(100dvh - 36px - 140px - 20px);
+  /* Package 2: page letterhead replaces 36px banner (≤48px) */
+  height: calc(100dvh - 48px - 20px);
   padding-bottom: calc(var(--space-6) + 24px);
   box-sizing: border-box;
 }
-body:has(#nr2-page-letterhead) .main {
-  margin-top: 140px;
-  height: calc(100dvh - 140px - 20px);
+/* Legacy E1 inject only when Package 2 page letterhead is absent */
+body:has(#nr2-exec-letterhead):not(:has(#nr2-page-letterhead)) .main {
+  height: calc(100dvh - 36px - 48px - 20px);
 }
 body.has-ops-gates .main {
-  margin-top: calc(32px + 140px);
-  height: calc(100dvh - 32px - 140px - 20px);
+  height: calc(100dvh - 48px - 32px - 20px);
 }
-body.has-ops-gates:has(#nr2-page-letterhead) .main {
-  margin-top: calc(32px + 140px);
-  height: calc(100dvh - 32px - 140px - 20px);
+body.has-ops-gates:has(#nr2-exec-letterhead):not(:has(#nr2-page-letterhead)) .main {
+  height: calc(100dvh - 116px - 20px);
 }
 /* Exact Moonshot Package 1: 48px compact row · inline 12px · no wrap bloat */
 .exec-compact-header {
