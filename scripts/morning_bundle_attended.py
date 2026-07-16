@@ -72,8 +72,15 @@ def main() -> int:
         proof = beam_desk_proof()
         last = last_close_record() or {}
         export_blob = last.get("export") if isinstance(last.get("export"), dict) else None
+        try:
+            from softdent_excel_probe import latest_excel_probe_snapshot
+
+            excel_probe = latest_excel_probe_snapshot()
+        except Exception as exc:  # noqa: BLE001
+            excel_probe = {"ok": False, "error": f"{type(exc).__name__}:{exc}"}
         out = {
             "morningBundle": mb or None,
+            "excelProbe": excel_probe,
             "periodClose": status.get("status"),
             "deskProof": proof.get("deskProof"),
             "drift": proof.get("drift"),

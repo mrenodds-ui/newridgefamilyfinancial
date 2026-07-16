@@ -3816,6 +3816,13 @@ class NR2BottleServer(BottleServer):
             period = str(bottle.request.query.get("period") or "").strip() or None
             return _json_response(hygiene_recall_summary(period=period))
 
+        @app.get("/api/softdent/excel-probe")
+        def softdent_excel_probe_api():
+            """Latest attended SoftDent Excel Output Options probe (money-beam gate)."""
+            from softdent_excel_probe import latest_excel_probe_snapshot
+
+            return _json_response(latest_excel_probe_snapshot())
+
         @app.get("/api/nr2/financial-recall")
         def nr2_financial_recall_api():
             """Board-safe financial recall candidates for Lighthouse CSV import."""

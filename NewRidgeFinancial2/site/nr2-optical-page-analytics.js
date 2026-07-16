@@ -69,6 +69,7 @@
       production,
       hygiene,
       recall,
+      excelProbe,
     ] = await Promise.all([
       W.getMoneyBeams(12000),
       W.getJson("/api/import-readiness", 12000),
@@ -81,6 +82,7 @@
       W.getJson("/api/softdent/provider-production", 12000),
       W.getJson("/api/softdent/hygiene-recall", 12000),
       W.getJson("/api/nr2/financial-recall", 12000),
+      W.getJson("/api/softdent/excel-probe", 12000),
     ]);
 
     const readyData = ready.ok ? ready.data : null;
@@ -276,6 +278,27 @@
     const hintBundle = document.getElementById("hint-an-bundle");
     if (hintBundle) hintBundle.textContent = bundle.hint;
     if (bundle.tone === "hal") live = true;
+
+    const excelSummary = document.getElementById("an-excel-summary");
+    if (excelProbe.ok && excelProbe.data) {
+      const ep = excelProbe.data;
+      if (ep.hasProbe) {
+        const avail = ep.excelAvailable === true;
+        if (excelSummary) {
+          excelSummary.textContent =
+            (avail ? "Excel available" : "Excel blocked") +
+            " · probe " +
+            String(ep.at || ep.fileMtime || "—") +
+            " · empty ≠ $0";
+        }
+        if (avail) live = true;
+      } else if (excelSummary) {
+        excelSummary.textContent =
+          "No probe on record — run scripts/probe_softdent_excel_output_options.py · empty ≠ $0";
+      }
+    } else if (excelSummary) {
+      excelSummary.textContent = "Excel probe NO SIGNAL";
+    }
 
     if (hygiene.ok && hygiene.data) {
       const hr = hygiene.data;

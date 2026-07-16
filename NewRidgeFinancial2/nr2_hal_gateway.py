@@ -655,6 +655,17 @@ def try_local_policy_reply(
     # generic product KB so “how do I pull SoftDent reports?” gets the playbook.
     # Account-tx Excel asks stay on softdent-signon-env (Format 1 Trans playbook).
     try:
+        from softdent_excel_probe import format_excel_probe_hal_reply, query_touches_excel_probe
+
+        if query_touches_excel_probe(raw):
+            return {
+                "text": format_excel_probe_hal_reply(raw),
+                "intent": "policy:softdent-excel-probe",
+            }
+    except Exception:
+        pass
+
+    try:
         from softdent_report_pull import (
             format_softdent_report_pull_hal_reply,
             query_touches_softdent_report_pull,
