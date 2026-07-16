@@ -1,4 +1,4 @@
-/* Office Manager — readiness + SoftDent ops · Force Close · no fake board actions */
+/* Office Manager — readiness + SoftDent ops · Force Close · Mon–Thu list · no fake board actions */
 (function () {
   const W = window.NR2OpticalWire;
   if (!W) return;
@@ -10,6 +10,146 @@
       if (op && Array.isArray(op.slots)) n += op.slots.length;
     });
     return n;
+  }
+
+  function todayIsoLocal() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + day;
+  }
+
+  function shortHash(h) {
+    const s = String(h || "").replace(/^#/, "").trim();
+    if (!s) return "—";
+    return "#" + s.slice(0, 4);
+  }
+
+  function renderWeeklySchedule(data) {
+    const grid = document.getElementById("wk-days-grid");
+    const rangeEl = document.getElementById("wk-range-label");
+    if (!grid) return;
+    grid.textContent = "";
+    const days = data && Array.isArray(data.days) ? data.days : [];
+    if (rangeEl) {
+      rangeEl.textContent = data && data.dateRange ? String(data.dateRange) : "—";
+    }
+    if (!days.length) {
+      const p = document.createElement("p");
+      p.className = "wk-empty";
+      p.textContent =
+        (data && data.emptyMessage) ||
+        "No Mon–Thu SoftDent appointments — sync SoftDent or empty week.";
+      grid.appendChild(p);
+      return;
+    }
+    const today = todayIsoLocal();
+    days.forEach(function (day) {
+      if (!day || typeof day !== "object") return;
+      const col = document.createElement("article");
+      const dateIso = String(day.date || "").slice(0, 10);
+      col.className = "wk-day" + (dateIso === today ? " is-today" : "");
+
+      const head = document.createElement("div");
+      head.className = "wk-day-head";
+      const title = document.createElement("span");
+      title.textContent =
+        String(day.dayName || "").slice(0, 3) +
+        (dateIso ? " · " + dateIso.slice(5) : "");
+      const count = document.createElement("span");
+      count.className = "wk-count";
+      const n = typeof day.count === "number" ? day.count : (day.slots || []).length;
+      count.textContent = String(n) + " appt" + (n === 1 ? "" : "s");
+      head.appendChild(title);
+      head.appendChild(count);
+      col.appendChild(head);
+
+      const slots = Array.isArray(day.slots) ? day.slots : [];
+      if (!slots.length) {
+        const empty = document.createElement("p");
+        empty.className = "wk-empty";
+        empty.textContent =
+          String(day.emptyMessage || "").trim() || "No SoftDent appointments.";
+        col.appendChild(empty);
+      } else {
+        const ul = document.createElement("ul");
+        ul.className = "wk-slots";
+        slots.forEach(function (slot) {
+          if (!slot || typeof slot !== "object") return;
+          const li = document.createElement("li");
+          li.className = "wk-slot";
+          const phi = document.createElement("span");
+          phi.className = "phi";
+          const initials = String(slot.initials || "P—").trim() || "P—";
+          phi.textContent = initials + " · " + shortHash(slot.patientHash);
+          const prov = document.createElement("span");
+          prov.className = "prov";
+          prov.textContent = String(slot.provider || "—");
+          prov.title = String(slot.provider || "");
+          const st = document.createElement("span");
+          st.className = "st";
+          st.textContent = String(slot.status || "scheduled");
+          const tm = document.createElement("span");
+          tm.className = "tm";
+          tm.textContent = "time " + (String(slot.time || "—").trim() || "—");
+          li.appendChild(phi);
+          li.appendChild(prov);
+          li.appendChild(st);
+          li.appendChild(tm);
+          ul.appendChild(li);
+        });
+        col.appendChild(ul);
+      }
+      grid.appendChild(col);
+    });
+  }
+
+  async function loadWeeklySchedule() {
+    const grid = document.getElementById("wk-days-grid");
+    if (grid) {
+      grid.textContent = "";
+      const p = document.createElement("p");
+      p.className = "wk-loading";
+      p.id = "wk-loading";
+      p.textContent = "Loading Mon–Thu schedule…";
+      grid.appendChild(p);
+    }
+    // Server defaults start=monday_of_week_iso when omitted
+    const res = await W.getJson("/api/softdent/appointments-range?days=4", 15000);
+    if (!res.ok || !res.data) {
+      if (grid) {
+        grid.textContent = "";
+        const p = document.createElement("p");
+        p.className = "wk-fault";
+        p.textContent =
+          "Mon–Thu schedule NO SIGNAL · " +
+          String((res.data && res.data.error) || res.status || "fetch failed");
+        grid.appendChild(p);
+      }
+      const rangeEl = document.getElementById("wk-range-label");
+      if (rangeEl) rangeEl.textContent = "NO SIGNAL";
+      return false;
+    }
+    renderWeeklySchedule(res.data);
+    return !!(res.data.hasData || (res.data.days && res.data.days.length));
+  }
+
+  function wireWeeklyRefresh() {
+    const btn = document.getElementById("btn-wk-refresh");
+    if (!btn || btn._nr2WkBound) return;
+    btn._nr2WkBound = true;
+    btn.addEventListener("click", function () {
+      loadWeeklySchedule().catch(function (err) {
+        const grid = document.getElementById("wk-days-grid");
+        if (!grid) return;
+        grid.textContent = "";
+        const p = document.createElement("p");
+        p.className = "wk-fault";
+        p.textContent = "Mon–Thu refresh fault · " + String(err && err.message ? err.message : err);
+        grid.appendChild(p);
+      });
+    });
   }
 
   function gapKeys(ready) {
@@ -102,14 +242,18 @@
     W.setText("val-gaps", null, "—");
     W.setText("val-health", null, "—");
 
-    const [ready, health, np, appt] = await Promise.all([
+    wireWeeklyRefresh();
+    const [ready, health, np, appt, weeklyOk] = await Promise.all([
       W.getJson("/api/import-readiness", 12000),
       W.getJson("/api/health", 12000),
       W.getJson("/api/softdent/new-patients-mtd", 12000),
       W.getJson("/api/softdent/appointments-today", 12000),
+      loadWeeklySchedule().catch(function () {
+        return false;
+      }),
     ]);
 
-    let live = false;
+    let live = !!weeklyOk;
     let blocked = false;
     let closeTrouble = false;
     let readyData = null;
@@ -249,7 +393,7 @@
         ? "OM · lasers STALE · FORCE CLOSE pulls SoftDent aging · empty ≠ $0"
         : closeTrouble
           ? "OM · " + closeBit + " · FORCE CLOSE available · empty ≠ $0"
-          : "OM · SoftDent day pulse + readiness · " +
+          : "OM · SoftDent Mon–Thu list + day pulse · " +
             (closeBit || "CLOSE · idle") +
             " · FORCE CLOSE · empty ≠ $0"
     );
@@ -259,4 +403,4 @@
     W.setBanner("partial", "OM wire fault · " + String(err && err.message ? err.message : err));
   });
 })();
-
+

@@ -346,8 +346,94 @@ a:hover { color: var(--hal); }
   font-family: var(--mono); font-size: 12px; color: #8a94a4;
 }
 
+/* Office Manager — Mon–Thu SoftDent schedule (PHI hash/initials) */
+.om-weekly {
+  margin: 0 0 var(--space-5);
+  border: 1px solid var(--border);
+  background: rgba(8, 12, 16, 0.92);
+  padding: var(--space-4) var(--space-3);
+  border-top: 3px solid var(--sd);
+}
+.om-weekly-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px;
+  margin-bottom: var(--space-2);
+}
+.om-weekly-head h2 {
+  margin: 0; font-family: var(--sans); font-size: 14px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #c8d0da;
+}
+.om-weekly-range {
+  font-family: var(--mono); font-size: 12px; color: var(--sd);
+}
+.om-weekly-head .btn-quiet { margin: 0; margin-left: auto; }
+.om-weekly-note {
+  font-family: var(--sans); font-size: 12px; color: #5a6575;
+  margin: 0 0 var(--space-3); line-height: 1.35;
+}
+.wk-days-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.wk-day {
+  border: 1px solid #243040;
+  background: rgba(6, 10, 14, 0.85);
+  min-height: 120px;
+  display: flex; flex-direction: column;
+}
+.wk-day.is-today { border-color: rgba(0, 212, 170, 0.55); }
+.wk-day-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 10px;
+  border-bottom: 1px solid #243040;
+  font-family: var(--sans); font-size: 12px; color: #c8d0da;
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+.wk-day-head .wk-count {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+}
+.wk-day.is-today .wk-day-head { color: var(--sd); }
+.wk-slots {
+  list-style: none; margin: 0; padding: 6px 8px 8px;
+  flex: 1;
+}
+.wk-slot {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px 8px;
+  align-items: baseline;
+  padding: 6px 4px;
+  border-bottom: 1px solid rgba(36, 48, 64, 0.7);
+  font-family: var(--sans); font-size: 12px; color: #9aa6b4;
+}
+.wk-slot:last-child { border-bottom: none; }
+.wk-slot .phi {
+  font-family: var(--mono); color: #cfd8e3; font-size: 12px;
+}
+.wk-slot .prov {
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wk-slot .st {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--sd);
+}
+.wk-slot .tm {
+  grid-column: 1 / -1;
+  font-family: var(--mono); font-size: 10px; color: #5a6575;
+}
+.wk-empty, .wk-loading, .wk-fault {
+  font-family: var(--sans); font-size: 12px; color: #5a6575;
+  padding: 12px 10px; margin: 0;
+}
+.wk-fault { color: var(--fringe); }
+
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
   .nav { border-right: none; border-bottom: 1px solid var(--border-soft); }
   .align-bench { grid-template-columns: 1fr; min-height: 0; }
+  .wk-days-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .wk-days-grid { grid-template-columns: 1fr; }
 }
