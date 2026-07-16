@@ -33,7 +33,7 @@ If SoftDent opens **Select File Name** with an empty path, NR2 **refuses to inve
 
 When SoftDent shows **Select File Name** / Excel save:
 
-1. Use SoftDent’s **own** folder (typical: `OneDrive\Documents\…` or SoftDent’s last-used Documents path such as `AcctAge`).
+1. Use SoftDent’s **own C: folder** (`C:\SoftDent\softdentexportreports`). Override with `SOFTDENT_SELECT_FILE_FOLDER` if SoftDent shows a different last-used path.
 2. **Never** type `C:\SoftDentReportExports` or `C:\SOFTDE~1` into SoftDent.
 3. After SoftDent saves, NR2 copies/lands Excel under `C:\SoftDentReportExports` (automation / Sync).
 

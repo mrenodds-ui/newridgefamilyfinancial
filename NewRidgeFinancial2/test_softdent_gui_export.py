@@ -45,12 +45,13 @@ class SoftDentGuiExportTests(unittest.TestCase):
 
     def test_select_file_path_keeps_softdent_folder(self):
         self.assertEqual(
-            _softdent_select_file_path("AG260716", r"E:\OneDrive\Documents\AcctAge\OLD"),
-            r"E:\OneDrive\Documents\AcctAge\AG260716",
+            _softdent_select_file_path("AG260716", r"C:\SoftDent\softdentexportreports\OLD"),
+            r"C:\SoftDent\softdentexportreports\AG260716",
         )
 
     def test_select_file_path_uses_office_folder_when_empty(self):
         office = resolve_select_file_folder()
+        self.assertEqual(office, Path(r"C:\SoftDent\softdentexportreports"))
         self.assertEqual(_softdent_select_file_path("AG260716", ""), str(office / "AG260716"))
         self.assertEqual(_softdent_select_file_path("REG2607", "REG2607"), str(office / "REG2607"))
 

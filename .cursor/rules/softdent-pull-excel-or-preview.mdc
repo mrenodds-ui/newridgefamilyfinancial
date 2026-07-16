@@ -30,4 +30,4 @@ Whenever SoftDent desktop is used to pull financial or report data (aging, regis
 
 - GUI export code and HAL playbooks must enforce Excel | Print Preview only.
 - If Excel is greyed: run attended Excel enablement runbook / probe — do not fall through to Printer or File.
-- After Excel save, SoftDent may open a temp workbook — SaveCopyAs to the office export folder as documented; do not invent SoftDent’s Select File Name directory.
+- After Excel save, SoftDent may open a temp workbook — SaveCopyAs to the office export folder as documented. SoftDent Select File Name uses SoftDent’s **C:** folder (`C:\SoftDent\softdentexportreports`); NR2 then copies into `C:\SoftDentReportExports`. Never invent SoftDent’s Select File Name directory.

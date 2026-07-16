@@ -1036,7 +1036,8 @@ def load_menu_map(path: Path | None = None) -> dict[str, Any]:
     return json.loads(map_path.read_text(encoding="utf-8-sig"))
 
 
-DEFAULT_SELECT_FILE_FOLDER = Path(r"E:\OneDrive\Documents")
+# SoftDent's own C: export folder for Select File Name (never SoftDentReportExports).
+DEFAULT_SELECT_FILE_FOLDER = Path(r"C:\SoftDent\softdentexportreports")
 
 
 def resolve_select_file_folder(catalog: dict[str, Any] | None = None) -> Path:
@@ -1146,13 +1147,14 @@ def _set_edit_text_win32(edit_hwnd: int, text: str) -> None:
 def _softdent_select_file_path(stem_only: str, current: str = "") -> str:
     """Build SoftDent Select File Name value using SoftDent's own directory.
 
-    SoftDent v19 shows ONE edit (e.g. ``E:\\OneDrive\\Documents\\AcctAge``) plus
-    static ``.XLS``. That folder is SoftDent's valid export path for this office —
+    SoftDent v19 shows ONE edit (e.g. ``C:\\SoftDent\\softdentexportreports\\AG260716``)
+    plus static ``.XLS``. That folder is SoftDent's valid C: export path —
     never replace it with ``C:\\SOFTDE~1`` / SoftDentReportExports (SoftDent
     rejects those as invalid directory). When the edit is empty or stem-only,
-    supply ``selectFileFolder`` from the menu map (``E:\\OneDrive\\Documents``).
-    Only swap the file stem when SoftDent already shows a folder; NR2 copies
-    into SoftDentReportExports after SoftDent writes the XLS.
+    supply ``selectFileFolder`` from the menu map
+    (``C:\\SoftDent\\softdentexportreports``). Only swap the file stem when
+    SoftDent already shows a folder; NR2 copies into SoftDentReportExports
+    after SoftDent writes the XLS.
     """
     stem = _softdent_file_stem(stem_only)
     cur = str(current or "").strip().strip('"')
@@ -1731,7 +1733,7 @@ def _complete_output_setup_and_save(
         time.sleep(0.25)
     if save:
         # SoftDent Select File Name: ONE path edit (SoftDentFolder\stem) + static .XLS.
-        # Keep SoftDent's folder verbatim (e.g. E:\OneDrive\Documents). Never
+        # Keep SoftDent's C: folder verbatim (C:\SoftDent\softdentexportreports). Never
         # substitute SoftDentReportExports / C:\SOFTDE~1 — SoftDent rejects those.
         stem_only = _softdent_file_stem(short_stem)
         if any(ch in stem_only for ch in (":", "\\", "/", " ")):
