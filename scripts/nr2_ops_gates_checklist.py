@@ -175,7 +175,8 @@ def main() -> int:
                 _gate(
                     "pilot_shadow",
                     "YELLOW",
-                    f"phase={phase} · shadowDays={days} · need ≥{min_days} before cutover",
+                    f"phase={phase} · shadowDays={days} · need >={min_days} before cutover",
+                    "python scripts/start_pilot_shadow_clock.py --from-period-close",
                 )
             )
     except Exception as exc:  # noqa: BLE001
