@@ -15,6 +15,7 @@
   let reconAvailable = false;
   let lastReady = null;
   let lastSessionOk = false;
+  let coreSyncMode = null;
 
   function lasersRed(ready) {
     if (!ready || typeof ready !== "object") return true;
@@ -112,6 +113,63 @@
     reconAvailable = mode !== "unavailable";
   }
 
+  function morningBundleBit(ready) {
+    const close = ready && ready.periodClose;
+    const bundle = close && close.morningBundle;
+    if (!bundle || typeof bundle !== "object") return "";
+    if (bundle.ok) {
+      return (
+        " · morning OK" + (bundle.okCount != null ? " " + bundle.okCount : "")
+      );
+    }
+    if (bundle.fallback) return " · morning FALLBACK";
+    const err = bundle.error || bundle.detail || "";
+    return " · morning FAIL" + (err ? " · " + String(err).slice(0, 28) : "");
+  }
+
+  function setCoreSyncPulse(mode) {
+    coreSyncMode = mode || null;
+    const core = document.getElementById("core");
+    const state = document.getElementById("hal-state");
+    if (!core) return;
+    core.classList.toggle("core--syncing", mode === "running");
+    if (mode === "running") {
+      if (state) {
+        state.textContent = "SYNC · RUNNING";
+        state.style.color = "#ffaa00";
+      }
+      return;
+    }
+    if (mode === "ok") {
+      fireCoreBurst("ok");
+      if (state) {
+        state.textContent = "SYNC · OK";
+        state.style.color = "";
+      }
+      setTimeout(function () {
+        coreSyncMode = null;
+        core.classList.remove("core--syncing");
+        updateHalCore(lastReady);
+      }, 1100);
+      return;
+    }
+    if (mode === "fail") {
+      fireCoreBurst("fail");
+      if (state) {
+        state.textContent = "SYNC · FAIL";
+        state.style.color = "var(--fringe)";
+      }
+      setTimeout(function () {
+        coreSyncMode = null;
+        core.classList.remove("core--syncing");
+        updateHalCore(lastReady);
+      }, 1300);
+      return;
+    }
+    core.classList.remove("core--syncing");
+    updateHalCore(lastReady);
+  }
+
   function updateHalCore(ready, moneyBits) {
     const core = document.getElementById("core");
     const state = document.getElementById("hal-state");
@@ -129,9 +187,14 @@
         : (document.getElementById("metric-qb") || {}).textContent || "—";
     if (fusion) fusion.textContent = "SD " + sdText + " · QB " + qbText;
 
+    if (coreSyncMode === "running" || coreSyncMode === "ok" || coreSyncMode === "fail") {
+      return;
+    }
+
     let mode = "fault";
     let label = "NO SIGNAL";
     let hintText = "SoftDent+QB beams · empty ≠ $0 · click → Alignment Bench";
+    const mb = morningBundleBit(ready);
 
     if (!ready) {
       label = "READINESS · NO SIGNAL";
@@ -139,20 +202,24 @@
     } else if (lasersRed(ready)) {
       const keys = laserKeys(ready).slice(0, 2).join(",") || "blocking";
       label = "LASERS · RED";
-      hintText = "Blocking · " + keys + " · empty ≠ $0 · click → Alignment Bench";
+      hintText =
+        "Blocking · " + keys + mb + " · empty ≠ $0 · click → Alignment Bench";
       mode = "fault";
     } else if (periodCloseTrouble(ready)) {
       label = periodCloseBit(ready);
-      hintText = label + " · money gated · empty ≠ $0 · click → Alignment Bench";
+      hintText = label + mb + " · money gated · empty ≠ $0 · click → Alignment Bench";
       mode = "warn";
     } else if (!lastSessionOk) {
       label = "READY · SESSION WEAK";
-      hintText = "Readiness ok · session may 403 mutations · click → Alignment Bench";
+      hintText =
+        "Readiness ok · session may 403 mutations" + mb + " · click → Alignment Bench";
       mode = "warn";
     } else {
       label = "LIVE · GREEN-PATH";
       hintText =
-        periodCloseBit(ready) + " · money-beams · empty ≠ $0 · click → Alignment Bench";
+        periodCloseBit(ready) +
+        mb +
+        " · money-beams · empty ≠ $0 · click → Alignment Bench";
       mode = "live";
     }
 
@@ -672,6 +739,7 @@
       led.classList.remove("idle");
       led.classList.add("on");
     }
+    setCoreSyncPulse("running");
     toast("SYNC → POST /api/apex/sync/trigger …");
     const r = await api("/api/apex/sync/trigger", {
       method: "POST",
@@ -684,13 +752,16 @@
       led.classList.add("idle");
     }
     if (r.status === 423) {
+      setCoreSyncPulse("fail");
       toast("Sync locked — already in progress (423)");
       return;
     }
     if (!r.ok) {
+      setCoreSyncPulse("fail");
       toast("Sync failed · " + (r.data && (r.data.error || r.data.status) || r.status));
       return;
     }
+    setCoreSyncPulse("ok");
     toast("Sync ok · refreshing lasers + metrics");
     await refreshLasers();
     await refreshReconHonesty();

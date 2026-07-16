@@ -415,7 +415,8 @@
       .core-ticks,
       .core-hit,
       .core.core--fire .core-burst,
-      .core.core--fire-fail .core-burst {
+      .core.core--fire-fail .core-burst,
+      .core.core--syncing {
         animation: none !important;
       }
       .core-hit { opacity: 0.35; transform: scale(0.7); }
@@ -432,6 +433,13 @@
     .core .state { font-family: var(--mono); font-size: 13px; color: var(--fringe); letter-spacing: 0.08em; }
     .core.core--live .state { color: var(--sd); }
     .core.core--warn .state { color: #ffaa00; }
+    .core.core--syncing {
+      animation: core-red-pulse 0.9s ease-in-out infinite;
+    }
+    .core.core--syncing::after {
+      animation-duration: 1.6s;
+      opacity: 1;
+    }
     .core .bind-hint { margin-top: 6px; }
     .lbl {
       font-size: var(--text-sm); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
