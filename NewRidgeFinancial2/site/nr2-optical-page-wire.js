@@ -290,9 +290,28 @@
     el.classList.remove("nr2-face-settle");
     void el.offsetWidth;
     el.classList.add("nr2-face-settle");
+    // Moonshot P5: physical lift on parent glass face during data refresh
+    const face =
+      (el.closest && el.closest(".metric-face, .beam-face")) ||
+      (el.classList && (el.classList.contains("metric-face") || el.classList.contains("beam-face"))
+        ? el
+        : null);
+    if (face) {
+      face.classList.add("nr2-face-lift");
+      window.setTimeout(function () {
+        face.classList.remove("nr2-face-lift");
+      }, 420);
+    }
     window.setTimeout(function () {
       el.classList.remove("nr2-face-settle");
     }, 400);
+  }
+  /** Moonshot P1: grain atmosphere on every optical shell */
+  function bootAtmosphere() {
+    document.querySelectorAll(".shell").forEach(function (el) {
+      el.classList.add("atmosphere");
+    });
+    return true;
   }
   function markRowsEnter(nodes, staggerMs) {
     if (prefersReducedMotion()) return 0;
@@ -1445,6 +1464,11 @@
       /* ignore mount faults — page faces still load */
     }
     try {
+      bootAtmosphere();
+    } catch (_) {
+      /* atmosphere optional */
+    }
+    try {
       bootMotionGrammar();
     } catch (_) {
       /* motion optional */
@@ -1480,6 +1504,7 @@
     pulseFaceSettle: pulseFaceSettle,
     markRowsEnter: markRowsEnter,
     bootMotionGrammar: bootMotionGrammar,
+    bootAtmosphere: bootAtmosphere,
     announce: announce,
     focusMainHeading: focusMainHeading,
     getFocusable: getFocusable,

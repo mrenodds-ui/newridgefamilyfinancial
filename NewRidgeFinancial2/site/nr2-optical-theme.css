@@ -29,6 +29,19 @@
   --radius-none: 0;
   --border: #2a3340;
   --border-soft: #1a222c;
+  /* Moonshot less-sterile P2: chromatic architecture */
+  --glow-sd: 0 0 20px rgba(0, 212, 170, 0.3);
+  --glow-qb: 0 0 18px rgba(255, 170, 0, 0.28);
+  --optical-warmth: 1;
+  --nr2-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --nr2-dur: 280ms;
+  --nr2-dur-slow: 420ms;
+  --nr2-face-ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --vacuum: #080a0c;
+  }
 }
 * { box-sizing: border-box; }
 html, body {
@@ -45,25 +58,56 @@ a, button, .nav a, .btn-quiet, .mech-lock, .mech-action, .wk-slot {
 a { color: var(--sd); text-decoration: none; }
 a:hover { color: var(--hal); }
 
-.type-staff { font-family: var(--sans); letter-spacing: 0.01em; }
+/* Moonshot P3: staff vs laser type hierarchy */
+.type-staff {
+  font-family: var(--sans);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+@supports (font-weight: 450) {
+  .type-staff { font-weight: 450; }
+}
+.main h1.type-staff,
+h1 {
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+@supports (font-weight: 450) {
+  .main h1.type-staff,
+  h1 { font-weight: 450; }
+}
 .type-laser {
   font-family: var(--mono); font-variant-numeric: tabular-nums;
   letter-spacing: 0.04em;
 }
 
-/* Honesty strip — staff-readable; lock accent, not all-caps mono dump */
+/* Honesty strip — Moonshot P1 sticky glass + P2 live glow */
 .banner {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   min-height: 36px; display: flex; align-items: center; justify-content: center; gap: var(--space-2);
   flex-wrap: wrap; padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid #2a2410; background: #100e08; color: var(--lock);
+  border-bottom: 1px solid rgba(0, 212, 170, 0.15);
+  background: rgba(16, 14, 8, 0.82);
+  color: var(--lock);
   font-family: var(--sans); font-size: var(--text-sm); letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 .banner .bind {
   color: #e8e8f0; font-family: var(--mono); font-size: 13px;
   letter-spacing: 0.02em;
 }
-.banner.live { border-bottom-color: rgba(0, 212, 170, 0.35); }
+.banner.live {
+  border-bottom-color: rgba(0, 212, 170, 0.15);
+  animation: nr2-banner-live-glow 2.4s ease-in-out infinite;
+}
 .banner.partial { border-bottom-color: rgba(255, 0, 68, 0.45); color: #e8c56a; }
+@keyframes nr2-banner-live-glow {
+  0%, 100% { box-shadow: 0 1px 0 rgba(0, 212, 170, 0.08); }
+  50% { box-shadow: 0 2px 14px rgba(0, 212, 170, 0.28); }
+}
 
 /* Package 1: ops gates on every optical page — honest RED/YELLOW, never mute RED */
 .nr2-ops-gates {
@@ -104,12 +148,60 @@ a:hover { color: var(--hal); }
 
 .shell {
   display: grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 36px);
+  position: relative;
+  isolation: isolate;
   background:
     radial-gradient(ellipse 55% 40% at 60% 40%, rgba(20,40,50,0.4), transparent 70%),
     var(--vacuum);
 }
 body.has-ops-gates .shell {
   min-height: calc(100dvh - 68px);
+}
+/* Moonshot P1: atmosphere grain on vacuum (3% opacity) */
+.shell.atmosphere::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  animation: nr2-grain 1.2s steps(2) infinite;
+}
+.shell.atmosphere > * {
+  position: relative;
+  z-index: 1;
+}
+@keyframes nr2-grain {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-2%, 1%); }
+}
+/* Moonshot P4: hub asymmetric viewfinder >1400px */
+@media (min-width: 1401px) {
+  body.page-hub .shell.shell-hub-asymmetric {
+    grid-template-columns: 240px 1.2fr 0.8fr;
+  }
+}
+.hub-rail {
+  border-left: 1px solid var(--border-soft);
+  background: rgba(8, 12, 16, 0.72);
+  padding: var(--space-4) var(--space-3);
+  overflow-y: auto;
+}
+.hub-rail .beam-face {
+  min-height: 220px;
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 1400px) {
+  body.page-hub .shell.shell-hub-asymmetric {
+    grid-template-columns: 220px 1fr;
+  }
+  .hub-rail {
+    grid-column: 1 / -1;
+    border-left: none;
+    border-top: 1px solid var(--border-soft);
+  }
 }
 
 /* Package 2: PHI glass — initials + hash only in default views */
@@ -284,12 +376,17 @@ td.phi-name .phi-label,
   font-weight: 600; color: var(--hal); letter-spacing: 0.02em;
 }
 .main .kicker {
-  font-family: var(--sans); font-size: var(--text-sm); color: var(--muted);
+  font-family: var(--sans); font-size: var(--text-sm); color: var(--qb);
   margin-bottom: var(--space-4); line-height: 1.4; max-width: 52rem;
+}
+.main .kicker a:hover {
+  color: var(--hal);
+  text-shadow: 0 0 12px rgba(255, 170, 0, 0.35);
 }
 .mode-eyebrow {
   margin: 0 0 var(--space-2); font-family: var(--sans); font-size: 12px;
-  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--qb);
 }
 .foot-nav {
   margin-top: var(--space-5); padding-top: var(--space-3);
@@ -298,31 +395,78 @@ td.phi-name .phi-label,
 }
 .foot-nav a { margin-right: 14px; }
 
-/* Subpage money face — same hierarchy as Alignment Bench */
+/* Subpage money face — Moonshot P1 glass + P4 ledge + P5 motion */
+.ledge {
+  margin-bottom: var(--space-5);
+  padding: var(--space-3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgba(14, 20, 28, 0.55) 0%, rgba(8, 12, 16, 0.35) 100%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.35),
+    0 10px 20px -10px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.ledge .money-strip { margin-bottom: 0; }
 .money-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-5);
+  background: linear-gradient(90deg, transparent, rgba(0, 212, 170, 0.03), transparent);
+}
+@media (max-width: 960px) {
+  .money-strip {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 .metric-face {
-  border: 1px solid var(--border); background: rgba(8, 12, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 20, 28, 0.85) 0%, rgba(10, 14, 20, 0.65) 100%);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   padding: var(--space-4) var(--space-3);
   display: flex; flex-direction: column; min-height: 168px;
+  border-radius: 2px;
+  transition: transform 0.2s var(--nr2-face-ease), box-shadow 0.3s ease;
 }
 .metric-face.sd { border-top: 3px solid var(--sd); }
 .metric-face.qb { border-top: 3px solid var(--qb); }
 .metric-face.hal { border-top: 3px solid var(--hal); }
 .metric-face.ops { border-top: 3px solid var(--lock); }
 .metric-face.stale-border { border-color: var(--fringe); }
+.metric-face.sd:hover {
+  box-shadow:
+    var(--glow-sd),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.metric-face.qb:hover {
+  box-shadow:
+    var(--glow-qb),
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
 .metric-face .face-lbl {
-  font-family: var(--sans); font-size: 12px; text-transform: uppercase;
-  letter-spacing: 0.08em; color: #c8d0da; margin-bottom: var(--space-2);
+  font-family: var(--sans); font-size: 13px; text-transform: none;
+  letter-spacing: 0.02em; color: var(--muted); margin-bottom: var(--space-2);
 }
 .metric-face .face-val,
 .metric-face .val {
-  font-family: var(--mono); font-size: 24px; font-weight: 600;
-  font-variant-numeric: tabular-nums; line-height: 1.15; margin-bottom: var(--space-2);
+  font-family: var(--mono);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" "ss01";
+  line-height: 1.15; margin-bottom: var(--space-2);
   word-break: break-word;
   min-height: 1.15em;
 }
@@ -566,20 +710,54 @@ html.nr2-reduced-motion .nr2-error-beam {
   box-shadow: 0 0 18px rgba(224,230,237,0.12);
   margin-bottom: var(--space-3);
 }
+/* Moonshot P1/P5: beam casts SoftDent light + ambient sweep */
 .beam {
-  height: 2px; margin: var(--space-3) 0; background: repeating-linear-gradient(
-    90deg, var(--hal) 0 8px, transparent 8px 16px
-  ); opacity: 0.35; animation: flow 1.2s linear infinite;
-  will-change: background-position;
+  position: relative;
+  height: 3px;
+  margin: var(--space-3) 0;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(0, 212, 170, 0.35) 20%,
+    var(--sd) 50%,
+    rgba(224, 230, 237, 0.55) 55%,
+    rgba(0, 212, 170, 0.35) 80%,
+    transparent 100%
+  );
+  opacity: 0.9;
+  box-shadow:
+    0 0 20px 2px var(--sd),
+    0 0 40px 8px rgba(0, 212, 170, 0.2);
+  overflow: visible;
+}
+.beam::after {
+  content: "";
+  position: absolute;
+  top: -10px;
+  bottom: -10px;
+  left: 0;
+  width: 28%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 212, 170, 0.45),
+    rgba(224, 230, 237, 0.5),
+    rgba(0, 212, 170, 0.45),
+    transparent
+  );
+  animation: beam-sweep 8s linear infinite;
+  pointer-events: none;
+}
+@keyframes beam-sweep {
+  0% { transform: translateX(-120%); opacity: 0.35; }
+  15% { opacity: 0.85; }
+  85% { opacity: 0.85; }
+  100% { transform: translateX(400%); opacity: 0.35; }
 }
 @keyframes flow { to { background-position: 32px 0; } }
 
 /* Package 6: motion grammar — transform/opacity only · respect reduced-motion */
-:root {
-  --nr2-ease: cubic-bezier(0.22, 1, 0.36, 1);
-  --nr2-dur: 280ms;
-  --nr2-dur-slow: 420ms;
-}
 html.nr2-motion .main.nr2-motion-enter > .mode-eyebrow,
 html.nr2-motion .main.nr2-motion-enter > h1,
 html.nr2-motion .main.nr2-motion-enter > .kicker,
@@ -621,6 +799,15 @@ html.nr2-motion .nr2-face-settle {
   0% { opacity: 0.55; transform: translateY(2px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+/* Moonshot P5: physical lift on data refresh */
+html.nr2-motion .metric-face.nr2-face-lift,
+html.nr2-motion .beam-face.nr2-face-lift {
+  transform: translateY(-2px);
+  box-shadow:
+    0 4px 8px rgba(0, 0, 0, 0.5),
+    0 16px 32px -8px rgba(0, 0, 0, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
 html.nr2-motion .nr2-row-enter {
   animation: nr2-row-enter var(--nr2-dur) var(--nr2-ease) both;
   animation-delay: var(--nr2-stagger, 0ms);
@@ -638,16 +825,17 @@ html.nr2-motion .msg {
 }
 html.nr2-motion .metric-face,
 html.nr2-motion .beam-face {
-  transition: border-color var(--nr2-dur) var(--nr2-ease),
-    background-color var(--nr2-dur) var(--nr2-ease),
-    transform var(--nr2-dur) var(--nr2-ease);
+  transition: transform 0.2s var(--nr2-face-ease),
+    box-shadow 0.3s ease,
+    border-color var(--nr2-dur) var(--nr2-ease),
+    background-color var(--nr2-dur) var(--nr2-ease);
 }
 html.nr2-motion .metric-face:hover,
 html.nr2-motion .beam-face:hover {
   transform: translateY(-1px);
 }
-html.nr2-motion .beam {
-  animation-duration: 1.1s;
+html.nr2-motion .beam::after {
+  animation-duration: 8s;
 }
 html.nr2-motion .nr2-ops-gate.pulse {
   animation-duration: 1.5s;
@@ -666,6 +854,9 @@ html.nr2-motion .om-claims-table tbody tr {
   .nr2-ops-gate.pulse,
   .nr2-skeleton,
   .beam,
+  .beam::after,
+  .banner.live,
+  .shell.atmosphere::before,
   html.nr2-motion .metric-face,
   html.nr2-motion .beam-face {
     animation: none !important;
@@ -673,12 +864,19 @@ html.nr2-motion .om-claims-table tbody tr {
     transform: none !important;
   }
   html.nr2-motion .metric-face:hover,
-  html.nr2-motion .beam-face:hover {
+  html.nr2-motion .beam-face:hover,
+  html.nr2-motion .metric-face.nr2-face-lift,
+  html.nr2-motion .beam-face.nr2-face-lift {
     transform: none;
   }
   .nr2-skeleton {
     background: #1a222c;
   }
+}
+html.nr2-reduced-motion .beam::after,
+html.nr2-reduced-motion .banner.live,
+html.nr2-reduced-motion .shell.atmosphere::before {
+  animation: none !important;
 }
 
 .honesty, .honesty-strip {
@@ -700,28 +898,47 @@ html.nr2-motion .om-claims-table tbody tr {
   min-height: min(52vh, 420px);
   margin-bottom: var(--space-5);
 }
+/* Moonshot P4: hub main holds SoftDent + HAL; QB is on the rail */
+body.page-hub .align-bench {
+  grid-template-columns: 1.2fr 0.8fr;
+}
 .beam-face {
-  border: 1px solid var(--border); background: rgba(8, 12, 16, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 20, 28, 0.85) 0%, rgba(10, 14, 20, 0.65) 100%);
+  backdrop-filter: blur(12px) saturate(120%);
+  -webkit-backdrop-filter: blur(12px) saturate(120%);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 12px 24px -8px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   padding: var(--space-4) var(--space-3);
   display: flex; flex-direction: column; min-height: 280px;
+  border-radius: 2px;
+  transition: transform 0.2s var(--nr2-face-ease), box-shadow 0.3s ease;
 }
 .beam-face.sd { border-top: 3px solid var(--sd); }
 .beam-face.qb { border-top: 3px solid var(--qb); }
+.beam-face.sd:hover { box-shadow: var(--glow-sd), 0 12px 24px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
+.beam-face.qb:hover { box-shadow: var(--glow-qb), 0 12px 24px -8px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05); }
 .beam-face.core {
   border-top: 3px solid var(--hal);
   background:
-    radial-gradient(ellipse 80% 50% at 50% 30%, rgba(224,230,237,0.06), transparent 70%),
-    rgba(10, 14, 18, 0.96);
+    radial-gradient(ellipse 80% 50% at 50% 30%, rgba(224,230,237,0.08), transparent 70%),
+    linear-gradient(180deg, rgba(14, 20, 28, 0.9) 0%, rgba(10, 14, 20, 0.72) 100%);
 }
 .beam-face.stale-border { border-color: var(--fringe); box-shadow: inset 0 0 0 1px rgba(255,0,68,0.25); }
 .beam-face.fresh { border-color: rgba(0, 212, 170, 0.45); }
 .face-lbl {
-  font-family: var(--sans); font-size: 13px; text-transform: uppercase;
-  letter-spacing: 0.08em; color: #c8d0da; margin-bottom: var(--space-2);
+  font-family: var(--sans); font-size: 13px; text-transform: none;
+  letter-spacing: 0.02em; color: var(--muted); margin-bottom: var(--space-2);
 }
 .face-val {
-  font-family: var(--mono); font-size: var(--text-val); font-weight: 600;
-  font-variant-numeric: tabular-nums; line-height: 1.15; margin-bottom: var(--space-2);
+  font-family: var(--mono);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" "ss01";
+  line-height: 1.15; margin-bottom: var(--space-2);
   word-break: break-word;
 }
 .face-val.sd { color: var(--sd); }
@@ -751,29 +968,50 @@ html.nr2-motion .om-claims-table tbody tr {
 }
 .btn-quiet:hover { color: var(--hal); }
 
-/* Mode strip — Hub tertiary nav; not a card grid (landing uses .bench > .mode-strip) */
-.main > .mode-strip {
+/* Mode strip — Hub tertiary nav; Moonshot P4 also mounts in .hub-rail */
+.main > .mode-strip,
+.hub-rail > .mode-strip {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
   padding: var(--space-3) 0 0; border-top: 1px solid var(--border-soft);
 }
-.main > .mode-strip .mode-lbl {
-  font-family: var(--sans); font-size: 12px; color: var(--muted);
+.hub-rail > .mode-strip {
+  flex-direction: column;
+  align-items: stretch;
+  border-top: none;
+  padding-top: 0;
+}
+.main > .mode-strip .mode-lbl,
+.hub-rail > .mode-strip .mode-lbl {
+  font-family: var(--sans); font-size: 12px; color: var(--qb);
+  font-weight: 600;
   margin-right: var(--space-2); text-transform: uppercase; letter-spacing: 0.08em;
 }
-.main > .mode-strip a {
+.main > .mode-strip a,
+.hub-rail > .mode-strip a {
   display: inline-flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 0 12px;
-  border: 1px solid var(--border); background: rgba(8,12,16,0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(14, 20, 28, 0.85) 0%, rgba(10, 14, 20, 0.65) 100%);
   color: #cfd8e3; font-family: var(--sans); font-size: 13px;
 }
-.main > .mode-strip a:hover { border-color: var(--sd); color: var(--sd); }
-.main > .mode-strip a .chip {
+.main > .mode-strip a:hover,
+.hub-rail > .mode-strip a:hover {
+  border-color: rgba(255, 170, 0, 0.45);
+  color: var(--qb);
+  box-shadow: var(--glow-qb);
+}
+.main > .mode-strip a .chip,
+.hub-rail > .mode-strip a .chip {
   font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; color: var(--muted);
 }
-.main > .mode-strip a .chip.sd { color: var(--sd); }
-.main > .mode-strip a .chip.qb { color: var(--qb); }
-.main > .mode-strip a .chip.hal { color: var(--hal); }
-.main > .mode-strip a .chip.stale { color: var(--fringe); }
+.main > .mode-strip a .chip.sd,
+.hub-rail > .mode-strip a .chip.sd { color: var(--sd); }
+.main > .mode-strip a .chip.qb,
+.hub-rail > .mode-strip a .chip.qb { color: var(--qb); }
+.main > .mode-strip a .chip.hal,
+.hub-rail > .mode-strip a .chip.hal { color: var(--hal); }
+.main > .mode-strip a .chip.stale,
+.hub-rail > .mode-strip a .chip.stale { color: var(--fringe); }
 
 .sublist { list-style: none; margin: 0; padding: 0; }
 .sublist li {
@@ -1395,12 +1633,37 @@ html.nr2-motion .om-claims-table tbody tr {
   .om-claims-table tbody tr.age-warn td { color: #a80; }
   .om-claims-table tbody tr.age-late td { color: #c60; }
   .om-claims-table tbody tr.age-critical td { color: #c33; }
+  /* Moonshot P6: glass → solid white; PHI as black redaction bars */
+  .metric-face,
+  .beam-face,
+  .phi-card,
+  .phi-sample,
+  .ledge,
+  .shell.atmosphere {
+    background: #fff !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important;
+    border-color: #333 !important;
+  }
+  .shell.atmosphere::before,
+  .beam,
+  .beam::after {
+    display: none !important;
+    animation: none !important;
+  }
   .nr2-print-redacted,
   .phi-hash.nr2-print-redacted,
   td.phi-name.nr2-print-redacted {
-    color: #666 !important;
-    font-weight: 700;
-    letter-spacing: 0.04em;
+    display: inline-block !important;
+    color: #fff !important;
+    background: #111 !important;
+    padding: 2px 8px !important;
+    font-size: 8pt !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em !important;
+    text-shadow: none !important;
+    border-radius: 1px;
   }
   .phi-sample-list li {
     break-inside: avoid;
