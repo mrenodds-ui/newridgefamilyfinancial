@@ -59,11 +59,51 @@ a:hover { color: var(--hal); }
 .banner.live { border-bottom-color: rgba(0, 212, 170, 0.35); }
 .banner.partial { border-bottom-color: rgba(255, 0, 68, 0.45); color: #e8c56a; }
 
+/* Package 1: ops gates on every optical page — honest RED/YELLOW, never mute RED */
+.nr2-ops-gates {
+  display: flex; flex-wrap: wrap; align-items: stretch; justify-content: center;
+  gap: 8px; min-height: 32px; padding: 4px 12px;
+  border-bottom: 1px solid #1e2430; background: #07090c;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+}
+.nr2-ops-gate {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 28px; padding: 2px 10px;
+  border: 1px solid #2a3340; background: #0a0f14; color: var(--muted);
+}
+.nr2-ops-gate .lbl { color: #7a8494; letter-spacing: 0.1em; }
+.nr2-ops-gate .val {
+  color: var(--hal); font-variant-numeric: tabular-nums; letter-spacing: 0.04em;
+}
+.nr2-ops-gate.tone-green {
+  border-color: rgba(0, 212, 170, 0.45); background: #061410;
+}
+.nr2-ops-gate.tone-green .val { color: var(--sd); }
+.nr2-ops-gate.tone-yellow {
+  border-color: rgba(232, 197, 106, 0.5); background: #141008;
+}
+.nr2-ops-gate.tone-yellow .val { color: #e8c56a; }
+.nr2-ops-gate.tone-red {
+  border-color: #dc2626; background: #1a0608; color: #fecaca;
+}
+.nr2-ops-gate.tone-red .lbl { color: #fca5a5; }
+.nr2-ops-gate.tone-red .val { color: #fecaca; font-weight: 700; }
+.nr2-ops-gate.pulse {
+  animation: nr2-ops-pulse 1.4s ease-in-out infinite;
+}
+@keyframes nr2-ops-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.0); border-color: #dc2626; }
+  50% { box-shadow: 0 0 12px 1px rgba(220, 38, 38, 0.45); border-color: #f87171; }
+}
+
 .shell {
   display: grid; grid-template-columns: 220px 1fr; min-height: calc(100dvh - 36px);
   background:
     radial-gradient(ellipse 55% 40% at 60% 40%, rgba(20,40,50,0.4), transparent 70%),
     var(--vacuum);
+}
+body.has-ops-gates .shell {
+  min-height: calc(100dvh - 68px);
 }
 .nav {
   border-right: 1px solid var(--border-soft); background: rgba(8,12,16,0.96);
@@ -839,7 +879,7 @@ a:hover { color: var(--hal); }
 }
 
 @media print {
-  .banner, .nav, .beam, .money-strip, .foot-nav, .ops-row,
+  .banner, .nr2-ops-gates, .nav, .beam, .money-strip, .foot-nav, .ops-row,
   .wk-filter, #btn-wk-refresh, #btn-wk-dossier-close, .wk-dossier,
   #btn-tr-refresh, #btn-cl-refresh, #btn-cl-dossier-close, #cl-dossier {
     display: none !important;

@@ -514,6 +514,219 @@
     });
     return btn;
   }
+  function morningBundleGate(ready) {
+    const bundle = ready && ready.periodClose && ready.periodClose.morningBundle;
+    if (!bundle || typeof bundle !== "object") {
+      return {
+        id: "morning_bundle",
+        label: "BUNDLE",
+        status: "RED",
+        detail: "No morning bundle signal · empty ≠ $0",
+        value: "RED",
+      };
+    }
+    if (bundle.ok) {
+      return {
+        id: "morning_bundle",
+        label: "BUNDLE",
+        status: "GREEN",
+        detail:
+          "Morning bundle ok" +
+          (bundle.okCount != null ? " · " + bundle.okCount + " reports" : "") +
+          " · empty ≠ $0",
+        value: "GREEN",
+      };
+    }
+    const err = String(bundle.error || bundle.detail || bundle.fallback || "not ok").slice(0, 72);
+    return {
+      id: "morning_bundle",
+      label: "BUNDLE",
+      status: "RED",
+      detail: (bundle.fallback ? "FALLBACK · " : "") + err + " · empty ≠ $0",
+      value: "RED",
+    };
+  }
+  function trellisGate(proof) {
+    if (!proof || typeof proof !== "object") {
+      return {
+        id: "trellis",
+        label: "TRELLIS",
+        status: "YELLOW",
+        detail: "No Trellis AM proof signal",
+        value: "—",
+      };
+    }
+    if (proof.passed) {
+      return {
+        id: "trellis",
+        label: "TRELLIS",
+        status: "GREEN",
+        detail: String(proof.chipLabel || "withBenefits > 0") + " · counts only",
+        value: "GREEN",
+      };
+    }
+    const chip = String(proof.chipStatus || "awaiting").toLowerCase();
+    if (chip === "fault") {
+      return {
+        id: "trellis",
+        label: "TRELLIS",
+        status: "RED",
+        detail: String(proof.chipLabel || "Trellis AM proof fault"),
+        value: "RED",
+      };
+    }
+    return {
+      id: "trellis",
+      label: "TRELLIS",
+      status: "YELLOW",
+      detail: String(proof.chipLabel || "awaiting nightly ClearCoverage scrape"),
+      value: "YELLOW",
+    };
+  }
+  function shadowGate(pilot) {
+    if (!pilot || typeof pilot !== "object") {
+      return {
+        id: "shadow",
+        label: "SHADOW",
+        status: "YELLOW",
+        detail: "No pilot shadow signal · systemOfRecord stays false",
+        value: "—/30",
+      };
+    }
+    const minDays = Number(pilot.minShadowDays);
+    const min = Number.isFinite(minDays) && minDays > 0 ? minDays : 30;
+    const elapsedRaw = pilot.shadowDaysElapsed;
+    const elapsed = typeof elapsedRaw === "number" && Number.isFinite(elapsedRaw) ? elapsedRaw : null;
+    const clock = (elapsed != null ? String(elapsed) : "—") + "/" + String(min);
+    if (pilot.systemOfRecord) {
+      return {
+        id: "shadow",
+        label: "SHADOW",
+        status: "GREEN",
+        detail: "systemOfRecord=true · phase " + String(pilot.phase || "cutover"),
+        value: clock,
+      };
+    }
+    const detail =
+      "phase " +
+      String(pilot.phase || "shadow") +
+      " · " +
+      clock +
+      " days · systemOfRecord=false";
+    return {
+      id: "shadow",
+      label: "SHADOW",
+      status: "YELLOW",
+      detail: detail,
+      value: clock,
+    };
+  }
+  function deriveOpsGates(ready, trellisProof, pilot) {
+    return [morningBundleGate(ready), trellisGate(trellisProof), shadowGate(pilot)];
+  }
+  async function fetchOpsGates(timeoutMs) {
+    const ms = timeoutMs || 12000;
+    const [readyRes, trellisRes, appRes] = await Promise.all([
+      getJson("/api/import-readiness", ms),
+      getJson("/api/trellis/am-proof", ms),
+      getJson("/api/app-info", ms),
+    ]);
+    const ready = readyRes.ok ? readyRes.data : null;
+    const trellisProof = trellisRes.ok ? trellisRes.data : null;
+    const pilot =
+      appRes.ok && appRes.data && appRes.data.pilot && typeof appRes.data.pilot === "object"
+        ? appRes.data.pilot
+        : null;
+    return {
+      gates: deriveOpsGates(ready, trellisProof, pilot),
+      ready: ready,
+      trellisProof: trellisProof,
+      pilot: pilot,
+    };
+  }
+  function renderOpsGates(el, gates) {
+    if (!el) return;
+    const list = Array.isArray(gates) ? gates : [];
+    el.innerHTML = list
+      .map(function (g) {
+        const status = String(g.status || "YELLOW").toUpperCase();
+        const tone =
+          status === "GREEN" ? "green" : status === "RED" ? "red" : status === "FAULT" ? "red" : "yellow";
+        const pulse = status === "RED" ? " pulse" : "";
+        return (
+          '<span class="nr2-ops-gate tone-' +
+          tone +
+          pulse +
+          '" data-gate="' +
+          String(g.id || "") +
+          '" title="' +
+          String(g.detail || "").replace(/"/g, "&quot;") +
+          '">' +
+          '<span class="lbl">' +
+          String(g.label || g.id || "GATE") +
+          "</span>" +
+          '<span class="val">' +
+          String(g.value || status) +
+          "</span>" +
+          "</span>"
+        );
+      })
+      .join("");
+  }
+  let opsGatesTimer = null;
+  function mountOpsGates(opts) {
+    const o = opts || {};
+    if (document.documentElement.getAttribute("data-nr2-ops-gates") === "off") return null;
+    let bar = document.getElementById("nr2-ops-gates");
+    if (!bar) {
+      bar = document.createElement("div");
+      bar.id = "nr2-ops-gates";
+      bar.className = "nr2-ops-gates";
+      bar.setAttribute("role", "status");
+      bar.setAttribute("aria-live", "polite");
+      bar.setAttribute("aria-label", "Ops gates · morning bundle · Trellis · shadow clock");
+      bar.innerHTML =
+        '<span class="nr2-ops-gate tone-yellow"><span class="lbl">OPS</span><span class="val">…</span></span>';
+      const banner = document.querySelector(".banner");
+      if (banner && banner.parentNode) {
+        banner.insertAdjacentElement("afterend", bar);
+      } else if (document.body.firstChild) {
+        document.body.insertBefore(bar, document.body.firstChild);
+      } else {
+        document.body.appendChild(bar);
+      }
+    }
+    document.body.classList.add("has-ops-gates");
+    const refresh = function () {
+      return fetchOpsGates(o.timeoutMs || 12000).then(function (pack) {
+        renderOpsGates(bar, pack.gates);
+        if (typeof o.onDone === "function") o.onDone(pack);
+        return pack;
+      });
+    };
+    refresh();
+    const ms = o.refreshMs == null ? 60000 : Number(o.refreshMs);
+    if (opsGatesTimer) {
+      clearInterval(opsGatesTimer);
+      opsGatesTimer = null;
+    }
+    if (ms > 0) {
+      opsGatesTimer = setInterval(refresh, ms);
+    }
+    return bar;
+  }
+  function bootOpsGates() {
+    try {
+      mountOpsGates({ refreshMs: 60000 });
+    } catch (_) {
+      /* ignore mount faults — page faces still load */
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootOpsGates);
+  } else {
+    bootOpsGates();
+  }
   global.NR2OpticalWire = {
     money: money,
     fmtMoney: fmtMoney,
@@ -546,5 +759,12 @@
     bindVerifyBeamButton: bindVerifyBeamButton,
     runDeskSmoke: runDeskSmoke,
     bindDeskSmokeButton: bindDeskSmokeButton,
+    morningBundleGate: morningBundleGate,
+    trellisGate: trellisGate,
+    shadowGate: shadowGate,
+    deriveOpsGates: deriveOpsGates,
+    fetchOpsGates: fetchOpsGates,
+    renderOpsGates: renderOpsGates,
+    mountOpsGates: mountOpsGates,
   };
 })(window);
