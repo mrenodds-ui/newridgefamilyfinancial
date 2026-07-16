@@ -4,7 +4,9 @@
 Read-only SoftDent UI exports into C:\\SoftDentReportExports, then hands off to the
 existing daily refresh / period import path. Never prints passwords.
 
-Intended schedule: interactive desktop Task Scheduler at 5:00 PM.
+Intended schedule: interactive desktop Task Scheduler at **9:00 PM** local
+(the night before the business day those SoftDent reports feed). SoftDent
+before Trellis (~10:10 PM). Do not defer next-day SoftDent pulls to morning.
 """
 
 from __future__ import annotations

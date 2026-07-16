@@ -80,6 +80,10 @@ def universal_report_pull_steps() -> list[str]:
         "Setup window: set Start/End (or as-of) dates; Doctors/Providers 999 = all unless filtering; OK.",
         SOFTDENT_SELECT_FILE_PATH_HYGIENE,
         "Print Preview path: page to the LAST page for exact totals (page 1 is often incomplete).",
+        "SCHEDULE (overall): SoftDent reports for the NEXT business day must be pulled at "
+        "9:00 PM local the NIGHT BEFORE (aging/register/collections money bundle and other "
+        "next-day SoftDent GUI pulls) — do not wait until morning. SoftDent before Trellis "
+        "(Trellis verify typically ~10:10 PM).",
         "Morning money bundle (aging/register/collections) needs Excel enabled for money beams; Preview-only keeps attest_only.",
         "NR2: https://127.0.0.1:8765 → SoftDent page → Sync (or refresh_softdent_period_imports). "
         "Never invent SoftDent dollars; empty ≠ $0.",
@@ -163,6 +167,7 @@ def format_softdent_report_pull_hal_reply(query: str = "") -> str:
         " ".join(f"{i}) {s}" for i, s in enumerate(steps, 1)),
         "Hard rules: Excel or Print Preview only — never Printer; never File; never Esc on SoftDent main; "
         "never Alt+R for Reports (AMD Instant Replay steals it); SoftDent is 32-bit — prefer F10. "
+        "SCHEDULE: next-day SoftDent reports at 9:00 PM local the night before (SoftDent before Trellis ~10:10 PM). "
         "If Excel is greyed out on Output Options → Print Preview only (empty ≠ $0 for money until Excel enabled). "
         "Money-beam enablement runbook: NewRidgeFinancial2/docs/runbooks/softdent_excel_enablement_nr2.md "
         "(then say approve for attended morning bundle). "

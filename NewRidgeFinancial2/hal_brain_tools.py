@@ -844,7 +844,10 @@ SOFTDENT_EXCEL_ENABLEMENT_RUNBOOK = (
 
 
 def softdent_export_morning_bundle(*, days: int = 30) -> dict[str, Any]:
-    """Export aging + register + collections for morning period-close.
+    """Export aging + register + collections for next-day / period-close money beams.
+
+    Overall schedule: run at **9:00 PM local the night before** the business day
+    these reports feed (not deferred to morning). SoftDent before Trellis (~10:10 PM).
 
     Aging is required for money beams. Register/collections are best-effort.
     If aging fails → ok=False (caller may attest-only). Partial secondary failures
