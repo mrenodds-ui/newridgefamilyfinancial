@@ -67,6 +67,7 @@
       collections,
       npm,
       production,
+      hygiene,
     ] = await Promise.all([
       W.getMoneyBeams(12000),
       W.getJson("/api/import-readiness", 12000),
@@ -77,6 +78,7 @@
       W.getJson("/api/softdent/collections-daily", 12000),
       W.getJson("/api/softdent/new-patients-mtd", 12000),
       W.getJson("/api/softdent/provider-production", 12000),
+      W.getJson("/api/softdent/hygiene-recall", 12000),
     ]);
 
     const readyData = ready.ok ? ready.data : null;
@@ -272,6 +274,40 @@
     const hintBundle = document.getElementById("hint-an-bundle");
     if (hintBundle) hintBundle.textContent = bundle.hint;
     if (bundle.tone === "hal") live = true;
+
+    if (hygiene.ok && hygiene.data) {
+      const hr = hygiene.data;
+      if (hr.hasData) {
+        const due = hr.recallDue != null ? Number(hr.recallDue) : null;
+        const done = hr.hygieneCompleted != null ? Number(hr.hygieneCompleted) : null;
+        const overdue = hr.overdue != null ? Number(hr.overdue) : null;
+        if (due != null && done != null) {
+          W.setText("an-hygiene", String(overdue != null ? overdue : due) + " gap");
+        } else if (due != null) {
+          W.setText("an-hygiene", String(due) + " due");
+        } else {
+          W.setText("an-hygiene", null, "∅");
+        }
+        const hintHy = document.getElementById("hint-an-hygiene");
+        if (hintHy) {
+          hintHy.textContent =
+            "Period " +
+            String(hr.period || currentMonthPrefix()) +
+            " · due " +
+            String(due != null ? due : "—") +
+            " · completed " +
+            String(done != null ? done : "—") +
+            " · counts only · empty ≠ $0";
+        }
+        live = true;
+      } else {
+        W.setText("an-hygiene", null, "∅");
+        const hintHy = document.getElementById("hint-an-hygiene");
+        if (hintHy) hintHy.textContent = "No hygiene recall export yet · empty ≠ $0";
+      }
+    } else {
+      W.setText("an-hygiene", null, "NO SIGNAL");
+    }
 
     W.setBanner(
       live ? "live" : "partial",

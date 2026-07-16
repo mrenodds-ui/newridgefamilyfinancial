@@ -14,6 +14,7 @@ from nr2_softdent_daily import (
     claim_review,
     claims_outstanding,
     collections_daily,
+    hygiene_recall_summary,
     new_patients_mtd,
     provider_production,
 )
@@ -60,6 +61,27 @@ class Nr2SoftdentDailyTests(unittest.TestCase):
                 result = new_patients_mtd(period="2026-06")
             self.assertTrue(result["hasData"])
             self.assertEqual(result["count"], 1)
+
+    def test_hygiene_recall_summary_counts_only(self) -> None:
+        with patch(
+            "softdent_practice_exports.read_practice_export_datasets",
+            return_value={
+                "hygieneRecall": {
+                    "rows": [{"Period": "2026-07", "RecallDue": 12, "HygieneCompleted": 9}],
+                    "sourceFile": "hygiene_recall_summary.csv",
+                }
+            },
+        ):
+            with patch(
+                "softdent_practice_exports.resolve_analytics_db",
+                return_value=Path("C:/SoftDentFinancialExports/softdent_financial_analytics.db"),
+            ):
+                result = hygiene_recall_summary(period="2026-07")
+        self.assertTrue(result.get("hasData"))
+        self.assertEqual(result.get("recallDue"), 12)
+        self.assertEqual(result.get("hygieneCompleted"), 9)
+        self.assertEqual(result.get("overdue"), 3)
+        self.assertTrue(result.get("emptyNotZero"))
 
     def test_claims_outstanding(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

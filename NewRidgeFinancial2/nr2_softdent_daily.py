@@ -242,6 +242,62 @@ def new_patients_mtd(*, period: str | None = None) -> dict[str, Any]:
     return {"hasData": count > 0, "count": count, "period": period, "source": "sd_patients", "dbPath": str(db_path)}
 
 
+def hygiene_recall_summary(*, period: str | None = None) -> dict[str, Any]:
+    """Hygiene recall gap counts for morning huddle (empty ≠ $0 · counts only)."""
+    period_key = (period or _utc_now_month())[:7]
+    try:
+        from softdent_practice_exports import read_practice_export_datasets, resolve_analytics_db
+
+        datasets = read_practice_export_datasets()
+        db_path = resolve_analytics_db()
+    except Exception as exc:
+        return {
+            "hasData": False,
+            "period": period_key,
+            "recallDue": None,
+            "hygieneCompleted": None,
+            "overdue": None,
+            "rows": [],
+            "error": str(exc),
+            "emptyNotZero": True,
+            "honesty": "counts only · not dollars",
+        }
+
+    hr = datasets.get("hygieneRecall") if isinstance(datasets, dict) else None
+    rows = list((hr or {}).get("rows") or [])
+    row = next(
+        (
+            r
+            for r in rows
+            if str((r or {}).get("Period") or "").startswith(period_key)
+        ),
+        rows[-1] if rows else None,
+    )
+    recall_due = None
+    hygiene_completed = None
+    if isinstance(row, dict):
+        if row.get("RecallDue") is not None:
+            recall_due = int(float(row.get("RecallDue") or 0))
+        if row.get("HygieneCompleted") is not None:
+            hygiene_completed = int(float(row.get("HygieneCompleted") or 0))
+    overdue = None
+    if recall_due is not None and hygiene_completed is not None:
+        overdue = max(0, recall_due - hygiene_completed)
+    has_data = bool(rows) or recall_due is not None or hygiene_completed is not None
+    return {
+        "hasData": has_data,
+        "period": period_key,
+        "recallDue": recall_due,
+        "hygieneCompleted": hygiene_completed,
+        "overdue": overdue,
+        "rows": rows[:8],
+        "source": (hr or {}).get("sourceFile") or "hygiene_recall_summary.csv",
+        "dbPath": str(db_path) if db_path else None,
+        "emptyNotZero": True,
+        "honesty": "counts only · not dollars",
+    }
+
+
 def appointments_snapshot(*, limit: int = 12) -> dict[str, Any]:
     conn, db_path = _open_db()
     if not conn:

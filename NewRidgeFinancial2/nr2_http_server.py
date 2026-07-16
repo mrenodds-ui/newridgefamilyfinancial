@@ -3807,6 +3807,15 @@ class NR2BottleServer(BottleServer):
 
             return _json_response(patient_retention())
 
+        @app.get("/api/softdent/hygiene-recall")
+        def softdent_hygiene_recall_api():
+            """Hygiene recall gap counts for analytics huddle (empty ≠ $0 · read-only)."""
+            import bottle
+            from nr2_softdent_daily import hygiene_recall_summary
+
+            period = str(bottle.request.query.get("period") or "").strip() or None
+            return _json_response(hygiene_recall_summary(period=period))
+
         @app.get("/api/softdent/operatory-grid")
         def softdent_operatory_grid_api():
             from nr2_softdent_daily import operatory_grid
