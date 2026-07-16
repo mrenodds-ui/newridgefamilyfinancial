@@ -7,3 +7,7 @@ sqlcipher3
 APScheduler>=3.10
 requests
 cryptography>=42.0
+# HAL BlueNote announce: duck Pandora (or other music) while speaking
+pycaw
+comtypes
+psutil

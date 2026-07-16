@@ -343,7 +343,12 @@ def apply_voice_style(cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 class MusicDucker:
-    """Lower background music during announcements, then restore it."""
+    """Lower background music during announcements, then restore it.
+
+    Targets Windows audio sessions by process name (default Pandora.exe) via
+    pycaw. Keys saved volumes by PID so restore still works across fresh
+    GetAllSessions() COM wrappers.
+    """
 
     def __init__(
         self,
@@ -353,6 +358,16 @@ class MusicDucker:
         self.process_names = [n.lower() for n in (process_names or ["Pandora.exe"]) if n]
         self.duck_level = max(0.0, min(1.0, float(duck_level)))
         self._saved: dict[int, float] = {}
+
+    @staticmethod
+    def available() -> bool:
+        try:
+            from pycaw.pycaw import AudioUtilities
+
+            AudioUtilities.GetAllSessions()
+            return True
+        except Exception:
+            return False
 
     def _sessions(self):
         from pycaw.pycaw import AudioUtilities
@@ -371,25 +386,45 @@ class MusicDucker:
 
     def duck(self) -> bool:
         applied = False
-        for session in self._sessions():
+        try:
+            sessions = self._sessions()
+        except Exception:
+            return False
+        for session in sessions:
             try:
+                proc = session.Process
+                if not proc:
+                    continue
+                pid = int(proc.pid)
                 vol = self._volume_ctl(session)
-                key = id(session._ctl)
-                if key not in self._saved:
-                    self._saved[key] = float(vol.GetMasterVolume())
-                vol.SetMasterVolume(self.duck_level, None)
+                current = float(vol.GetMasterVolume())
+                if pid not in self._saved:
+                    self._saved[pid] = current
+                # Never raise music while ducking — only lower when louder than target.
+                if current > self.duck_level:
+                    vol.SetMasterVolume(self.duck_level, None)
                 applied = True
             except Exception:
                 pass
         return applied
 
     def restore(self) -> None:
-        for session in self._sessions():
+        if not self._saved:
+            return
+        try:
+            sessions = self._sessions()
+        except Exception:
+            self._saved.clear()
+            return
+        for session in sessions:
             try:
-                key = id(session._ctl)
-                if key not in self._saved:
+                proc = session.Process
+                if not proc:
                     continue
-                self._volume_ctl(session).SetMasterVolume(self._saved[key], None)
+                pid = int(proc.pid)
+                if pid not in self._saved:
+                    continue
+                self._volume_ctl(session).SetMasterVolume(self._saved[pid], None)
             except Exception:
                 pass
         self._saved.clear()
@@ -486,15 +521,22 @@ class Announcer:
                 return
             if self._music_ducker is not None:
                 asynchronous = False
-                self._music_ducker.duck()
             try:
+                if self._music_ducker is not None:
+                    try:
+                        self._music_ducker.duck()
+                    except Exception:
+                        pass
                 if self._neural_tts and self._speak_neural(phrase):
                     return
                 self._last_engine = "sapi"
                 self._speak_sapi(phrase, asynchronous=asynchronous)
             finally:
                 if self._music_ducker is not None:
-                    self._music_ducker.restore()
+                    try:
+                        self._music_ducker.restore()
+                    except Exception:
+                        pass
 
     def _speak_neural(self, text: str) -> bool:
         try:

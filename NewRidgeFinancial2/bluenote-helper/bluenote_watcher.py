@@ -263,10 +263,16 @@ def run_watcher() -> int:
         try:
             from announcer import MusicDucker
 
-            music_ducker = MusicDucker(
-                process_names=cfg.get("duckMusicProcesses") or ["Pandora.exe"],
-                duck_level=float(cfg.get("duckMusicLevel", 0.14)),
-            )
+            procs = cfg.get("duckMusicProcesses") or ["Pandora.exe"]
+            level = float(cfg.get("duckMusicLevel", 0.14))
+            if not MusicDucker.available():
+                log(
+                    "music ducking unavailable (install pycaw in watcher Python); "
+                    "Pandora will stay at full volume during announces"
+                )
+            else:
+                music_ducker = MusicDucker(process_names=procs, duck_level=level)
+                log(f"music ducking: ON ({', '.join(procs)} -> {level:.0%})")
         except Exception as exc:
             log(f"music ducking failed: {exc}")
 
