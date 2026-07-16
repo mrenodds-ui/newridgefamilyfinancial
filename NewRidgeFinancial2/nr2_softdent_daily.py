@@ -585,14 +585,61 @@ def _filter_unpaid_claim_rows(
     name_to_id: dict[str, str],
     transactions: list[dict[str, Any]] | None = None,
     settlement_index: dict[str, set[str]] | None = None,
-) -> list[tuple[Any, ...]]:
-    """Drop paid/settled rows using full SoftDent TXN ledger (not stale DS status)."""
+    suppress_ctx: dict[str, Any] | None = None,
+    with_evidence: bool = False,
+) -> list[tuple[Any, ...]] | tuple[list[tuple[Any, ...]], dict[str, int], list[str]]:
+    """Drop paid/settled rows: TXN → ERA → Claims Aging → staff verified paid.
+
+    SoftDent READ-ONLY. empty ≠ $0 — missing ERA/Aging never invents paid.
+    """
     if not rows:
+        if with_evidence:
+            return [], {"txn": 0, "era": 0, "aging": 0, "staff": 0}, []
         return []
     try:
-        from softdent_operational_pipeline import claim_is_unpaid_on_txn
+        from nr2_claims_paid_suppress import claim_is_still_outstanding, load_suppress_context
     except Exception:
-        return rows
+        # Fallback: TXN-only (legacy)
+        try:
+            from softdent_operational_pipeline import claim_is_unpaid_on_txn
+        except Exception:
+            if with_evidence:
+                return list(rows), {"txn": 0, "era": 0, "aging": 0, "staff": 0}, [
+                    "still_waiting"
+                ] * len(rows)
+            return rows
+        txs = transactions
+        idx = settlement_index
+        if txs is None or idx is None:
+            try:
+                from softdent_operational_pipeline import load_txn_settlement_context
+
+                txs, idx = load_txn_settlement_context()
+            except Exception:
+                txs, idx = None, None
+        kept_fb: list[tuple[Any, ...]] = []
+        evidence_fb: list[str] = []
+        dropped_fb = {"txn": 0, "era": 0, "aging": 0, "staff": 0}
+        for claim_id, patient, payer, service_date, amount, status in rows:
+            patient_raw = str(patient or "").strip()
+            chart_mrn = _resolve_claim_chart_mrn(str(claim_id or ""), patient_raw, name_to_id)
+            if claim_is_unpaid_on_txn(
+                patient_id=chart_mrn,
+                service_date=str(service_date or ""),
+                claim_id=str(claim_id or ""),
+                claim_status=str(status or ""),
+                transactions=txs,
+                settlement_index=idx,
+            ):
+                kept_fb.append((claim_id, patient, payer, service_date, amount, status))
+                evidence_fb.append("still_waiting")
+            else:
+                dropped_fb["txn"] += 1
+        if with_evidence:
+            return kept_fb, dropped_fb, evidence_fb
+        return kept_fb
+
+    ctx = suppress_ctx if isinstance(suppress_ctx, dict) else load_suppress_context()
     txs = transactions
     idx = settlement_index
     if txs is None or idx is None:
@@ -602,20 +649,35 @@ def _filter_unpaid_claim_rows(
             txs, idx = load_txn_settlement_context()
         except Exception:
             txs, idx = None, None
+    era_index = ctx.get("era") if isinstance(ctx.get("era"), dict) else None
+    aging_index = ctx.get("aging") if isinstance(ctx.get("aging"), dict) else None
+    staff_ids = ctx.get("staffIds") if isinstance(ctx.get("staffIds"), set) else None
     kept: list[tuple[Any, ...]] = []
+    evidence: list[str] = []
+    dropped = {"txn": 0, "era": 0, "aging": 0, "staff": 0}
     for claim_id, patient, payer, service_date, amount, status in rows:
         patient_raw = str(patient or "").strip()
-        # Settlement index is keyed by SoftDent chart/MRN from TXN ledger.
         chart_mrn = _resolve_claim_chart_mrn(str(claim_id or ""), patient_raw, name_to_id)
-        if claim_is_unpaid_on_txn(
-            patient_id=chart_mrn,
-            service_date=str(service_date or ""),
+        keep, reason = claim_is_still_outstanding(
             claim_id=str(claim_id or ""),
+            patient_id=chart_mrn,
+            patient_name=patient_raw,
+            service_date=str(service_date or ""),
+            amount=amount,
             claim_status=str(status or ""),
             transactions=txs,
             settlement_index=idx,
-        ):
+            era_index=era_index,
+            aging_index=aging_index,
+            staff_ids=staff_ids,
+        )
+        if keep:
             kept.append((claim_id, patient, payer, service_date, amount, status))
+            evidence.append(reason)
+        elif reason in dropped:
+            dropped[reason] += 1
+    if with_evidence:
+        return kept, dropped, evidence
     return kept
 
 
@@ -629,8 +691,8 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
     Sensei id (name join when TXN chart MRN is not a Sensei UniqueID) so Claims
     page can open mini dossier on click.
 
-    Re-checks each row against SoftDent Trans-for-a-Period so stale daysheet
-    (DS-) rows with insurance pay on/after DOS do not appear as unpaid.
+    Suppresses paid via TXN → ERA → Claims Aging Excel → staff verified paid
+    (NR2-12150). Missing ERA/Aging never invents paid (empty ≠ $0).
     """
     conn, db_path = _connect()
     if not conn:
@@ -642,6 +704,35 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             "sampleWithPatientId": 0,
             "honesty": "empty != $0",
         }
+    suppress_meta: dict[str, Any] = {
+        "txnDropped": 0,
+        "eraDropped": 0,
+        "agingDropped": 0,
+        "staffDropped": 0,
+        "agingActive": False,
+        "eraActive": False,
+        "txnDateMax": None,
+        "txnPath": None,
+        "agingPath": None,
+    }
+    try:
+        from nr2_claims_paid_suppress import load_suppress_context
+
+        suppress_ctx = load_suppress_context()
+        aging = suppress_ctx.get("aging") if isinstance(suppress_ctx.get("aging"), dict) else {}
+        era = suppress_ctx.get("era") if isinstance(suppress_ctx.get("era"), dict) else {}
+        suppress_meta.update(
+            {
+                "agingActive": bool(aging.get("active")),
+                "eraActive": bool(era.get("active")),
+                "txnDateMax": suppress_ctx.get("txnDateMax"),
+                "txnPath": suppress_ctx.get("txnPath"),
+                "agingPath": aging.get("path"),
+                "staffHideCount": len(suppress_ctx.get("staffIds") or []),
+            }
+        )
+    except Exception:
+        suppress_ctx = None
     try:
         cur = conn.cursor()
         source = "sd_claims"
@@ -660,7 +751,10 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         generic_payer_count = 0
         txn_ctx: tuple[list[dict[str, Any]], dict[str, set[str]]] | None = None
         known_ids: set[str] = set()
+        evidence_all: list[str] = []
+        sd_claims_queried = False
         if _table_exists(conn, "sd_claims"):
+            sd_claims_queried = True
             cur.execute(
                 """
                 SELECT claim_id, patient_name, payer, service_date, claim_amount, claim_status
@@ -680,24 +774,40 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 txn_ctx = load_txn_settlement_context()
             except Exception:
                 txn_ctx = None
-            rows = _filter_unpaid_claim_rows(
+            filtered = _filter_unpaid_claim_rows(
                 candidate_rows,
                 name_to_id=name_to_id,
                 transactions=txn_ctx[0] if txn_ctx else None,
                 settlement_index=txn_ctx[1] if txn_ctx else None,
+                suppress_ctx=suppress_ctx,
+                with_evidence=True,
             )
+            if isinstance(filtered, tuple):
+                rows, dropped, evidence_all = filtered
+                suppress_meta["txnDropped"] = int(dropped.get("txn") or 0)
+                suppress_meta["eraDropped"] = int(dropped.get("era") or 0)
+                suppress_meta["agingDropped"] = int(dropped.get("aging") or 0)
+                suppress_meta["staffDropped"] = int(dropped.get("staff") or 0)
+                suppress_meta["candidateOpenStatusCount"] = len(candidate_rows)
+            else:
+                rows = filtered
+                evidence_all = ["still_waiting"] * len(rows)
             count = len(rows)
             total = round(sum(float(r[4] or 0) for r in rows), 2) if rows else 0.0
             generic_payer_count = sum(
                 1 for r in rows if _generic_payer_label(str(r[2] or ""))
             )
-            rows = rows[: max(1, int(limit))]
+            if rows:
+                rows = rows[: max(1, int(limit))]
+                evidence_all = evidence_all[: len(rows)]
         else:
             rows = []
             name_to_id = {}
             generic_payer_count = 0
 
-        if not rows and _table_exists(conn, "outstanding_claims"):
+        # Only fall back when sd_claims was never queried — never reintroduce
+        # unfiltered outstanding_claims after paid suppress emptied the list.
+        if not sd_claims_queried and not rows and _table_exists(conn, "outstanding_claims"):
             source = "outstanding_claims"
             cur.execute(
                 """
@@ -726,6 +836,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             generic_payer_count = sum(
                 1 for r in rows if _generic_payer_label(str(r[2] or ""))
             )
+            evidence_all = ["still_waiting"] * len(rows)
 
         claims = []
         with_patient_id = 0
@@ -733,7 +844,7 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
             from patient_dossier import name_hash as _name_hash
         except Exception:
             _name_hash = None  # type: ignore[assignment,misc]
-        for claim_id, patient, payer, service_date, amount, status in rows:
+        for i, (claim_id, patient, payer, service_date, amount, status) in enumerate(rows):
             patient_raw = str(patient or "").strip()
             patient_id = _resolve_claim_patient_id(
                 str(claim_id or ""),
@@ -755,6 +866,11 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
                 "amount": round(float(amount or 0), 2),
                 "status": str(status or ""),
                 "initials": _initials_from_name(patient_raw) if patient_raw else "P—",
+                "evidence": (
+                    evidence_all[i]
+                    if i < len(evidence_all)
+                    else "still_waiting"
+                ),
             }
             if patient_raw and _name_hash:
                 entry["nameHash"] = _name_hash(patient_raw)
@@ -783,12 +899,15 @@ def claims_outstanding(*, limit: int = 10) -> dict[str, Any]:
         "sampleLimit": max(1, int(limit)),
         "sampleWithPatientId": with_patient_id if rows else 0,
         "payerStats": payer_stats,
+        "paidSuppress": suppress_meta,
         "source": source,
         "dbPath": str(db_path),
         "honesty": "empty != $0",
         "sourceNote": (
-            "sd_claims may be SoftDent Trans-for-a-Period estimates when SoftDent "
-            "Outstanding Claims by Patient Excel is greyed (empty ≠ $0)."
+            "Outstanding = still waiting after TXN/ERA/Claims-Aging/staff filters. "
+            "Missing ERA or Claims Aging Excel does not invent paid (empty ≠ $0). "
+            "Pull SoftDent Claims Aging → Excel to C:\\SoftDentReportExports\\claims_aging_*.xls "
+            "and refresh Trans-for-a-Period through today for freshest paid suppression."
         ),
     }
 

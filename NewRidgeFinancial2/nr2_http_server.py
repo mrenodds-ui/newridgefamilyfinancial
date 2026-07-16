@@ -3084,6 +3084,29 @@ class NR2BottleServer(BottleServer):
                 )
             return _json_response(result)
 
+        @app.post("/api/softdent/claims-force-close")
+        def softdent_claims_force_close_api():
+            """Staff-verified paid hide — local only; no SoftDent write-back."""
+            from hal_employee_workflows import add_claim_action
+
+            payload = bottle.request.json or {}
+            data = payload if isinstance(payload, dict) else {}
+            data = {
+                **data,
+                "action": "staff_verified_paid",
+                "note": str(data.get("note") or "Staff verified paid — hide from outstanding").strip(),
+            }
+            result = add_claim_action(_local_store(), data)
+            if result.get("ok"):
+                _audit_mutation(
+                    "claim_staff_verified_paid",
+                    detail={
+                        "claimId": result.get("claimId"),
+                        "hiddenFromOutstanding": result.get("hiddenFromOutstanding"),
+                    },
+                )
+            return _json_response(result)
+
         @app.post("/api/claims/appeal-packet")
         def claims_appeal_packet_api():
             from hal_employee_workflows import build_appeal_packet

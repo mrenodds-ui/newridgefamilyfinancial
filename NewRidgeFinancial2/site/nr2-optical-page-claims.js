@@ -15,6 +15,7 @@
     needs_attachment: "Needs attachment",
     resubmit_path: "Resubmit path",
     patient_followup: "Patient follow-up",
+    staff_verified_paid: "Staff verified paid (hide)",
     note: "Note",
   };
 
@@ -194,7 +195,7 @@
       const age = claimAgeDays(c && c.serviceDate);
       const amt = c && c.amount != null ? String(c.amount) : "";
       rows.push([
-        String((c && c.initials) || "P—"),
+        W.formatPhiInitials ? W.formatPhiInitials(c) : String((c && c.initials) || "P—"),
         String((c && c.nameHash) || "——"),
         String((c && c.patientHash) || "——"),
         String((c && c.payer) || ""),
@@ -399,17 +400,72 @@
     form.appendChild(note);
     form.appendChild(btn);
     body.appendChild(form);
+
+    const forceWrap = document.createElement("div");
+    forceWrap.className = "cl-action-log";
+    const forceBtn = document.createElement("button");
+    forceBtn.type = "button";
+    forceBtn.className = "btn-quiet";
+    forceBtn.textContent = "Force close (staff verified paid)";
+    forceBtn.title =
+      "Hide from Claims outstanding list locally. SoftDent READ-ONLY — no write-back.";
+    forceBtn.addEventListener("click", function () {
+      if (!W.postJson) return;
+      const ok = window.confirm(
+        "Hide this claim from the outstanding list? SoftDent is not changed (local hide only)."
+      );
+      if (!ok) return;
+      forceBtn.disabled = true;
+      W.postJson(
+        "/api/softdent/claims-force-close",
+        {
+          claimId: String((claim && claim.claimId) || ""),
+          patientId: String((claim && claim.patientId) || ""),
+          patientName: displayPatientName(claim),
+          serviceDate: String((claim && claim.serviceDate) || ""),
+          amount: claim && claim.amount,
+          note: String(note.value || "").trim() || "Staff verified paid — hide from outstanding",
+          actor: "Staff",
+        },
+        12000
+      )
+        .then(function (res) {
+          forceBtn.disabled = false;
+          if (!res || !res.ok || !res.data || !res.data.ok) {
+            forceBtn.textContent = "Failed";
+            setTimeout(function () {
+              forceBtn.textContent = "Force close (staff verified paid)";
+            }, 1400);
+            return;
+          }
+          forceBtn.textContent = "Hidden";
+          if (typeof loadClaimsOutstanding === "function") {
+            loadClaimsOutstanding();
+          }
+        })
+        .catch(function () {
+          forceBtn.disabled = false;
+          forceBtn.textContent = "Failed";
+          setTimeout(function () {
+            forceBtn.textContent = "Force close (staff verified paid)";
+          }, 1400);
+        });
+    });
+    forceWrap.appendChild(forceBtn);
+    body.appendChild(forceWrap);
   }
 
   function shortHash(h) {
-    const s = String(h || "").replace(/^#/, "").trim();
-    if (!s) return "—";
-    return "#" + s.slice(0, 4);
+    return W.shortHash ? W.shortHash(h) : (function () {
+      const s = String(h || "").replace(/^#/, "").trim();
+      if (!s) return "—";
+      return "#" + s.slice(0, 4);
+    })();
   }
 
-  function displayPatientName(obj) {
-    const name = String((obj && obj.patientName) || "").trim();
-    if (name) return name;
+  /** Default views: initials+hash only — never First Last. */
+  function displayPatientName(obj, opts) {
+    if (W.formatPhiLabel) return W.formatPhiLabel(obj, opts);
     const initials = String((obj && obj.initials) || "").trim();
     if (initials) return initials;
     return "—";
@@ -495,6 +551,23 @@
       ["Age", age == null ? "—" : String(age) + " days"],
       ["Hash", shortHash((claim && claim.patientHash) || (mini && mini.patientHash))],
     ]);
+    const fullName = String((claim && claim.patientName) || "").trim();
+    if (fullName) {
+      const reveal = document.createElement("button");
+      reveal.type = "button";
+      reveal.className = "btn-quiet";
+      reveal.textContent = "Reveal full name (this view only)";
+      reveal.title = "Explicit reveal · SoftDent READ-ONLY · not logged to SoftDent";
+      reveal.addEventListener("click", function () {
+        const rows = body.querySelectorAll(".d-row");
+        if (rows && rows[0] && rows[0].children[1]) {
+          rows[0].children[1].textContent = fullName;
+        }
+        reveal.disabled = true;
+        reveal.textContent = "Full name revealed";
+      });
+      body.appendChild(reveal);
+    }
 
     const rev = review && typeof review === "object" ? review : null;
     clLastPhoneCopy = "";
@@ -937,6 +1010,7 @@
         hasData: data.hasData,
         emptyMessage: data.emptyMessage,
         payerStats: data.payerStats,
+        paidSuppress: data.paidSuppress,
       };
     }
     const source = data || clClaimsCache;
@@ -996,6 +1070,21 @@
         " open";
     }
     if (summary) {
+      const ps =
+        (source && source.paidSuppress) ||
+        (clClaimsMeta && clClaimsMeta.paidSuppress) ||
+        null;
+      let suppressBit = "";
+      if (ps && typeof ps === "object") {
+        const parts = [];
+        if (ps.txnDropped) parts.push("TXN-" + String(ps.txnDropped));
+        if (ps.eraDropped) parts.push("ERA-" + String(ps.eraDropped));
+        if (ps.agingDropped) parts.push("Aging-" + String(ps.agingDropped));
+        if (ps.staffDropped) parts.push("Staff-" + String(ps.staffDropped));
+        if (parts.length) suppressBit = " · paid hide " + parts.join("/");
+        if (ps.txnDateMax) suppressBit += " · TXN thru " + String(ps.txnDateMax);
+        if (!ps.agingActive) suppressBit += " · Claims Aging Excel not loaded";
+      }
       summary.textContent =
         String(count) +
         " open claim" +
@@ -1006,6 +1095,7 @@
           ? " · filter " + String(claims.length) + "/" + String(beforeFilter)
           : "") +
         payerStatsBit(source || clClaimsMeta) +
+        suppressBit +
         " · SoftDent READ-ONLY · empty ≠ $0";
     }
     if (!claims.length) {
@@ -1041,27 +1131,42 @@
       if (clActiveClaimId && cid && cid === clActiveClaimId) {
         tr.classList.add("is-active");
       }
+      const evidence = String(c.evidence || "still_waiting");
+      const statusText = String(c.status || "—") || "—";
       const cells = [
         displayPatientName(c),
         String(c.payer || "—") || "—",
         String(c.serviceDate || "—").slice(0, 10) || "—",
         fmtClaimAmount(c.amount),
-        String(c.status || "—") || "—",
+        statusText,
         age == null ? "—" : String(age) + "d",
       ];
       cells.forEach(function (text, idx) {
         const td = document.createElement("td");
-        if (idx === 0) td.className = "phi-name";
-        if (idx === 3 || idx === 5) td.className = "num";
-        if (idx === 5) td.classList.add("age-cell");
-        td.textContent = text;
+        if (idx === 0) {
+          td.className = "phi-name";
+          if (W.fillPhiCard) {
+            W.fillPhiCard(td, c);
+          } else {
+            td.textContent = text;
+          }
+        } else {
+          if (idx === 3 || idx === 5) td.className = "num";
+          if (idx === 5) td.classList.add("age-cell");
+          td.textContent = text;
+        }
+        if (idx === 4) {
+          td.title = "Evidence: " + evidence + " · SoftDent READ-ONLY";
+        }
         tr.appendChild(td);
       });
       tr.title =
         "Open claim context · " +
         (cid || "—") +
         " · age " +
-        (age == null ? "unknown" : String(age) + "d");
+        (age == null ? "unknown" : String(age) + "d") +
+        " · evidence " +
+        evidence;
       tr.addEventListener("click", function () {
         tr.classList.add("is-active");
         openClaimContext(c);

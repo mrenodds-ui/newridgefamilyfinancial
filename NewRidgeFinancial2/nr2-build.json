@@ -1,11 +1,11 @@
 {
-  "schemaVersion": "nr2-12073-excel-gate-all-next",
-  "BUILD_ID": "nr2-12073-excel-gate-all-next",
-  "assetVersion": "nr2-12073-excel-gate-all-next",
-  "builtAt": "2026-07-16T14:05:00.000Z",
-  "notes": "nr2-12073: SoftDent Excel enablement runbook + morningBundle excelEnablementGate; Trellis withBenefits AM proof script; QB AP/payroll inbox drop runbook. SoftDent write-back forbidden; empty≠$0; Force Close laser-gated. Operator must enable SoftDent Excel then approve attended morning bundle for money beams.",
+  "schemaVersion": "nr2-12150-claims-paid-suppress",
+  "BUILD_ID": "nr2-12150-claims-paid-suppress",
+  "assetVersion": "nr2-12150-claims-paid-suppress",
+  "builtAt": "2026-07-16T18:45:00.000Z",
+  "notes": "nr2-12150: Claims outstanding paid suppress cascade TXN→ERA→Claims Aging Excel→staff verified paid hide; Force close local hide (no SoftDent write-back); empty≠$0 — missing ERA/Aging never invents paid.",
   "staffRenderMode": "nr2-clean",
-  "package": "NR2-12073-EXCEL-GATE-ALL-NEXT",
+  "package": "NR2-12150-CLAIMS-PAID-SUPPRESS",
   "compat": false,
   "packsAllowed": false,
   "baseCleanStamp": "nr2-11000-clean"

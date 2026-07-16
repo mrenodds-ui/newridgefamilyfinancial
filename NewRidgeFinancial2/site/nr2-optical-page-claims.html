@@ -50,9 +50,11 @@
           <button type="button" class="btn-quiet" id="btn-cl-export-batch" title="Export filtered payer phone batch CSV (initials+hash only)">Export phone batch</button>
         </div>
         <p class="om-claims-note">
-          SoftDent read-only · full patient names · oldest first · click a row for claim review ·
-          age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · filter Age + Gaps + Payer for phone batches ·
-          J/K next claim · C copy phone line · null amounts = — (empty ≠ $0) · sample capped at 200
+          SoftDent read-only · unpaid only (TXN + ERA + Claims Aging + staff hide) · oldest first ·
+          click a row for claim review · Force close hides locally (no SoftDent write-back) ·
+          pull SoftDent Claims Aging → Excel to C:\SoftDentReportExports\claims_aging_*.xls ·
+          age font ≤30 green · ≤60 yellow · ≤90 amber · &gt;90 red · filter Age + Gaps + Payer ·
+          J/K next claim · C copy phone line · empty ≠ $0 · sample capped at 200
         </p>
         <div class="om-claims-filters" id="cl-filters" aria-label="Filter unpaid SoftDent claims">
           <label class="om-claims-filter">

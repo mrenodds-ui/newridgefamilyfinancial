@@ -403,3 +403,10 @@ def ingest_era_inbox(*, ensure_dirs: bool = False, limit: int | None = None) -> 
         "honesty": "empty_not_zero",
         "at": _utc_now(),
     }
+
+
+def paid_claim_keys_from_era() -> dict[str, Any]:
+    """Paid claim keys for Claims outstanding suppress (NR2-12150). empty ≠ $0."""
+    from nr2_claims_paid_suppress import paid_claim_keys_from_era as _keys
+
+    return _keys()

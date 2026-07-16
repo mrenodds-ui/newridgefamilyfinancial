@@ -1752,6 +1752,7 @@ CLAIM_ACTION_CHOICES = (
     "needs_attachment",
     "resubmit_path",
     "patient_followup",
+    "staff_verified_paid",
     "note",
 )
 
@@ -1822,6 +1823,8 @@ def add_claim_action(store, payload: dict[str, Any] | None = None) -> dict[str, 
     actor = str(data.get("actor") or data.get("employeeId") or "Staff").strip()[:80] or "Staff"
     entry_id = str(uuid.uuid4())
     created = _utc_now()
+    patient_id = str(data.get("patientId") or data.get("patient_id") or "").strip()
+    patient_name = str(data.get("patientName") or data.get("patient_name") or "").strip()
     with store._connect() as conn:
         init_employee_workflow_schemas(conn)
         conn.execute(
@@ -1834,13 +1837,29 @@ def add_claim_action(store, payload: dict[str, Any] | None = None) -> dict[str, 
                 entry_id,
                 created,
                 claim_id,
-                str(data.get("patientId") or data.get("patient_id") or "").strip(),
-                str(data.get("patientName") or data.get("patient_name") or "").strip(),
+                patient_id,
+                patient_name,
                 action,
                 note,
                 actor,
             ),
         )
+    staff_hide: dict[str, Any] | None = None
+    if action == "staff_verified_paid":
+        try:
+            from nr2_claims_paid_suppress import mark_staff_verified_paid
+
+            staff_hide = mark_staff_verified_paid(
+                claim_id=claim_id,
+                patient_id=patient_id,
+                patient_name=patient_name,
+                service_date=str(data.get("serviceDate") or data.get("service_date") or ""),
+                amount=data.get("amount"),
+                actor=actor,
+                note=note,
+            )
+        except Exception as exc:  # noqa: BLE001
+            staff_hide = {"ok": False, "error": str(exc)[:200], "writeBack": False}
     return {
         "ok": True,
         "id": entry_id,
@@ -1850,6 +1869,11 @@ def add_claim_action(store, payload: dict[str, Any] | None = None) -> dict[str, 
         "actor": actor,
         "at": created,
         "softdentWriteBack": False,
+        "writeBack": False,
+        "hiddenFromOutstanding": bool(
+            isinstance(staff_hide, dict) and staff_hide.get("ok") and staff_hide.get("hidden")
+        ),
+        "staffHide": staff_hide,
         "honesty": "empty != $0; SoftDent READ-ONLY; local staff log only",
     }
 
