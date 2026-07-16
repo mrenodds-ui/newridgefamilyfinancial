@@ -949,6 +949,13 @@
     const ph = String((claim && claim.patientHash) || "").trim();
     clActiveClaimId = cid;
     clActivePatientId = pid;
+    if (window.NR2OpticalNav && window.NR2OpticalNav.setDeepTrail) {
+      window.NR2OpticalNav.setDeepTrail([
+        {
+          label: cid || (W.formatPhiLabel ? W.formatPhiLabel(claim) : "claim"),
+        },
+      ]);
+    }
     document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
       el.classList.remove("is-active");
     });
@@ -1321,6 +1328,9 @@
         clActiveClaimId = "";
         clActivePatientId = "";
         clLastPhoneCopy = "";
+        if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
+          window.NR2OpticalNav.clearDeepTrail();
+        }
         document.querySelectorAll("#cl-tbody tr.is-active").forEach(function (el) {
           el.classList.remove("is-active");
         });

@@ -167,21 +167,68 @@ td.phi-name .phi-label,
   padding: var(--space-3) var(--space-2); overflow-y: auto;
 }
 .nav .brand {
+  display: block;
   font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em;
   color: var(--hal); margin-bottom: var(--space-3);
+  padding: var(--space-2); border: 1px solid transparent;
 }
+.nav a.brand:hover { color: var(--sd); border-color: #334; }
 .nav a {
-  display: block; padding: var(--space-2) var(--space-2); margin-bottom: 4px;
+  display: flex; align-items: center;
+  padding: var(--space-2) var(--space-2); margin-bottom: 4px;
+  min-height: var(--hit); box-sizing: border-box;
   border: 1px solid transparent; color: var(--muted);
   font-family: var(--sans); font-size: 13px;
 }
-.nav a:hover, .nav a.on {
+.nav a:hover {
   border-color: #334; color: var(--sd); background: #0c1218;
+}
+.nav a.on,
+.nav a[aria-current="page"] {
+  border-color: rgba(0, 212, 170, 0.45);
+  color: var(--sd);
+  background: #0c1614;
+  box-shadow: inset 3px 0 0 var(--sd);
+  font-weight: 600;
 }
 .nav .group {
   margin-top: var(--space-3); margin-bottom: var(--space-1);
   font-family: var(--mono); font-size: 11px; color: #556; letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+/* Package 3: breadcrumb wayfinding */
+.nr2-crumb {
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.nr2-crumb ol {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0;
+}
+.nr2-crumb li {
+  display: inline-flex; align-items: center;
+  min-height: 28px;
+}
+.nr2-crumb li + li::before {
+  content: "›";
+  margin: 0 8px;
+  color: #556;
+  font-weight: 600;
+}
+.nr2-crumb a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 2px;
+  min-height: 28px;
+  display: inline-flex; align-items: center;
+}
+.nr2-crumb a:hover { color: var(--sd); }
+.nr2-crumb .nr2-crumb-here {
+  color: var(--hal);
+  font-weight: 600;
 }
 .main { padding: var(--space-4) var(--space-4) var(--space-6); overflow-y: auto; }
 .main h1 {
@@ -936,7 +983,7 @@ td.phi-name .phi-label,
 }
 
 @media print {
-  .banner, .nr2-ops-gates, .nav, .beam, .money-strip, .foot-nav, .ops-row,
+  .banner, .nr2-ops-gates, .nr2-crumb, .nav, .beam, .money-strip, .foot-nav, .ops-row,
   .wk-filter, #btn-wk-refresh, #btn-wk-dossier-close, .wk-dossier,
   #btn-tr-refresh, #btn-cl-refresh, #btn-cl-dossier-close, #cl-dossier {
     display: none !important;

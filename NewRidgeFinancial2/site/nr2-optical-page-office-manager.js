@@ -451,6 +451,15 @@
     const pid = String((slot && slot.patientId) || "").trim();
     const ph = String((slot && slot.patientHash) || "").trim();
     wkActivePatientId = pid;
+    if (window.NR2OpticalNav && window.NR2OpticalNav.setDeepTrail) {
+      window.NR2OpticalNav.setDeepTrail([
+        {
+          label: W.formatPhiLabel
+            ? W.formatPhiLabel(slot)
+            : String((slot && slot.initials) || pid || "patient"),
+        },
+      ]);
+    }
     document.querySelectorAll(".wk-slot.is-active").forEach(function (el) {
       el.classList.remove("is-active");
     });
@@ -888,6 +897,9 @@
         if (panel) panel.hidden = true;
         if (wrap) wrap.classList.remove("has-dossier");
         wkActivePatientId = "";
+        if (window.NR2OpticalNav && window.NR2OpticalNav.clearDeepTrail) {
+          window.NR2OpticalNav.clearDeepTrail();
+        }
         document.querySelectorAll(".wk-slot.is-active").forEach(function (el) {
           el.classList.remove("is-active");
         });
