@@ -127,6 +127,48 @@
     return " · morning FAIL" + (err ? " · " + String(err).slice(0, 28) : "");
   }
 
+  function halMorningBrief(ready, sdText, qbText) {
+    const sd = String(sdText || "—");
+    const qb = String(qbText || "—");
+    const mb = morningBundleBit(ready);
+    if (!ready) {
+      return "No import-readiness signal yet — SoftDent and QuickBooks faces stay empty ≠ $0.";
+    }
+    if (lasersRed(ready)) {
+      const keys = laserKeys(ready).slice(0, 2).join(", ") || "critical imports";
+      return (
+        "Lasers red on " +
+        keys +
+        " — money faces gated until imports refresh. empty ≠ $0."
+      );
+    }
+    if (periodCloseTrouble(ready)) {
+      return (
+        periodCloseBit(ready) +
+        mb +
+        " — close path blocked; click Ask HAL for next move. empty ≠ $0."
+      );
+    }
+    if (/STALE|∅|NO SIGNAL|—/.test(sd) || /STALE|∅|NO SIGNAL|—/.test(qb)) {
+      return (
+        "Green-path lasers, but money fusion still incomplete (SD " +
+        sd +
+        " · QB " +
+        qb +
+        "). empty ≠ $0."
+      );
+    }
+    return (
+      "Live fusion: SoftDent claims " +
+      sd +
+      ", QuickBooks " +
+      qb +
+      "." +
+      (mb ? mb.replace(/^ · /, " ") + "." : "") +
+      " Click Ask HAL for today's brief."
+    );
+  }
+
   function setCoreSyncPulse(mode) {
     coreSyncMode = mode || null;
     const core = document.getElementById("core");
@@ -175,6 +217,7 @@
     const state = document.getElementById("hal-state");
     const fusion = document.getElementById("hal-fusion");
     const hint = document.getElementById("hal-hint");
+    const brief = document.getElementById("hal-brief");
     if (!core || !state) return;
 
     const sdText =
@@ -186,6 +229,7 @@
         ? String(moneyBits.qb)
         : (document.getElementById("metric-qb") || {}).textContent || "—";
     if (fusion) fusion.textContent = "SD " + sdText + " · QB " + qbText;
+    if (brief) brief.textContent = halMorningBrief(ready, sdText, qbText);
 
     if (coreSyncMode === "running" || coreSyncMode === "ok" || coreSyncMode === "fail") {
       return;

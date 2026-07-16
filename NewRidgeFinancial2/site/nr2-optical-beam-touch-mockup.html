@@ -439,6 +439,14 @@
     .core .state { font-family: var(--mono); font-size: 13px; color: var(--fringe); letter-spacing: 0.08em; }
     .core.core--live .state { color: var(--sd); }
     .core.core--warn .state { color: #ffaa00; }
+    .core .brief {
+      margin: 6px 10px 0;
+      font-family: var(--sans);
+      font-size: 12px;
+      line-height: 1.35;
+      color: #c5cdd8;
+      max-width: 190px;
+    }
     .core.core--syncing {
       animation: core-red-pulse 0.9s ease-in-out infinite;
     }
@@ -536,6 +544,7 @@
       margin-top: -7px;
       border-radius: 50%; background: #00ced1;
       box-shadow: 0 0 14px #00ced1, 0 0 28px rgba(0,206,209,0.45);
+      animation: led-pulse 1.2s ease-in-out infinite;
     }
     .beam-ctrl {
       stroke-dasharray: 6 8;
@@ -709,6 +718,7 @@
         <div class="ai">MONEY FUSION</div>
         <div class="v" id="hal-fusion">SD — · QB —</div>
         <div class="state" id="hal-state">WIRING…</div>
+        <p class="brief" id="hal-brief">Wiring SoftDent + QuickBooks honesty…</p>
         <span class="bind-hint" id="hal-hint">SoftDent+QB beams · empty ≠ $0 · click Ask HAL · Shift+click Alignment</span>
       </div>
     </div>
