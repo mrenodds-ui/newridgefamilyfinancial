@@ -71,6 +71,43 @@ class PilotPhaseGateTests(unittest.TestCase):
         loaded = json.loads(self.mod.PILOT_STATE_PATH.read_text(encoding="utf-8"))
         self.assertEqual(loaded.get("phase"), "shadow")
 
+    def test_days_since_utc_calendar_not_wall_clock(self) -> None:
+        from datetime import datetime, timezone
+
+        started = "2026-07-15T21:10:23+00:00"
+        fixed_now = datetime(2026, 7, 17, 10, 0, 0, tzinfo=timezone.utc)
+
+        class _Frozen:
+            @classmethod
+            def now(cls, tz=None):  # noqa: ANN001
+                return fixed_now
+
+            @staticmethod
+            def fromisoformat(value: str):
+                return datetime.fromisoformat(value)
+
+        with mock.patch.object(self.mod, "datetime", _Frozen):
+            # Wall-clock floor would be 1; UTC calendar day gap is 2.
+            self.assertEqual(self.mod._days_since(started), 2)
+
+    def test_pilot_info_shadow_clock_labels(self) -> None:
+        self.mod.save_pilot_state(
+            {
+                "phase": "shadow",
+                "shadow_started_at": "2026-07-15T21:10:23+00:00",
+            }
+        )
+        with mock.patch.object(self.mod, "_days_since", return_value=2):
+            with mock.patch.object(self.mod, "_min_shadow_days", return_value=30):
+                info = self.mod.pilot_info()
+        self.assertEqual(info.get("shadowDaysElapsed"), 2)
+        self.assertEqual(info.get("shadowDaysRemaining"), 28)
+        self.assertFalse(info.get("shadowEligible"))
+        self.assertEqual(info.get("shadowClockLabel"), "Day 2 of 30")
+        self.assertIn("28 days until eligible", str(info.get("shadowRemainingLabel")))
+        self.assertFalse(info.get("forceCloseAvailable"))
+        self.assertFalse(info.get("systemOfRecord"))
+
 
 if __name__ == "__main__":
     unittest.main()

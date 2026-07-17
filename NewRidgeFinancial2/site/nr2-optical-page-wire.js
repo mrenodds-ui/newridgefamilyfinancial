@@ -1289,36 +1289,61 @@
         id: "shadow",
         label: "SHADOW",
         status: "YELLOW",
-        detail: "No pilot shadow signal · systemOfRecord stays false",
-        value: "—/30",
+        detail: "No pilot shadow signal · systemOfRecord stays false · forceClose stays false",
+        value: "Day — of 30",
       };
     }
     const minDays = Number(pilot.minShadowDays);
     const min = Number.isFinite(minDays) && minDays > 0 ? minDays : 30;
     const elapsedRaw = pilot.shadowDaysElapsed;
     const elapsed = typeof elapsedRaw === "number" && Number.isFinite(elapsedRaw) ? elapsedRaw : null;
-    const clock = (elapsed != null ? String(elapsed) : "—") + "/" + String(min);
+    const remainingRaw = pilot.shadowDaysRemaining;
+    const remaining =
+      typeof remainingRaw === "number" && Number.isFinite(remainingRaw)
+        ? remainingRaw
+        : elapsed != null
+          ? Math.max(0, min - elapsed)
+          : null;
+    const clockLabel =
+      typeof pilot.shadowClockLabel === "string" && pilot.shadowClockLabel.trim()
+        ? String(pilot.shadowClockLabel).trim()
+        : "Day " + (elapsed != null ? String(elapsed) : "—") + " of " + String(min);
+    const remainingLabel =
+      typeof pilot.shadowRemainingLabel === "string" && pilot.shadowRemainingLabel.trim()
+        ? String(pilot.shadowRemainingLabel).trim()
+        : remaining == null
+          ? "systemOfRecord stays false"
+          : remaining === 0
+            ? "Shadow minimum met · cutover attestation still required"
+            : String(remaining) + " day" + (remaining === 1 ? "" : "s") + " until eligible";
+    // Compact visible value: Day X of 30 · Ny left (text, not color-alone).
+    const value =
+      remaining != null && remaining > 0
+        ? clockLabel + " · " + String(remaining) + " left"
+        : clockLabel;
     if (pilot.systemOfRecord) {
       return {
         id: "shadow",
         label: "SHADOW",
         status: "GREEN",
-        detail: "systemOfRecord=true · phase " + String(pilot.phase || "cutover"),
-        value: clock,
+        detail: "systemOfRecord=true · phase " + String(pilot.phase || "cutover") + " · " + clockLabel,
+        value: clockLabel,
       };
     }
     const detail =
       "phase " +
       String(pilot.phase || "shadow") +
       " · " +
-      clock +
-      " days · systemOfRecord=false";
+      clockLabel +
+      " · " +
+      remainingLabel +
+      " · systemOfRecord=false · forceClose=false";
     return {
       id: "shadow",
       label: "SHADOW",
       status: "YELLOW",
       detail: detail,
-      value: clock,
+      value: value,
     };
   }
   function deriveOpsGates(ready, trellisProof, pilot) {

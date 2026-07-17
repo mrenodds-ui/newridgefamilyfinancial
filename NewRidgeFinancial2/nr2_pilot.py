@@ -39,11 +39,17 @@ def _parse_ts(value: str | None) -> datetime | None:
 
 
 def _days_since(value: str | None) -> int | None:
+    """UTC calendar days since stamp (date boundary, not incomplete 24h floors).
+
+    Day-30 cutover disputes use calendar dates in UTC so a start at 21:10 UTC
+    still advances on the next UTC midnight — not after a full 24h wall clock.
+    """
     started = _parse_ts(value)
     if not started:
         return None
-    delta = datetime.now(timezone.utc) - started
-    return max(0, delta.days)
+    start_day = started.astimezone(timezone.utc).date()
+    today = datetime.now(timezone.utc).date()
+    return max(0, (today - start_day).days)
 
 
 def _min_shadow_days() -> int:
@@ -116,6 +122,20 @@ def pilot_info() -> dict[str, Any]:
     attestation = load_cutover_attestation()
     shadow_days = _days_since(str(state.get("shadow_started_at") or ""))
     supervised_days = _days_since(str(state.get("supervised_started_at") or ""))
+    min_shadow = _min_shadow_days()
+    remaining: int | None = None
+    if shadow_days is not None:
+        remaining = max(0, min_shadow - shadow_days)
+    eligible = bool(shadow_days is not None and shadow_days >= min_shadow)
+    if shadow_days is None:
+        clock_label = f"Day — of {min_shadow}"
+        remaining_label = "No shadow start · systemOfRecord stays false"
+    elif eligible:
+        clock_label = f"Day {shadow_days} of {min_shadow}"
+        remaining_label = "Shadow minimum met · cutover attestation still required"
+    else:
+        clock_label = f"Day {shadow_days} of {min_shadow}"
+        remaining_label = f"{remaining} day{'s' if remaining != 1 else ''} until eligible"
     return {
         "phase": phase,
         "systemOfRecord": phase == "cutover",
@@ -123,11 +143,17 @@ def pilot_info() -> dict[str, Any]:
         "supervisedStartedAt": state.get("supervised_started_at"),
         "cutoverAt": state.get("cutover_at") or (attestation or {}).get("signed_at_utc"),
         "shadowDaysElapsed": shadow_days,
+        "shadowDaysRemaining": remaining,
+        "shadowEligible": eligible,
+        "shadowClockLabel": clock_label,
+        "shadowRemainingLabel": remaining_label,
         "supervisedDaysElapsed": supervised_days,
-        "minShadowDays": _min_shadow_days(),
+        "minShadowDays": min_shadow,
         "minSupervisedDays": _min_supervised_days(),
         "cutoverAttested": bool(attestation and attestation.get("signed_by")),
         "attestationSignedBy": (attestation or {}).get("signed_by"),
+        # Never auto-flip Force Close from shadow clock alone.
+        "forceCloseAvailable": False,
     }
 
 
