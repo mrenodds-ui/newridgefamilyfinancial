@@ -898,71 +898,6 @@
     ].filter(Boolean);
     return parts.join(" · ");
   }
-  /**
-   * SoftDent AR outstanding vs QB monthly revenue — optical |Δ| only.
-   * Different metrics · not auto-reconciled · no Reconcile CTA · empty ≠ $0.
-   */
-  function paintMetricGapHonesty(opts) {
-    const id = opts && opts.id;
-    const hintId = opts && opts.hintId;
-    const beams = opts && opts.beams;
-    const ready = opts && opts.ready;
-    const el = id ? document.getElementById(id) : null;
-    if (!el) return { applied: false, live: false };
-
-    const lasers = lasersRed(ready);
-    const staleBeam = !!(beams && beams.importStale);
-    const gap = beams && beams.metricGapHonesty;
-    const hint = hintId ? document.getElementById(hintId) : null;
-
-    if (lasers || staleBeam) {
-      setText(id, null, lasers ? "STALE / ∅" : "NO SIGNAL");
-      el.classList.add("stale");
-      if (hint) {
-        hint.textContent =
-          "Different Metrics · Not Auto-Reconciled · lasers/import STALE · empty ≠ $0 · no Reconcile CTA";
-      }
-      return { applied: true, live: false, blocked: true };
-    }
-
-    if (!gap || !gap.bothLive || gap.rawDelta == null || !Number.isFinite(Number(gap.rawDelta))) {
-      setText(id, null, "∅");
-      if (hint) {
-        hint.textContent =
-          (gap && gap.label ? gap.label + " · " : "Different Metrics · Not Auto-Reconciled · ") +
-          "∅ when either beam empty · empty ≠ $0 · no Reconcile CTA";
-      }
-      return { applied: true, live: false };
-    }
-
-    const raw = Number(gap.rawDelta);
-    if (raw === 0) {
-      setText(id, null, "Empty ≠ $0");
-    } else {
-      const shown =
-        gap.rawDeltaDisplay && String(gap.rawDeltaDisplay).indexOf("$") === 0
-          ? String(gap.rawDeltaDisplay)
-          : fmtMoney(raw);
-      setText(id, shown);
-    }
-    el.classList.remove("stale");
-    el.classList.add("exec-currency");
-    if (hint) {
-      hint.textContent =
-        (gap.label || "Different Metrics — Not Auto-Reconciled") +
-        " · SoftDent AR outstanding vs QB monthly revenue · empty ≠ $0 · no Reconcile CTA" +
-        (beams && beams.beamHash
-          ? " · hash " + String(beams.beamHash).slice(0, 16)
-          : "");
-    }
-    return {
-      applied: true,
-      live: true,
-      rawDelta: raw,
-      notAutoReconciled: true,
-      noReconcileCta: true,
-    };
-  }
   function formatBeamHash(h, len) {
     const s = String(h || "").trim();
     if (!s) return "n/a";
@@ -1354,61 +1289,36 @@
         id: "shadow",
         label: "SHADOW",
         status: "YELLOW",
-        detail: "No pilot shadow signal · systemOfRecord stays false · forceClose stays false",
-        value: "Day — of 30",
+        detail: "No pilot shadow signal · systemOfRecord stays false",
+        value: "—/30",
       };
     }
     const minDays = Number(pilot.minShadowDays);
     const min = Number.isFinite(minDays) && minDays > 0 ? minDays : 30;
     const elapsedRaw = pilot.shadowDaysElapsed;
     const elapsed = typeof elapsedRaw === "number" && Number.isFinite(elapsedRaw) ? elapsedRaw : null;
-    const remainingRaw = pilot.shadowDaysRemaining;
-    const remaining =
-      typeof remainingRaw === "number" && Number.isFinite(remainingRaw)
-        ? remainingRaw
-        : elapsed != null
-          ? Math.max(0, min - elapsed)
-          : null;
-    const clockLabel =
-      typeof pilot.shadowClockLabel === "string" && pilot.shadowClockLabel.trim()
-        ? String(pilot.shadowClockLabel).trim()
-        : "Day " + (elapsed != null ? String(elapsed) : "—") + " of " + String(min);
-    const remainingLabel =
-      typeof pilot.shadowRemainingLabel === "string" && pilot.shadowRemainingLabel.trim()
-        ? String(pilot.shadowRemainingLabel).trim()
-        : remaining == null
-          ? "systemOfRecord stays false"
-          : remaining === 0
-            ? "Shadow minimum met · cutover attestation still required"
-            : String(remaining) + " day" + (remaining === 1 ? "" : "s") + " until eligible";
-    // Compact visible value: Day X of 30 · Ny left (text, not color-alone).
-    const value =
-      remaining != null && remaining > 0
-        ? clockLabel + " · " + String(remaining) + " left"
-        : clockLabel;
+    const clock = (elapsed != null ? String(elapsed) : "—") + "/" + String(min);
     if (pilot.systemOfRecord) {
       return {
         id: "shadow",
         label: "SHADOW",
         status: "GREEN",
-        detail: "systemOfRecord=true · phase " + String(pilot.phase || "cutover") + " · " + clockLabel,
-        value: clockLabel,
+        detail: "systemOfRecord=true · phase " + String(pilot.phase || "cutover"),
+        value: clock,
       };
     }
     const detail =
       "phase " +
       String(pilot.phase || "shadow") +
       " · " +
-      clockLabel +
-      " · " +
-      remainingLabel +
-      " · systemOfRecord=false · forceClose=false";
+      clock +
+      " days · systemOfRecord=false";
     return {
       id: "shadow",
       label: "SHADOW",
       status: "YELLOW",
       detail: detail,
-      value: value,
+      value: clock,
     };
   }
   function deriveOpsGates(ready, trellisProof, pilot) {
@@ -1845,7 +1755,6 @@
     honestyMoney: honestyMoney,
     getMoneyBeams: getMoneyBeams,
     applyBeamHeadline: applyBeamHeadline,
-    paintMetricGapHonesty: paintMetricGapHonesty,
     beamProvenanceLine: beamProvenanceLine,
     periodCloseStatus: periodCloseStatus,
     periodCloseIsTrouble: periodCloseIsTrouble,

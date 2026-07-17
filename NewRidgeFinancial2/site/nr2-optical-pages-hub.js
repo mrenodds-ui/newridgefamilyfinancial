@@ -67,7 +67,6 @@
   function paintAlignmentMoney(beams, readyData) {
     const sdObj = beams && beams.softdent;
     const qbObj = beams && beams.quickbooks;
-    const gap = beams && beams.metricGapHonesty;
     const sdLive = !!(sdObj && sdObj.hasData && sdObj.display);
     const qbLive = !!(qbObj && qbObj.hasData && qbObj.display);
     const alignedEl = document.getElementById("hub-aligned");
@@ -90,20 +89,18 @@
       }
     }
     if (varianceEl) {
-      if (W.paintMetricGapHonesty) {
-        W.paintMetricGapHonesty({
-          id: "hub-variance",
-          hintId: "hint-hub-variance",
-          beams: beams,
-          ready: readyData,
-        });
-      } else if (!(sdLive && qbLive) || !(gap && gap.bothLive)) {
+      if (!(sdLive && qbLive)) {
         W.setText("hub-variance", null, "∅");
       } else {
-        const raw = W.money(gap.rawDelta);
-        if (raw == null) W.setText("hub-variance", null, "∅");
-        else if (raw === 0) W.setText("hub-variance", null, "Empty ≠ $0");
-        else W.setText("hub-variance", W.fmtMoney(raw));
+        const sdAmt = W.money(sdObj.amount != null ? sdObj.amount : sdObj.total);
+        const qbAmt = W.money(qbObj.amount != null ? qbObj.amount : qbObj.total);
+        if (sdAmt == null || qbAmt == null) {
+          W.setText("hub-variance", "SD/QB live · gap ∅");
+        } else {
+          const gap = Math.abs(sdAmt - qbAmt);
+          if (gap === 0) W.setText("hub-variance", null, "Empty ≠ $0");
+          else W.setText("hub-variance", W.fmtMoney(gap));
+        }
         varianceEl.classList.add("exec-currency");
       }
     }
