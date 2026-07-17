@@ -117,7 +117,7 @@ def main() -> int:
         print("  1) Close/minimize Chrome Claim Management / NR2 Optical Claims")
         print("  2) SoftDent signed on (COMPUTE) and foreground")
         print("  3) Output Options → Excel enabled (not greyed)")
-        print("  4) Select File Name uses SoftDent's own Documents folder — never invent paths")
+        print("  4) Select File Name under C:\\SoftDentReportExports (all Excel reports)")
         try:
             answer = input("\nProceed with attended morning bundle? [y/N]: ").strip().lower()
         except EOFError:
@@ -156,7 +156,13 @@ def main() -> int:
         print("\nRefreshing shadow period-close beam snapshot …")
         from daily_closeout import run_period_close
 
-        close = run_period_close(actor="morning_bundle_attended", auto=True, pull_softdent=False)
+        # Persist attended Excel bundle onto periodClose.morningBundle (BUNDLE gate).
+        close = run_period_close(
+            actor="morning_bundle_attended",
+            auto=True,
+            pull_softdent=False,
+            export_result=result,
+        )
         print(json.dumps(
             {
                 "ok": close.get("ok"),
@@ -164,6 +170,11 @@ def main() -> int:
                 "dataBeamHash": close.get("dataBeamHash"),
                 "softdentDisplay": close.get("softdentDisplay"),
                 "qbDisplay": close.get("qbDisplay"),
+                "morningBundleOk": bool(
+                    ((close.get("export") or {}).get("ok"))
+                    if isinstance(close.get("export"), dict)
+                    else False
+                ),
             },
             indent=2,
         ))

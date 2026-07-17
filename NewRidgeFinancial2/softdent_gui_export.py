@@ -1365,7 +1365,11 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
                 time.sleep(0.04)
                 win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
                 time.sleep(0.2)
-            # BN_CLICKED notify (SoftDent may listen for this)
+            # BM_CLICK + BN_CLICKED — SoftDent 32-bit often ignores 64-bit click_input alone
+            try:
+                win32gui.SendMessage(child, 0x00F5, 0, 0)  # BM_CLICK
+            except Exception:
+                pass
             try:
                 parent = int(win32gui.GetParent(child) or hwnd)
                 cid = int(win32gui.GetDlgCtrlID(child) or 0)
@@ -1480,6 +1484,24 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
                         time.sleep(0.08)
                     except Exception:
                         pass
+            # 64-bit Python often can't latch SoftDent 32-bit radios via click alone —
+            # walk Down from the top of the Output Options list and Space each stop.
+            try:
+                _force_foreground(hwnd)
+                time.sleep(0.1)
+                _keys_on_output("{HOME}")
+                time.sleep(0.08)
+                for _ in range(10):
+                    _keys_on_output("{SPACE}")
+                    time.sleep(0.12)
+                    hit = _safe_selected()
+                    if hit == "excel":
+                        return "excel"
+                    _keys_on_output("{DOWN}")
+                    time.sleep(0.1)
+                _force_check_radio(excel_btn)
+            except Exception:
+                pass
             return _safe_selected()
 
         if want_excel and excel_btn is None and preview_btn is not None:
@@ -1814,11 +1836,31 @@ def _complete_output_setup_and_save(
             preferred_folder = None
         cancel_printer_dialogs()
         dismiss_softdent_alerts()
-        time.sleep(2.0)
+        # SoftDent "Replace existing file?" / overwrite confirm — keyboard Yes/Enter only.
+        for _ in range(6):
+            for w in list(_desktop_dialogs()):
+                try:
+                    blob = _dialog_text_blob(w)
+                    if any(
+                        s in blob
+                        for s in (
+                            "already exists",
+                            "replace",
+                            "overwrite",
+                            "file exists",
+                        )
+                    ):
+                        _force_foreground(int(w.handle))
+                        _send_softdent_keys("{ENTER}", hwnd=int(w.handle))
+                        time.sleep(0.35)
+                except Exception:
+                    continue
+            time.sleep(0.2)
 
         dest_root.mkdir(parents=True, exist_ok=True)
         # SoftDent writes into SoftDentReportExports; NR2 canonicalizes under dest_root.
-        min_mtime = time.time() - 180.0
+        # Poll — SoftDent Excel can lag several seconds; also catch Excel-on-temp SDWIN.
+        min_mtime = time.time() - 300.0
         search_roots: list[Path] = []
         office_folder = resolve_select_file_folder()
         if office_folder.is_dir():
@@ -1845,7 +1887,6 @@ def _complete_output_setup_and_save(
             seen.add(key)
             deduped.append(root)
         search_roots = deduped
-        candidates: list[Path] = []
         stem_patterns = {f"{stem_only}.*", f"{stem_only.upper()}.*"}
         if full_stem and full_stem != stem_only:
             stem_patterns.add(f"{full_stem}.*")
@@ -1853,34 +1894,71 @@ def _complete_output_setup_and_save(
         if full_stem.startswith("AGE") or stem_only.startswith("AG"):
             stem_patterns.add("AGE*.*")
             stem_patterns.add("AG*.*")
-        for root in search_roots:
-            if not root.is_dir():
-                continue
-            for pattern in stem_patterns:
-                for cand in root.glob(pattern):
-                    if not cand.is_file():
-                        continue
-                    if cand.suffix.lower() not in {
-                        ".xls",
-                        ".xlsx",
-                        ".csv",
-                        ".txt",
-                        ".rep",
-                    }:
-                        continue
-                    try:
-                        if float(cand.stat().st_mtime) < min_mtime:
+            stem_patterns.add("account_aging.*")
+
+        def _collect_stem_candidates() -> list[Path]:
+            found: list[Path] = []
+            for root in search_roots:
+                if not root.is_dir():
+                    continue
+                for pattern in stem_patterns:
+                    for cand in root.glob(pattern):
+                        if not cand.is_file():
                             continue
-                    except OSError:
-                        continue
-                    candidates.append(cand)
+                        if cand.suffix.lower() not in {
+                            ".xls",
+                            ".xlsx",
+                            ".csv",
+                            ".txt",
+                            ".rep",
+                        }:
+                            continue
+                        try:
+                            if float(cand.stat().st_mtime) < min_mtime:
+                                continue
+                        except OSError:
+                            continue
+                        found.append(cand)
+            return found
+
+        candidates: list[Path] = []
+        for _ in range(24):  # ~48s poll
+            cancel_printer_dialogs(max_rounds=1)
+            dismiss_softdent_alerts(max_rounds=1)
+            candidates = _collect_stem_candidates()
+            if candidates:
+                break
+            # SoftDent often skips disk write and opens Excel on %TEMP%\SDWIN*.csv
+            if _excel_sdwin_workbook_open():
+                excel_copy = _save_excel_sdwin_copy(dest_root / f"{short_stem}.xls")
+                if excel_copy and excel_copy.is_file():
+                    candidates = [excel_copy]
+                    break
+            time.sleep(2.0)
+
+        if not candidates:
+            # Last chance: Excel workbook still open after Select File Name.
+            if _excel_sdwin_workbook_open():
+                excel_copy = _save_excel_sdwin_copy(dest_root / f"{short_stem}.xls")
+                if excel_copy and excel_copy.is_file():
+                    candidates = [excel_copy]
         if not candidates:
             raise RuntimeError(
                 f"Expected export not found for File stem {stem_only} "
                 f"(from {short_stem!r}) under {dest_root}, {MIRROR_ROOT}, or SoftDent dirs"
             )
-        # Prefer newest match; when AG* wildcards widen the net, still take mtime tip.
-        produced = max(candidates, key=lambda p: p.stat().st_mtime)
+        # Prefer SoftDentReportExports hits, then newest mtime.
+        office_key = str(office_folder).lower()
+
+        def _cand_rank(p: Path) -> tuple[int, float]:
+            try:
+                mtime = float(p.stat().st_mtime)
+            except OSError:
+                mtime = 0.0
+            in_office = 1 if str(p).lower().startswith(office_key) else 0
+            return (in_office, mtime)
+
+        produced = max(candidates, key=_cand_rank)
     else:
         # Excel-on-temp path (validated on SoftDent v19.1.4 Trans/Register/Collections)
         dest_root.mkdir(parents=True, exist_ok=True)

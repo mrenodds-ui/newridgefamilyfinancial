@@ -25,15 +25,11 @@
 3. `forceCloseAvailable` remains false — **PASS**  
 4. empty ≠ $0 / PHI initials+hash — **PASS** on live beams (`emptyNotZero=true`)
 
-## Remaining exact next step (blocked until SoftDent stop lifted)
+## Remaining exact next step — **DONE 2026-07-16 evening (Track B)**
 
-`periodClose.morningBundle` is still **null** → optical BUNDLE gate stays **RED** (“No morning bundle signal”).
+See `MOONSHOT_OPS_MORNING_BUNDLE_TRACK_B_APPLIED_2026-07-16.md`.
 
-Once the operator says **resume SoftDent** / **lift SoftDent stop**:
-
-1. Confirm SoftDent signed on (`COMPUTE` / env override).  
-2. Run attended: `python scripts/morning_bundle_attended.py --yes --refresh-close` (Excel or Print Preview only — never File, never Printer).  
-3. Re-probe: `morningBundle.ok=true` (or honest fail) · BUNDLE gate updates · `forceCloseAvailable` still false unless lasers go red.
+`periodClose.morningBundle.ok=true` · optical **BUNDLE GREEN** · aging+register Excel under `C:\SoftDentReportExports` · collections still in `failed[]` (best-effort). Use `.\.venv\Scripts\python.exe scripts/morning_bundle_attended.py --yes --refresh-close`.
 
 ## What was NOT done (by design under SoftDent stop)
 

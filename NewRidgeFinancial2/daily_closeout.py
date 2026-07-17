@@ -166,12 +166,19 @@ def merge_period_close_into_readiness(readiness: dict[str, Any]) -> dict[str, An
     if query_op and not ops.get("activeOperation"):
         ctx["queryOperation"] = query_op
     readiness = {**readiness, "operationContext": ctx}
+    # Slim status fields + morningBundle (BUNDLE ops gate reads this on every optical page).
+    close_status = period_close_status()
     readiness["periodClose"] = {
-        "status": ops.get("periodCloseStatus"),
-        "completedAt": ops.get("completedAt"),
-        "lastBeamHash": ops.get("lastBeamHash"),
-        "shadowStartedAt": ops.get("shadowStartedAt"),
-        "systemOfRecord": ops.get("systemOfRecord"),
+        "status": ops.get("periodCloseStatus") or close_status.get("status"),
+        "completedAt": ops.get("completedAt") or close_status.get("completedAt"),
+        "lastBeamHash": ops.get("lastBeamHash") or close_status.get("beamHash"),
+        "shadowStartedAt": ops.get("shadowStartedAt") or close_status.get("shadowStartedAt"),
+        "systemOfRecord": ops.get("systemOfRecord")
+        if ops.get("systemOfRecord") is not None
+        else close_status.get("systemOfRecord"),
+        "morningBundle": close_status.get("morningBundle"),
+        "forceClose": close_status.get("forceClose"),
+        "emptyNotZero": True,
     }
     return readiness
 
@@ -540,6 +547,7 @@ def run_period_close(
     auto: bool = False,
     readiness: dict[str, Any] | None = None,
     force_close: bool = False,
+    export_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute one shadow period-close cycle.
 
@@ -547,6 +555,10 @@ def run_period_close(
     (scheduler), then heal imports, laser gate, money-beam attest, JSONL log.
     SoftDent GUI export is consent-free (Excel/Print Preview only; write-back forbidden).
     Aging is required; register/collections are best-effort (partial still heals).
+
+    ``export_result``: pass a prior attended morning-bundle payload (e.g. from
+    ``morning_bundle_attended.py``) so ``periodClose.morningBundle`` / BUNDLE gate
+    update without a second SoftDent GUI pull.
     """
     _ = consent_export  # SoftDent export no longer gated; kept for API compatibility
     with _LOCK:
@@ -614,10 +626,35 @@ def run_period_close(
                 store=store,
             )
 
-        export_result: dict[str, Any] | None = None
+        provided_export = export_result if isinstance(export_result, dict) else None
+        export_result = provided_export
         import_refresh: dict[str, Any] | None = None
         export_fallback_attest = False
-        if pull_softdent:
+        # Attended morning bundle already ran SoftDent Excel — persist + heal, no second GUI pull.
+        if provided_export is not None and not pull_softdent:
+            if not provided_export.get("ok"):
+                export_fallback_attest = True
+                export_result = {
+                    **provided_export,
+                    "ok": False,
+                    "fallback": provided_export.get("fallback") or "attest_only",
+                    "guiExport": False,
+                    "emptyNotZero": True,
+                }
+            else:
+                try:
+                    from import_healing import heal_import_pipeline
+
+                    import_refresh = heal_import_pipeline(force=True)
+                except Exception as exc:  # noqa: BLE001
+                    import_refresh = {"ok": False, "error": str(exc)[:240]}
+                try:
+                    from import_diagnostics import assess_import_readiness as _assess
+
+                    ready = _assess()
+                except Exception:
+                    pass
+        elif pull_softdent:
             try:
                 from hal_brain_tools import softdent_export_morning_bundle
 
@@ -726,15 +763,17 @@ def run_period_close(
             "importRefresh": import_refresh,
             "pullSoftdent": bool(pull_softdent),
             "softdentReports": list((export_result or {}).get("reportIds") or [])
-            if pull_softdent and isinstance(export_result, dict)
+            if (pull_softdent or provided_export) and isinstance(export_result, dict)
             else (["aging"] if pull_softdent else None),
             "exportOkCount": (export_result or {}).get("okCount")
-            if pull_softdent and isinstance(export_result, dict)
+            if (pull_softdent or provided_export) and isinstance(export_result, dict)
             else None,
             "exportPartial": bool((export_result or {}).get("partial"))
-            if pull_softdent and isinstance(export_result, dict)
+            if (pull_softdent or provided_export) and isinstance(export_result, dict)
             else None,
-            "guiExport": bool(export_result and export_result.get("ok")) if pull_softdent else None,
+            "guiExport": bool(export_result and export_result.get("ok"))
+            if (pull_softdent or provided_export)
+            else None,
             "fallback": "attest_only" if export_fallback_attest else None,
             "buildStamp": build_stamp,
             "shadowStartedAt": shadow_started,
