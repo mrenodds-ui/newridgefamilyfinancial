@@ -72,7 +72,7 @@ def universal_report_pull_steps() -> list[str]:
         "Before unattended pulls: close or minimize Chrome Claim Management / NR2 Optical Claims — they steal SoftDent focus.",
         "Open the report: Reports → <category> → <report> (F10 menus preferred if 64-bit menu_select fails ElementNotEnabled).",
         "Output Options appears: click Excel then Enter — OR click Print Preview then Enter. NEVER Printer. NEVER File.",
-        "If Excel is GREYED OUT on Output Options: use Print Preview only (NR2 will not invent money from preview; empty ≠ $0 until Excel is enabled in SoftDent).",
+        "If Excel is GREYED OUT on Output Options: SoftDent is blocking extractable pulls (can be across all reports that use Output Options) — use Print Preview only for optical read (NR2 will not invent money from preview; empty ≠ $0 until Excel is enabled in SoftDent).",
         "OPERATOR — enable SoftDent Excel (money beams): SoftDent Help/setup → report Output Options must list Excel as enabled "
         "(office SoftDent install / printer-driver / Carestream report export feature). Until Excel is clickable, morningBundle stays attest_only. "
         "Runbook: NewRidgeFinancial2/docs/runbooks/softdent_excel_enablement_nr2.md.",
@@ -168,7 +168,7 @@ def format_softdent_report_pull_hal_reply(query: str = "") -> str:
         "Hard rules: Excel or Print Preview only — never Printer; never File; never Esc on SoftDent main; "
         "never Alt+R for Reports (AMD Instant Replay steals it); SoftDent is 32-bit — prefer F10. "
         "SCHEDULE: next-day SoftDent reports at 9:00 PM local the night before (SoftDent before Trellis 1:00 AM pull). "
-        "If Excel is greyed out on Output Options → Print Preview only (empty ≠ $0 for money until Excel enabled). "
+        "If Excel is greyed out on Output Options → SoftDent is blocking data pulls (can apply across all SoftDent reports) — Print Preview only for optical read (empty ≠ $0 for money until Excel enabled). "
         "Money-beam enablement runbook: NewRidgeFinancial2/docs/runbooks/softdent_excel_enablement_nr2.md "
         "(then say approve for attended morning bundle). "
         "Minimize Chrome Claim Management / NR2 Optical Claims before unattended pulls (focus thieves). "
