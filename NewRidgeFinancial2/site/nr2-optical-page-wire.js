@@ -1585,7 +1585,7 @@
     });
     return true;
   }
-  /** Moonshot Package 4 — Tabbed Content Deck (vanilla display toggle; default Summary). */
+  /** === Moonshot Canonical Wire Pack 2026-07-17 — bootExecTabs (NO SKIP) === */
   function bootExecTabs() {
     const frame = document.querySelector("main.main > .chrome-frame");
     const tabs = frame && frame.querySelector(":scope > .exec-tabs");
@@ -1640,7 +1640,7 @@
     activate("summary");
     return true;
   }
-  /** Package 1 §8 / Package 3: ledge height var (sticky legacy or chrome-frame density). */
+  /** === Moonshot Canonical Wire Pack 2026-07-17 — bootPackage1StickyStack (NO SKIP) === */
   function bootPackage1StickyStack() {
     const main = document.querySelector("main.main");
     const ledge =
@@ -1667,6 +1667,7 @@
     }
     return true;
   }
+  /** === Moonshot Canonical Wire Pack 2026-07-17 — bootOpsGates order (NO SKIP) === */
   function bootOpsGates() {
     try {
       mountOpsGates({ refreshMs: 60000 });

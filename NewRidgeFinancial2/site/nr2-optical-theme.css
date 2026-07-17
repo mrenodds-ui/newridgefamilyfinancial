@@ -862,7 +862,8 @@ body.page-hub .main > .tab-panel .hal-chip {
 .main > .beam::after {
   display: none;
 }
-body > .honesty {
+body > .honesty,
+body > aside.honesty {
   position: fixed;
   bottom: 0;
   left: 220px;
@@ -881,9 +882,11 @@ body > .honesty {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  display: block;
 }
 @media (max-width: 900px) {
-  body > .honesty {
+  body > .honesty,
+  body > aside.honesty {
     left: 0;
   }
 }
@@ -2277,3 +2280,82 @@ body.page-hub .align-bench {
   .tr-row { color: #222; border-color: #ccc; }
   .tr-carrier { color: #444; }
 }
+
+/* === Moonshot Canonical Executive Viewport Pack 2026-07-17 === */
+/* Source: docs/MOONSHOT_EXEC_VIEWPORT_CODING_PACK_2026-07-17.md — lock literals; SoftDent read-only */
+:root {
+  --nr2-chrome-frame-h: 172px; /* 140px desk + 32px tabs */
+  --nr2-exec-tabs-h: 32px;
+}
+.beam,
+.main > .beam {
+  position: relative;
+  height: 1px;
+  margin: 4px 0;
+  border: 0;
+  background: rgba(201, 162, 39, 0.3);
+  opacity: 1;
+  box-shadow: none;
+  overflow: hidden;
+}
+.beam::after,
+.main > .beam::after {
+  display: none !important;
+}
+body > .honesty,
+body > aside.honesty {
+  position: fixed;
+  bottom: 0;
+  left: 220px;
+  right: 0;
+  height: 20px;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 2px 8px;
+  margin: 0;
+  background: rgba(8, 10, 12, 0.95);
+  border: 0;
+  border-top: 1px solid rgba(201, 162, 39, 0.25);
+  border-left: 0;
+  z-index: 200;
+  box-sizing: border-box;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  display: block;
+}
+@media (max-width: 900px) {
+  body > .honesty,
+  body > aside.honesty { left: 0; }
+}
+#nr2-page-letterhead.banner.exec-letterhead,
+header.banner.exec-letterhead {
+  height: 48px;
+  max-height: 48px;
+  border-bottom: 1px solid rgba(201, 162, 39, 0.35);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.chrome-frame {
+  position: fixed;
+  left: 220px;
+  right: 0;
+  height: var(--nr2-chrome-frame-h);
+  z-index: 100;
+  background: var(--vacuum);
+  overflow: hidden;
+}
+.chrome-frame > .exec-tabs {
+  flex: 0 0 var(--nr2-exec-tabs-h);
+  height: var(--nr2-exec-tabs-h);
+  min-height: var(--nr2-exec-tabs-h);
+  max-height: var(--nr2-exec-tabs-h);
+}
+.main > .tab-panel[hidden] {
+  display: none !important;
+}
+/* Compact header superseded by letterhead — keep rule for P1 gate artifacts but hide in flow */
+.main > .exec-compact-header {
+  display: none;
+}
+
