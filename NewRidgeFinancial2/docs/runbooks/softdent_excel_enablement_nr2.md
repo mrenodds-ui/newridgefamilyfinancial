@@ -27,6 +27,7 @@ If Excel is greyed out, automation correctly uses Print Preview and keeps `morni
 2. When **Output Options** appears:
    - Prefer **Excel** (must be enabled / not greyed).
    - If Excel is greyed: SoftDent install/feature — enable report Excel export in SoftDent (Carestream/office IT). **Do not** click File or Printer.
+   - Also check **System → Printing Preferences → Default Path for Excel Files** → `C:\SoftDentReportExports` (short `C:\SOFTDE~1` is OK). Quitting a stuck Excel process alone does **not** un-grey the radio when SoftDent has Excel disabled at feature level (probed 2026-07-17).
    - Print Preview is allowed for visual totals only; NR2 will **not** treat Preview as money ingest.
 
 ### 3) SoftDentReportExports save folder
