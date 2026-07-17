@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>NR2 Optical Bench — unify (nr2-12043-hal-patient-summary)</title>
-  <link rel="stylesheet" href="/nr2-optical-theme.css" />
+  <link rel="stylesheet" href="/nr2-optical-theme.css?v=moonshot-exec-viewport-20260717" />
   <style>
     /* Landing layout only — color/type tokens come from nr2-optical-theme.css */
     :root {
@@ -17,6 +17,11 @@
       background: var(--vacuum); color: #e8e8f0; font-family: var(--sans);
       font-size: var(--text-base);
       display: flex; flex-direction: column;
+      padding-bottom: 20px; /* Moonshot Package 1: honesty LED clearance */
+    }
+    /* Landing has no 220px nav — honesty LED full width (Moonshot §8) */
+    body > .honesty {
+      left: 0;
     }
     .exec-landing-ledge { flex: 0 0 auto; }
     .exec-landing-shell {
@@ -1090,5 +1095,6 @@
       }
     })();
   </script>
+  <div class="honesty">Honesty: empty ≠ $0 · no SoftDent write-back · no invent dollars · SoftDent+QB beams</div>
 </body>
 </html>

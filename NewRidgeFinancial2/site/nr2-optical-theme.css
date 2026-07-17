@@ -1278,50 +1278,19 @@ html.nr2-reduced-motion .nr2-error-beam {
   box-shadow: 0 0 18px rgba(224,230,237,0.12);
   margin-bottom: var(--space-3);
 }
-/* Moonshot P1/P5: beam casts SoftDent light + ambient sweep */
+/* Moonshot Package 1 §4 + §7: beam = 1px gold laser only (no gradient bloat / sweep) */
 .beam {
   position: relative;
-  height: 3px;
-  margin: var(--space-3) 0;
+  height: 1px;
+  margin: 4px 0;
   border: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(0, 212, 170, 0.35) 20%,
-    var(--sd) 50%,
-    rgba(224, 230, 237, 0.55) 55%,
-    rgba(0, 212, 170, 0.35) 80%,
-    transparent 100%
-  );
-  opacity: 0.9;
-  box-shadow:
-    0 0 20px 2px var(--sd),
-    0 0 40px 8px rgba(0, 212, 170, 0.2);
-  overflow: visible;
+  background: rgba(201, 162, 39, 0.3);
+  opacity: 1;
+  box-shadow: none;
+  overflow: hidden;
 }
 .beam::after {
-  content: "";
-  position: absolute;
-  top: -10px;
-  bottom: -10px;
-  left: 0;
-  width: 28%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(0, 212, 170, 0.45),
-    rgba(224, 230, 237, 0.5),
-    rgba(0, 212, 170, 0.45),
-    transparent
-  );
-  animation: beam-sweep 8s linear infinite;
-  pointer-events: none;
-}
-@keyframes beam-sweep {
-  0% { transform: translateX(-120%); opacity: 0.35; }
-  15% { opacity: 0.85; }
-  85% { opacity: 0.85; }
-  100% { transform: translateX(400%); opacity: 0.35; }
+  display: none;
 }
 @keyframes flow { to { background-position: 32px 0; } }
 
