@@ -332,12 +332,54 @@ def money_beam_attestation(
 
     beam_hash = hashes["beamHash"]
     data_hash = hashes["dataBeamHash"]
+    sd_live = bool(sd.get("hasData")) and sd.get("totalOutstanding") is not None and _finite(
+        sd.get("totalOutstanding")
+    )
+    qb_live = bool(qb.get("hasData")) and qb.get("monthlyRevenue") is not None and _finite(
+        qb.get("monthlyRevenue")
+    )
+    sd_amt = float(sd["totalOutstanding"]) if sd_live else None
+    qb_amt = float(qb["monthlyRevenue"]) if qb_live else None
+    both_live = sd_live and qb_live
+    raw_delta = abs(sd_amt - qb_amt) if both_live else None
+    if both_live and raw_delta is not None:
+        raw_delta_display = f"${raw_delta:,.0f}" if raw_delta == int(raw_delta) else f"${raw_delta:,.2f}"
+        allowed.append(float(raw_delta))
+        allowed.append(float(round(float(raw_delta))))
+        allowed.append(float(round(float(raw_delta), 2)))
+    else:
+        raw_delta_display = "∅ NO SIGNAL"
+    metric_gap = {
+        "label": "Different Metrics — Not Auto-Reconciled",
+        "notAutoReconciled": True,
+        "noReconcileCta": True,
+        "emptyNotZero": True,
+        "softdentMetric": "SoftDent AR outstanding (claims total)",
+        "quickbooksMetric": "QuickBooks monthly revenue",
+        "softdentAmount": sd_amt,
+        "quickbooksAmount": qb_amt,
+        "softdentDisplay": sd.get("display"),
+        "quickbooksDisplay": qb.get("display"),
+        "bothLive": both_live,
+        "rawDelta": raw_delta,
+        "rawDeltaDisplay": raw_delta_display,
+        "honestyLine": (
+            "SoftDent AR outstanding vs QB monthly revenue — different metrics; "
+            "not auto-reconciled. Empty ≠ $0. No Reconcile CTA."
+        ),
+    }
+
     lines = [
         "LIVE MONEY BEAMS (cite ONLY these SoftDent/QB displays for currency; never invent other dollars):",
         f"- SoftDent claims: {sd.get('display')} · hasData={bool(sd.get('hasData'))} · {sd.get('hint') or ''}",
         f"- QuickBooks revenue: {qb.get('display')} · hasData={bool(qb.get('hasData'))} · {qb.get('hint') or ''}",
         f"- beamTimestamp={at} · beamHash={beam_hash} · dataBeamHash={data_hash}",
         "If a beam is ∅ NO SIGNAL / hasData=false: say Financial data unavailable for that source — never $0.",
+        (
+            "METRIC GAP: SoftDent AR outstanding vs QB monthly revenue are DIFFERENT metrics — "
+            "cite raw |Δ| only as optical; never claim reconciled / never invent a Reconcile action."
+        ),
+        f"- metricGap rawDeltaDisplay={raw_delta_display} · bothLive={both_live}",
     ]
     if sd.get("display") == "∅ NO SIGNAL" or qb.get("display") == "∅ NO SIGNAL":
         lines.append(
@@ -374,6 +416,7 @@ def money_beam_attestation(
             "at": qb.get("at") or at,
             "hint": qb.get("hint"),
         },
+        "metricGapHonesty": metric_gap,
         "promptBlock": "\n".join(lines),
     }
     with _attest_cache_lock:

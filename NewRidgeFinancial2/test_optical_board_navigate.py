@@ -14,6 +14,8 @@ class OpticalBoardNavigateTests(unittest.TestCase):
         self.assertEqual(resolve_optical_href("quickbooks"), "/nr2-optical-page-quickbooks.html")
         self.assertEqual(resolve_optical_href("qb"), "/nr2-optical-page-quickbooks.html")
         self.assertEqual(resolve_optical_href("ar"), "/nr2-optical-page-ar.html")
+        self.assertEqual(resolve_optical_href("money-gap"), "/nr2-optical-page-money-gap.html")
+        self.assertEqual(resolve_optical_href("metric-gap"), "/nr2-optical-page-money-gap.html")
         self.assertEqual(resolve_optical_href("unknown-xyz"), "")
 
     def test_enrich_adds_href(self) -> None:

@@ -9,6 +9,7 @@
     { group: "HAL" },
     { href: "/nr2-optical-page-hal.html", label: "HAL + Chat", crumb: "HAL" },
     { href: "/nr2-optical-page-claims.html", label: "Claims + ERA", crumb: "Claims" },
+    { href: "/nr2-optical-page-money-gap.html", label: "Metric Gap", crumb: "Metric Gap" },
     { href: "/nr2-optical-page-narratives.html", label: "Narratives", crumb: "Narratives" },
     { href: "/nr2-optical-page-analytics.html", label: "Analytics / Huddle", crumb: "Analytics" },
     { group: "PLANNING" },

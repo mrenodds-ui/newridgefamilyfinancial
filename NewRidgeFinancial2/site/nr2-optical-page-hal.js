@@ -15,6 +15,8 @@
   const beamSdHint = document.getElementById("beamSdHint");
   const beamQb = document.getElementById("beamQb");
   const beamQbHint = document.getElementById("beamQbHint");
+  const beamMetricGap = document.getElementById("beamMetricGap");
+  const beamMetricGapHint = document.getElementById("beamMetricGapHint");
   const consentModal = document.getElementById("consentModal");
   const consentBody = document.getElementById("consentBody");
   const chatBind = document.getElementById("chatBind");
@@ -346,6 +348,24 @@
       beamQb.classList.toggle("empty", hQb.empty);
       beamQbHint.textContent =
         qb.hint || (qb.at ? "synced " + String(qb.at).slice(0, 19) : "");
+      const gap = (data && data.metricGapHonesty) || {};
+      if (beamMetricGap) {
+        if (gap.bothLive && gap.rawDeltaDisplay) {
+          const emptyZero = Number(gap.rawDelta) === 0;
+          beamMetricGap.textContent = emptyZero
+            ? "Empty ≠ $0"
+            : String(gap.rawDeltaDisplay);
+          beamMetricGap.classList.toggle("empty", emptyZero);
+        } else {
+          beamMetricGap.textContent = "∅";
+          beamMetricGap.classList.add("empty");
+        }
+      }
+      if (beamMetricGapHint) {
+        beamMetricGapHint.textContent =
+          (gap.label || "Different Metrics — Not Auto-Reconciled") +
+          " · empty ≠ $0 · no Reconcile CTA";
+      }
       const bothEmpty = hSd.empty && hQb.empty;
       if (data && data.importStale) {
         showMoneyBanner(

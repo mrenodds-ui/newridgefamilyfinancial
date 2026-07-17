@@ -898,6 +898,71 @@
     ].filter(Boolean);
     return parts.join(" · ");
   }
+  /**
+   * SoftDent AR outstanding vs QB monthly revenue — optical |Δ| only.
+   * Different metrics · not auto-reconciled · no Reconcile CTA · empty ≠ $0.
+   */
+  function paintMetricGapHonesty(opts) {
+    const id = opts && opts.id;
+    const hintId = opts && opts.hintId;
+    const beams = opts && opts.beams;
+    const ready = opts && opts.ready;
+    const el = id ? document.getElementById(id) : null;
+    if (!el) return { applied: false, live: false };
+
+    const lasers = lasersRed(ready);
+    const staleBeam = !!(beams && beams.importStale);
+    const gap = beams && beams.metricGapHonesty;
+    const hint = hintId ? document.getElementById(hintId) : null;
+
+    if (lasers || staleBeam) {
+      setText(id, null, lasers ? "STALE / ∅" : "NO SIGNAL");
+      el.classList.add("stale");
+      if (hint) {
+        hint.textContent =
+          "Different Metrics · Not Auto-Reconciled · lasers/import STALE · empty ≠ $0 · no Reconcile CTA";
+      }
+      return { applied: true, live: false, blocked: true };
+    }
+
+    if (!gap || !gap.bothLive || gap.rawDelta == null || !Number.isFinite(Number(gap.rawDelta))) {
+      setText(id, null, "∅");
+      if (hint) {
+        hint.textContent =
+          (gap && gap.label ? gap.label + " · " : "Different Metrics · Not Auto-Reconciled · ") +
+          "∅ when either beam empty · empty ≠ $0 · no Reconcile CTA";
+      }
+      return { applied: true, live: false };
+    }
+
+    const raw = Number(gap.rawDelta);
+    if (raw === 0) {
+      setText(id, null, "Empty ≠ $0");
+    } else {
+      const shown =
+        gap.rawDeltaDisplay && String(gap.rawDeltaDisplay).indexOf("$") === 0
+          ? String(gap.rawDeltaDisplay)
+          : fmtMoney(raw);
+      setText(id, shown);
+    }
+    el.classList.remove("stale");
+    el.classList.add("exec-currency");
+    if (hint) {
+      hint.textContent =
+        (gap.label || "Different Metrics — Not Auto-Reconciled") +
+        " · SoftDent AR outstanding vs QB monthly revenue · empty ≠ $0 · no Reconcile CTA" +
+        (beams && beams.beamHash
+          ? " · hash " + String(beams.beamHash).slice(0, 16)
+          : "");
+    }
+    return {
+      applied: true,
+      live: true,
+      rawDelta: raw,
+      notAutoReconciled: true,
+      noReconcileCta: true,
+    };
+  }
   function formatBeamHash(h, len) {
     const s = String(h || "").trim();
     if (!s) return "n/a";
@@ -1780,6 +1845,7 @@
     honestyMoney: honestyMoney,
     getMoneyBeams: getMoneyBeams,
     applyBeamHeadline: applyBeamHeadline,
+    paintMetricGapHonesty: paintMetricGapHonesty,
     beamProvenanceLine: beamProvenanceLine,
     periodCloseStatus: periodCloseStatus,
     periodCloseIsTrouble: periodCloseIsTrouble,

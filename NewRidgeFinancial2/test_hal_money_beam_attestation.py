@@ -85,13 +85,82 @@ class HalMoneyBeamAttestationTests(unittest.TestCase):
                 },
             ),
         ):
-            out = money_beam_attestation()
+            out = money_beam_attestation(bypass_cache=True)
         block = out.get("promptBlock") or ""
         self.assertIn("$12,345", block)
         self.assertIn("$78,399", block)
         self.assertNotIn("HONESTY:", block)
         self.assertTrue(out.get("beamHash"))
         self.assertIn(12345.0, out.get("allowedAmounts") or [])
+        gap = out.get("metricGapHonesty") or {}
+        self.assertTrue(gap.get("bothLive"))
+        self.assertTrue(gap.get("notAutoReconciled"))
+
+    def test_metric_gap_honesty_different_metrics_not_reconciled(self) -> None:
+        from hal_brain_tools import money_beam_attestation
+
+        with (
+            patch(
+                "hal_brain_tools.softdent_status",
+                return_value={
+                    "hasData": True,
+                    "display": "$52,270",
+                    "hint": "SoftDent claims live",
+                    "totalOutstanding": 52270.0,
+                },
+            ),
+            patch(
+                "hal_brain_tools.qb_summary",
+                return_value={
+                    "hasData": True,
+                    "display": "$78,399",
+                    "hint": "QuickBooks revenue live (latest month)",
+                    "monthlyRevenue": 78399.0,
+                },
+            ),
+        ):
+            out = money_beam_attestation(bypass_cache=True)
+        gap = out.get("metricGapHonesty") or {}
+        self.assertTrue(gap.get("notAutoReconciled"))
+        self.assertTrue(gap.get("noReconcileCta"))
+        self.assertTrue(gap.get("bothLive"))
+        self.assertTrue(gap.get("emptyNotZero"))
+        self.assertEqual(gap.get("rawDelta"), 26129.0)
+        self.assertIn("Different Metrics", str(gap.get("label") or ""))
+        self.assertIn("METRIC GAP", out.get("promptBlock") or "")
+        self.assertIn(26129.0, out.get("allowedAmounts") or [])
+        self.assertTrue(gap.get("noReconcileCta"))
+        self.assertIn("no reconcile cta", str(gap.get("honestyLine") or "").lower())
+
+    def test_metric_gap_honesty_empty_when_one_beam_missing(self) -> None:
+        from hal_brain_tools import money_beam_attestation
+
+        with (
+            patch(
+                "hal_brain_tools.softdent_status",
+                return_value={
+                    "hasData": False,
+                    "display": "∅ NO SIGNAL",
+                    "hint": "empty ≠ $0",
+                    "totalOutstanding": None,
+                },
+            ),
+            patch(
+                "hal_brain_tools.qb_summary",
+                return_value={
+                    "hasData": True,
+                    "display": "$78,399",
+                    "hint": "QB live",
+                    "monthlyRevenue": 78399.0,
+                },
+            ),
+        ):
+            out = money_beam_attestation(bypass_cache=True)
+        gap = out.get("metricGapHonesty") or {}
+        self.assertFalse(gap.get("bothLive"))
+        self.assertIsNone(gap.get("rawDelta"))
+        self.assertEqual(gap.get("rawDeltaDisplay"), "∅ NO SIGNAL")
+        self.assertTrue(gap.get("notAutoReconciled"))
 
 
 class HalMoneyHonestyGateTests(unittest.TestCase):
@@ -106,7 +175,7 @@ class HalMoneyHonestyGateTests(unittest.TestCase):
         from hal_brain_tools import money_beam_attestation, try_deterministic_money_reply
 
         with _live_attest_patches()[0], _live_attest_patches()[1]:
-            att = money_beam_attestation()
+            att = money_beam_attestation(bypass_cache=True)
             out = try_deterministic_money_reply("What is our outstanding AR?", att)
         self.assertIsNotNone(out)
         assert out is not None
@@ -118,7 +187,7 @@ class HalMoneyHonestyGateTests(unittest.TestCase):
         from hal_brain_tools import money_beam_attestation, validate_money_reply
 
         with _live_attest_patches()[0], _live_attest_patches()[1]:
-            att = money_beam_attestation()
+            att = money_beam_attestation(bypass_cache=True)
             out = validate_money_reply(
                 "AR is about $35,842 today.",
                 query="What is our AR?",
@@ -134,7 +203,7 @@ class HalMoneyHonestyGateTests(unittest.TestCase):
         from hal_brain_tools import money_beam_attestation, validate_money_reply
 
         with _live_attest_patches()[0], _live_attest_patches()[1]:
-            att = money_beam_attestation()
+            att = money_beam_attestation(bypass_cache=True)
             out = validate_money_reply(
                 "$7,714 outstanding (SoftDent live).",
                 query="What is our AR?",
