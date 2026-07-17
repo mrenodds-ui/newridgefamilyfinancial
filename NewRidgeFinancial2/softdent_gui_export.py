@@ -1396,7 +1396,78 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
         preview_btn = None
         printer_btn = None
         file_btn = None
+        excel_enabled: bool | None = None
         labels: list[str] = []
+
+        class _HwndBtn:
+            """Minimal SoftDent radio wrapper when 64-bit pywinauto can't enumerate 32-bit kids."""
+
+            def __init__(self, handle: int, text: str, *, enabled: bool = True):
+                self.handle = int(handle)
+                self._text = str(text or "")
+                self._enabled = bool(enabled)
+
+            def window_text(self) -> str:
+                return self._text
+
+            def is_enabled(self) -> bool:
+                return self._enabled
+
+            def get_toggle_state(self) -> int:
+                import win32gui
+
+                return int(win32gui.SendMessage(self.handle, 0x00F0, 0, 0))  # BM_GETCHECK
+
+            def get_check_state(self) -> int:
+                return self.get_toggle_state()
+
+            def click_input(self) -> None:
+                import win32api
+                import win32con
+                import win32gui
+
+                # Prefer radio circle (left edge) — SoftDent ignores center text clicks sometimes.
+                left, top, right, bottom = win32gui.GetWindowRect(self.handle)
+                x = left + 10
+                y = (top + bottom) // 2
+                win32api.SetCursorPos((x, y))
+                time.sleep(0.04)
+                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+                time.sleep(0.03)
+                win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+
+        def _ctrl_enabled(btn) -> bool | None:
+            try:
+                if hasattr(btn, "is_enabled"):
+                    return bool(btn.is_enabled())
+            except Exception:
+                pass
+            try:
+                import win32gui
+
+                return bool(win32gui.IsWindowEnabled(int(btn.handle)))
+            except Exception:
+                return None
+
+        def _assign(label: str, btn) -> None:
+            nonlocal excel_btn, preview_btn, printer_btn, file_btn, excel_enabled
+            lab = label.lower()
+            if lab in {"ok", "cancel", "help"}:
+                return
+            checked = _radio_checked(btn)
+            en = _ctrl_enabled(btn)
+            labels.append(f"Button:{label}:checked={checked}:enabled={en}")
+            if lab == "printer" or lab.startswith("printer"):
+                printer_btn = btn
+            elif lab == "file" or lab.startswith("file"):
+                file_btn = btn
+            elif lab == "excel" or lab.startswith("excel"):
+                excel_btn = btn
+                excel_enabled = en
+            elif "preview" in lab:
+                preview_btn = btn
+
+        # Prefer pywinauto; SoftDent 32-bit often throws RuntimeError under 64-bit Python.
         try:
             from pywinauto import Application
 
@@ -1414,101 +1485,112 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
                         continue
                     if not label:
                         continue
-                    lab = label.lower()
-                    if lab in {"ok", "cancel", "help"}:
-                        continue
-                    checked = _radio_checked(b)
-                    labels.append(f"{class_name}:{label}:checked={checked}")
-                    if lab == "printer" or lab.startswith("printer"):
-                        printer_btn = b
-                    elif lab == "file" or lab.startswith("file"):
-                        file_btn = b
-                    elif lab == "excel" or lab.startswith("excel"):
-                        excel_btn = b
-                    elif "preview" in lab:
-                        preview_btn = b
+                    _assign(label, b)
         except Exception as exc:
-            logger.warning("Output Options radio scan failed: %s", type(exc).__name__)
-        return excel_btn, preview_btn, printer_btn, file_btn, labels
+            logger.warning("Output Options pywinauto radio scan failed: %s", type(exc).__name__)
+
+        if not labels:
+            # Win32 EnumChildWindows fallback — works across 32/64 SoftDent Output Options.
+            try:
+                import win32gui
+
+                kids: list[int] = []
+
+                def _enum(hwnd_child, _lparam):
+                    kids.append(int(hwnd_child))
+                    return True
+
+                win32gui.EnumChildWindows(int(out.handle), _enum, None)
+                for child in kids:
+                    try:
+                        cls = win32gui.GetClassName(child) or ""
+                        if cls not in {"Button", "RadioButton"}:
+                            continue
+                        raw = win32gui.GetWindowText(child) or ""
+                        label = raw.replace("&", "").strip()
+                        if not label:
+                            continue
+                        en = bool(win32gui.IsWindowEnabled(child))
+                        _assign(label, _HwndBtn(child, label, enabled=en))
+                    except Exception:
+                        continue
+            except Exception as exc:
+                logger.warning("Output Options win32 radio scan failed: %s", type(exc).__name__)
+
+        return excel_btn, preview_btn, printer_btn, file_btn, labels, excel_enabled
 
     def _safe_selected() -> str | None:
-        """Return 'excel'|'preview' only when that choice is exclusive (never Printer/File)."""
-        excel_btn, preview_btn, printer_btn, file_btn, labels = _find_output_radios()
+        """Return 'excel'|'preview' only when that choice is exclusive (never Printer/File).
+
+        Strict: when Printer/File radios exist, they must be known OFF (False), not unknown.
+        Blind Enter while SoftDent still defaults Printer is how physical print jobs escape.
+        """
+        excel_btn, preview_btn, printer_btn, file_btn, labels, _excel_en = _find_output_radios()
         if labels:
             logger.info("SoftDent Output Options state: %s", "; ".join(labels[:16]))
         printer_on = _radio_checked(printer_btn) if printer_btn is not None else None
         file_on = _radio_checked(file_btn) if file_btn is not None else None
         excel_on = _radio_checked(excel_btn) if excel_btn is not None else None
         preview_on = _radio_checked(preview_btn) if preview_btn is not None else None
-        if printer_on is True or file_on is True:
+        # Must positively know Printer/File are off when those radios exist.
+        if printer_btn is not None and printer_on is not False:
             return None
+        if file_btn is not None and file_on is not False:
+            return None
+        printer_clear = printer_btn is None or printer_on is False
         if want_preview:
-            # Preview exclusive: Preview on, Excel off (or Excel ok as alternate safe)
-            if preview_on is True and excel_on is not True:
+            if preview_on is True and excel_on is not True and printer_clear:
                 return "preview"
-            if excel_on is True and preview_on is not True:
+            if excel_on is True and preview_on is not True and printer_clear:
                 return "excel"
             return None
-        # want Excel: Excel must be on; Preview must NOT also be on (ambiguous → SoftDent may Preview)
-        if excel_on is True and preview_on is not True:
+        # want Excel: Excel must be on; Preview must NOT also be on (ambiguous)
+        if excel_on is True and preview_on is not True and printer_clear:
             return "excel"
         return None
 
     def _select_safe() -> str | None:
-        excel_btn, preview_btn, printer_btn, _file_btn, labels = _find_output_radios()
+        excel_btn, preview_btn, printer_btn, _file_btn, labels, excel_enabled = _find_output_radios()
         if labels:
             logger.info("SoftDent Output Options before select: %s", "; ".join(labels[:16]))
+        if not labels:
+            # No radio enumeration → refuse keyboard Space walk (lands on Printer first).
+            logger.warning("Output Options radios not enumerable — refuse blind Space walk")
+            return None
 
-        # SoftDent opens with Printer checked — leave Printer before any Enter.
-        if want_excel and excel_btn is not None:
-            for attempt in range(6):
-                if _force_check_radio(excel_btn):
-                    hit = _safe_selected()
-                    if hit == "excel":
-                        return "excel"
-                # If Preview also lit, click Excel again (do not arrow — arrows land on Preview)
-                try:
-                    _keys_on_output("e")  # mnemonic Excel (never p/f)
-                    time.sleep(0.15)
-                    _force_check_radio(excel_btn)
-                    time.sleep(0.15)
-                    hit = _safe_selected()
-                    if hit == "excel":
-                        return "excel"
-                except Exception:
-                    pass
-                if attempt >= 2:
-                    # Tab across radios then Space once Excel shows focus text
-                    try:
-                        _keys_on_output("{TAB}")
-                        time.sleep(0.08)
-                    except Exception:
-                        pass
-            # 64-bit Python often can't latch SoftDent 32-bit radios via click alone —
-            # walk Down from the top of the Output Options list and Space each stop.
-            try:
-                _force_foreground(hwnd)
-                time.sleep(0.1)
-                _keys_on_output("{HOME}")
-                time.sleep(0.08)
-                for _ in range(10):
-                    _keys_on_output("{SPACE}")
-                    time.sleep(0.12)
-                    hit = _safe_selected()
-                    if hit == "excel":
-                        return "excel"
-                    _keys_on_output("{DOWN}")
-                    time.sleep(0.1)
-                _force_check_radio(excel_btn)
-            except Exception:
-                pass
-            return _safe_selected()
-
+        # SoftDent often greys Excel for Collection Summary — Print Preview only (never Printer/File).
+        if want_excel and excel_enabled is False and preview_btn is not None:
+            raise SoftDentExcelDisabledError(
+                "SoftDent Output Options: Excel is greyed/disabled — Print Preview is available "
+                "(never Printer/File). empty ≠ $0 — no Excel drop for money beams."
+            )
         if want_excel and excel_btn is None and preview_btn is not None:
             raise SoftDentExcelDisabledError(
                 "SoftDent Output Options: Excel control not present — Print Preview is available "
                 "(File refused). empty ≠ $0 — no Excel drop for money beams."
             )
+
+        # SoftDent opens with Printer checked — leave Printer before any Enter.
+        # Prefer direct Excel click only. Never HOME/DOWN/SPACE (selects Printer first).
+        if want_excel and excel_btn is not None and excel_enabled is not False:
+            for attempt in range(8):
+                if _force_check_radio(excel_btn):
+                    hit = _safe_selected()
+                    if hit == "excel":
+                        return "excel"
+                # Mnemonic Excel (never p/f) then re-click Excel control.
+                try:
+                    _keys_on_output("e")
+                    time.sleep(0.15)
+                    _force_check_radio(excel_btn)
+                    time.sleep(0.2)
+                    hit = _safe_selected()
+                    if hit == "excel":
+                        return "excel"
+                except Exception:
+                    pass
+                time.sleep(0.12)
+            return _safe_selected()
 
         if want_preview and preview_btn is not None:
             for _ in range(4):
@@ -1537,7 +1619,7 @@ def _select_output_option_prompt(kind: str = "excel") -> None:
 
     # Absolute gate: refuse Enter while Printer is selected or safe radio unverified.
     if not chosen:
-        excel_btn, preview_btn, printer_btn, _file_btn, labels = _find_output_radios()
+        excel_btn, preview_btn, printer_btn, _file_btn, labels, _excel_en = _find_output_radios()
         printer_on = _radio_checked(printer_btn) if printer_btn is not None else None
         try:
             _keyboard_cancel_dialog(hwnd)
