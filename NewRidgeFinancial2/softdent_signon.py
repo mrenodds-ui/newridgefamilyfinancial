@@ -24,7 +24,8 @@ ENV_PASSWORD = "SOFTDENT_SIGNON_PASSWORD"
 ENV_USER_ALT = "SOFTDENT_GUI_USER"
 ENV_PASSWORD_ALT = "SOFTDENT_GUI_PASSWORD"
 
-_DEFAULT_USER_HINT = "COMPUTE"  # SoftDent Sign On user id (workstation/computer login)
+# Prefer Dr (admin) for Excel Output Options / report export; override via SOFTDENT_SIGNON_*.
+_DEFAULT_USER_HINT = "Dr"
 
 # Whole-program SoftDent data-access rule (HAL + refresh + playbook).
 SOFTDENT_DATA_ACCESS_DOCTRINE = (
@@ -252,7 +253,7 @@ def format_softdent_account_tx_excel_hal_reply() -> str:
 
     return (
         "SOFTDENT ACCOUNT TRANSACTIONS → EXCEL (desktop SoftDent only; not database/sd_*): "
-        "Sign On with COMPUTE / computer (keyboard or mouse). Never Printer. Never Esc on SoftDent main. "
+        "Sign On with Dr (admin) via SOFTDENT_SIGNON_* (keyboard or mouse). Never Printer. Never Esc on SoftDent main. "
         "ALL PATIENTS / PERIOD (preferred bulk path): Reports → Accounting → Trans for a Period → "
         "Output Options → click Excel then Enter → Transactions For A Period setup: set Start/End dates, "
         "Format 1 = List Each Transaction Separately (line-level), Doctors 999 for all, then OK. "

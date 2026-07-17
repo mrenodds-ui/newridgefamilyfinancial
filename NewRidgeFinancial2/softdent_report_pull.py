@@ -68,7 +68,7 @@ def clear_softdent_report_pull_cache() -> None:
 def universal_report_pull_steps() -> list[str]:
     return [
         "Launch SoftDent only via CS SoftDent Software.lnk (-sus) — never bare SDWIN.EXE.",
-        "Sign On: COMPUTE / computer (or SOFTDENT_SIGNON_* env). Keyboard or mouse; never Esc on SoftDent main.",
+        "Sign On: Dr (admin) via SOFTDENT_SIGNON_* env (preferred over COMPUTE for Excel exports). Keyboard or mouse; never Esc on SoftDent main.",
         "Before unattended pulls: close or minimize Chrome Claim Management / NR2 Optical Claims — they steal SoftDent focus.",
         "Open the report: Reports → <category> → <report> (F10 menus preferred if 64-bit menu_select fails ElementNotEnabled).",
         "Output Options appears: click Excel then Enter — OR click Print Preview then Enter. NEVER Printer. NEVER File.",

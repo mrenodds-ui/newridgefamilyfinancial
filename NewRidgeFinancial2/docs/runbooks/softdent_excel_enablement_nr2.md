@@ -21,7 +21,7 @@ Carestream SoftDent Help documents the same Output Options pattern for running r
 ### 1) Prep desktop
 
 1. Close or minimize **Chrome Claim Management** / **NR2 Optical · Claims** (focus thieves).
-2. Leave SoftDent main window foreground (signed on as `COMPUTE` / `computer`, or `SOFTDENT_SIGNON_*`).
+2. Leave SoftDent main window foreground (signed on as **Dr** admin via `SOFTDENT_SIGNON_*`; prefer Dr over COMPUTE for Excel Output Options).
 3. Do **not** use Esc on SoftDent main (quit prompt).
 
 ### 2) Confirm Excel is available on Output Options
